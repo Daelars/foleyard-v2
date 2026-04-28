@@ -76,29 +76,6 @@ async function resolveIndexedFile(fileId) {
   }
 }
 
-async function resolveFirstIndexedFile() {
-  try {
-    const response = await fetch(`${DEV_SERVER_URL}/api/files?limit=1`);
-    const data = await response.json();
-    const file = data.files?.[0];
-
-    if (!response.ok || !file?.path) {
-      return { ok: false, error: "No indexed file available for drag test" };
-    }
-
-    if (!fs.existsSync(file.path)) {
-      return { ok: false, error: "Test file no longer exists on disk" };
-    }
-
-    return { ok: true, file };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Failed to resolve test file",
-    };
-  }
-}
-
 function createDragIcon() {
   const SIZE = 32;
   const canvas = Buffer.alloc(SIZE * SIZE * 4);

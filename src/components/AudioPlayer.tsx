@@ -38,6 +38,7 @@ interface FileRecord {
 interface AudioPlayerProps {
   selectedFile: FileRecord | null;
   onClose: () => void;
+  onPlaybackChange?: (isPlaying: boolean) => void;
   onToggleFavorite: (id: string) => Promise<void>;
   collections: { id: string; name: string; fileCount?: number }[];
   onAddToCollection: (collectionId: string) => Promise<void>;
@@ -48,6 +49,7 @@ const VOLUME_STORAGE_KEY = "soundslop-volume";
 export function AudioPlayer({
   selectedFile,
   onClose,
+  onPlaybackChange,
   onToggleFavorite,
   collections,
   onAddToCollection,
@@ -61,6 +63,7 @@ export function AudioPlayer({
       key={selectedFile.id}
       selectedFile={selectedFile}
       onClose={onClose}
+      onPlaybackChange={onPlaybackChange}
       onToggleFavorite={onToggleFavorite}
       collections={collections}
       onAddToCollection={onAddToCollection}
@@ -71,12 +74,14 @@ export function AudioPlayer({
 function AudioPlayerContent({
   selectedFile,
   onClose,
+  onPlaybackChange,
   onToggleFavorite,
   collections,
   onAddToCollection,
 }: {
   selectedFile: FileRecord;
   onClose: () => void;
+  onPlaybackChange?: (isPlaying: boolean) => void;
   onToggleFavorite: (id: string) => Promise<void>;
   collections: { id: string; name: string; fileCount?: number }[];
   onAddToCollection: (collectionId: string) => Promise<void>;
@@ -138,13 +143,17 @@ function AudioPlayerContent({
         audioRef.current = null;
       }
     };
-  }, [selectedFile.path, isMuted, volume]);
+  }, [selectedFile.id, selectedFile.path, isMuted, volume]);
 
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = isMuted ? 0 : volume;
     }
   }, [isMuted, volume]);
+
+  useEffect(() => {
+    onPlaybackChange?.(isPlaying);
+  }, [isPlaying, onPlaybackChange]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {

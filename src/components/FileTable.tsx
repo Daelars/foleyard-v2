@@ -2,7 +2,7 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRef, useState } from "react";
-import { Heart, ChevronRight, Play, Folder, ChevronLeft, ListMusic, Copy } from "lucide-react";
+import { Heart, ChevronRight, Play, Pause, Folder, ChevronLeft, ListMusic, Copy } from "lucide-react";
 import { cn, formatDuration } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -27,6 +27,7 @@ interface FileTableProps {
   onNavigate: (dir: string | null) => void;
   onNavigateLibrary?: () => void;
   selectedFileId: string | null;
+  isSelectedFilePlaying?: boolean;
   onSelect: (file: FileRecord, index: number) => void;
   onToggleFavorite: (id: string) => Promise<void>;
   searchQuery: string;
@@ -55,6 +56,7 @@ export function FileTable({
   onNavigate,
   onNavigateLibrary,
   selectedFileId,
+  isSelectedFilePlaying = false,
   onSelect,
   onToggleFavorite,
   searchQuery,
@@ -212,10 +214,19 @@ const file = item.data;
                 draggable={!isLoading}
               >
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted/45 ring-1 ring-border/50">
-                  <Play className={cn(
-                    "size-4 transition-all",
-                    isSelected ? "text-primary fill-current" : "text-muted-foreground/60 group-hover:text-muted-foreground"
-                  )} />
+                  {isSelected && isSelectedFilePlaying ? (
+                    <Pause
+                      className={cn(
+                        "size-4 transition-all",
+                        "text-primary fill-current",
+                      )}
+                    />
+                  ) : (
+                    <Play className={cn(
+                      "size-4 transition-all",
+                      isSelected ? "text-primary fill-current" : "text-muted-foreground/60 group-hover:text-muted-foreground"
+                    )} />
+                  )}
                 </div>
 
                 <div className="min-w-0 flex-1">

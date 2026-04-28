@@ -83,6 +83,7 @@ function HomeContent() {
     null,
   );
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [isPlayerPlaying, setIsPlayerPlaying] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState({
     libraryRoot: null,
@@ -431,7 +432,11 @@ function HomeContent() {
           onNavigate={navigateDirectory}
           onNavigateLibrary={showLibrary}
           selectedFileId={selectedFile?.id ?? null}
-          onSelect={(file) => setSelectedFile(file)}
+          isSelectedFilePlaying={isPlayerPlaying}
+          onSelect={(file) => {
+            setSelectedFile(file);
+            setIsPlayerPlaying(false);
+          }}
           onToggleFavorite={handleToggleFavorite}
           searchQuery={deferredSearchQuery}
           isLoading={isLoadingFiles}
@@ -444,9 +449,13 @@ function HomeContent() {
         />
       </main>
 
-      <AudioPlayer
-        selectedFile={selectedFile}
-        onClose={() => setSelectedFile(null)}
+        <AudioPlayer
+          selectedFile={selectedFile}
+          onClose={() => {
+            setSelectedFile(null);
+            setIsPlayerPlaying(false);
+          }}
+          onPlaybackChange={setIsPlayerPlaying}
         onToggleFavorite={handleToggleFavorite}
         collections={collections}
         onAddToCollection={handleAddToCollection}

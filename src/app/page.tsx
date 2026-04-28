@@ -191,12 +191,19 @@ function HomeContent() {
   }, []);
 
   useEffect(() => {
-    loadInitialData();
+    const run = async () => {
+      await loadInitialData();
+    };
+
+    void run();
   }, [loadInitialData]);
 
   useEffect(() => {
-    loadFiles();
-    loadDirectories();
+    const run = async () => {
+      await Promise.all([loadFiles(), loadDirectories()]);
+    };
+
+    void run();
   }, [loadFiles, loadDirectories]);
 
   const handleToggleFavorite = async (id: string) => {
@@ -237,7 +244,7 @@ function HomeContent() {
         libraryRoot: data.libraryRoot,
         stats: data.stats,
       }));
-    } catch {
+    } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save settings");
     }
   };
@@ -253,7 +260,7 @@ function HomeContent() {
 
       setScanStatus(data.status);
       toast.info("Scan started");
-    } catch {
+    } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to start scan");
     }
   };

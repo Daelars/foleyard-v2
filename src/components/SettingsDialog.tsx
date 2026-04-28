@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -78,23 +78,72 @@ export function SettingsDialog({
   onDeleteCollection,
   onCreateTag,
 }: SettingsDialogProps) {
+  const resetKey = `${open ? "open" : "closed"}:${settings.libraryRoot ?? ""}`;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden border-border/70 bg-popover/92 p-0 backdrop-blur-2xl sm:max-w-3xl">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_12%,transparent),transparent_34%)]" />
+        <DialogHeader className="relative border-b border-border/70 px-6 py-5">
+          <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+            <Database className="size-5 text-primary" />
+            Settings
+          </DialogTitle>
+          <DialogDescription>
+            Configure your library folder, scan your files, and manage metadata.
+          </DialogDescription>
+        </DialogHeader>
+
+        {open ? (
+          <SettingsDialogBody
+            key={resetKey}
+            settings={settings}
+            onSaveRoot={onSaveRoot}
+            scanStatus={scanStatus}
+            onStartScan={onStartScan}
+            collections={collections}
+            tags={tags}
+            onCreateCollection={onCreateCollection}
+            onDeleteCollection={onDeleteCollection}
+            onCreateTag={onCreateTag}
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type SettingsDialogBodyProps = Pick<
+  SettingsDialogProps,
+  | "settings"
+  | "onSaveRoot"
+  | "scanStatus"
+  | "onStartScan"
+  | "collections"
+  | "tags"
+  | "onCreateCollection"
+  | "onDeleteCollection"
+  | "onCreateTag"
+>;
+
+function SettingsDialogBody({
+  settings,
+  onSaveRoot,
+  scanStatus,
+  onStartScan,
+  collections,
+  tags,
+  onCreateCollection,
+  onDeleteCollection,
+  onCreateTag,
+}: SettingsDialogBodyProps) {
   const [rootDraft, setRootDraft] = useState(settings.libraryRoot ?? "");
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isStartingScan, setIsStartingScan] = useState(false);
-  const [validationResult, setValidationResult] =
-    useState<ValidationResult | null>(null);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newTagName, setNewTagName] = useState("");
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    setRootDraft(settings.libraryRoot ?? "");
-    setValidationResult(null);
-  }, [open, settings.libraryRoot]);
 
   const hasPathChanged = rootDraft.trim() !== (settings.libraryRoot ?? "");
 
@@ -198,20 +247,7 @@ export function SettingsDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden border-border/70 bg-popover/92 p-0 backdrop-blur-2xl sm:max-w-3xl">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_12%,transparent),transparent_34%)]" />
-        <DialogHeader className="relative border-b border-border/70 px-6 py-5">
-          <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-            <Database className="size-5 text-primary" />
-            Settings
-          </DialogTitle>
-          <DialogDescription>
-            Configure your library folder, scan your files, and manage metadata.
-          </DialogDescription>
-        </DialogHeader>
-
-        <Tabs defaultValue="library" className="relative flex min-h-0 flex-1 flex-col">
+    <Tabs defaultValue="library" className="relative flex min-h-0 flex-1 flex-col">
           <div className="border-b border-border/70 bg-card/30 px-6 py-3 backdrop-blur-xl">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="library">Library</TabsTrigger>
@@ -431,8 +467,6 @@ export function SettingsDialog({
             </div>
           </TabsContent>
         </Tabs>
-      </DialogContent>
-    </Dialog>
   );
 }
 

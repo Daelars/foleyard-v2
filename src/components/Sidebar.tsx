@@ -3,6 +3,7 @@
 import { Folder, Heart, List, Settings, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DotmSquare3 } from "@/components/ui/dotm-square-3";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ export function Sidebar({
 }: SidebarProps) {
   const libraryActive = currentView === "all" || currentView === "directory";
   const favoritesActive = currentView === "favorites";
+  const scanComplete = !scanStatus.running && scanStatus.discovered > 0;
 
   const handleSelectLibrary = () => {
     onSelectLibrary();
@@ -172,19 +174,41 @@ export function Sidebar({
       </ScrollArea>
 
       <div className="relative border-t border-border/70 bg-background/45 p-4 backdrop-blur-xl">
-        <div className="mb-4 space-y-2">
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">
-            <span>Status</span>
-            <span className={scanStatus.running ? "text-primary" : ""}>{scanStatus.phase}</span>
+        <div className="mb-4 rounded-2xl border border-border/70 bg-card/40 p-3 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <DotmSquare3
+              size={24}
+              dotSize={3}
+              speed={1.2}
+              animated={scanStatus.running}
+              muted={!scanStatus.running && !scanComplete}
+              pattern="full"
+              ariaLabel={scanStatus.running ? "Scan running" : "Scan idle"}
+              className={cn(
+                "shrink-0",
+                scanStatus.running
+                  ? "text-primary"
+                  : scanComplete
+                    ? "text-foreground"
+                    : "text-muted-foreground/70",
+              )}
+            />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
+                <span>Status</span>
+                <span className={scanStatus.running ? "text-primary" : "text-muted-foreground"}>
+                  {scanStatus.phase}
+                </span>
+              </div>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                {scanStatus.running
+                  ? `${scanStatus.discovered} files discovered`
+                  : scanStatus.discovered > 0
+                    ? `${scanStatus.discovered} files indexed`
+                    : "Ready to scan library"}
+              </p>
+            </div>
           </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted shadow-inner">
-             <div 
-               className={`h-full bg-primary transition-all duration-500 ${scanStatus.running ? "w-1/2 animate-pulse" : "w-full"}`} 
-             />
-          </div>
-          <p className="text-[10px] text-muted-foreground">
-            {scanStatus.discovered} files discovered
-          </p>
         </div>
         
         <Button 

@@ -87,6 +87,8 @@ function AudioPlayerContent({
   onAddToCollection: (collectionId: string) => Promise<void>;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const volumeRef = useRef(0.72);
+  const isMutedRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -103,9 +105,14 @@ function AudioPlayerContent({
   const [isMuted, setIsMuted] = useState(false);
 
   useEffect(() => {
+    volumeRef.current = volume;
+    isMutedRef.current = isMuted;
+  }, [isMuted, volume]);
+
+  useEffect(() => {
     const audio = new Audio(`/api/audio?id=${encodeURIComponent(selectedFile.id)}`);
     audio.preload = "metadata";
-    audio.volume = isMuted ? 0 : volume;
+    audio.volume = isMutedRef.current ? 0 : volumeRef.current;
     audioRef.current = audio;
 
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
@@ -143,7 +150,7 @@ function AudioPlayerContent({
         audioRef.current = null;
       }
     };
-  }, [selectedFile.id, selectedFile.path, isMuted, volume]);
+  }, [selectedFile.id]);
 
   useEffect(() => {
     if (audioRef.current) {

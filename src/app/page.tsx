@@ -485,13 +485,13 @@ function HomeContent() {
         />
       </main>
 
-        <AudioPlayer
-          selectedFile={selectedFile}
-          onClose={() => {
-            setSelectedFile(null);
-            setIsPlayerPlaying(false);
-          }}
-          onPlaybackChange={setIsPlayerPlaying}
+      <AudioPlayer
+        selectedFile={selectedFile}
+        onClose={() => {
+          setSelectedFile(null);
+          setIsPlayerPlaying(false);
+        }}
+        onPlaybackChange={setIsPlayerPlaying}
         onToggleFavorite={handleToggleFavorite}
         collections={collections}
         onAddToCollection={handleAddToCollection}

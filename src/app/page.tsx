@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useDeferredValue, useEffect, useState } from "react";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, PanelLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Sidebar } from "@/components/Sidebar";
 import { FileTable } from "@/components/FileTable";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +87,7 @@ function HomeContent() {
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [isPlayerPlaying, setIsPlayerPlaying] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [settings, setSettings] = useState({
     libraryRoot: null,
     stats: { activeFiles: 0, removedFiles: 0 },
@@ -392,6 +395,7 @@ function HomeContent() {
     <div className="relative flex h-screen overflow-hidden bg-background font-sans">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_10%,transparent),transparent_32%),radial-gradient(circle_at_bottom_right,color-mix(in_oklab,var(--foreground)_5%,transparent),transparent_38%)]" />
       <Sidebar
+        className="hidden md:flex"
         currentView={currentView}
         collections={collections}
         selectedCollection={selectedCollection}
@@ -403,10 +407,42 @@ function HomeContent() {
         onSelectCollection={showCollection}
       />
 
+      <Dialog open={showMobileSidebar} onOpenChange={setShowMobileSidebar}>
+        <DialogContent
+          showCloseButton={false}
+          className="left-0 top-0 h-screen w-[calc(100%-3rem)] max-w-80 translate-x-0 translate-y-0 rounded-none border-r border-border/70 bg-card/90 p-0 shadow-2xl duration-300 ease-out data-open:slide-in-from-left-8 data-open:fade-in-0 data-closed:slide-out-to-left-8 data-closed:fade-out-0 sm:max-w-80"
+        >
+          <DialogTitle className="sr-only">Navigation Menu</DialogTitle>
+          <Sidebar
+            className="w-full border-r-0"
+            currentView={currentView}
+            collections={collections}
+            selectedCollection={selectedCollection}
+            tags={tags}
+            scanStatus={scanStatus}
+            onOpenSettings={() => setShowSettings(true)}
+            onSelectLibrary={showLibrary}
+            onSelectFavorites={showFavorites}
+            onSelectCollection={showCollection}
+            onAction={() => setShowMobileSidebar(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
       <main className="relative flex min-w-0 flex-1 flex-col bg-background/45 backdrop-blur-xl">
-        <header className="shrink-0 border-b border-border/70 bg-background/20 px-5 py-3 backdrop-blur-xl">
+        <header className="shrink-0 border-b border-border/70 bg-background/20 px-4 py-3 backdrop-blur-xl md:px-5">
           <div className="flex h-10 items-center gap-3">
-            <div className="relative flex-1 max-w-xl rounded-xl border border-border/50 bg-card/30 px-px py-px backdrop-blur-md">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-10 rounded-xl border border-border/50 bg-card/30 backdrop-blur-md duration-200 animate-in fade-in-0 zoom-in-95 md:hidden active:scale-95"
+              onClick={() => setShowMobileSidebar(true)}
+              aria-label="Open navigation menu"
+            >
+              <PanelLeft className="size-4" />
+            </Button>
+
+            <div className="relative flex-1 rounded-xl border border-border/50 bg-card/30 px-px py-px backdrop-blur-md duration-300 animate-in fade-in-0 slide-in-from-top-2 md:max-w-xl">
               <div className="relative rounded-lg bg-background/40">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input

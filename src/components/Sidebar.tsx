@@ -17,10 +17,12 @@ interface SidebarProps {
     discovered: number;
     running: boolean;
   };
+  className?: string;
   onOpenSettings: () => void;
   onSelectLibrary: () => void;
   onSelectFavorites: () => void;
   onSelectCollection: (id: string) => void;
+  onAction?: () => void;
 }
 
 export function Sidebar({
@@ -29,16 +31,43 @@ export function Sidebar({
   selectedCollection,
   tags,
   scanStatus,
+  className,
   onOpenSettings,
   onSelectLibrary,
   onSelectFavorites,
   onSelectCollection,
+  onAction,
 }: SidebarProps) {
   const libraryActive = currentView === "all" || currentView === "directory";
   const favoritesActive = currentView === "favorites";
 
+  const handleSelectLibrary = () => {
+    onSelectLibrary();
+    onAction?.();
+  };
+
+  const handleSelectFavorites = () => {
+    onSelectFavorites();
+    onAction?.();
+  };
+
+  const handleSelectCollection = (id: string) => {
+    onSelectCollection(id);
+    onAction?.();
+  };
+
+  const handleOpenSettings = () => {
+    onOpenSettings();
+    onAction?.();
+  };
+
   return (
-    <aside className="relative flex w-64 shrink-0 flex-col overflow-hidden border-r border-border/70 bg-card/55 backdrop-blur-xl">
+    <aside
+      className={cn(
+        "relative flex w-64 shrink-0 flex-col overflow-hidden border-r border-border/70 bg-card/55 backdrop-blur-xl animate-in fade-in-0 slide-in-from-left-3 duration-300",
+        className,
+      )}
+    >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_12%,transparent),transparent_36%)]" />
       <div className="relative flex flex-col gap-4 p-4">
         <div className="flex items-center justify-between">
@@ -48,15 +77,15 @@ export function Sidebar({
           )}
         </div>
         
-        <div className="space-y-1">
+        <div className="space-y-1 animate-in fade-in-0 slide-in-from-left-2 duration-300">
           <Button
             variant="ghost"
             className={cn(
-              "w-full justify-start gap-3 rounded-xl text-muted-foreground hover:bg-primary/8 hover:text-foreground",
+              "w-full justify-start gap-3 rounded-xl text-muted-foreground transition-[background-color,color,box-shadow,transform] duration-200 hover:bg-primary/8 hover:text-foreground active:scale-[0.99]",
               libraryActive &&
                 "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
             )}
-            onClick={onSelectLibrary}
+            onClick={handleSelectLibrary}
           >
             <List className={cn("size-4", libraryActive && "text-primary")} />
             Library
@@ -64,11 +93,11 @@ export function Sidebar({
           <Button
             variant="ghost"
             className={cn(
-              "w-full justify-start gap-3 rounded-xl text-muted-foreground hover:bg-primary/8 hover:text-foreground",
+              "w-full justify-start gap-3 rounded-xl text-muted-foreground transition-[background-color,color,box-shadow,transform] duration-200 hover:bg-primary/8 hover:text-foreground active:scale-[0.99]",
               favoritesActive &&
                 "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
             )}
-            onClick={onSelectFavorites}
+            onClick={handleSelectFavorites}
           >
             <Heart className={cn("size-4", favoritesActive && "fill-current text-primary")} />
             Favorites
@@ -79,7 +108,7 @@ export function Sidebar({
       <Separator className="relative mx-4 w-auto" />
 
       <ScrollArea className="relative flex-1">
-        <div className="p-4 space-y-6">
+        <div className="space-y-6 p-4">
           <section className="space-y-2">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">
               Playlists
@@ -93,11 +122,11 @@ export function Sidebar({
                     key={collection.id}
                     variant="ghost"
                     className={cn(
-                      "h-8 w-full justify-start gap-3 rounded-lg text-sm font-normal text-muted-foreground hover:bg-primary/8 hover:text-foreground",
+                      "h-8 w-full justify-start gap-3 rounded-lg text-sm font-normal text-muted-foreground transition-[background-color,color,box-shadow,transform] duration-200 hover:bg-primary/8 hover:text-foreground active:scale-[0.99]",
                       active &&
                         "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
                     )}
-                    onClick={() => onSelectCollection(collection.id)}
+                      onClick={() => handleSelectCollection(collection.id)}
                   >
                     <Folder className={cn("size-3.5", active && "text-primary")} />
                     <span className="truncate">{collection.name}</span>
@@ -161,8 +190,8 @@ export function Sidebar({
         <Button 
           variant="outline" 
           size="sm" 
-          className="w-full gap-2 rounded-xl text-xs" 
-          onClick={onOpenSettings}
+          className="w-full gap-2 rounded-xl text-xs transition-[background-color,color,box-shadow,transform] duration-200 active:scale-[0.99]" 
+          onClick={handleOpenSettings}
         >
           <Settings className="size-3.5" />
           Settings

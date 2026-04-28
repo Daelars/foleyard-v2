@@ -8,15 +8,12 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
-  const pathParam = searchParams.get('path');
 
   let filePath: string | null = null;
 
   if (id) {
     const file = getFileById(id);
     if (file) filePath = file.path;
-  } else if (pathParam) {
-    filePath = decodeURIComponent(pathParam);
   }
 
   if (!filePath) {

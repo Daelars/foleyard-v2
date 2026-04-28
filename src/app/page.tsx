@@ -73,9 +73,15 @@ function HomeContent() {
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
-  const [currentView, setCurrentView] = useState<"all" | "favorites" | "collection" | "directory">("all");
-  const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
-  const [selectedDirectory, setSelectedDirectory] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<
+    "all" | "favorites" | "collection" | "directory"
+  >("all");
+  const [selectedCollection, setSelectedCollection] = useState<string | null>(
+    null,
+  );
+  const [selectedDirectory, setSelectedDirectory] = useState<string | null>(
+    null,
+  );
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState({
@@ -131,10 +137,11 @@ function HomeContent() {
         }
       }
     }
-    
+
     if (currentView === "favorites") params.set("favorites", "true");
-    if (currentView === "collection" && selectedCollection) params.set("collectionId", selectedCollection);
-    
+    if (currentView === "collection" && selectedCollection)
+      params.set("collectionId", selectedCollection);
+
     try {
       const response = await fetch(`/api/files?${params.toString()}`);
       if (!response.ok) throw new Error("Failed to fetch files");
@@ -149,7 +156,11 @@ function HomeContent() {
 
   const loadDirectories = useCallback(async () => {
     // Only load directories if we're not searching
-    if (deferredSearchQuery.trim() || currentView === "favorites" || currentView === "collection") {
+    if (
+      deferredSearchQuery.trim() ||
+      currentView === "favorites" ||
+      currentView === "collection"
+    ) {
       setDirectories([]);
       return;
     }
@@ -160,26 +171,30 @@ function HomeContent() {
       const res = await fetch(`/api/directories?${params.toString()}`);
       const data = await res.json();
       setDirectories(data.directories ?? []);
-    } catch {
-      console.error("Failed to load directories:", err);
+    } catch (error) {
+      console.error("Failed to load directories:", error);
+      toast.error("Failed to load directories");
     }
   }, [deferredSearchQuery, currentView, selectedDirectory]);
 
   const loadInitialData = useCallback(async () => {
     try {
-      const [settingsRes, collectionsRes, tagsRes, scanRes] = await Promise.all([
-        fetch("/api/settings"),
-        fetch("/api/collections"),
-        fetch("/api/tags"),
-        fetch("/api/scan")
-      ]);
-      
-      const [settingsData, collectionsData, tagsData, scanData] = await Promise.all([
-        settingsRes.json(),
-        collectionsRes.json(),
-        tagsRes.json(),
-        scanRes.json()
-      ]);
+      const [settingsRes, collectionsRes, tagsRes, scanRes] = await Promise.all(
+        [
+          fetch("/api/settings"),
+          fetch("/api/collections"),
+          fetch("/api/tags"),
+          fetch("/api/scan"),
+        ],
+      );
+
+      const [settingsData, collectionsData, tagsData, scanData] =
+        await Promise.all([
+          settingsRes.json(),
+          collectionsRes.json(),
+          tagsRes.json(),
+          scanRes.json(),
+        ]);
 
       setSettings(settingsData);
       setCollections(collectionsData.collections ?? []);
@@ -214,11 +229,18 @@ function HomeContent() {
         body: JSON.stringify({ id, action: "toggleFavorite" }),
       });
       if (!res.ok) throw new Error();
-      
+
       // Optimistic update
-      setFiles(prev => prev.map(f => f.id === id ? { ...f, isFavorite: !f.isFavorite } : f));
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.id === id ? { ...f, isFavorite: !f.isFavorite } : f,
+        ),
+      );
       if (selectedFile?.id === id) {
-        setSelectedFile({ ...selectedFile, isFavorite: !selectedFile.isFavorite });
+        setSelectedFile({
+          ...selectedFile,
+          isFavorite: !selectedFile.isFavorite,
+        });
       }
     } catch {
       toast.error("Failed to update favorite status");
@@ -319,7 +341,9 @@ function HomeContent() {
 
   const handleAddToCollection = async (collectionId: string) => {
     if (!selectedFile) return;
-    const playlist = collections.find((collection) => collection.id === collectionId);
+    const playlist = collections.find(
+      (collection) => collection.id === collectionId,
+    );
 
     try {
       const res = await fetch("/api/collections", {
@@ -359,7 +383,8 @@ function HomeContent() {
 
   const selectedPlaylistName =
     currentView === "collection"
-      ? collections.find((collection) => collection.id === selectedCollection)?.name ?? null
+      ? (collections.find((collection) => collection.id === selectedCollection)
+          ?.name ?? null)
       : null;
 
   return (
@@ -411,7 +436,12 @@ function HomeContent() {
           searchQuery={deferredSearchQuery}
           isLoading={isLoadingFiles}
         />
-        <div className={cn("h-0 transition-all duration-300", selectedFile && "h-28")} />
+        <div
+          className={cn(
+            "h-0 transition-all duration-300",
+            selectedFile && "h-28",
+          )}
+        />
       </main>
 
       <AudioPlayer

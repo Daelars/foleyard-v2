@@ -98,7 +98,7 @@ function AudioPlayerContent({
   const [isMuted, setIsMuted] = useState(false);
 
   useEffect(() => {
-    const audio = new Audio(`/api/audio?path=${encodeURIComponent(selectedFile.path)}`);
+    const audio = new Audio(`/api/audio?id=${encodeURIComponent(selectedFile.id)}`);
     audio.preload = "metadata";
     audio.volume = isMuted ? 0 : volume;
     audioRef.current = audio;

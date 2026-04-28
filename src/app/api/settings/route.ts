@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { clearLibraryData, getLibraryRoot, getLibraryStats } from '@/lib/db';
+import { getLibraryRoot, getLibraryStats } from '@/lib/db';
 import { saveLibraryRoot, validateLibraryRoot } from '@/lib/scanner';
 
 export const runtime = 'nodejs';

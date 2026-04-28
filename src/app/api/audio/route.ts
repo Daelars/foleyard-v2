@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
         'Content-Type': contentType,
       };
 
-      // @ts-ignore - ReadableStream conversion
+      // @ts-expect-error - ReadableStream conversion
       return new NextResponse(file, { headers: head, status: 206 });
     } else {
       const head = {
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
         'Content-Type': contentType,
       };
       const file = fs.createReadStream(filePath);
-      // @ts-ignore
+      // @ts-expect-error - ReadableStream conversion
       return new NextResponse(file, { headers: head });
     }
   } catch (err) {

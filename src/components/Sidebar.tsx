@@ -1,6 +1,6 @@
 "use client";
 
-import { Folder, Heart, List, Tag, Settings, Activity } from "lucide-react";
+import { Folder, Heart, List, Settings, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";

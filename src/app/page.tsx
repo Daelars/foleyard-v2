@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useState } from "react";
 import { Search, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Sidebar } from "@/components/Sidebar";
@@ -140,7 +140,7 @@ function HomeContent() {
       if (!response.ok) throw new Error("Failed to fetch files");
       const data = await response.json();
       setFiles(data.files ?? []);
-    } catch (err) {
+    } catch {
       toast.error("Failed to load library");
     } finally {
       setIsLoadingFiles(false);
@@ -160,7 +160,7 @@ function HomeContent() {
       const res = await fetch(`/api/directories?${params.toString()}`);
       const data = await res.json();
       setDirectories(data.directories ?? []);
-    } catch (err) {
+    } catch {
       console.error("Failed to load directories:", err);
     }
   }, [deferredSearchQuery, currentView, selectedDirectory]);
@@ -185,7 +185,7 @@ function HomeContent() {
       setCollections(collectionsData.collections ?? []);
       setTags(tagsData.tags ?? []);
       setScanStatus(scanData);
-    } catch (err) {
+    } catch {
       toast.error("Failed to sync with server");
     }
   }, []);
@@ -213,7 +213,7 @@ function HomeContent() {
       if (selectedFile?.id === id) {
         setSelectedFile({ ...selectedFile, isFavorite: !selectedFile.isFavorite });
       }
-    } catch (e) {
+    } catch {
       toast.error("Failed to update favorite status");
     }
   };
@@ -237,7 +237,7 @@ function HomeContent() {
         libraryRoot: data.libraryRoot,
         stats: data.stats,
       }));
-    } catch (e) {
+    } catch {
       toast.error(e instanceof Error ? e.message : "Failed to save settings");
     }
   };
@@ -253,7 +253,7 @@ function HomeContent() {
 
       setScanStatus(data.status);
       toast.info("Scan started");
-    } catch (e) {
+    } catch {
       toast.error(e instanceof Error ? e.message : "Failed to start scan");
     }
   };
@@ -269,7 +269,7 @@ function HomeContent() {
       if (!res.ok) throw new Error();
       loadInitialData();
       toast.success("Playlist created");
-    } catch (e) {
+    } catch {
       toast.error("Failed to create playlist");
     }
   };
@@ -290,7 +290,7 @@ function HomeContent() {
 
       loadInitialData();
       toast.success("Playlist deleted");
-    } catch (e) {
+    } catch {
       toast.error("Failed to delete playlist");
     }
   };
@@ -305,7 +305,7 @@ function HomeContent() {
       });
       loadInitialData();
       toast.success("Tag created");
-    } catch (e) {
+    } catch {
       toast.error("Failed to create tag");
     }
   };
@@ -327,7 +327,7 @@ function HomeContent() {
 
       await loadInitialData();
       toast.success(`Added to ${playlist?.name ?? "playlist"}`);
-    } catch (e) {
+    } catch {
       toast.error("Failed to add to playlist");
     }
   };

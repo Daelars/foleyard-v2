@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 
 interface SidebarProps {
   currentView: "all" | "favorites" | "collection" | "directory";
@@ -33,9 +34,13 @@ export function Sidebar({
   onSelectFavorites,
   onSelectCollection,
 }: SidebarProps) {
+  const libraryActive = currentView === "all" || currentView === "directory";
+  const favoritesActive = currentView === "favorites";
+
   return (
-    <aside className="w-64 shrink-0 border-r border-border bg-card/30 flex flex-col overflow-hidden">
-      <div className="p-4 flex flex-col gap-4">
+    <aside className="relative flex w-64 shrink-0 flex-col overflow-hidden border-r border-border/70 bg-card/55 backdrop-blur-xl">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_12%,transparent),transparent_36%)]" />
+      <div className="relative flex flex-col gap-4 p-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold tracking-tight px-2">SoundSlop</h2>
           {scanStatus.running && (
@@ -45,49 +50,65 @@ export function Sidebar({
         
         <div className="space-y-1">
           <Button
-            variant={currentView === "all" || currentView === "directory" ? "secondary" : "ghost"}
-            className="w-full justify-start gap-3"
+            variant="ghost"
+            className={cn(
+              "w-full justify-start gap-3 rounded-xl text-muted-foreground hover:bg-primary/8 hover:text-foreground",
+              libraryActive &&
+                "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
+            )}
             onClick={onSelectLibrary}
           >
-            <List className="size-4" />
+            <List className={cn("size-4", libraryActive && "text-primary")} />
             Library
           </Button>
           <Button
-            variant={currentView === "favorites" ? "secondary" : "ghost"}
-            className="w-full justify-start gap-3"
+            variant="ghost"
+            className={cn(
+              "w-full justify-start gap-3 rounded-xl text-muted-foreground hover:bg-primary/8 hover:text-foreground",
+              favoritesActive &&
+                "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
+            )}
             onClick={onSelectFavorites}
           >
-            <Heart className={`size-4 ${currentView === "favorites" ? "fill-current text-red-500" : ""}`} />
+            <Heart className={cn("size-4", favoritesActive && "fill-current text-primary")} />
             Favorites
           </Button>
         </div>
       </div>
 
-      <Separator className="mx-4 w-auto" />
+      <Separator className="relative mx-4 w-auto" />
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="relative flex-1">
         <div className="p-4 space-y-6">
           <section className="space-y-2">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">
               Playlists
             </h3>
             <div className="space-y-1">
-              {collections.map((collection) => (
-                <Button
-                  key={collection.id}
-                  variant={selectedCollection === collection.id ? "secondary" : "ghost"}
-                  className="w-full justify-start gap-3 h-8 text-sm font-normal"
-                  onClick={() => onSelectCollection(collection.id)}
-                >
-                  <Folder className="size-3.5" />
-                  <span className="truncate">{collection.name}</span>
-                  {typeof collection.fileCount === "number" && (
-                    <span className="ml-auto text-[10px] text-muted-foreground">
-                      {collection.fileCount}
-                    </span>
-                  )}
-                </Button>
-              ))}
+              {collections.map((collection) => {
+                const active = selectedCollection === collection.id;
+
+                return (
+                  <Button
+                    key={collection.id}
+                    variant="ghost"
+                    className={cn(
+                      "h-8 w-full justify-start gap-3 rounded-lg text-sm font-normal text-muted-foreground hover:bg-primary/8 hover:text-foreground",
+                      active &&
+                        "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
+                    )}
+                    onClick={() => onSelectCollection(collection.id)}
+                  >
+                    <Folder className={cn("size-3.5", active && "text-primary")} />
+                    <span className="truncate">{collection.name}</span>
+                    {typeof collection.fileCount === "number" && (
+                      <span className={cn("ml-auto text-[10px]", active ? "text-primary" : "text-muted-foreground")}>
+                        {collection.fileCount}
+                      </span>
+                    )}
+                  </Button>
+                );
+              })}
               {collections.length === 0 && (
                 <p className="text-xs text-muted-foreground px-2 py-1">No playlists yet</p>
               )}
@@ -121,13 +142,13 @@ export function Sidebar({
         </div>
       </ScrollArea>
 
-      <div className="p-4 border-t border-border bg-background/50">
+      <div className="relative border-t border-border/70 bg-background/45 p-4 backdrop-blur-xl">
         <div className="mb-4 space-y-2">
           <div className="flex items-center justify-between text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">
             <span>Status</span>
             <span className={scanStatus.running ? "text-primary" : ""}>{scanStatus.phase}</span>
           </div>
-          <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted shadow-inner">
              <div 
                className={`h-full bg-primary transition-all duration-500 ${scanStatus.running ? "w-1/2 animate-pulse" : "w-full"}`} 
              />
@@ -140,7 +161,7 @@ export function Sidebar({
         <Button 
           variant="outline" 
           size="sm" 
-          className="w-full gap-2 text-xs" 
+          className="w-full gap-2 rounded-xl text-xs" 
           onClick={onOpenSettings}
         >
           <Settings className="size-3.5" />

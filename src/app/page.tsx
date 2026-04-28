@@ -356,7 +356,8 @@ function HomeContent() {
       : null;
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden font-sans">
+    <div className="relative flex h-screen overflow-hidden bg-background font-sans">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_10%,transparent),transparent_32%),radial-gradient(circle_at_bottom_right,color-mix(in_oklab,var(--foreground)_5%,transparent),transparent_38%)]" />
       <Sidebar
         currentView={currentView}
         collections={collections}
@@ -369,23 +370,24 @@ function HomeContent() {
         onSelectCollection={showCollection}
       />
 
-      <main className="flex-1 flex flex-col min-w-0 bg-background/50">
-        <header className="h-16 shrink-0 border-b border-border flex items-center px-6 gap-4">
-          <div className="relative flex-1 max-w-xl">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search library..."
-              className="pl-9 h-10 bg-muted/30 border-none focus-visible:ring-1 focus-visible:ring-primary/50"
-            />
-          </div>
-          <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
-             {isLoadingFiles ? (
-               <Loader2 className="size-4 animate-spin text-primary" />
-             ) : (
-               <span>{files.length} Sounds Found</span>
-             )}
+      <main className="relative flex min-w-0 flex-1 flex-col bg-background/45 backdrop-blur-xl">
+        <header className="shrink-0 border-b border-border/70 bg-background/20 px-5 py-3 backdrop-blur-xl">
+          <div className="flex h-10 items-center gap-3">
+            <div className="relative flex-1 max-w-xl rounded-xl border border-border/50 bg-card/30 px-px py-px backdrop-blur-md">
+              <div className="relative rounded-lg bg-background/40">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search library..."
+                  className="h-8 rounded-lg border-0 bg-transparent pl-10 pr-4 text-sm shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
+                />
+              </div>
+            </div>
+
+            {isLoadingFiles && (
+              <Loader2 className="size-4 text-primary animate-spin" />
+            )}
           </div>
         </header>
 

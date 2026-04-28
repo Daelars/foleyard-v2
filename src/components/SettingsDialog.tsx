@@ -199,8 +199,9 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden p-0 sm:max-w-3xl">
-        <DialogHeader className="border-b border-border px-6 py-5">
+      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden border-border/70 bg-popover/92 p-0 backdrop-blur-2xl sm:max-w-3xl">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_12%,transparent),transparent_34%)]" />
+        <DialogHeader className="relative border-b border-border/70 px-6 py-5">
           <DialogTitle className="flex items-center gap-2 text-xl font-bold">
             <Database className="size-5 text-primary" />
             Settings
@@ -210,8 +211,8 @@ export function SettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="library" className="flex min-h-0 flex-1 flex-col">
-          <div className="border-b border-border px-6 py-3">
+        <Tabs defaultValue="library" className="relative flex min-h-0 flex-1 flex-col">
+          <div className="border-b border-border/70 bg-card/30 px-6 py-3 backdrop-blur-xl">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="library">Library</TabsTrigger>
               <TabsTrigger value="metadata">Playlists & Tags</TabsTrigger>
@@ -220,7 +221,7 @@ export function SettingsDialog({
 
           <TabsContent value="library" className="min-h-0 flex-1 overflow-y-auto p-6">
             <div className="space-y-6">
-              <section className="space-y-4">
+              <section className="space-y-4 rounded-2xl border border-border/60 bg-card/45 p-4 backdrop-blur">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h3 className="flex items-center gap-2 text-sm font-semibold">
@@ -293,7 +294,7 @@ export function SettingsDialog({
 
               <Separator />
 
-              <section className="space-y-4">
+              <section className="space-y-4 rounded-2xl border border-border/60 bg-card/45 p-4 backdrop-blur">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h3 className="text-sm font-semibold">Scan Library</h3>
@@ -333,7 +334,7 @@ export function SettingsDialog({
 
           <TabsContent value="metadata" className="min-h-0 flex-1 overflow-y-auto p-6">
             <div className="space-y-8">
-              <section className="space-y-4">
+              <section className="space-y-4 rounded-2xl border border-border/60 bg-card/45 p-4 backdrop-blur">
                 <div className="flex items-center justify-between">
                   <h3 className="flex items-center gap-2 text-sm font-semibold">
                     <ListMusic className="size-4" /> Playlists
@@ -356,7 +357,7 @@ export function SettingsDialog({
                     <Plus className="size-4" />
                   </Button>
                 </div>
-                <div className="divide-y divide-border rounded-xl border border-border">
+                <div className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border/70 bg-background/30">
                   {collections.length === 0 ? (
                     <div className="p-4 text-sm text-muted-foreground">
                       No playlists yet. Create one, then add sounds from the audio player.
@@ -390,7 +391,7 @@ export function SettingsDialog({
 
               <Separator />
 
-              <section className="space-y-4">
+              <section className="space-y-4 rounded-2xl border border-border/60 bg-card/45 p-4 backdrop-blur">
                 <div className="flex items-center justify-between">
                   <h3 className="flex items-center gap-2 text-sm font-semibold">
                     <TagIcon className="size-4" /> Tags

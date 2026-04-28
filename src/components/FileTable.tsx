@@ -1,11 +1,12 @@
 "use client";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRef } from "react";
-import { Heart, ChevronRight, Play, Folder, ChevronLeft, ListMusic } from "lucide-react";
+import { useRef, useState } from "react";
+import { Heart, ChevronRight, Play, Folder, ChevronLeft, ListMusic, Copy } from "lucide-react";
 import { cn, formatDuration } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { toast } from "sonner";
 
 interface FileRecord {
   id: string;
@@ -60,6 +61,7 @@ export function FileTable({
   isLoading,
 }: FileTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const [draggingFile, setDraggingFile] = useState<string | null>(null);
   const items = [
     ...directories.map((d) => ({ type: "directory" as const, data: d })),
     ...files.map((f) => ({ type: "file" as const, data: f })),
@@ -83,7 +85,7 @@ export function FileTable({
     onNavigate(parts.length > 0 ? parts.join("/") : null);
   };
 
-  const handleNavigateLibrary = () => {
+const handleNavigateLibrary = () => {
     if (onNavigateLibrary) {
       onNavigateLibrary();
       return;
@@ -92,10 +94,23 @@ export function FileTable({
     onNavigate(null);
   };
 
+  const handleDragStart = async (e: React.DragEvent, file: FileRecord) => {
+    const filePath = file.path;
+    const fileUri = `file:///${filePath.replace(/\\/g, "/")}`;
+    e.dataTransfer.setData("text/uri-list", fileUri);
+    e.dataTransfer.setData("text/plain", filePath);
+    e.dataTransfer.effectAllowed = "copy";
+    setDraggingFile(file.id);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingFile(null);
+  };
+
   if (items.length === 0 && !isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center">
-        <div className="size-16 bg-muted rounded-full flex items-center justify-center mb-4">
+      <div className="flex flex-1 flex-col items-center justify-center p-8 text-center text-muted-foreground">
+        <div className="mb-4 flex size-16 items-center justify-center rounded-full border border-border bg-card/70 shadow-lg backdrop-blur">
            <Play className="size-8 opacity-20" />
         </div>
         <h3 className="text-lg font-medium">No sounds found</h3>
@@ -109,9 +124,9 @@ export function FileTable({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex min-h-0 flex-1 flex-col">
       {(currentDirectory || currentPlaylistName) && !searchQuery && (
-        <div className="px-6 py-2 border-b border-border bg-muted/20 flex items-center gap-2">
+        <div className="flex items-center gap-2 border-b border-border/70 bg-card/35 px-6 py-2 backdrop-blur-xl">
            <Button variant="ghost" size="icon" className="size-7 rounded-full" onClick={handleBack}>
              <ChevronLeft className="size-4" />
            </Button>
@@ -159,12 +174,12 @@ export function FileTable({
               return (
                 <div
                   key={`dir-${dir}`}
-                  className="absolute top-0 left-0 w-full flex items-center gap-4 px-4 py-2 border-b border-border/40 hover:bg-accent/40 transition-colors group cursor-pointer"
+                  className="group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-border/35 px-4 py-2 transition-colors hover:bg-card/65 hover:backdrop-blur"
                   style={{ height: `64px`, transform: `translateY(${virtualRow.start}px)` }}
                   onClick={() => onNavigate(dir)}
                 >
-                  <div className="shrink-0 size-10 flex items-center justify-center">
-                    <Folder className="size-5 text-primary/60 group-hover:text-primary transition-colors fill-primary/5" />
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
+                    <Folder className="size-5 fill-primary/5 transition-colors group-hover:text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="truncate text-sm font-semibold">{label}</div>
@@ -175,23 +190,28 @@ export function FileTable({
               );
             }
 
-            const file = item.data;
+const file = item.data;
             const isSelected = selectedFileId === file.id;
+            const isDragging = draggingFile === file.id;
 
             return (
               <div
                 key={`file-${file.id}`}
                 className={cn(
-                  "absolute top-0 left-0 w-full flex items-center gap-4 px-4 py-2 border-b border-border/40 transition-colors group cursor-pointer",
-                  isSelected ? "bg-accent/80" : "hover:bg-accent/40"
+                   "group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-border/35 px-4 py-2 transition-colors",
+                   isSelected ? "bg-card/80 shadow-[inset_3px_0_0_var(--primary)] backdrop-blur" : "hover:bg-card/65 hover:backdrop-blur",
+                   isDragging && "opacity-50 cursor-grabbing"
                 )}
                 style={{
                   height: `64px`,
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
                 onClick={() => onSelect(file, virtualRow.index)}
+                onDragStart={(e) => handleDragStart(e, file)}
+                onDragEnd={handleDragEnd}
+                draggable={!isLoading}
               >
-                <div className="shrink-0 size-10 flex items-center justify-center">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted/45 ring-1 ring-border/50">
                   <Play className={cn(
                     "size-4 transition-all",
                     isSelected ? "text-primary fill-current" : "text-muted-foreground/60 group-hover:text-muted-foreground"
@@ -203,12 +223,38 @@ export function FileTable({
                     {highlightMatch(file.filename, searchQuery)}
                   </div>
                   <div className="mt-1 flex items-center gap-3 text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">
-                    <span className="bg-muted px-1.5 py-0.5 rounded text-[9px]">{file.format ?? "???"}</span>
+                    <span className="rounded bg-muted/80 px-1.5 py-0.5 text-[9px] ring-1 ring-border/50">{file.format ?? "???"}</span>
                     <span>{formatDuration(file.duration)}</span>
                   </div>
                 </div>
 
                 <div className="shrink-0 flex items-center gap-3">
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 rounded-full text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await navigator.clipboard.writeText(file.path);
+                              toast.success("File path copied!");
+                            } catch {
+                              toast.error("Failed to copy path");
+                            }
+                          }}
+                        >
+                          <Copy className="size-4" />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent>
+                      Copy file path
+                    </TooltipContent>
+                  </Tooltip>
+
                   <Tooltip>
                     <TooltipTrigger
                       render={

@@ -1,4 +1,3 @@
-import fs from 'fs';
 import path from 'path';
 
 import Database from 'better-sqlite3';
@@ -14,7 +13,6 @@ import * as schema from '@/lib/schema';
 
 const databasePath = getDatabasePath();
 ensureDesktopDatabaseInitialized(databasePath);
-fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 const sqlite = new Database(databasePath);
 
 sqlite.pragma('journal_mode = WAL');

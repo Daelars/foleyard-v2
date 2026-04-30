@@ -93,6 +93,7 @@ function createMainWindow() {
     width: 1400,
     height: 900,
     backgroundColor: "#0a0a0c",
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -106,6 +107,8 @@ function createMainWindow() {
   } else {
     void mainWindow.loadFile(path.join(__dirname, "../.next/server/index.html"));
   }
+
+  mainWindow.setMenuBarVisibility(false);
 
   mainWindow.on("closed", () => {
     mainWindow = null;

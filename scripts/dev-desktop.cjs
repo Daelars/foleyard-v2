@@ -2,6 +2,8 @@
 const { spawn } = require("child_process");
 const waitOn = require("wait-on");
 
+require("./verify-workspace-root.cjs");
+
 const isWindows = process.platform === "win32";
 const env = { ...process.env, SOUNDSLOP_DESKTOP: "1" };
 let nextProcess = null;

@@ -4,8 +4,10 @@
   "private": true,
   "main": "electron/main.cjs",
   "scripts": {
+    "predev": "node scripts/verify-workspace-root.cjs",
     "dev": "next dev",
     "dev:desktop": "node scripts/dev-desktop.cjs",
+    "prebuild": "node scripts/verify-workspace-root.cjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

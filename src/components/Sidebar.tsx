@@ -1,8 +1,9 @@
 "use client";
 
-import { Folder, Heart, List, Tag, Settings, Activity } from "lucide-react";
+import { Folder, Heart, List, Settings, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DotmSquare3 } from "@/components/ui/dotm-square-3";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -17,10 +18,12 @@ interface SidebarProps {
     discovered: number;
     running: boolean;
   };
+  className?: string;
   onOpenSettings: () => void;
   onSelectLibrary: () => void;
   onSelectFavorites: () => void;
   onSelectCollection: (id: string) => void;
+  onAction?: () => void;
 }
 
 export function Sidebar({
@@ -29,16 +32,44 @@ export function Sidebar({
   selectedCollection,
   tags,
   scanStatus,
+  className,
   onOpenSettings,
   onSelectLibrary,
   onSelectFavorites,
   onSelectCollection,
+  onAction,
 }: SidebarProps) {
   const libraryActive = currentView === "all" || currentView === "directory";
   const favoritesActive = currentView === "favorites";
+  const scanComplete = !scanStatus.running && scanStatus.discovered > 0;
+
+  const handleSelectLibrary = () => {
+    onSelectLibrary();
+    onAction?.();
+  };
+
+  const handleSelectFavorites = () => {
+    onSelectFavorites();
+    onAction?.();
+  };
+
+  const handleSelectCollection = (id: string) => {
+    onSelectCollection(id);
+    onAction?.();
+  };
+
+  const handleOpenSettings = () => {
+    onOpenSettings();
+    onAction?.();
+  };
 
   return (
-    <aside className="relative flex w-64 shrink-0 flex-col overflow-hidden border-r border-border/70 bg-card/55 backdrop-blur-xl">
+    <aside
+      className={cn(
+        "relative flex w-64 shrink-0 flex-col overflow-hidden border-r border-border/70 bg-card/55 backdrop-blur-xl animate-in fade-in-0 slide-in-from-left-3 duration-300",
+        className,
+      )}
+    >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_12%,transparent),transparent_36%)]" />
       <div className="relative flex flex-col gap-4 p-4">
         <div className="flex items-center justify-between">
@@ -48,15 +79,15 @@ export function Sidebar({
           )}
         </div>
         
-        <div className="space-y-1">
+        <div className="space-y-1 animate-in fade-in-0 slide-in-from-left-2 duration-300">
           <Button
             variant="ghost"
             className={cn(
-              "w-full justify-start gap-3 rounded-xl text-muted-foreground hover:bg-primary/8 hover:text-foreground",
+              "w-full justify-start gap-3 rounded-xl text-muted-foreground transition-[background-color,color,box-shadow,transform] duration-200 hover:bg-primary/8 hover:text-foreground active:scale-[0.99]",
               libraryActive &&
                 "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
             )}
-            onClick={onSelectLibrary}
+            onClick={handleSelectLibrary}
           >
             <List className={cn("size-4", libraryActive && "text-primary")} />
             Library
@@ -64,11 +95,11 @@ export function Sidebar({
           <Button
             variant="ghost"
             className={cn(
-              "w-full justify-start gap-3 rounded-xl text-muted-foreground hover:bg-primary/8 hover:text-foreground",
+              "w-full justify-start gap-3 rounded-xl text-muted-foreground transition-[background-color,color,box-shadow,transform] duration-200 hover:bg-primary/8 hover:text-foreground active:scale-[0.99]",
               favoritesActive &&
                 "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
             )}
-            onClick={onSelectFavorites}
+            onClick={handleSelectFavorites}
           >
             <Heart className={cn("size-4", favoritesActive && "fill-current text-primary")} />
             Favorites
@@ -79,7 +110,7 @@ export function Sidebar({
       <Separator className="relative mx-4 w-auto" />
 
       <ScrollArea className="relative flex-1">
-        <div className="p-4 space-y-6">
+        <div className="space-y-6 p-4">
           <section className="space-y-2">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">
               Playlists
@@ -93,11 +124,11 @@ export function Sidebar({
                     key={collection.id}
                     variant="ghost"
                     className={cn(
-                      "h-8 w-full justify-start gap-3 rounded-lg text-sm font-normal text-muted-foreground hover:bg-primary/8 hover:text-foreground",
+                      "h-8 w-full justify-start gap-3 rounded-lg text-sm font-normal text-muted-foreground transition-[background-color,color,box-shadow,transform] duration-200 hover:bg-primary/8 hover:text-foreground active:scale-[0.99]",
                       active &&
                         "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
                     )}
-                    onClick={() => onSelectCollection(collection.id)}
+                      onClick={() => handleSelectCollection(collection.id)}
                   >
                     <Folder className={cn("size-3.5", active && "text-primary")} />
                     <span className="truncate">{collection.name}</span>
@@ -143,26 +174,48 @@ export function Sidebar({
       </ScrollArea>
 
       <div className="relative border-t border-border/70 bg-background/45 p-4 backdrop-blur-xl">
-        <div className="mb-4 space-y-2">
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">
-            <span>Status</span>
-            <span className={scanStatus.running ? "text-primary" : ""}>{scanStatus.phase}</span>
+        <div className="mb-4 rounded-2xl border border-border/70 bg-card/40 p-3 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <DotmSquare3
+              size={24}
+              dotSize={3}
+              speed={1.2}
+              animated={scanStatus.running}
+              muted={!scanStatus.running && !scanComplete}
+              pattern="full"
+              ariaLabel={scanStatus.running ? "Scan running" : "Scan idle"}
+              className={cn(
+                "shrink-0",
+                scanStatus.running
+                  ? "text-primary"
+                  : scanComplete
+                    ? "text-foreground"
+                    : "text-muted-foreground/70",
+              )}
+            />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
+                <span>Status</span>
+                <span className={scanStatus.running ? "text-primary" : "text-muted-foreground"}>
+                  {scanStatus.phase}
+                </span>
+              </div>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                {scanStatus.running
+                  ? `${scanStatus.discovered} files discovered`
+                  : scanStatus.discovered > 0
+                    ? `${scanStatus.discovered} files indexed`
+                    : "Ready to scan library"}
+              </p>
+            </div>
           </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted shadow-inner">
-             <div 
-               className={`h-full bg-primary transition-all duration-500 ${scanStatus.running ? "w-1/2 animate-pulse" : "w-full"}`} 
-             />
-          </div>
-          <p className="text-[10px] text-muted-foreground">
-            {scanStatus.discovered} files discovered
-          </p>
         </div>
         
         <Button 
           variant="outline" 
           size="sm" 
-          className="w-full gap-2 rounded-xl text-xs" 
-          onClick={onOpenSettings}
+          className="w-full gap-2 rounded-xl text-xs transition-[background-color,color,box-shadow,transform] duration-200 active:scale-[0.99]" 
+          onClick={handleOpenSettings}
         >
           <Settings className="size-3.5" />
           Settings

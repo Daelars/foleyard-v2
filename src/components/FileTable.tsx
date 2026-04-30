@@ -13,6 +13,7 @@ import {
   Heart,
   ListMusic,
   MoreHorizontal,
+  Pause,
   Play,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -59,6 +60,7 @@ interface FileTableProps {
   onNavigate: (dir: string | null) => void;
   onNavigateLibrary?: () => void;
   selectedFileId: string | null;
+  isSelectedFilePlaying?: boolean;
   onSelect: (file: FileRecord, index: number) => void;
   onToggleFavorite: (id: string) => Promise<void>;
   searchQuery: string;
@@ -90,6 +92,7 @@ export function FileTable({
   onNavigate,
   onNavigateLibrary,
   selectedFileId,
+  isSelectedFilePlaying = false,
   onSelect,
   onToggleFavorite,
   searchQuery,
@@ -344,14 +347,22 @@ export function FileTable({
                     onClick={() => onSelect(file, virtualRow.index)}
                   >
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted/45 ring-1 ring-border/50">
-                      <Play
-                        className={cn(
-                          "size-4 transition-all",
-                          isSelected
-                            ? "fill-current text-primary"
-                            : "text-muted-foreground/60 group-hover:text-muted-foreground",
-                        )}
-                      />
+                      {isSelected && isSelectedFilePlaying ? (
+                        <Pause
+                          className={cn(
+                            "size-4 fill-current text-primary transition-all",
+                          )}
+                        />
+                      ) : (
+                        <Play
+                          className={cn(
+                            "size-4 transition-all",
+                            isSelected
+                              ? "fill-current text-primary"
+                              : "text-muted-foreground/60 group-hover:text-muted-foreground",
+                          )}
+                        />
+                      )}
                     </div>
 
                     <div className="min-w-0 flex-1">

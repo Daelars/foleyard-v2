@@ -38,6 +38,7 @@ interface FileRecord {
 interface AudioPlayerProps {
   selectedFile: FileRecord | null;
   onClose: () => void;
+  onPlaybackChange?: (isPlaying: boolean) => void;
   onToggleFavorite: (id: string) => Promise<void>;
   collections: { id: string; name: string; fileCount?: number }[];
   onAddToCollection: (collectionId: string) => Promise<void>;
@@ -48,15 +49,50 @@ const VOLUME_STORAGE_KEY = "soundslop-volume";
 export function AudioPlayer({
   selectedFile,
   onClose,
+  onPlaybackChange,
   onToggleFavorite,
   collections,
   onAddToCollection,
 }: AudioPlayerProps) {
+  if (!selectedFile) {
+    return null;
+  }
+
+  return (
+    <AudioPlayerContent
+      key={selectedFile.id}
+      selectedFile={selectedFile}
+      onClose={onClose}
+      onPlaybackChange={onPlaybackChange}
+      onToggleFavorite={onToggleFavorite}
+      collections={collections}
+      onAddToCollection={onAddToCollection}
+    />
+  );
+}
+
+function AudioPlayerContent({
+  selectedFile,
+  onClose,
+  onPlaybackChange,
+  onToggleFavorite,
+  collections,
+  onAddToCollection,
+}: {
+  selectedFile: FileRecord;
+  onClose: () => void;
+  onPlaybackChange?: (isPlaying: boolean) => void;
+  onToggleFavorite: (id: string) => Promise<void>;
+  collections: { id: string; name: string; fileCount?: number }[];
+  onAddToCollection: (collectionId: string) => Promise<void>;
+}) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const volumeRef = useRef(0.72);
+  const isMutedRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [waveformData, setWaveformData] = useState<number[]>([]);
+  const [waveformData] = useState<number[]>([]);
   const [volume, setVolume] = useState(() => {
     if (typeof window === "undefined") {
       return 0.72;
@@ -69,57 +105,14 @@ export function AudioPlayer({
   const [isMuted, setIsMuted] = useState(false);
 
   useEffect(() => {
-    if (!selectedFile?.path) {
-      setWaveformData([]);
-      return;
-    }
-
-    let cancelled = false;
-
-    fetch(`/api/waveform?path=${encodeURIComponent(selectedFile.path)}`)
-      .then((response) => response.json())
-      .then((data) => {
-        if (cancelled) {
-          return;
-        }
-
-        if (Array.isArray(data.peaks) && data.peaks.length > 0) {
-          setWaveformData(data.peaks);
-          return;
-        }
-
-        setWaveformData(createFallbackWaveform(selectedFile.id));
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setWaveformData(createFallbackWaveform(selectedFile.id));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedFile?.id, selectedFile?.path]);
+    volumeRef.current = volume;
+    isMutedRef.current = isMuted;
+  }, [isMuted, volume]);
 
   useEffect(() => {
-    if (!selectedFile) {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = "";
-        audioRef.current = null;
-      }
-
-      setIsPlaying(false);
-      setCurrentTime(0);
-      setDuration(0);
-      return;
-    }
-
-    const audio = new Audio(
-      `/api/audio?path=${encodeURIComponent(selectedFile.path)}`,
-    );
+    const audio = new Audio(`/api/audio?id=${encodeURIComponent(selectedFile.id)}`);
     audio.preload = "metadata";
-    audio.volume = isMuted ? 0 : volume;
+    audio.volume = isMutedRef.current ? 0 : volumeRef.current;
     audioRef.current = audio;
 
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
@@ -157,7 +150,7 @@ export function AudioPlayer({
         audioRef.current = null;
       }
     };
-  }, [selectedFile?.id, selectedFile?.path]);
+  }, [selectedFile.id]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -166,18 +159,18 @@ export function AudioPlayer({
   }, [isMuted, volume]);
 
   useEffect(() => {
+    onPlaybackChange?.(isPlaying);
+  }, [isPlaying, onPlaybackChange]);
+
+  useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(VOLUME_STORAGE_KEY, String(volume));
     }
   }, [volume]);
 
   const title = useMemo(() => {
-    if (!selectedFile) {
-      return "";
-    }
-
     return selectedFile.filename.replace(/\.[^.]+$/, "");
-  }, [selectedFile]);
+  }, [selectedFile.filename]);
 
   const togglePlayback = () => {
     const audio = audioRef.current;
@@ -216,10 +209,6 @@ export function AudioPlayer({
       setIsMuted(true);
     }
   };
-
-  if (!selectedFile) {
-    return null;
-  }
 
   const effectiveDuration = duration || selectedFile.duration || 0;
 
@@ -412,25 +401,4 @@ function formatTime(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-}
-
-function createFallbackWaveform(seed: string) {
-  const values: number[] = [];
-  let state = 0;
-
-  for (let index = 0; index < seed.length; index += 1) {
-    state = (state << 5) - state + seed.charCodeAt(index);
-    state |= 0;
-  }
-
-  state = Math.abs(state) || 1;
-
-  for (let index = 0; index < 180; index += 1) {
-    state = (state * 1664525 + 1013904223) % 4294967296;
-    const noise = state / 4294967296;
-    const envelope = Math.sin((index / 179) * Math.PI) * 0.16;
-    values.push(Math.max(0.06, Math.min(1, 0.14 + noise * 0.66 + envelope)));
-  }
-
-  return values;
 }

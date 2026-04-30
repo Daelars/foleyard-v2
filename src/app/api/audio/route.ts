@@ -8,15 +8,12 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
-  const pathParam = searchParams.get('path');
 
   let filePath: string | null = null;
 
   if (id) {
     const file = getFileById(id);
     if (file) filePath = file.path;
-  } else if (pathParam) {
-    filePath = decodeURIComponent(pathParam);
   }
 
   if (!filePath) {
@@ -56,7 +53,7 @@ export async function GET(request: NextRequest) {
         'Content-Type': contentType,
       };
 
-      // @ts-ignore - ReadableStream conversion
+      // @ts-expect-error - ReadableStream conversion
       return new NextResponse(file, { headers: head, status: 206 });
     } else {
       const head = {
@@ -64,7 +61,7 @@ export async function GET(request: NextRequest) {
         'Content-Type': contentType,
       };
       const file = fs.createReadStream(filePath);
-      // @ts-ignore
+      // @ts-expect-error - ReadableStream conversion
       return new NextResponse(file, { headers: head });
     }
   } catch (err) {

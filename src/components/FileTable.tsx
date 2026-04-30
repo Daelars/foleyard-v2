@@ -32,7 +32,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getDesktopBridge, isDesktopApp } from "@/lib/desktop";
 import { cn, formatDuration } from "@/lib/utils";
 
@@ -66,7 +70,10 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   const parts = text.split(new RegExp(`(${query})`, "gi"));
   return parts.map((part, i) =>
     part.toLowerCase() === query.toLowerCase() ? (
-      <mark key={i} className="rounded-sm bg-primary/30 px-0.5 text-primary-foreground">
+      <mark
+        key={i}
+        className="rounded-sm bg-primary/30 px-0.5 text-primary-foreground"
+      >
         {part}
       </mark>
     ) : (
@@ -140,7 +147,10 @@ export function FileTable({
       const result = await getDesktopBridge()?.copyFilePath(file.id);
       if (result?.ok) {
         toast.success("File path copied", {
-          action: { label: "Copy", onClick: () => navigator.clipboard.writeText(file.path) },
+          action: {
+            label: "Copy",
+            onClick: () => navigator.clipboard.writeText(file.path),
+          },
         });
         return;
       }
@@ -191,7 +201,7 @@ export function FileTable({
     console.info("Starting native drag", file.path);
     onSelect(file, index);
     setDraggingFile(file.id);
-    desktopBridge.startDragFile(file.id, file.path);
+    getDesktopBridge()?.startDragFile(file.id, file.path);
   };
 
   const handleDragEnd = () => {
@@ -206,7 +216,12 @@ export function FileTable({
         </div>
         <h3 className="text-lg font-medium">No sounds found</h3>
         {(currentDirectory || currentPlaylistName) && (
-          <Button variant="outline" size="sm" className="mt-4 gap-2" onClick={handleBack}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4 gap-2"
+            onClick={handleBack}
+          >
             <ChevronLeft className="size-4" /> Go Back
           </Button>
         )}
@@ -218,11 +233,19 @@ export function FileTable({
     <div className="flex min-h-0 flex-1 flex-col">
       {(currentDirectory || currentPlaylistName) && !searchQuery && (
         <div className="flex items-center gap-2 border-b border-border/70 bg-card/35 px-6 py-2 backdrop-blur-xl">
-          <Button variant="ghost" size="icon" className="size-7 rounded-full" onClick={handleBack}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 rounded-full"
+            onClick={handleBack}
+          >
             <ChevronLeft className="size-4" />
           </Button>
           <div className="flex items-center gap-1 overflow-hidden text-xs font-medium text-muted-foreground">
-            <span className="cursor-pointer hover:text-foreground" onClick={handleNavigateLibrary}>
+            <span
+              className="cursor-pointer hover:text-foreground"
+              onClick={handleNavigateLibrary}
+            >
               Library
             </span>
             {currentDirectory
@@ -254,7 +277,10 @@ export function FileTable({
         </div>
       )}
 
-      <div ref={parentRef} className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-border">
+      <div
+        ref={parentRef}
+        className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-border"
+      >
         <div
           style={{
             height: `${virtualizer.getTotalSize()}px`,
@@ -273,14 +299,19 @@ export function FileTable({
                 <div
                   key={`dir-${dir}`}
                   className="group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-border/35 px-4 py-2 transition-colors hover:bg-card/65 hover:backdrop-blur"
-                  style={{ height: "64px", transform: `translateY(${virtualRow.start}px)` }}
+                  style={{
+                    height: "64px",
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
                   onClick={() => onNavigate(dir)}
                 >
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
                     <Folder className="size-5 fill-primary/5 transition-colors group-hover:text-primary" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">{label}</div>
+                    <div className="truncate text-sm font-semibold">
+                      {label}
+                    </div>
                     <div className="mt-0.5 text-[10px] font-bold uppercase tracking-tight text-muted-foreground">
                       Folder
                     </div>
@@ -348,7 +379,8 @@ export function FileTable({
                                   "flex size-8 items-center justify-center rounded-full text-muted-foreground/65 opacity-0 transition-all group-hover:opacity-100",
                                   showDesktopActions && "opacity-100",
                                   isDragging && "cursor-grabbing",
-                                  !isDragging && "cursor-grab hover:bg-accent hover:text-foreground",
+                                  !isDragging &&
+                                    "cursor-grab hover:bg-accent hover:text-foreground",
                                 )}
                                 onClick={(event) => event.stopPropagation()}
                                 onMouseDown={(event) => {
@@ -357,7 +389,13 @@ export function FileTable({
                                     onSelect(file, virtualRow.index);
                                   }
                                 }}
-                                onDragStart={(event) => handleNativeDragStart(event, file, virtualRow.index)}
+                                onDragStart={(event) =>
+                                  handleNativeDragStart(
+                                    event,
+                                    file,
+                                    virtualRow.index,
+                                  )
+                                }
                                 onDragEnd={handleDragEnd}
                                 aria-label="Drag file into another app"
                               >
@@ -386,12 +424,19 @@ export function FileTable({
                                 void onToggleFavorite(file.id);
                               }}
                             >
-                              <Heart className={cn("size-4", file.isFavorite && "fill-current")} />
+                              <Heart
+                                className={cn(
+                                  "size-4",
+                                  file.isFavorite && "fill-current",
+                                )}
+                              />
                             </Button>
                           }
                         />
                         <TooltipContent>
-                          {file.isFavorite ? "Remove from favorites" : "Add to favorites"}
+                          {file.isFavorite
+                            ? "Remove from favorites"
+                            : "Add to favorites"}
                         </TooltipContent>
                       </Tooltip>
 
@@ -423,11 +468,15 @@ export function FileTable({
                               <FolderOpen className="size-4" />
                               Reveal in Explorer
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => void handleOpenFile(file)}>
+                            <DropdownMenuItem
+                              onClick={() => void handleOpenFile(file)}
+                            >
                               <ExternalLink className="size-4" />
                               Open file
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => void handleCopyPath(file)}>
+                            <DropdownMenuItem
+                              onClick={() => void handleCopyPath(file)}
+                            >
                               <Copy className="size-4" />
                               Copy path
                             </DropdownMenuItem>
@@ -438,7 +487,9 @@ export function FileTable({
                       <ChevronRight
                         className={cn(
                           "size-4 text-muted-foreground transition-transform",
-                          isSelected ? "translate-x-1 text-primary" : "group-hover:translate-x-0.5",
+                          isSelected
+                            ? "translate-x-1 text-primary"
+                            : "group-hover:translate-x-0.5",
                         )}
                       />
                     </div>
@@ -450,11 +501,15 @@ export function FileTable({
                   <ContextMenuSeparator />
                   {desktop ? (
                     <>
-                      <ContextMenuItem onClick={() => void handleRevealInExplorer(file)}>
+                      <ContextMenuItem
+                        onClick={() => void handleRevealInExplorer(file)}
+                      >
                         <FolderOpen />
                         Reveal in Explorer
                       </ContextMenuItem>
-                      <ContextMenuItem onClick={() => void handleOpenFile(file)}>
+                      <ContextMenuItem
+                        onClick={() => void handleOpenFile(file)}
+                      >
                         <ExternalLink />
                         Open file
                       </ContextMenuItem>

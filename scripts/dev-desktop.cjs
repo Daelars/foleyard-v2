@@ -16,14 +16,6 @@ function run(command, args, options = {}) {
   });
 }
 
-function runBun(args, options = {}) {
-  if (isWindows) {
-    return run("cmd.exe", ["/d", "/s", "/c", `bun ${args.join(" ")}`], options);
-  }
-
-  return run("bun", args, options);
-}
-
 function killProcessTree(pid) {
   if (!pid) {
     return;
@@ -79,7 +71,7 @@ process.on("SIGTERM", () => shutdown(0));
 async function main() {
   await stopStaleProcesses();
 
-  nextProcess = runBun(["run", "dev"], {
+  nextProcess = run("node", ["node_modules/next/dist/bin/next", "dev", "--port", "3001"], {
     env,
     detached: !isWindows,
   });
@@ -90,10 +82,10 @@ async function main() {
     }
   });
 
-  await waitOn({ resources: ["http://localhost:3000"] });
+  await waitOn({ resources: ["http://localhost:3001"] });
 
-  electronProcess = runBun(["x", "electron", "."], {
-    env: { ...env, ELECTRON_START_URL: "http://localhost:3000" },
+  electronProcess = run("node", ["node_modules/electron/cli.js", "."], {
+    env: { ...env, ELECTRON_START_URL: "http://localhost:3001" },
     detached: !isWindows,
   });
 

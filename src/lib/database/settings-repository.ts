@@ -8,27 +8,77 @@ function getExtensionSettingKey(extensionId: string) {
 }
 
 export function getLibraryRoot() {
+  return getLibraryRoots()[0] ?? null;
+}
+
+export function getLibraryRoots() {
+  const rootsRow = db
+    .select()
+    .from(schema.settings)
+    .where(eq(schema.settings.key, "libraryRoots"))
+    .get();
+
+  if (rootsRow?.value) {
+    try {
+      const parsed = JSON.parse(rootsRow.value);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (value): value is string => typeof value === "string" && value.length > 0,
+        );
+      }
+    } catch {
+      // Fall back to the legacy single-root setting below.
+    }
+  }
+
   const row = db
     .select()
     .from(schema.settings)
     .where(eq(schema.settings.key, "libraryRoot"))
     .get();
 
-  return row?.value ?? null;
+  return row?.value ? [row.value] : [];
 }
 
 export function setLibraryRoot(libraryRoot: string) {
+  setLibraryRoots([libraryRoot]);
+}
+
+export function setLibraryRoots(libraryRoots: string[]) {
+  const roots = Array.from(new Set(libraryRoots.filter(Boolean)));
+  const now = new Date().toISOString();
+
   db.insert(schema.settings)
     .values({
       key: "libraryRoot",
-      value: libraryRoot,
-      updatedAt: new Date().toISOString(),
+      value: roots[0] ?? null,
+      updatedAt: now,
     })
     .onConflictDoUpdate({
       target: schema.settings.key,
-      set: { value: libraryRoot, updatedAt: new Date().toISOString() },
+      set: { value: roots[0] ?? null, updatedAt: now },
     })
     .run();
+
+  db.insert(schema.settings)
+    .values({
+      key: "libraryRoots",
+      value: JSON.stringify(roots),
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: schema.settings.key,
+      set: { value: JSON.stringify(roots), updatedAt: now },
+    })
+    .run();
+}
+
+export function addLibraryRoot(libraryRoot: string) {
+  setLibraryRoots([...getLibraryRoots(), libraryRoot]);
+}
+
+export function removeLibraryRoot(libraryRoot: string) {
+  setLibraryRoots(getLibraryRoots().filter((root) => root !== libraryRoot));
 }
 
 export function clearLibraryData() {

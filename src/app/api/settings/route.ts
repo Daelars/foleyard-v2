@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getLibraryRoot, getLibraryStats } from '@/lib/db';
-import { saveLibraryRoot, validateLibraryRoot } from '@/lib/scanner';
+import { addLibraryRoot, getLibraryRoot, getLibraryRoots, getLibraryStats, removeLibraryRoot } from '@/lib/db';
+import { validateLibraryRoot } from '@/lib/scanner';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   return NextResponse.json({
     libraryRoot: getLibraryRoot(),
+    libraryRoots: getLibraryRoots(),
     stats: getLibraryStats(),
   });
 }
@@ -32,11 +33,25 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(validation, { status: 400 });
       }
 
-      saveLibraryRoot(validation.normalizedPath);
+      addLibraryRoot(validation.normalizedPath);
 
       return NextResponse.json({
         success: true,
-        libraryRoot: validation.normalizedPath,
+        libraryRoot: getLibraryRoot(),
+        libraryRoots: getLibraryRoots(),
+        savedPath: validation.normalizedPath,
+        stats: getLibraryStats(),
+      });
+    }
+
+    if (action === 'remove') {
+      const pathValue = String(body?.path ?? '');
+      removeLibraryRoot(pathValue);
+
+      return NextResponse.json({
+        success: true,
+        libraryRoot: getLibraryRoot(),
+        libraryRoots: getLibraryRoots(),
         stats: getLibraryStats(),
       });
     }

@@ -16,6 +16,8 @@ interface SidebarProps {
   scanStatus: {
     phase: string;
     discovered: number;
+    indexed?: number;
+    metadataProcessed?: number;
     running: boolean;
   };
   className?: string;
@@ -45,6 +47,19 @@ export function Sidebar({
   const favoritesActive = currentView === "favorites";
   const extensionsActive = currentView === "extensions";
   const scanComplete = !scanStatus.running && scanStatus.discovered > 0;
+  const statusDetail = scanStatus.running
+    ? scanStatus.phase === "metadata"
+      ? `${scanStatus.metadataProcessed ?? 0} metadata enriched`
+      : `${scanStatus.indexed ?? 0}/${scanStatus.discovered} files indexed`
+    : scanStatus.discovered > 0
+      ? `${scanStatus.indexed ?? scanStatus.discovered} files indexed`
+      : "Ready to scan library";
+  const sectionHeaderClass =
+    "px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70";
+  const navItemClass =
+    "w-full justify-start gap-3 rounded-xl text-muted-foreground transition-[background-color,color,box-shadow] duration-200 hover:bg-accent/50 hover:text-accent-foreground";
+  const activeNavItemClass =
+    "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/10 hover:text-primary";
 
   const handleSelectExtensions = () => {
     onSelectExtensions();
@@ -74,7 +89,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "relative flex w-64 shrink-0 flex-col overflow-hidden border-r border-border/70 bg-card/55 backdrop-blur-xl animate-in fade-in-0 slide-in-from-left-3 duration-300",
+        "relative flex w-64 shrink-0 flex-col overflow-hidden border-r border-border/40 bg-card/60 backdrop-blur-xl animate-in fade-in-0 slide-in-from-left-3 duration-300",
         className,
       )}
     >
@@ -86,14 +101,13 @@ export function Sidebar({
              <Activity className="size-4 text-primary animate-pulse" />
           )}
         </div>
-        
+
         <div className="space-y-1 animate-in fade-in-0 slide-in-from-left-2 duration-300">
           <Button
             variant="ghost"
             className={cn(
-              "w-full justify-start gap-3 rounded-xl text-muted-foreground transition-[background-color,color,box-shadow,transform] duration-200 hover:bg-primary/8 hover:text-foreground active:scale-[0.99]",
-              libraryActive &&
-                "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
+              navItemClass,
+              libraryActive && activeNavItemClass,
             )}
             onClick={handleSelectLibrary}
           >
@@ -103,9 +117,8 @@ export function Sidebar({
           <Button
             variant="ghost"
             className={cn(
-              "w-full justify-start gap-3 rounded-xl text-muted-foreground transition-[background-color,color,box-shadow,transform] duration-200 hover:bg-primary/8 hover:text-foreground active:scale-[0.99]",
-              favoritesActive &&
-                "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
+              navItemClass,
+              favoritesActive && activeNavItemClass,
             )}
             onClick={handleSelectFavorites}
           >
@@ -115,9 +128,8 @@ export function Sidebar({
           <Button
             variant="ghost"
             className={cn(
-              "w-full justify-start gap-3 rounded-xl text-muted-foreground transition-[background-color,color,box-shadow,transform] duration-200 hover:bg-primary/8 hover:text-foreground active:scale-[0.99]",
-              extensionsActive &&
-                "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
+              navItemClass,
+              extensionsActive && activeNavItemClass,
             )}
             onClick={handleSelectExtensions}
           >
@@ -132,7 +144,7 @@ export function Sidebar({
       <ScrollArea className="relative flex-1">
         <div className="space-y-6 p-4">
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">
+            <h3 className={sectionHeaderClass}>
               Playlists
             </h3>
             <div className="space-y-1">
@@ -144,9 +156,9 @@ export function Sidebar({
                     key={collection.id}
                     variant="ghost"
                     className={cn(
-                      "h-8 w-full justify-start gap-3 rounded-lg text-sm font-normal text-muted-foreground transition-[background-color,color,box-shadow,transform] duration-200 hover:bg-primary/8 hover:text-foreground active:scale-[0.99]",
-                      active &&
-                        "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
+                      "h-8 text-sm font-normal",
+                      navItemClass,
+                      active && activeNavItemClass,
                     )}
                       onClick={() => handleSelectCollection(collection.id)}
                   >
@@ -167,7 +179,7 @@ export function Sidebar({
           </section>
 
           <section className="space-y-3">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">
+            <h3 className={sectionHeaderClass}>
               Tags
             </h3>
             <div className="flex flex-wrap gap-1.5 px-2">
@@ -175,7 +187,7 @@ export function Sidebar({
                 <Badge
                   key={tag.id}
                   variant="outline"
-                  className="cursor-pointer hover:bg-accent transition-colors py-0.5 px-2 text-[10px]"
+                  className="cursor-pointer px-2 py-0.5 text-[10px] transition-colors hover:bg-accent/50 hover:text-accent-foreground"
                   style={{
                     borderColor: tag.color + "40",
                     backgroundColor: tag.color + "10",
@@ -193,8 +205,8 @@ export function Sidebar({
         </div>
       </ScrollArea>
 
-      <div className="relative border-t border-border/70 bg-background/45 p-4 backdrop-blur-xl">
-        <div className="mb-4 rounded-2xl border border-border/70 bg-card/40 p-3 backdrop-blur-sm">
+      <div className="relative border-t border-border/40 bg-card/60 p-4 backdrop-blur-xl">
+        <div className="mb-4 rounded-2xl border border-border/40 bg-card/60 p-3 shadow-sm backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <DotmSquare3
               size={24}
@@ -214,27 +226,23 @@ export function Sidebar({
               )}
             />
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
                 <span>Status</span>
                 <span className={scanStatus.running ? "text-primary" : "text-muted-foreground"}>
                   {scanStatus.phase}
                 </span>
               </div>
               <p className="mt-1 text-[10px] text-muted-foreground">
-                {scanStatus.running
-                  ? `${scanStatus.discovered} files discovered`
-                  : scanStatus.discovered > 0
-                    ? `${scanStatus.discovered} files indexed`
-                    : "Ready to scan library"}
+                {statusDetail}
               </p>
             </div>
           </div>
         </div>
-        
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="w-full gap-2 rounded-xl text-xs transition-[background-color,color,box-shadow,transform] duration-200 active:scale-[0.99]" 
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full gap-2 rounded-xl text-xs transition-[background-color,color,box-shadow] duration-200"
           onClick={handleOpenSettings}
         >
           <Settings className="size-3.5" />

@@ -17,11 +17,11 @@ export function AudioPlayerVolumeControl({
   volume: number;
 }) {
   return (
-    <div className="flex min-w-[150px] flex-1 items-center gap-2 rounded-full border border-border bg-muted/40 px-3 py-1.5 md:min-w-[160px] md:flex-none">
+    <div className="flex min-w-[150px] flex-1 items-center gap-2 rounded-full border border-border/40 bg-card/60 px-3 py-1.5 backdrop-blur-xl md:min-w-[160px] md:flex-none">
       <Button
         variant="ghost"
         size="icon"
-        className="size-6 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-foreground"
+        className="size-6 shrink-0 rounded-full text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
         onClick={onToggleMuted}
         aria-label={isMuted ? "Unmute audio" : "Mute audio"}
       >

@@ -15,7 +15,7 @@ export function FileTableDirectoryRow({
 
   return (
     <div
-      className="group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-border/35 px-4 py-2 transition-colors hover:bg-card/65 hover:backdrop-blur"
+      className="group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-border/35 px-4 py-2 transition-[background-color,color] hover:bg-accent/50 hover:text-accent-foreground hover:backdrop-blur"
       style={{
         height: "64px",
         transform: `translateY(${start}px)`,
@@ -27,7 +27,7 @@ export function FileTableDirectoryRow({
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold">{label}</div>
-        <div className="mt-0.5 text-[10px] font-bold uppercase tracking-tight text-muted-foreground">
+        <div className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
           Folder
         </div>
       </div>

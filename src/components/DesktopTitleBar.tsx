@@ -1,7 +1,7 @@
 "use client";
 
 import { Minus, Square, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { getDesktopBridge, isDesktopApp } from "@/lib/desktop";
@@ -25,8 +25,8 @@ function TitleBarButton({
       style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
       className={
         danger
-          ? "flex h-10 w-12 items-center justify-center text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground"
-          : "flex h-10 w-12 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          ? "flex h-10 w-12 items-center justify-center text-muted-foreground transition-[background-color,color] hover:bg-destructive hover:text-destructive-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          : "flex h-10 w-12 items-center justify-center text-muted-foreground transition-[background-color,color] hover:bg-accent/50 hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       }
     >
       {children}
@@ -35,19 +35,14 @@ function TitleBarButton({
 }
 
 export function DesktopTitleBar() {
-  const [isReady, setIsReady] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
-  const desktop = isDesktopApp();
+  const desktop = useSyncExternalStore(
+    () => () => undefined,
+    isDesktopApp,
+    () => false,
+  );
 
   useEffect(() => {
-    setIsReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isReady) {
-      return;
-    }
-
     if (!desktop) {
       return;
     }
@@ -64,9 +59,9 @@ export function DesktopTitleBar() {
     return bridge.onWindowState((state) => {
       setIsMaximized(state.isMaximized);
     });
-  }, [desktop, isReady]);
+  }, [desktop]);
 
-  if (!isReady || !desktop) {
+  if (!desktop) {
     return null;
   }
 
@@ -78,7 +73,7 @@ export function DesktopTitleBar() {
   return (
     <div
       style={{ WebkitAppRegion: "drag" } as CSSProperties}
-      className="flex h-10 shrink-0 items-center border-b border-border/70 bg-card/75 pl-3 backdrop-blur-xl"
+      className="flex h-10 shrink-0 items-center border-b border-border/40 bg-card/60 pl-3 backdrop-blur-xl"
     >
       <div className="flex-1" />
 

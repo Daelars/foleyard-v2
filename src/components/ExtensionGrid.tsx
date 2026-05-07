@@ -1,5 +1,10 @@
 "use client";
 
+import { MoreHorizontal } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
 export type ExtensionGridItem = {
   id: string;
   name: string;
@@ -39,9 +44,9 @@ function ExtensionCard({
   onToggleEnabled?: (extensionId: string, enabled: boolean) => void;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border/50 bg-card/40 p-4 backdrop-blur-sm">
+    <div className="flex flex-col gap-3 rounded-xl border border-border/40 bg-card/60 p-4 shadow-sm backdrop-blur-xl transition-[background-color,border-color] hover:bg-accent/50 hover:text-accent-foreground">
       <div className="flex items-start gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/50 text-muted-foreground ring-1 ring-border/50">
           <span className="text-xs font-bold">
             {extension.name.slice(0, 2).toUpperCase()}
           </span>
@@ -58,37 +63,40 @@ function ExtensionCard({
       </p>
       <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
         <span
-          className={
+          className={cn(
+            "rounded-full border px-2 py-1 ring-1",
             extension.enabled
-              ? "rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-emerald-600"
-              : "rounded-full border border-border/60 bg-background/50 px-2 py-1"
-          }
+              ? "border-primary/40 bg-primary/10 text-primary ring-primary/20"
+              : "border-border/40 bg-muted/50 ring-border/50",
+          )}
         >
           {extension.enabled ? "enabled" : "disabled"}
         </span>
-        <span className="rounded-full border border-border/60 bg-background/50 px-2 py-1">
+        <span className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 ring-1 ring-border/50">
           {extension.category}
         </span>
         {typeof extension.commandCount === "number" && (
-          <span className="rounded-full border border-border/60 bg-background/50 px-2 py-1">
+          <span className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 ring-1 ring-border/50">
             {extension.commandCount} commands
           </span>
         )}
         {typeof extension.settingsCount === "number" && (
-          <span className="rounded-full border border-border/60 bg-background/50 px-2 py-1">
+          <span className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 ring-1 ring-border/50">
             {extension.settingsCount} settings
           </span>
         )}
         {typeof extension.permissionCount === "number" && (
-          <span className="rounded-full border border-border/60 bg-background/50 px-2 py-1">
+          <span className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 ring-1 ring-border/50">
             {extension.permissionCount} permissions
           </span>
         )}
       </div>
       <div className="flex gap-2">
-        <button
+        <Button
           type="button"
-          className="flex-1 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
+          variant={extension.enabled ? "outline" : "default"}
+          size="sm"
+          className="flex-1 rounded-lg text-xs"
           disabled={isPending}
           onClick={() => onToggleEnabled?.(extension.id, !extension.enabled)}
         >
@@ -97,15 +105,17 @@ function ExtensionCard({
             : extension.enabled
               ? "Disable"
               : "Enable"}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="size-8 rounded-lg bg-muted/50 text-muted-foreground transition-colors hover:bg-muted"
+          variant="ghost"
+          size="icon"
+          className="size-8 rounded-lg text-muted-foreground"
           onClick={() => onOpenDetails?.(extension)}
         >
           <span className="sr-only">Details and settings</span>
-          ⋯
-        </button>
+          <MoreHorizontal className="size-4" />
+        </Button>
       </div>
     </div>
   );
@@ -113,21 +123,21 @@ function ExtensionCard({
 
 function ExtensionCardSkeleton() {
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border/50 bg-card/40 p-4 backdrop-blur-sm">
+    <div className="flex flex-col gap-3 rounded-xl border border-border/40 bg-card/60 p-4 shadow-sm backdrop-blur-xl">
       <div className="flex items-start gap-3">
-        <div className="size-10 animate-pulse rounded-lg bg-muted" />
+        <div className="size-10 animate-pulse rounded-lg bg-muted/50 ring-1 ring-border/50" />
         <div className="flex-1 space-y-2">
-          <div className="h-4 w-24 animate-pulse rounded bg-muted" />
-          <div className="h-3 w-16 animate-pulse rounded bg-muted" />
+          <div className="h-4 w-24 animate-pulse rounded bg-muted/50" />
+          <div className="h-3 w-16 animate-pulse rounded bg-muted/50" />
         </div>
       </div>
       <div className="space-y-2">
-        <div className="h-3 w-full animate-pulse rounded bg-muted" />
-        <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
+        <div className="h-3 w-full animate-pulse rounded bg-muted/50" />
+        <div className="h-3 w-3/4 animate-pulse rounded bg-muted/50" />
       </div>
       <div className="flex gap-2">
-        <div className="h-8 flex-1 animate-pulse rounded-lg bg-muted" />
-        <div className="h-8 w-8 animate-pulse rounded-lg bg-muted" />
+        <div className="h-8 flex-1 animate-pulse rounded-lg bg-muted/50" />
+        <div className="h-8 w-8 animate-pulse rounded-lg bg-muted/50" />
       </div>
     </div>
   );
@@ -145,7 +155,7 @@ export function ExtensionGrid({
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
       {showEmptyState ? (
-        <div className="flex min-h-64 items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card/30 px-6 text-center backdrop-blur-sm">
+        <div className="flex min-h-64 items-center justify-center rounded-2xl border border-dashed border-border/40 bg-card/60 px-6 text-center shadow-sm backdrop-blur-xl">
           <div className="max-w-md space-y-2">
             <p className="text-sm font-medium">No extensions registered</p>
             <p className="text-sm text-muted-foreground">

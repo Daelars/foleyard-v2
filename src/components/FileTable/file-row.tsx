@@ -86,10 +86,10 @@ export function FileTableFileRow({
       <ContextMenuTrigger>
         <div
           className={cn(
-            "group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-border/35 px-4 py-2 transition-colors",
+            "group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-border/35 px-4 py-2 transition-[background-color,color,box-shadow] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             isSelected
-              ? "bg-card/80 shadow-[inset_3px_0_0_var(--primary)] backdrop-blur"
-              : "hover:bg-card/65 hover:backdrop-blur",
+              ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--primary)] backdrop-blur"
+              : "hover:bg-accent/50 hover:text-accent-foreground hover:backdrop-blur",
             isDragging && "opacity-60",
           )}
           style={{
@@ -118,7 +118,7 @@ export function FileTableFileRow({
               {highlightMatch(file.filename, searchQuery)}
             </div>
             <div className="mt-1 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <span className="rounded bg-muted/80 px-1.5 py-0.5 text-[9px] ring-1 ring-border/50">
+              <span className="rounded bg-muted/50 px-1.5 py-0.5 text-[9px] ring-1 ring-border/50">
                 {file.format ?? "???"}
               </span>
               <span>{formatDuration(file.duration)}</span>
@@ -139,7 +139,7 @@ export function FileTableFileRow({
                         showDesktopActions && "opacity-100",
                         isDragging && "cursor-grabbing",
                         !isDragging &&
-                          "cursor-grab hover:bg-accent hover:text-foreground",
+                          "cursor-grab hover:bg-accent/50 hover:text-accent-foreground",
                       )}
                       onClick={(event) => event.stopPropagation()}
                       onMouseDown={(event) => {
@@ -171,8 +171,8 @@ export function FileTableFileRow({
                     className={cn(
                       "size-8 rounded-full transition-all",
                       file.isFavorite
-                        ? "bg-red-500/10 text-red-500 hover:bg-red-500/20 hover:text-red-600"
-                        : "text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground",
+                        ? "bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary"
+                        : "text-muted-foreground/60 hover:bg-accent/50 hover:text-accent-foreground",
                     )}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -196,7 +196,7 @@ export function FileTableFileRow({
                       variant="ghost"
                       size="icon"
                       className={cn(
-                        "size-8 rounded-full text-muted-foreground/60 opacity-0 transition-all hover:bg-accent hover:text-foreground group-hover:opacity-100",
+                        "size-8 rounded-full text-muted-foreground/60 opacity-0 transition-all hover:bg-accent/50 hover:text-accent-foreground group-hover:opacity-100",
                         isSelected && "opacity-100",
                       )}
                       onClick={(event) => event.stopPropagation()}
@@ -208,7 +208,7 @@ export function FileTableFileRow({
                 />
                 <DropdownMenuContent
                   align="end"
-                  className="w-44 rounded-xl border-border/60 bg-popover/95 backdrop-blur-xl"
+                  className="w-44"
                 >
                   <DropdownMenuItem onClick={() => void handleRevealInExplorer(file)}>
                     <FolderOpen className="size-4" />

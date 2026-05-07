@@ -48,14 +48,14 @@ export function AudioPlayerShell({
 }) {
   return (
     <div className="fixed inset-x-4 bottom-4 z-50 md:left-[17rem] md:right-6">
-      <div className="relative overflow-hidden rounded-[24px] border border-border bg-card/90 shadow-2xl backdrop-blur-2xl md:h-[108px]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_34%),radial-gradient(circle_at_center,color-mix(in_oklab,var(--foreground)_4%,transparent),transparent_58%)]" />
+      <div className="relative overflow-hidden rounded-2xl border border-border/40 bg-card/80 shadow-2xl backdrop-blur-2xl md:h-[108px]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_10%,transparent),transparent_34%)]" />
         <div className="relative flex flex-col gap-3 px-4 py-3 text-card-foreground md:h-full md:flex-row md:items-center md:gap-4 md:px-5 md:py-3">
           <div className="flex items-center gap-3 md:gap-4">
             <Button
               size="icon"
               onClick={onTogglePlayback}
-              className="h-16 w-16 shrink-0 rounded-full border border-primary/45 bg-primary/10 text-primary shadow-[0_0_0_1px_color-mix(in_oklab,var(--primary)_16%,transparent),0_0_24px_color-mix(in_oklab,var(--primary)_22%,transparent)] backdrop-blur-md transition-transform hover:scale-[1.02] hover:bg-primary/15 active:scale-95 md:h-14 md:w-14"
+              className="h-16 w-16 shrink-0 rounded-full border border-border/40 bg-primary text-primary-foreground shadow-lg backdrop-blur-md hover:bg-primary/90 md:h-14 md:w-14"
               aria-label={isPlaying ? "Pause audio" : "Play audio"}
             >
               {isPlaying ? (
@@ -82,7 +82,7 @@ export function AudioPlayerShell({
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="size-8 shrink-0 rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                className="size-8 shrink-0 rounded-full text-muted-foreground"
                 aria-label="Close player"
               >
                 <X className="size-3.5" />
@@ -98,7 +98,7 @@ export function AudioPlayerShell({
                   variant="ghost"
                   size="icon"
                   onClick={onClose}
-                  className="size-8 shrink-0 rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  className="size-8 shrink-0 rounded-full text-muted-foreground"
                   aria-label="Close player"
                 >
                   <X className="size-4" />
@@ -109,7 +109,7 @@ export function AudioPlayerShell({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border bg-muted/40 px-1 py-1 md:border-none md:bg-transparent md:px-0 md:py-0">
+            <div className="rounded-xl border border-border/40 bg-muted/50 px-1 py-1 md:border-none md:bg-transparent md:px-0 md:py-0">
               <AudioScrubber
                 data={waveformData}
                 currentTime={currentTime}
@@ -121,7 +121,7 @@ export function AudioPlayerShell({
                 barRadius={999}
                 barHeight={3}
                 showHandle={false}
-                barColor="rgba(255, 255, 255, 0.72)"
+                barColor="var(--primary)"
                 className="w-full overflow-hidden"
               />
             </div>

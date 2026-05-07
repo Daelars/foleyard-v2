@@ -79,17 +79,19 @@ export async function extractMetadata(
     fileSize?: number;
     filename?: string;
     format?: string | null;
+    fullParse?: boolean;
   },
 ): Promise<AudioMetadata> {
   const fileSize = options?.fileSize ?? (await stat(filePath)).size;
   const filename = options?.filename ?? path.basename(filePath);
   const derivedFormat = path.extname(filePath).toLowerCase().slice(1) || null;
   const ext = options?.format ?? derivedFormat;
+  const fullParse = options?.fullParse ?? true;
 
   try {
     const headerMetadata = await parseHeader(filePath, fileSize, ext);
 
-    if (!needsFullParse(headerMetadata, ext)) {
+    if (!fullParse || !needsFullParse(headerMetadata, ext)) {
       return toAudioMetadata(headerMetadata, filename, ext, fileSize);
     }
 

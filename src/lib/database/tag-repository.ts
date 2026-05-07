@@ -1,7 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 
-import { db } from "./connection";
+import { db, sqlite } from "./connection";
 import * as schema from "@/lib/schema";
 
 export function getAllTags() {
@@ -37,4 +37,12 @@ export function detachTagFromFile(fileId: string, tagId: string) {
   db.delete(schema.fileTags)
     .where(and(eq(schema.fileTags.fileId, fileId), eq(schema.fileTags.tagId, tagId)))
     .run();
+}
+
+export function deleteTag(tagId: string) {
+  sqlite
+    .transaction((id: string) => {
+      sqlite.prepare("DELETE FROM file_tags WHERE tag_id = ?").run(id);
+      sqlite.prepare("DELETE FROM tags WHERE id = ?").run(id);
+    })(tagId);
 }

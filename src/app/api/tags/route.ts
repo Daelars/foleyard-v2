@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { attachTagToFile, createTag, detachTagFromFile, getAllTags, getTagsForFile } from '@/lib/db';
+import { attachTagToFile, createTag, deleteTag, detachTagFromFile, getAllTags, getTagsForFile } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -43,6 +43,11 @@ export async function DELETE(request: NextRequest) {
 
     if (fileId && tagId) {
       detachTagFromFile(fileId, tagId);
+      return NextResponse.json({ success: true });
+    }
+
+    if (tagId) {
+      deleteTag(tagId);
       return NextResponse.json({ success: true });
     }
 

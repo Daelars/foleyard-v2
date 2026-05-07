@@ -83,4 +83,5 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_is_favorite ON files(is_favorite)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_directory ON files(directory)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_last_scanned_at ON files(last_scanned_at)`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_tags_tag_id ON file_tags(tag_id)`);
 }

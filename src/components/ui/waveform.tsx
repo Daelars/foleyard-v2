@@ -55,10 +55,10 @@ export const Waveform = ({
       const rect = canvas.getBoundingClientRect();
       ctx.clearRect(0, 0, rect.width, rect.height);
 
-      const computedBarColor =
-        barColor ||
-        getComputedStyle(canvas).getPropertyValue("--foreground") ||
-        "#000";
+      const styles = getComputedStyle(canvas);
+      const computedBarColor = barColor?.startsWith("var(")
+        ? styles.getPropertyValue(barColor.slice(4, -1)).trim()
+        : barColor || styles.getPropertyValue("--primary").trim() || "#000";
 
       const step = barWidth + barGap;
       const barCount = Math.max(1, Math.floor(rect.width / step));

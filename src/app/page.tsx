@@ -45,10 +45,15 @@ interface ScanStatus {
   running: boolean;
   phase: string;
   discovered: number;
+  indexed: number;
+  skippedUnchanged: number;
+  metadataProcessed: number;
   added: number;
   updated: number;
   removed: number;
   failed: number;
+  errors: number;
+  total: number;
   error: string | null;
 }
 
@@ -56,10 +61,15 @@ const emptyScanStatus: ScanStatus = {
   running: false,
   phase: "idle",
   discovered: 0,
+  indexed: 0,
+  skippedUnchanged: 0,
+  metadataProcessed: 0,
   added: 0,
   updated: 0,
   removed: 0,
   failed: 0,
+  errors: 0,
+  total: 0,
   error: null,
 };
 
@@ -92,8 +102,13 @@ function HomeContent() {
   const [isPlayerPlaying, setIsPlayerPlaying] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<{
+    libraryRoot: string | null;
+    libraryRoots: string[];
+    stats: { activeFiles: number; removedFiles: number };
+  }>({
     libraryRoot: null,
+    libraryRoots: [],
     stats: { activeFiles: 0, removedFiles: 0 },
   });
   const [scanStatus, setScanStatus] = useState<ScanStatus>(emptyScanStatus);
@@ -290,7 +305,12 @@ function HomeContent() {
         extensionsRes.json(),
       ]);
 
-      setSettings(settingsData);
+      setSettings({
+        ...settingsData,
+        libraryRoots:
+          settingsData.libraryRoots ??
+          (settingsData.libraryRoot ? [settingsData.libraryRoot] : []),
+      });
       setCollections(collectionsData.collections ?? []);
       setTags(tagsData.tags ?? []);
       setScanStatus(scanData);
@@ -389,7 +409,11 @@ function HomeContent() {
         throw new Error(data.error ?? "Failed to save settings");
       }
 
-      setSettings({ libraryRoot: data.libraryRoot, stats: data.stats });
+      setSettings({
+        libraryRoot: data.libraryRoot,
+        libraryRoots: data.libraryRoots ?? (data.libraryRoot ? [data.libraryRoot] : []),
+        stats: data.stats,
+      });
       setScanStatus((current) => ({
         ...current,
         libraryRoot: data.libraryRoot,
@@ -443,6 +467,19 @@ function HomeContent() {
   };
 
   const handleDeleteCollection = async (collectionId: string) => {
+    const deletedCollection = collections.find(
+      (collection) => collection.id === collectionId,
+    );
+    setCollections((current) =>
+      current.filter((collection) => collection.id !== collectionId),
+    );
+
+    const wasSelected = selectedCollection === collectionId;
+    if (wasSelected) {
+      setSelectedCollection(null);
+      setCurrentView("all");
+    }
+
     try {
       const res = await fetch("/api/collections", {
         method: "DELETE",
@@ -453,15 +490,59 @@ function HomeContent() {
         throw new Error();
       }
 
-      if (selectedCollection === collectionId) {
-        setSelectedCollection(null);
-        setCurrentView("all");
-      }
-
-      void loadInitialData();
       toast.success("Playlist deleted");
     } catch {
+      if (deletedCollection) {
+        setCollections((current) =>
+          current.some((collection) => collection.id === deletedCollection.id)
+            ? current
+            : [...current, deletedCollection].sort((a, b) =>
+                a.name.localeCompare(b.name),
+              ),
+        );
+      }
+      if (wasSelected) {
+        setSelectedCollection(collectionId);
+        setCurrentView("collection");
+      }
       toast.error("Failed to delete playlist");
+    }
+  };
+
+  const handleRemoveRoot = async (path: string) => {
+    const previousSettings = settings;
+    const nextRoots = settings.libraryRoots.filter((root) => root !== path);
+
+    setSettings({
+      ...settings,
+      libraryRoot: nextRoots[0] ?? null,
+      libraryRoots: nextRoots,
+    });
+
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "remove", path }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to remove library folder");
+      }
+
+      setSettings({
+        libraryRoot: data.libraryRoot,
+        libraryRoots: data.libraryRoots ?? (data.libraryRoot ? [data.libraryRoot] : []),
+        stats: data.stats,
+      });
+    } catch (error) {
+      setSettings(previousSettings);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to remove library folder",
+      );
     }
   };
 
@@ -480,6 +561,35 @@ function HomeContent() {
       toast.success("Tag created");
     } catch {
       toast.error("Failed to create tag");
+    }
+  };
+
+  const handleDeleteTag = async (tagId: string) => {
+    const deletedTag = tags.find((tag) => tag.id === tagId);
+    setTags((current) => current.filter((tag) => tag.id !== tagId));
+
+    try {
+      const res = await fetch("/api/tags", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagId }),
+      });
+      if (!res.ok) {
+        throw new Error();
+      }
+
+      toast.success("Tag deleted");
+    } catch {
+      if (deletedTag) {
+        setTags((current) =>
+          current.some((tag) => tag.id === deletedTag.id)
+            ? current
+            : [...current, deletedTag].sort((a, b) =>
+                a.name.localeCompare(b.name),
+              ),
+        );
+      }
+      toast.error("Failed to delete tag");
     }
   };
 
@@ -613,7 +723,7 @@ function HomeContent() {
       <Dialog open={showMobileSidebar} onOpenChange={setShowMobileSidebar}>
         <DialogContent
           showCloseButton={false}
-          className="left-0 top-0 h-screen w-[calc(100%-3rem)] max-w-80 translate-x-0 translate-y-0 rounded-none border-r border-border/70 bg-card/90 p-0 shadow-2xl duration-300 ease-out data-open:slide-in-from-left-8 data-open:fade-in-0 data-closed:slide-out-to-left-8 data-closed:fade-out-0 sm:max-w-80"
+          className="left-0 top-0 h-screen w-[calc(100%-3rem)] max-w-80 translate-x-0 translate-y-0 rounded-none border-r border-border/40 bg-card/80 p-0 shadow-2xl backdrop-blur-2xl duration-300 ease-out data-open:slide-in-from-left-8 data-open:fade-in-0 data-closed:slide-out-to-left-8 data-closed:fade-out-0 sm:max-w-80"
         >
           <DialogTitle className="sr-only">Navigation Menu</DialogTitle>
           <Sidebar
@@ -633,15 +743,15 @@ function HomeContent() {
         </DialogContent>
       </Dialog>
 
-      <main className="relative flex min-w-0 flex-1 flex-col bg-background/45 backdrop-blur-xl">
+      <main className="relative flex min-w-0 flex-1 flex-col bg-background/40 backdrop-blur-md">
         <DesktopTitleBar />
 
-        <header className="shrink-0 border-b border-border/70 bg-background/20 px-4 py-3 backdrop-blur-xl md:px-5">
+        <header className="shrink-0 border-b border-border/40 bg-card/60 px-4 py-3 backdrop-blur-xl md:px-5">
           <div className="flex h-10 items-center gap-3">
             <Button
               variant="ghost"
               size="icon"
-              className="size-10 rounded-xl border border-border/50 bg-card/30 backdrop-blur-md duration-200 animate-in fade-in-0 zoom-in-95 md:hidden active:scale-95"
+              className="size-10 rounded-xl border-border/40 bg-card/60 backdrop-blur-xl duration-200 animate-in fade-in-0 zoom-in-95 md:hidden"
               onClick={() => setShowMobileSidebar(true)}
               aria-label="Open navigation menu"
             >
@@ -649,16 +759,14 @@ function HomeContent() {
             </Button>
 
             {!showExtensionsView && (
-              <div className="relative flex-1 rounded-xl border border-border/50 bg-card/30 px-px py-px backdrop-blur-md duration-300 animate-in fade-in-0 slide-in-from-top-2 md:max-w-xl">
-                <div className="relative rounded-lg bg-background/40">
-                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search library..."
-                    className="h-8 rounded-lg border-0 bg-transparent pl-10 pr-4 text-sm shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
-                  />
-                </div>
+              <div className="relative flex-1 duration-300 animate-in fade-in-0 slide-in-from-top-2 md:max-w-xl">
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground/70" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search library..."
+                  className="h-10 rounded-xl border-border/40 bg-card/60 pl-10 pr-4 text-sm leading-5 shadow-sm backdrop-blur-xl placeholder:text-muted-foreground/65 focus-visible:border-primary/50 focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
               </div>
             )}
 
@@ -703,7 +811,7 @@ function HomeContent() {
             </div>
 
             {showSoundShelf ? (
-              <aside className="hidden w-80 shrink-0 border-l border-border/70 bg-card/35 backdrop-blur-xl lg:flex lg:flex-col">
+              <aside className="hidden w-80 shrink-0 border-l border-border/40 bg-card/60 backdrop-blur-xl lg:flex lg:flex-col">
                 <SoundShelf
                   onItemCountChange={setSoundShelfItemCount}
                   onSelectFile={(fileId) => {
@@ -741,6 +849,7 @@ function HomeContent() {
         onOpenChange={setShowSettings}
         settings={settings}
         onSaveRoot={handleSaveRoot}
+        onRemoveRoot={handleRemoveRoot}
         scanStatus={scanStatus}
         onStartScan={handleStartScan}
         collections={collections}
@@ -748,6 +857,9 @@ function HomeContent() {
         onCreateCollection={handleCreateCollection}
         onDeleteCollection={handleDeleteCollection}
         onCreateTag={handleCreateTag}
+        onDeleteTag={handleDeleteTag}
+        extensions={extensions}
+        onToggleExtension={handleToggleExtensionEnabled}
       />
 
       <Dialog
@@ -758,7 +870,7 @@ function HomeContent() {
           }
         }}
       >
-        <DialogContent className="max-w-lg rounded-2xl border border-border/70 bg-card/95 backdrop-blur-xl">
+        <DialogContent className="max-w-lg rounded-2xl border border-border/40 bg-card/95 p-6 backdrop-blur-2xl">
           <DialogTitle>
             {selectedExtension?.name ?? "Extension details"}
           </DialogTitle>
@@ -780,7 +892,7 @@ function HomeContent() {
                     {selectedExtension.commands.map((command) => (
                       <span
                         key={command}
-                        className="rounded-full border border-border/60 bg-background/50 px-2 py-1 text-xs text-muted-foreground"
+                        className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 text-xs text-muted-foreground ring-1 ring-border/50"
                       >
                         {command}
                       </span>
@@ -800,7 +912,7 @@ function HomeContent() {
                     {selectedExtension.permissions.map((permission) => (
                       <span
                         key={permission}
-                        className="rounded-full border border-border/60 bg-background/50 px-2 py-1 text-xs text-muted-foreground"
+                        className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 text-xs text-muted-foreground ring-1 ring-border/50"
                       >
                         {permission}
                       </span>
@@ -820,7 +932,7 @@ function HomeContent() {
                     {selectedExtension.surfaces.map((surface) => (
                       <span
                         key={surface}
-                        className="rounded-full border border-border/60 bg-background/50 px-2 py-1 text-xs text-muted-foreground"
+                        className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 text-xs text-muted-foreground ring-1 ring-border/50"
                       >
                         {surface}
                       </span>

@@ -26,7 +26,7 @@ export function AudioPlayerCollectionMenu({
         render={
           <Button
             variant="ghost"
-            className="h-9 rounded-full border border-primary/35 bg-primary/10 px-3.5 text-sm font-medium text-card-foreground hover:bg-primary/15"
+            className="h-9 rounded-full border border-border/40 bg-card/60 px-3.5 text-sm font-medium text-card-foreground backdrop-blur-xl hover:bg-accent/50 hover:text-accent-foreground"
           >
             <FolderPlus className="mr-2.5 size-4" />
             Add to Playlist
@@ -35,7 +35,7 @@ export function AudioPlayerCollectionMenu({
       />
       <DropdownMenuContent
         align="end"
-        className="w-60 rounded-2xl border-border bg-popover text-popover-foreground"
+        className="w-60"
       >
         <DropdownMenuGroup>
           <DropdownMenuLabel className="text-muted-foreground">

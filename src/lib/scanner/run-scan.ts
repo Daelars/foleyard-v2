@@ -9,9 +9,10 @@ import {
   getAllFilesIncludingRemoved,
   getFilesByPaths,
   getLibraryRoot,
+  getLibraryRoots,
   getLibraryStats,
   reconcileMovedFiles,
-  setLibraryRoot,
+  setLibraryRoots,
 } from "@/lib/db";
 import { extractMetadata } from "@/lib/metadata";
 
@@ -20,8 +21,8 @@ import { streamAudioFileBatches } from "./filesystem";
 import { validateLibraryRoot } from "./validation";
 
 const DISCOVERY_BATCH_SIZE = 500;
-const METADATA_CONCURRENCY = 4;
-const METADATA_WRITE_BATCH_SIZE = 100;
+const METADATA_CONCURRENCY = 8;
+const METADATA_WRITE_BATCH_SIZE = 250;
 
 type ExistingFileRecord = ReturnType<typeof getAllFilesIncludingRemoved>[number];
 type MetadataUpdateRecord = {
@@ -74,6 +75,7 @@ function createMetadataQueue(
               fileSize: task.fileSize,
               filename: task.filename,
               format: task.format,
+              fullParse: false,
             });
           } catch {
             incrementScanErrors();
@@ -274,16 +276,10 @@ function markRemovedFiles(
   scanStatus.removed = Math.max(0, scanStatus.removed - relinkedFiles);
 }
 
-async function runScan(libraryRoot: string) {
-  resetScanStatus(libraryRoot);
+async function runScan(libraryRoots: string[]) {
+  resetScanStatus(libraryRoots.join(path.delimiter));
 
   try {
-    const validation = await validateLibraryRoot(libraryRoot);
-    if (!validation.valid || !validation.normalizedPath) {
-      throw new Error(validation.error ?? "Invalid library root");
-    }
-
-    const normalizedRoot = validation.normalizedPath;
     const seenPaths = new Set<string>();
     const allExistingFiles = getAllFilesIncludingRemoved();
     const lastScannedAt = new Date().toISOString();
@@ -298,21 +294,32 @@ async function runScan(libraryRoot: string) {
 
     scanStatus.phase = "discovering";
 
-    for await (const batch of streamAudioFileBatches(normalizedRoot, {
-      batchSize: DISCOVERY_BATCH_SIZE,
-      onDiscover: () => {
-        scanStatus.discovered += 1;
-        scanStatus.total = scanStatus.discovered;
-      },
-    })) {
-      scanStatus.phase = "indexing";
-      await processDiscoveredBatch(
-        batch,
-        normalizedRoot,
-        lastScannedAt,
-        seenPaths,
-        metadataQueue,
-      );
+    for (const libraryRoot of libraryRoots) {
+      scanStatus.phase = "validating";
+      const validation = await validateLibraryRoot(libraryRoot);
+      if (!validation.valid || !validation.normalizedPath) {
+        throw new Error(validation.error ?? "Invalid library root");
+      }
+
+      const normalizedRoot = validation.normalizedPath;
+      scanStatus.phase = "discovering";
+
+      for await (const batch of streamAudioFileBatches(normalizedRoot, {
+        batchSize: DISCOVERY_BATCH_SIZE,
+        onDiscover: () => {
+          scanStatus.discovered += 1;
+          scanStatus.total = scanStatus.discovered;
+        },
+      })) {
+        scanStatus.phase = "indexing";
+        await processDiscoveredBatch(
+          batch,
+          normalizedRoot,
+          lastScannedAt,
+          seenPaths,
+          metadataQueue,
+        );
+      }
     }
 
     scanStatus.phase = "metadata";
@@ -353,7 +360,7 @@ export function getScanStatus() {
 }
 
 export function saveLibraryRoot(libraryRoot: string) {
-  setLibraryRoot(libraryRoot);
+  setLibraryRoots([libraryRoot]);
 }
 
 export function startScan() {
@@ -361,12 +368,12 @@ export function startScan() {
     return { started: false, reason: "already-running", status: getScanStatus() };
   }
 
-  const libraryRoot = getLibraryRoot();
-  if (!libraryRoot) {
+  const libraryRoots = getLibraryRoots();
+  if (libraryRoots.length === 0) {
     return { started: false, reason: "missing-root", status: getScanStatus() };
   }
 
-  activeScan = runScan(libraryRoot);
+  activeScan = runScan(libraryRoots);
   void activeScan.finally(() => {
     activeScan = null;
   });

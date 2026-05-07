@@ -19,7 +19,7 @@ export function AudioPlayerFavoriteButton({
       variant="ghost"
       size="icon"
       className={cn(
-        "size-8 rounded-full border border-border bg-muted/40 text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+        "size-8 rounded-full border border-border/40 bg-card/60 text-muted-foreground backdrop-blur-xl hover:bg-accent/50 hover:text-accent-foreground",
         isFavorite && "text-primary",
       )}
       onClick={() => onToggleFavorite(fileId)}

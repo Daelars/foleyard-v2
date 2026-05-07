@@ -31,13 +31,18 @@ export {
   clearLibraryData,
   getExtensionEnabled,
   getLibraryRoot,
+  getLibraryRoots,
   getLibraryStats,
+  addLibraryRoot,
+  removeLibraryRoot,
   setExtensionEnabled,
   setLibraryRoot,
+  setLibraryRoots,
 } from "@/lib/database/settings-repository";
 export {
   attachTagToFile,
   createTag,
+  deleteTag,
   detachTagFromFile,
   getAllTags,
   getTagsForFile,

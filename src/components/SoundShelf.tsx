@@ -116,7 +116,7 @@ export function SoundShelf({
           <div
             key={item.fileId}
             className={cn(
-              "flex cursor-pointer items-center gap-3 rounded-lg border border-border/50 px-3 py-2 transition-colors hover:bg-card/60",
+              "flex cursor-pointer items-center gap-3 rounded-lg border border-border/40 bg-card/60 px-3 py-2 shadow-sm backdrop-blur-xl transition-[background-color,color] hover:bg-accent/50 hover:text-accent-foreground",
             )}
             onClick={() => onSelectFile?.(item.fileId)}
           >
@@ -128,7 +128,7 @@ export function SoundShelf({
             </div>
             <button
               type="button"
-              className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              className="shrink-0 rounded-full p-1 text-muted-foreground transition-[background-color,color] hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               onClick={(event) => {
                 event.stopPropagation();
                 void handleRemove(item.fileId);

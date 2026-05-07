@@ -20,6 +20,16 @@ function registerIpcHandlers() {
   ipcMain.handle("desktop:copy-file-path", async (_event, fileId) =>
     copyFilePath(fileId),
   );
+  ipcMain.handle("desktop:pick-folder", async () => {
+    const { dialog } = require("electron");
+    const result = await dialog.showOpenDialog({
+      properties: ["openDirectory"],
+    });
+    if (result.canceled || !result.filePaths.length) {
+      return { ok: false, error: "No folder selected" };
+    }
+    return { ok: true, path: result.filePaths[0] };
+  });
   ipcMain.handle("desktop:reveal-in-explorer", async (_event, fileId) =>
     revealInExplorer(fileId),
   );

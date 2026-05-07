@@ -140,6 +140,55 @@ body {
   overflow: hidden;
 }
 
+.foleyard-library-scroll {
+  scrollbar-color: color-mix(in oklab, var(--primary) 58%, transparent) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.foleyard-library-scroll::-webkit-scrollbar {
+  width: 0.7rem;
+}
+
+.foleyard-library-scroll::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.foleyard-library-scroll::-webkit-scrollbar-track {
+  background: color-mix(in oklab, var(--card) 22%, transparent);
+  border-radius: 999px;
+}
+
+.foleyard-library-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--primary);
+  background-image:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--primary) 74%, transparent),
+      color-mix(in oklab, var(--primary) 42%, transparent)
+    );
+  border: 0.22rem solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+.foleyard-library-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary);
+  background-image:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--primary) 90%, transparent),
+      color-mix(in oklab, var(--primary) 58%, transparent)
+  );
+  background-clip: content-box;
+}
+
+.foleyard-library-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 .dark {
   --background: oklch(0.1910 0.0043 264.4658);
   --foreground: oklch(0.9489 0.0029 264.5417);

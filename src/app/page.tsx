@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, PanelLeft, Search } from "lucide-react";
 import { toast } from "sonner";
 
@@ -78,7 +78,7 @@ function HomeContent() {
   const [tags, setTags] = useState<TagRecord[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentView, setCurrentView] = useState<
     "all" | "favorites" | "extensions" | "collection" | "directory"
   >("all");
@@ -107,6 +107,8 @@ function HomeContent() {
     useState<ExtensionGridItem | null>(null);
 
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
+  const filesRequestIdRef = useRef(0);
+  const directoriesRequestIdRef = useRef(0);
 
   const loadSoundShelfCount = useCallback(async () => {
     try {
@@ -158,7 +160,20 @@ function HomeContent() {
     setSelectedDirectory(directory);
   }, []);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
   const loadFiles = useCallback(async () => {
+    const requestId = filesRequestIdRef.current + 1;
+    filesRequestIdRef.current = requestId;
+
     if (currentView === "extensions") {
       setFiles([]);
       setIsLoadingFiles(false);
@@ -167,8 +182,8 @@ function HomeContent() {
 
     setIsLoadingFiles(true);
     const params = new URLSearchParams();
-    if (deferredSearchQuery.trim()) {
-      params.set("q", deferredSearchQuery.trim());
+    if (debouncedSearchQuery.trim()) {
+      params.set("q", debouncedSearchQuery.trim());
     } else {
       if (currentView === "directory" && selectedDirectory) {
         params.set("directory", selectedDirectory);
@@ -197,17 +212,26 @@ function HomeContent() {
       }
 
       const data = await response.json();
-      setFiles(data.files ?? []);
+      if (filesRequestIdRef.current === requestId) {
+        setFiles(data.files ?? []);
+      }
     } catch {
-      toast.error("Failed to load library");
+      if (filesRequestIdRef.current === requestId) {
+        toast.error("Failed to load library");
+      }
     } finally {
-      setIsLoadingFiles(false);
+      if (filesRequestIdRef.current === requestId) {
+        setIsLoadingFiles(false);
+      }
     }
-  }, [currentView, deferredSearchQuery, selectedCollection, selectedDirectory]);
+  }, [currentView, debouncedSearchQuery, selectedCollection, selectedDirectory]);
 
   const loadDirectories = useCallback(async () => {
+    const requestId = directoriesRequestIdRef.current + 1;
+    directoriesRequestIdRef.current = requestId;
+
     if (
-      deferredSearchQuery.trim() ||
+      debouncedSearchQuery.trim() ||
       currentView === "favorites" ||
       currentView === "collection" ||
       currentView === "extensions"
@@ -223,12 +247,16 @@ function HomeContent() {
       }
       const res = await fetch(`/api/directories?${params.toString()}`);
       const data = await res.json();
-      setDirectories(data.directories ?? []);
+      if (directoriesRequestIdRef.current === requestId) {
+        setDirectories(data.directories ?? []);
+      }
     } catch (error) {
-      console.error("Failed to load directories:", error);
-      toast.error("Failed to load directories");
+      if (directoriesRequestIdRef.current === requestId) {
+        console.error("Failed to load directories:", error);
+        toast.error("Failed to load directories");
+      }
     }
-  }, [deferredSearchQuery, currentView, selectedDirectory]);
+  }, [debouncedSearchQuery, currentView, selectedDirectory]);
 
   const loadInitialData = useCallback(async () => {
     setIsLoadingExtensions(true);
@@ -650,7 +678,7 @@ function HomeContent() {
           />
         ) : (
           <div className="flex min-h-0 flex-1">
-            <div className="min-w-0 flex-1">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <FileTable
                 files={files}
                 directories={directories}
@@ -668,7 +696,7 @@ function HomeContent() {
                   }
                 }}
                 onToggleFavorite={handleToggleFavorite}
-                searchQuery={deferredSearchQuery}
+                searchQuery={debouncedSearchQuery}
                 isLoading={isLoadingFiles}
                 soundShelfEnabled={soundShelfEnabled}
               />

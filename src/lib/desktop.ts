@@ -14,6 +14,7 @@ export interface DesktopBridge {
   revealInExplorer: (fileId: string) => Promise<DesktopActionResult>;
   openFileExternally: (fileId: string) => Promise<DesktopActionResult>;
   copyFilePath: (fileId: string) => Promise<DesktopActionResult>;
+  pickFolder: () => Promise<DesktopActionResult>;
   minimizeWindow: () => Promise<{ ok: boolean }>;
   toggleMaximizeWindow: () => Promise<{
     ok: boolean;

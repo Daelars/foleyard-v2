@@ -72,7 +72,7 @@ export function FileTable({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       {(currentDirectory || currentPlaylistName) && !searchQuery && (
         <FileTableBreadcrumbBar
           currentDirectory={currentDirectory}
@@ -85,7 +85,7 @@ export function FileTable({
 
       <div
         ref={parentRef}
-        className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-border"
+        className="foleyard-library-scroll flex-1 overflow-y-auto"
       >
         <div
           style={{

@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   copyFilePath(fileId) {
     return ipcRenderer.invoke("desktop:copy-file-path", fileId);
   },
+  pickFolder() {
+    return ipcRenderer.invoke("desktop:pick-folder");
+  },
   minimizeWindow() {
     return ipcRenderer.invoke("desktop:window-minimize");
   },

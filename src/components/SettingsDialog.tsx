@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { getDesktopBridge } from "@/lib/desktop";
 
 type ValidationResult = {
   valid: boolean;
@@ -144,11 +145,51 @@ function SettingsDialogBody({
   const [isStartingScan, setIsStartingScan] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newTagName, setNewTagName] = useState("");
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const hasPathChanged = rootDraft.trim() !== (settings.libraryRoot ?? "");
 
-  const validatePath = async () => {
-    const path = rootDraft.trim();
+  const handleBrowse = async () => {
+    const bridge = getDesktopBridge();
+    if (bridge) {
+      const result = await bridge.pickFolder();
+      if (!result.ok || !result.path) return;
+
+      setRootDraft(result.path);
+      setValidationResult(null);
+
+      const validation = await validatePathWith(result.path);
+      if (validation?.valid && validation.normalizedPath) {
+        setRootDraft(validation.normalizedPath);
+      }
+    } else {
+      folderInputRef.current?.click();
+    }
+  };
+
+  const handleWebFolderPicked = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const audioFiles = Array.from(files).filter((f) =>
+      /\.(wav|mp3|flac|ogg|aiff|aac|m4a|wma)$/i.test(f.name),
+    );
+
+    const sampleNames = audioFiles.slice(0, 10).map((f) => f.name);
+    const result: ValidationResult = {
+      valid: audioFiles.length > 0,
+      normalizedPath: null,
+      readable: true,
+      audioFileCount: audioFiles.length,
+      samples: sampleNames,
+      error: audioFiles.length === 0 ? "No supported audio files found in the selected folder." : null,
+    };
+
+    setValidationResult(result);
+    event.target.value = "";
+  };
+
+  const validatePathWith = async (path: string) => {
     if (!path) {
       setValidationResult({
         valid: false,
@@ -198,7 +239,7 @@ function SettingsDialogBody({
     setIsSaving(true);
 
     try {
-      const validation = await validatePath();
+      const validation = await validatePathWith(rootDraft.trim());
       if (!validation?.valid || !validation.normalizedPath) {
         toast.error(validation?.error ?? "Choose a valid library folder");
         return;
@@ -288,14 +329,23 @@ function SettingsDialogBody({
                     />
                     <Button
                       variant="outline"
-                      onClick={validatePath}
-                      disabled={isValidating || !rootDraft.trim()}
+                      onClick={handleBrowse}
+                      disabled={isValidating}
                     >
                       {isValidating ? (
                         <Loader2 className="mr-2 size-4 animate-spin" />
                       ) : null}
-                      Validate
+                      <FolderOpen className="mr-2 size-4" />
+                      Browse
                     </Button>
+                    <input
+                      ref={folderInputRef}
+                      type="file"
+                      className="hidden"
+                      /* @ts-ignore - webkitdirectory is a non-standard attribute */
+                      webkitdirectory=""
+                      onChange={handleWebFolderPicked}
+                    />
                   </div>
 
                   {settings.libraryRoot ? (

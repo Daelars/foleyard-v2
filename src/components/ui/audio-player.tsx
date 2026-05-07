@@ -126,6 +126,7 @@ export function AudioPlayerProvider<TData = unknown>({
         return
       }
       itemRef.current = item
+      _setActiveItem(item)
       const currentRate = audioRef.current.playbackRate
       audioRef.current.pause()
       audioRef.current.currentTime = 0
@@ -164,6 +165,7 @@ export function AudioPlayerProvider<TData = unknown>({
       }
 
       itemRef.current = item
+      _setActiveItem(item)
       const currentRate = audioRef.current.playbackRate
       if (!audioRef.current.paused) {
         audioRef.current.pause()
@@ -216,18 +218,52 @@ export function AudioPlayerProvider<TData = unknown>({
     [activeItem]
   )
 
-  useAnimationFrame(() => {
-    if (audioRef.current) {
-      _setActiveItem(itemRef.current)
-      setReadyState(audioRef.current.readyState)
-      setNetworkState(audioRef.current.networkState)
-      setTime(audioRef.current.currentTime)
-      setDuration(audioRef.current.duration)
-      setPaused(audioRef.current.paused)
-      setError(audioRef.current.error)
-      setPlaybackRateState(audioRef.current.playbackRate)
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    const onTimeUpdate = () => setTime(audio.currentTime)
+    const onPlay = () => setPaused(false)
+    const onPause = () => setPaused(true)
+    const onDurationChange = () => setDuration(audio.duration)
+    const onError = () => setError(audio.error)
+    const onWaiting = () => setNetworkState(audio.networkState)
+    const onCanPlay = () => {
+      setReadyState(audio.readyState)
+      setNetworkState(audio.networkState)
     }
-  })
+    const onLoadedMetadata = () => {
+      setDuration(audio.duration)
+      setReadyState(audio.readyState)
+    }
+    const onLoadStart = () => {
+      setNetworkState(audio.networkState)
+    }
+
+    audio.addEventListener("timeupdate", onTimeUpdate)
+    audio.addEventListener("play", onPlay)
+    audio.addEventListener("pause", onPause)
+    audio.addEventListener("durationchange", onDurationChange)
+    audio.addEventListener("loadedmetadata", onLoadedMetadata)
+    audio.addEventListener("error", onError)
+    audio.addEventListener("waiting", onWaiting)
+    audio.addEventListener("canplay", onCanPlay)
+    audio.addEventListener("canplaythrough", onCanPlay)
+    audio.addEventListener("loadstart", onLoadStart)
+
+    return () => {
+      audio.removeEventListener("timeupdate", onTimeUpdate)
+      audio.removeEventListener("play", onPlay)
+      audio.removeEventListener("pause", onPause)
+      audio.removeEventListener("durationchange", onDurationChange)
+      audio.removeEventListener("loadedmetadata", onLoadedMetadata)
+      audio.removeEventListener("error", onError)
+      audio.removeEventListener("waiting", onWaiting)
+      audio.removeEventListener("canplay", onCanPlay)
+      audio.removeEventListener("canplaythrough", onCanPlay)
+      audio.removeEventListener("loadstart", onLoadStart)
+    }
+  }, [])
 
   const isPlaying = !paused
   const isBuffering =
@@ -485,36 +521,6 @@ export function AudioPlayerButton<TData = unknown>({
       }
     />
   )
-}
-
-type Callback = (delta: number) => void
-
-function useAnimationFrame(callback: Callback) {
-  const requestRef = useRef<number | null>(null)
-  const previousTimeRef = useRef<number | null>(null)
-  const callbackRef = useRef<Callback>(callback)
-
-  useEffect(() => {
-    callbackRef.current = callback
-  }, [callback])
-
-  useEffect(() => {
-    const animate = (time: number) => {
-      if (previousTimeRef.current !== null) {
-        const delta = time - previousTimeRef.current
-        callbackRef.current(delta)
-      }
-      previousTimeRef.current = time
-      requestRef.current = requestAnimationFrame(animate)
-    }
-
-    requestRef.current = requestAnimationFrame(animate)
-
-    return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current)
-      previousTimeRef.current = null
-    }
-  }, [])
 }
 
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const

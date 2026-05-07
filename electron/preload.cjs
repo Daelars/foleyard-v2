@@ -14,11 +14,30 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   copyFilePath(fileId) {
     return ipcRenderer.invoke("desktop:copy-file-path", fileId);
   },
+  minimizeWindow() {
+    return ipcRenderer.invoke("desktop:window-minimize");
+  },
+  toggleMaximizeWindow() {
+    return ipcRenderer.invoke("desktop:window-toggle-maximize");
+  },
+  closeWindow() {
+    return ipcRenderer.invoke("desktop:window-close");
+  },
+  getWindowState() {
+    return ipcRenderer.invoke("desktop:get-window-state");
+  },
   onActionError(listener) {
     const wrapped = (_event, message) => listener(message);
     ipcRenderer.on("desktop:action-error", wrapped);
     return () => {
       ipcRenderer.removeListener("desktop:action-error", wrapped);
+    };
+  },
+  onWindowState(listener) {
+    const wrapped = (_event, state) => listener(state);
+    ipcRenderer.on("desktop:window-state", wrapped);
+    return () => {
+      ipcRenderer.removeListener("desktop:window-state", wrapped);
     };
   },
 });

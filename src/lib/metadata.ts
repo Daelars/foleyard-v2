@@ -5,6 +5,7 @@ import * as path from 'path';
 export interface AudioMetadata {
   filename: string;
   format: string | null;
+  codec: string | null;
   duration: number | null;
   sampleRate: number | null;
   bitDepth: number | null;
@@ -33,6 +34,7 @@ function toAudioMetadata(
   return {
     filename,
     format,
+    codec: metadata.format.codec ?? null,
     duration: metadata.format.duration ?? null,
     sampleRate: metadata.format.sampleRate ?? null,
     bitDepth: metadata.format.bitsPerSample ?? null,
@@ -71,29 +73,38 @@ async function parseHeader(filePath: string, fileSize: number, format: string | 
   }
 }
 
-export async function extractMetadata(filePath: string): Promise<AudioMetadata> {
-  const stats = await stat(filePath);
-  const filename = path.basename(filePath);
-  const ext = path.extname(filePath).toLowerCase().slice(1) || null;
+export async function extractMetadata(
+  filePath: string,
+  options?: {
+    fileSize?: number;
+    filename?: string;
+    format?: string | null;
+  },
+): Promise<AudioMetadata> {
+  const fileSize = options?.fileSize ?? (await stat(filePath)).size;
+  const filename = options?.filename ?? path.basename(filePath);
+  const derivedFormat = path.extname(filePath).toLowerCase().slice(1) || null;
+  const ext = options?.format ?? derivedFormat;
 
   try {
-    const headerMetadata = await parseHeader(filePath, stats.size, ext);
+    const headerMetadata = await parseHeader(filePath, fileSize, ext);
 
     if (!needsFullParse(headerMetadata, ext)) {
-      return toAudioMetadata(headerMetadata, filename, ext, stats.size);
+      return toAudioMetadata(headerMetadata, filename, ext, fileSize);
     }
 
     const fullMetadata = await mm.parseFile(filePath, { duration: true, skipCovers: true });
-    return toAudioMetadata(fullMetadata, filename, ext, stats.size);
+    return toAudioMetadata(fullMetadata, filename, ext, fileSize);
   } catch {
     return {
       filename,
       format: ext,
+      codec: null,
       duration: null,
       sampleRate: null,
       bitDepth: null,
       channels: null,
-      fileSize: stats.size,
+      fileSize,
     };
   }
 }

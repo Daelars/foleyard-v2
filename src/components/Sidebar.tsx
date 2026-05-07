@@ -1,6 +1,6 @@
 "use client";
 
-import { Folder, Heart, List, Settings, Activity } from "lucide-react";
+import { Folder, Heart, List, Settings, Activity, Puzzle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DotmSquare3 } from "@/components/ui/dotm-square-3";
@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 interface SidebarProps {
-  currentView: "all" | "favorites" | "collection" | "directory";
+  currentView: "all" | "favorites" | "extensions" | "collection" | "directory";
   collections: { id: string; name: string; fileCount?: number }[];
   selectedCollection: string | null;
   tags: { id: string; name: string; color: string }[];
@@ -22,6 +22,7 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onSelectLibrary: () => void;
   onSelectFavorites: () => void;
+  onSelectExtensions: () => void;
   onSelectCollection: (id: string) => void;
   onAction?: () => void;
 }
@@ -36,12 +37,19 @@ export function Sidebar({
   onOpenSettings,
   onSelectLibrary,
   onSelectFavorites,
+  onSelectExtensions,
   onSelectCollection,
   onAction,
 }: SidebarProps) {
   const libraryActive = currentView === "all" || currentView === "directory";
   const favoritesActive = currentView === "favorites";
+  const extensionsActive = currentView === "extensions";
   const scanComplete = !scanStatus.running && scanStatus.discovered > 0;
+
+  const handleSelectExtensions = () => {
+    onSelectExtensions();
+    onAction?.();
+  };
 
   const handleSelectLibrary = () => {
     onSelectLibrary();
@@ -103,6 +111,18 @@ export function Sidebar({
           >
             <Heart className={cn("size-4", favoritesActive && "fill-current text-primary")} />
             Favorites
+          </Button>
+          <Button
+            variant="ghost"
+            className={cn(
+              "w-full justify-start gap-3 rounded-xl text-muted-foreground transition-[background-color,color,box-shadow,transform] duration-200 hover:bg-primary/8 hover:text-foreground active:scale-[0.99]",
+              extensionsActive &&
+                "bg-primary/12 text-foreground ring-1 ring-primary/20 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/14",
+            )}
+            onClick={handleSelectExtensions}
+          >
+            <Puzzle className={cn("size-4", extensionsActive && "text-primary")} />
+            Extensions
           </Button>
         </div>
       </div>

@@ -2,11 +2,16 @@
   "name": "foleyard",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*",
+    "packages/yard-tools/*"
+  ],
   "main": "electron/main.cjs",
   "scripts": {
     "predev": "node scripts/verify-workspace-root.cjs",
     "dev": "next dev",
     "dev:desktop": "node scripts/dev-desktop.cjs",
+    "bench:scan": "tsx scripts/benchmark-scan.ts",
     "prebuild": "node scripts/verify-workspace-root.cjs",
     "build": "next build",
     "start": "next start",
@@ -25,6 +30,7 @@
     "music-metadata": "^11.12.3",
     "next": "16.2.4",
     "next-themes": "^0.4.6",
+    "picocolors": "^1.1.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "shadcn": "^4.5.0",
@@ -48,6 +54,7 @@
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vitest": "^4.1.5",
     "wait-on": "^9.0.5"
   },
   "ignoreScripts": [

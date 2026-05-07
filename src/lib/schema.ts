@@ -13,6 +13,7 @@ export const files = sqliteTable('files', {
   filename: text('filename').notNull(),
   directory: text('directory'),
   format: text('format'),
+  codec: text('codec'),
   duration: real('duration'),
   sampleRate: integer('sample_rate'),
   bitDepth: integer('bit_depth'),

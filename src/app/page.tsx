@@ -1,15 +1,21 @@
 "use client";
 
 import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
-import { Search, Loader2, PanelLeft } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Sidebar } from "@/components/Sidebar";
+import { Loader2, PanelLeft, Search } from "lucide-react";
+import { toast } from "sonner";
+
+import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";
+import { DesktopTitleBar } from "@/components/DesktopTitleBar";
+import { ExtensionGrid, type ExtensionGridItem } from "@/components/ExtensionGrid";
 import { FileTable } from "@/components/FileTable";
-import { AudioPlayer, AudioPlayerRef } from "@/components/AudioPlayer";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { Sidebar } from "@/components/Sidebar";
+import { SoundShelf } from "@/components/SoundShelf";
+import { AudioPlayerProvider } from "@/components/ui/audio-player";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
 import { cn } from "@/lib/utils";
 
 interface FileRecord {
@@ -57,8 +63,6 @@ const emptyScanStatus: ScanStatus = {
   error: null,
 };
 
-import { AudioPlayerProvider } from "@/components/ui/audio-player";
-
 export default function Home() {
   return (
     <AudioPlayerProvider>
@@ -76,7 +80,7 @@ function HomeContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [currentView, setCurrentView] = useState<
-    "all" | "favorites" | "collection" | "directory"
+    "all" | "favorites" | "extensions" | "collection" | "directory"
   >("all");
   const [selectedCollection, setSelectedCollection] = useState<string | null>(
     null,
@@ -93,8 +97,31 @@ function HomeContent() {
     stats: { activeFiles: 0, removedFiles: 0 },
   });
   const [scanStatus, setScanStatus] = useState<ScanStatus>(emptyScanStatus);
+  const [extensions, setExtensions] = useState<ExtensionGridItem[]>([]);
+  const [isLoadingExtensions, setIsLoadingExtensions] = useState(true);
+  const [pendingExtensionId, setPendingExtensionId] = useState<string | null>(
+    null,
+  );
+  const [soundShelfItemCount, setSoundShelfItemCount] = useState(0);
+  const [selectedExtension, setSelectedExtension] =
+    useState<ExtensionGridItem | null>(null);
 
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
+
+  const loadSoundShelfCount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/extensions/sound-shelf");
+      if (!res.ok) {
+        setSoundShelfItemCount(0);
+        return;
+      }
+
+      const data = (await res.json()) as { items?: Array<unknown> };
+      setSoundShelfItemCount(data.items?.length ?? 0);
+    } catch {
+      setSoundShelfItemCount(0);
+    }
+  }, []);
 
   const showLibrary = useCallback(() => {
     setCurrentView("all");
@@ -107,6 +134,14 @@ function HomeContent() {
     setCurrentView("favorites");
     setSelectedCollection(null);
     setSelectedDirectory(null);
+    setSearchQuery("");
+  }, []);
+
+  const showExtensions = useCallback(() => {
+    setCurrentView("extensions");
+    setSelectedCollection(null);
+    setSelectedDirectory(null);
+    setSelectedFile(null);
     setSearchQuery("");
   }, []);
 
@@ -124,16 +159,20 @@ function HomeContent() {
   }, []);
 
   const loadFiles = useCallback(async () => {
+    if (currentView === "extensions") {
+      setFiles([]);
+      setIsLoadingFiles(false);
+      return;
+    }
+
     setIsLoadingFiles(true);
     const params = new URLSearchParams();
     if (deferredSearchQuery.trim()) {
       params.set("q", deferredSearchQuery.trim());
     } else {
-      // Only filter by directory if not searching
       if (currentView === "directory" && selectedDirectory) {
         params.set("directory", selectedDirectory);
       } else if (currentView === "all") {
-        // In "all" view without search, if we have a selectedDirectory, show its files
         if (selectedDirectory) {
           params.set("directory", selectedDirectory);
         } else {
@@ -144,13 +183,19 @@ function HomeContent() {
       }
     }
 
-    if (currentView === "favorites") params.set("favorites", "true");
-    if (currentView === "collection" && selectedCollection)
+    if (currentView === "favorites") {
+      params.set("favorites", "true");
+    }
+    if (currentView === "collection" && selectedCollection) {
       params.set("collectionId", selectedCollection);
+    }
 
     try {
       const response = await fetch(`/api/files?${params.toString()}`);
-      if (!response.ok) throw new Error("Failed to fetch files");
+      if (!response.ok) {
+        throw new Error("Failed to fetch files");
+      }
+
       const data = await response.json();
       setFiles(data.files ?? []);
     } catch {
@@ -161,11 +206,11 @@ function HomeContent() {
   }, [currentView, deferredSearchQuery, selectedCollection, selectedDirectory]);
 
   const loadDirectories = useCallback(async () => {
-    // Only load directories if we're not searching
     if (
       deferredSearchQuery.trim() ||
       currentView === "favorites" ||
-      currentView === "collection"
+      currentView === "collection" ||
+      currentView === "extensions"
     ) {
       setDirectories([]);
       return;
@@ -173,7 +218,9 @@ function HomeContent() {
 
     try {
       const params = new URLSearchParams();
-      if (selectedDirectory) params.set("parent", selectedDirectory);
+      if (selectedDirectory) {
+        params.set("parent", selectedDirectory);
+      }
       const res = await fetch(`/api/directories?${params.toString()}`);
       const data = await res.json();
       setDirectories(data.directories ?? []);
@@ -184,47 +231,93 @@ function HomeContent() {
   }, [deferredSearchQuery, currentView, selectedDirectory]);
 
   const loadInitialData = useCallback(async () => {
-    try {
-      const [settingsRes, collectionsRes, tagsRes, scanRes] = await Promise.all(
-        [
-          fetch("/api/settings"),
-          fetch("/api/collections"),
-          fetch("/api/tags"),
-          fetch("/api/scan"),
-        ],
-      );
+    setIsLoadingExtensions(true);
 
-      const [settingsData, collectionsData, tagsData, scanData] =
-        await Promise.all([
-          settingsRes.json(),
-          collectionsRes.json(),
-          tagsRes.json(),
-          scanRes.json(),
-        ]);
+    try {
+      const [
+        settingsRes,
+        collectionsRes,
+        tagsRes,
+        scanRes,
+        extensionsRes,
+      ] = await Promise.all([
+        fetch("/api/settings"),
+        fetch("/api/collections"),
+        fetch("/api/tags"),
+        fetch("/api/scan"),
+        fetch("/api/extensions"),
+      ]);
+
+      const [
+        settingsData,
+        collectionsData,
+        tagsData,
+        scanData,
+        extensionsData,
+      ] = await Promise.all([
+        settingsRes.json(),
+        collectionsRes.json(),
+        tagsRes.json(),
+        scanRes.json(),
+        extensionsRes.json(),
+      ]);
 
       setSettings(settingsData);
       setCollections(collectionsData.collections ?? []);
       setTags(tagsData.tags ?? []);
       setScanStatus(scanData);
+
+      const nextExtensions = (extensionsData.extensions ?? []) as ExtensionGridItem[];
+      setExtensions(nextExtensions);
+
+      if (
+        nextExtensions.some(
+          (extension) => extension.id === "sound-shelf" && extension.enabled,
+        )
+      ) {
+        void loadSoundShelfCount();
+      } else {
+        setSoundShelfItemCount(0);
+      }
     } catch {
       toast.error("Failed to sync with server");
+    } finally {
+      setIsLoadingExtensions(false);
     }
-  }, []);
+  }, [loadSoundShelfCount]);
 
   useEffect(() => {
-    const run = async () => {
-      await loadInitialData();
-    };
+    const timer = window.setTimeout(() => {
+      void loadInitialData();
+    }, 0);
 
-    void run();
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [loadInitialData]);
 
   useEffect(() => {
-    const run = async () => {
-      await Promise.all([loadFiles(), loadDirectories()]);
+    const handleSoundShelfChanged = () => {
+      void loadSoundShelfCount();
     };
 
-    void run();
+    window.addEventListener(SOUND_SHELF_CHANGED_EVENT, handleSoundShelfChanged);
+    return () => {
+      window.removeEventListener(
+        SOUND_SHELF_CHANGED_EVENT,
+        handleSoundShelfChanged,
+      );
+    };
+  }, [loadSoundShelfCount]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void Promise.all([loadFiles(), loadDirectories()]);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [loadFiles, loadDirectories]);
 
   const handleToggleFavorite = async (id: string) => {
@@ -234,14 +327,16 @@ function HomeContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, action: "toggleFavorite" }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        throw new Error();
+      }
 
-      // Optimistic update
       setFiles((prev) =>
-        prev.map((f) =>
-          f.id === id ? { ...f, isFavorite: !f.isFavorite } : f,
+        prev.map((file) =>
+          file.id === id ? { ...file, isFavorite: !file.isFavorite } : file,
         ),
       );
+
       if (selectedFile?.id === id) {
         setSelectedFile({
           ...selectedFile,
@@ -272,8 +367,10 @@ function HomeContent() {
         libraryRoot: data.libraryRoot,
         stats: data.stats,
       }));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save settings");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save settings",
+      );
     }
   };
 
@@ -288,21 +385,29 @@ function HomeContent() {
 
       setScanStatus(data.status);
       toast.info("Scan started");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to start scan");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to start scan",
+      );
     }
   };
 
   const handleCreateCollection = async (name: string) => {
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      return;
+    }
+
     try {
       const res = await fetch("/api/collections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim() }),
       });
-      if (!res.ok) throw new Error();
-      loadInitialData();
+      if (!res.ok) {
+        throw new Error();
+      }
+
+      void loadInitialData();
       toast.success("Playlist created");
     } catch {
       toast.error("Failed to create playlist");
@@ -316,14 +421,16 @@ function HomeContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ collectionId }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        throw new Error();
+      }
 
       if (selectedCollection === collectionId) {
         setSelectedCollection(null);
         setCurrentView("all");
       }
 
-      loadInitialData();
+      void loadInitialData();
       toast.success("Playlist deleted");
     } catch {
       toast.error("Failed to delete playlist");
@@ -331,22 +438,72 @@ function HomeContent() {
   };
 
   const handleCreateTag = async (name: string) => {
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      return;
+    }
+
     try {
       await fetch("/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim() }),
       });
-      loadInitialData();
+      void loadInitialData();
       toast.success("Tag created");
     } catch {
       toast.error("Failed to create tag");
     }
   };
 
+  const handleToggleExtensionEnabled = useCallback(
+    async (extensionId: string, enabled: boolean) => {
+      setPendingExtensionId(extensionId);
+
+      try {
+        const res = await fetch("/api/extensions", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ extensionId, enabled }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error ?? "Failed to update extension");
+        }
+
+        setExtensions((current) =>
+          current.map((extension) =>
+            extension.id === extensionId ? data.extension : extension,
+          ),
+        );
+
+        if (extensionId === "sound-shelf") {
+          if (enabled) {
+            void loadSoundShelfCount();
+          } else {
+            setSoundShelfItemCount(0);
+          }
+        }
+
+        toast.success(enabled ? "Extension enabled" : "Extension disabled");
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to update extension",
+        );
+      } finally {
+        setPendingExtensionId(null);
+      }
+    },
+    [loadSoundShelfCount],
+  );
+
   const handleAddToCollection = async (collectionId: string) => {
-    if (!selectedFile) return;
+    if (!selectedFile) {
+      return;
+    }
+
     const playlist = collections.find(
       (collection) => collection.id === collectionId,
     );
@@ -360,7 +517,9 @@ function HomeContent() {
           collectionId,
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        throw new Error();
+      }
 
       await loadInitialData();
       toast.success(`Added to ${playlist?.name ?? "playlist"}`);
@@ -369,22 +528,28 @@ function HomeContent() {
     }
   };
 
-  // Poll scan status
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
+    let interval: ReturnType<typeof setInterval> | undefined;
+
     if (scanStatus.running) {
       interval = setInterval(async () => {
         const res = await fetch("/api/scan");
         const data = await res.json();
         setScanStatus(data);
+
         if (!data.running) {
-          loadFiles();
-          loadInitialData();
+          void loadFiles();
+          void loadInitialData();
           toast.success("Scan complete");
         }
       }, 2000);
     }
-    return () => clearInterval(interval);
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
   }, [scanStatus.running, loadFiles, loadInitialData]);
 
   const selectedPlaylistName =
@@ -393,9 +558,16 @@ function HomeContent() {
           ?.name ?? null)
       : null;
 
+  const showExtensionsView = currentView === "extensions";
+  const soundShelfEnabled =
+    extensions.find((extension) => extension.id === "sound-shelf")?.enabled ??
+    false;
+  const showSoundShelf = soundShelfEnabled && soundShelfItemCount > 0;
+
   return (
     <div className="relative flex h-screen overflow-hidden bg-background font-sans">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_10%,transparent),transparent_32%),radial-gradient(circle_at_bottom_right,color-mix(in_oklab,var(--foreground)_5%,transparent),transparent_38%)]" />
+
       <Sidebar
         className="hidden md:flex"
         currentView={currentView}
@@ -406,6 +578,7 @@ function HomeContent() {
         onOpenSettings={() => setShowSettings(true)}
         onSelectLibrary={showLibrary}
         onSelectFavorites={showFavorites}
+        onSelectExtensions={showExtensions}
         onSelectCollection={showCollection}
       />
 
@@ -425,6 +598,7 @@ function HomeContent() {
             onOpenSettings={() => setShowSettings(true)}
             onSelectLibrary={showLibrary}
             onSelectFavorites={showFavorites}
+            onSelectExtensions={showExtensions}
             onSelectCollection={showCollection}
             onAction={() => setShowMobileSidebar(false)}
           />
@@ -432,6 +606,8 @@ function HomeContent() {
       </Dialog>
 
       <main className="relative flex min-w-0 flex-1 flex-col bg-background/45 backdrop-blur-xl">
+        <DesktopTitleBar />
+
         <header className="shrink-0 border-b border-border/70 bg-background/20 px-4 py-3 backdrop-blur-xl md:px-5">
           <div className="flex h-10 items-center gap-3">
             <Button
@@ -444,49 +620,78 @@ function HomeContent() {
               <PanelLeft className="size-4" />
             </Button>
 
-            <div className="relative flex-1 rounded-xl border border-border/50 bg-card/30 px-px py-px backdrop-blur-md duration-300 animate-in fade-in-0 slide-in-from-top-2 md:max-w-xl">
-              <div className="relative rounded-lg bg-background/40">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search library..."
-                  className="h-8 rounded-lg border-0 bg-transparent pl-10 pr-4 text-sm shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
-                />
+            {!showExtensionsView && (
+              <div className="relative flex-1 rounded-xl border border-border/50 bg-card/30 px-px py-px backdrop-blur-md duration-300 animate-in fade-in-0 slide-in-from-top-2 md:max-w-xl">
+                <div className="relative rounded-lg bg-background/40">
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search library..."
+                    className="h-8 rounded-lg border-0 bg-transparent pl-10 pr-4 text-sm shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {isLoadingFiles && (
-              <Loader2 className="size-4 text-primary animate-spin" />
+              <Loader2 className="size-4 animate-spin text-primary" />
             )}
           </div>
         </header>
 
-        <FileTable
-          files={files}
-          directories={directories}
-          currentDirectory={selectedDirectory}
-          currentPlaylistName={selectedPlaylistName}
-          onNavigate={navigateDirectory}
-          onNavigateLibrary={showLibrary}
-          selectedFileId={selectedFile?.id ?? null}
-          isSelectedFilePlaying={isPlayerPlaying}
-          onSelect={(file) => {
-             if (selectedFile?.id === file.id) {
-               audioPlayerRef.current?.togglePlayback();
-             } else {
-               setSelectedFile(file);
-             }
-           }}
-          onToggleFavorite={handleToggleFavorite}
-          searchQuery={deferredSearchQuery}
-          isLoading={isLoadingFiles}
-        />
+        {showExtensionsView ? (
+          <ExtensionGrid
+            extensions={extensions}
+            isLoading={isLoadingExtensions}
+            onOpenDetails={setSelectedExtension}
+            onToggleEnabled={handleToggleExtensionEnabled}
+            pendingExtensionId={pendingExtensionId}
+          />
+        ) : (
+          <div className="flex min-h-0 flex-1">
+            <div className="min-w-0 flex-1">
+              <FileTable
+                files={files}
+                directories={directories}
+                currentDirectory={selectedDirectory}
+                currentPlaylistName={selectedPlaylistName}
+                onNavigate={navigateDirectory}
+                onNavigateLibrary={showLibrary}
+                selectedFileId={selectedFile?.id ?? null}
+                isSelectedFilePlaying={isPlayerPlaying}
+                onSelect={(file) => {
+                  if (selectedFile?.id === file.id) {
+                    audioPlayerRef.current?.togglePlayback();
+                  } else {
+                    setSelectedFile(file);
+                  }
+                }}
+                onToggleFavorite={handleToggleFavorite}
+                searchQuery={deferredSearchQuery}
+                isLoading={isLoadingFiles}
+                soundShelfEnabled={soundShelfEnabled}
+              />
+            </div>
+
+            {showSoundShelf ? (
+              <aside className="hidden w-80 shrink-0 border-l border-border/70 bg-card/35 backdrop-blur-xl lg:flex lg:flex-col">
+                <SoundShelf
+                  onItemCountChange={setSoundShelfItemCount}
+                  onSelectFile={(fileId) => {
+                    const match = files.find((file) => file.id === fileId);
+                    if (match) {
+                      setSelectedFile(match);
+                    }
+                  }}
+                />
+              </aside>
+            ) : null}
+          </div>
+        )}
+
         <div
-          className={cn(
-            "h-0 transition-all duration-300",
-            selectedFile && "h-28",
-          )}
+          className={cn("h-0 transition-all duration-300", selectedFile && "h-28")}
         />
       </main>
 
@@ -516,6 +721,106 @@ function HomeContent() {
         onDeleteCollection={handleDeleteCollection}
         onCreateTag={handleCreateTag}
       />
+
+      <Dialog
+        open={selectedExtension !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedExtension(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg rounded-2xl border border-border/70 bg-card/95 backdrop-blur-xl">
+          <DialogTitle>
+            {selectedExtension?.name ?? "Extension details"}
+          </DialogTitle>
+          {selectedExtension ? (
+            <div className="space-y-5 text-sm">
+              <div className="space-y-1">
+                <p className="text-muted-foreground">
+                  {selectedExtension.description}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedExtension.provider} · v{selectedExtension.version}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Commands</h3>
+                {selectedExtension.commands?.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedExtension.commands.map((command) => (
+                      <span
+                        key={command}
+                        className="rounded-full border border-border/60 bg-background/50 px-2 py-1 text-xs text-muted-foreground"
+                      >
+                        {command}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No commands exposed.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Permissions</h3>
+                {selectedExtension.permissions?.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedExtension.permissions.map((permission) => (
+                      <span
+                        key={permission}
+                        className="rounded-full border border-border/60 bg-background/50 px-2 py-1 text-xs text-muted-foreground"
+                      >
+                        {permission}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No permissions declared.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Surfaces</h3>
+                {selectedExtension.surfaces?.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedExtension.surfaces.map((surface) => (
+                      <span
+                        key={surface}
+                        className="rounded-full border border-border/60 bg-background/50 px-2 py-1 text-xs text-muted-foreground"
+                      >
+                        {surface}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No UI surfaces declared.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Settings</h3>
+                {selectedExtension.settingsCount ? (
+                  <p className="text-xs text-muted-foreground">
+                    This extension exposes {selectedExtension.settingsCount} configurable settings.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    This extension has no configurable settings yet.
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

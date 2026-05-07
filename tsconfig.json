@@ -19,7 +19,13 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@yard-core": ["./packages/yard-core/src/index.ts"],
+      "@yard-core/*": ["./packages/yard-core/src/*"],
+      "yard-core": ["./packages/yard-core/src/index.ts"],
+      "yard-core/*": ["./packages/yard-core/src/*"],
+      "@foleyard/sound-shelf": ["./packages/yard-tools/sound-shelf/src/index.ts"],
+      "@foleyard/*": ["./packages/yard-tools/*/src/index.ts"]
     }
   },
   "include": [

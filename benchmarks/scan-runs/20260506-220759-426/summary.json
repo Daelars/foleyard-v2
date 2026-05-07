@@ -1,0 +1,48 @@
+{
+  "startedAt": "2026-05-06T22:07:59.426Z",
+  "completedAt": "2026-05-06T22:08:00.360Z",
+  "options": {
+    "desktopMode": true,
+    "discoverOnly": false,
+    "pollMs": 1,
+    "rootOverride": null
+  },
+  "targetRoot": "P:\\SoundLibary",
+  "mode": "full-scan",
+  "validation": {
+    "valid": true,
+    "readable": true,
+    "normalizedPath": "P:\\SoundLibary",
+    "elapsedMs": 1.764299999999821,
+    "error": null
+  },
+  "discovery": {
+    "mode": "streaming-batches",
+    "filesFound": 15877,
+    "batchesProcessed": 32,
+    "firstFileLatencyMs": 4.57770000000005,
+    "elapsedMs": 119.70960000000014,
+    "throughput": "132629.3 files/s"
+  },
+  "scan": {
+    "finalPhase": "complete",
+    "elapsedMs": 788.1063999999999,
+    "metrics": {
+      "discovered": 15877,
+      "indexed": 15877,
+      "skippedUnchanged": 15877,
+      "metadataProcessed": 0,
+      "added": 0,
+      "updated": 0,
+      "removed": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    "discoveryThroughput": "132629.3 files/s",
+    "overallThroughput": "20145.8 files/s",
+    "indexingThroughput": "20145.8 files/s",
+    "metadataThroughput": null,
+    "error": null
+  },
+  "exitCode": 0
+}

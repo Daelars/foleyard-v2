@@ -5,6 +5,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Database,
+  Download,
   ListMusic,
   FolderOpen,
   Loader2,
@@ -192,29 +193,103 @@ function SettingsDialogBody({
   const [isValidating, setIsValidating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isStartingScan, setIsStartingScan] = useState(false);
+  const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newTagName, setNewTagName] = useState("");
   const [expandedExtensionId, setExpandedExtensionId] = useState<string | null>(null);
+  const manualUpdateToastRef = useRef<string | number | null>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const tagInputRef = useRef<HTMLInputElement>(null);
 
-  // Local zoom state for smooth slider dragging
-  const [localZoom, setLocalZoom] = useState(zoom);
-
   useEffect(() => {
-    setLocalZoom(zoom);
-  }, [zoom]);
+    const bridge = getDesktopBridge();
+
+    if (!bridge) {
+      return;
+    }
+
+    const finishManualCheck = () => {
+      setIsCheckingForUpdates(false);
+      manualUpdateToastRef.current = null;
+    };
+
+    const unsubAvailable = bridge.onUpdateAvailable((info) => {
+      const id = manualUpdateToastRef.current;
+      if (id != null) {
+        toast.loading(`Update v${info.version} available. Downloading...`, { id });
+        finishManualCheck();
+      }
+    });
+
+    const unsubReady = bridge.onUpdateReady((info) => {
+      const id = manualUpdateToastRef.current;
+      if (id != null) {
+        toast.success(`Update v${info.version} is ready`, { id });
+        finishManualCheck();
+      }
+    });
+
+    const unsubNotAvailable = bridge.onUpdateNotAvailable(() => {
+      const id = manualUpdateToastRef.current;
+      if (id != null) {
+        toast.success("Foleyard is up to date", { id });
+        finishManualCheck();
+      }
+    });
+
+    const unsubError = bridge.onUpdateError((info) => {
+      const id = manualUpdateToastRef.current;
+      if (id != null) {
+        toast.error(`Update check failed: ${info.message}`, { id });
+        finishManualCheck();
+      }
+    });
+
+    return () => {
+      unsubAvailable();
+      unsubReady();
+      unsubNotAvailable();
+      unsubError();
+    };
+  }, []);
 
   const handleSliderChange = (value: number | readonly number[]) => {
     const nextZoom = Array.isArray(value) ? value[0] : value;
-    setLocalZoom(nextZoom);
     onUpdateZoom?.(nextZoom);
   };
 
   const handleResetZoom = () => {
-    setLocalZoom(100);
     onUpdateZoom?.(100);
+  };
+
+  const handleCheckForUpdates = async () => {
+    const bridge = getDesktopBridge();
+
+    if (!bridge) {
+      toast.error("Update checks are only available in the desktop app");
+      return;
+    }
+
+    setIsCheckingForUpdates(true);
+    manualUpdateToastRef.current = toast.loading("Checking for updates...");
+
+    try {
+      const result = await bridge.checkForUpdates();
+
+      if (!result.ok) {
+        toast.error("Update check failed", { id: manualUpdateToastRef.current ?? undefined });
+        setIsCheckingForUpdates(false);
+        manualUpdateToastRef.current = null;
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Update check failed",
+        { id: manualUpdateToastRef.current ?? undefined },
+      );
+      setIsCheckingForUpdates(false);
+      manualUpdateToastRef.current = null;
+    }
   };
 
   const handleBrowse = async () => {
@@ -904,12 +979,12 @@ function SettingsDialogBody({
                         Scale the entire UI. Useful for high-DPI screens.
                      </p>
                    </div>
-                   <Badge variant="secondary" className="font-mono">{localZoom}%</Badge>
+                   <Badge variant="secondary" className="font-mono">{zoom}%</Badge>
                 </div>
 
                 <div className="space-y-4">
                   <Slider
-                    value={[localZoom]}
+                    value={[zoom]}
                     min={50}
                     max={200}
                     step={5}
@@ -927,7 +1002,7 @@ function SettingsDialogBody({
                     variant="outline"
                     size="sm"
                     onClick={handleResetZoom}
-                    disabled={localZoom === 100}
+                    disabled={zoom === 100}
                     className="h-8 text-[10px] uppercase tracking-widest"
                   >
                     Reset to Default
@@ -958,6 +1033,19 @@ function SettingsDialogBody({
                 </p>
 
                 <div className="flex gap-2 border-t border-border/40 pt-4">
+                   <Button
+                     variant="outline"
+                     className="h-10 gap-2 rounded-lg px-4"
+                     onClick={handleCheckForUpdates}
+                     disabled={isCheckingForUpdates}
+                   >
+                      {isCheckingForUpdates ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Download className="size-4" />
+                      )}
+                      Check for Updates
+                   </Button>
                    <Button variant="outline" className="h-10 gap-2 rounded-lg px-4">
                       <ExternalLink className="size-4" /> Documentation
                    </Button>

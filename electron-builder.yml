@@ -20,12 +20,17 @@ files:
   - "!.next/node_modules/better-sqlite3*/build/**/*.cpp"
   - "!.next/node_modules/better-sqlite3*/build/**/*.h"
   - "!.next/node_modules/better-sqlite3*/build/**/test_extension.node"
+  - icon.png
+  - icon.ico
   - package.json
 asarUnpack:
   - "**/*.node"
 win:
+  icon: icon.ico
   target: nsis
 nsis:
+  installerIcon: icon.ico
+  uninstallerIcon: icon.ico
   oneClick: false
   allowToChangeInstallationDirectory: true
 publish:

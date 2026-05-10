@@ -27,6 +27,7 @@ function createMainWindow(startUrl, onClosed) {
     height: 900,
     minWidth: 1080,
     minHeight: 720,
+    icon: path.join(app.getAppPath(), "icon.png"),
     backgroundColor: "#0a0a0c",
     autoHideMenuBar: true,
     frame: false,

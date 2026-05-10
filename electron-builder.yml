@@ -1,5 +1,6 @@
 appId: com.foleyard.app
 productName: Foleyard
+artifactName: Foleyard-Setup-${version}.${ext}
 directories:
   output: dist-electron
 files:

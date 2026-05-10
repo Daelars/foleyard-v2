@@ -26,7 +26,19 @@ jobs:
           if (!(Test-Path "dist-electron/latest.yml")) {
             throw "dist-electron/latest.yml was not generated"
           }
-          if (!(Get-ChildItem "dist-electron/*.exe")) {
+          $latest = Get-Content "dist-electron/latest.yml" -Raw
+          $pathMatch = [regex]::Match($latest, "(?m)^path:\s*(.+)\s*$")
+          if (!$pathMatch.Success) {
+            throw "dist-electron/latest.yml does not contain an installer path"
+          }
+          $installerName = $pathMatch.Groups[1].Value.Trim()
+          if (!(Test-Path (Join-Path "dist-electron" $installerName))) {
+            throw "latest.yml points to $installerName, but that file was not generated"
+          }
+          if (!(Test-Path (Join-Path "dist-electron" "$installerName.blockmap"))) {
+            throw "latest.yml points to $installerName, but $installerName.blockmap was not generated"
+          }
+          if (!(Get-ChildItem "dist-electron/Foleyard-Setup-*.exe")) {
             throw "No Windows installer was generated"
           }
       - uses: softprops/action-gh-release@v2
@@ -34,8 +46,8 @@ jobs:
           fail_on_unmatched_files: true
           generate_release_notes: true
           files: |
-            dist-electron/*.exe
-            dist-electron/*.exe.blockmap
+            dist-electron/Foleyard-Setup-*.exe
+            dist-electron/Foleyard-Setup-*.exe.blockmap
             dist-electron/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}

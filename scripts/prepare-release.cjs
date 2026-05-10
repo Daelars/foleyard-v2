@@ -5,11 +5,13 @@ const path = require("path");
 const root = path.join(__dirname, "..");
 
 function run(command, args, options = {}) {
-  return execFileSync(command, args, {
+  const output = execFileSync(command, args, {
     cwd: root,
     encoding: "utf-8",
     stdio: options.stdio ?? "pipe",
-  }).trim();
+  });
+
+  return typeof output === "string" ? output.trim() : "";
 }
 
 function readJson(filePath) {
@@ -52,8 +54,12 @@ function incrementVersion(version, bump) {
   throw new Error(`Expected bump to be patch, minor, major, or x.y.z. Received: ${bump}`);
 }
 
+function getWorkingTreeStatus() {
+  return run("git", ["status", "--porcelain"]);
+}
+
 function assertCleanWorkingTree() {
-  const status = run("git", ["status", "--porcelain"]);
+  const status = getWorkingTreeStatus();
 
   if (status) {
     throw new Error(
@@ -65,6 +71,42 @@ function assertCleanWorkingTree() {
       ].join("\n"),
     );
   }
+}
+
+function isResumableVersionBumpStatus(status) {
+  const lines = status.split("\n").filter(Boolean);
+  const allowed = new Set(["package.json", "package-lock.json"]);
+
+  return (
+    lines.length > 0 &&
+    lines.every((line) => {
+      const filePath = line.slice(3);
+      const indexStatus = line[0];
+      const worktreeStatus = line[1];
+      return allowed.has(filePath) && indexStatus === "M" && worktreeStatus === " ";
+    })
+  );
+}
+
+function assertCleanOrResumableWorkingTree() {
+  const status = run("git", ["status", "--porcelain"]);
+
+  if (!status) {
+    return false;
+  }
+
+  if (isResumableVersionBumpStatus(status)) {
+    return true;
+  }
+
+  throw new Error(
+    [
+      "Working tree is not clean.",
+      "Commit or stash your changes before preparing a release.",
+      "Current changes:",
+      status,
+    ].join("\n"),
+  );
 }
 
 function tagExists(tagName) {
@@ -100,19 +142,23 @@ function main() {
   const shouldPush = args.includes("--push");
   const dryRun = args.includes("--dry-run");
 
-  assertCleanWorkingTree();
+  const resumeVersionBump = assertCleanOrResumableWorkingTree();
 
   const packagePath = path.join(root, "package.json");
   const packageJson = readJson(packagePath);
   const previousVersion = packageJson.version;
-  const nextVersion = incrementVersion(previousVersion, bump);
+  const nextVersion = resumeVersionBump ? previousVersion : incrementVersion(previousVersion, bump);
   const tagName = `v${nextVersion}`;
 
   if (tagExists(tagName)) {
     throw new Error(`Tag already exists: ${tagName}`);
   }
 
-  console.log(`[release] ${previousVersion} -> ${nextVersion}`);
+  if (resumeVersionBump) {
+    console.log(`[release] resuming prepared ${nextVersion}`);
+  } else {
+    console.log(`[release] ${previousVersion} -> ${nextVersion}`);
+  }
 
   if (dryRun) {
     console.log(`[release] dry run; would commit and tag ${tagName}`);
@@ -122,9 +168,26 @@ function main() {
     return;
   }
 
-  packageJson.version = nextVersion;
-  writeJson(packagePath, packageJson);
-  const updatedLock = updatePackageLock(nextVersion);
+  if (nextVersion === previousVersion && !resumeVersionBump) {
+    console.log(`[release] version is already ${nextVersion}; creating missing tag only`);
+    run("git", ["tag", "-a", tagName, "-m", `Release ${nextVersion}`], { stdio: "inherit" });
+
+    if (shouldPush) {
+      run("git", ["push", "origin", "HEAD"], { stdio: "inherit" });
+      run("git", ["push", "origin", tagName], { stdio: "inherit" });
+    }
+
+    console.log(`[release] prepared ${tagName}`);
+    return;
+  }
+
+  let updatedLock = fs.existsSync(path.join(root, "package-lock.json"));
+
+  if (!resumeVersionBump) {
+    packageJson.version = nextVersion;
+    writeJson(packagePath, packageJson);
+    updatedLock = updatePackageLock(nextVersion);
+  }
 
   const filesToCommit = ["package.json"];
   if (updatedLock) {

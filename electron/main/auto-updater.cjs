@@ -51,6 +51,13 @@ function initAutoUpdater() {
   });
 
   autoUpdater.on("error", (error) => {
+    if (isNoPublishedReleaseError(error)) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("desktop:update-not-available");
+      }
+      return;
+    }
+
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("desktop:update-error", {
         message: error.message,
@@ -60,6 +67,16 @@ function initAutoUpdater() {
 
   checkForUpdates();
   setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL_MS);
+}
+
+function isNoPublishedReleaseError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    message.includes("Unable to find latest version on GitHub") ||
+    message.includes("No published versions on GitHub") ||
+    message.includes("please ensure a production release exists")
+  );
 }
 
 function checkForUpdates() {

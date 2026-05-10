@@ -1,19 +1,30 @@
 "use client";
 
-import { ChevronRight, Folder } from "lucide-react";
+import { ChevronRight, Folder, Scan } from "lucide-react";
+
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 export function FileTableDirectoryRow({
   dir,
   start,
   onNavigate,
+  folderJanitorEnabled,
+  onScanFolder,
 }: {
   dir: string;
   start: number;
   onNavigate: (dir: string) => void;
+  folderJanitorEnabled?: boolean;
+  onScanFolder?: (folderPath: string) => void;
 }) {
   const label = dir.split(/[\\/]/).pop() || dir;
 
-  return (
+  const row = (
     <div
       className="group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-border/35 px-4 py-2 transition-[background-color,color] hover:bg-accent/50 hover:text-accent-foreground hover:backdrop-blur"
       style={{
@@ -33,5 +44,21 @@ export function FileTableDirectoryRow({
       </div>
       <ChevronRight className="mr-2 size-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
     </div>
+  );
+
+  if (!folderJanitorEnabled || !onScanFolder) {
+    return row;
+  }
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger>{row}</ContextMenuTrigger>
+      <ContextMenuContent className="w-44">
+        <ContextMenuItem onClick={() => onScanFolder(dir)}>
+          <Scan className="size-4" />
+          Scan Folder for Issues
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

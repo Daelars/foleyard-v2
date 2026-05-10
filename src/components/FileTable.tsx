@@ -26,6 +26,10 @@ export function FileTable({
   searchQuery,
   isLoading,
   soundShelfEnabled = false,
+  makePackEnabled = false,
+  onMakePackFile,
+  folderJanitorEnabled = false,
+  onScanFolder,
 }: FileTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const desktopActions = useFileTableDesktopActions(onSelect);
@@ -104,6 +108,8 @@ export function FileTable({
                   dir={item.data}
                   start={virtualRow.start}
                   onNavigate={onNavigate}
+                  folderJanitorEnabled={folderJanitorEnabled}
+                  onScanFolder={onScanFolder}
                 />
               );
             }
@@ -128,8 +134,10 @@ export function FileTable({
                 isSelectedFilePlaying={isSelectedFilePlaying}
                 onSelect={onSelect}
                 onToggleFavorite={onToggleFavorite}
+                onMakePackFile={onMakePackFile}
                 searchQuery={searchQuery}
                 showDesktopActions={showDesktopActions}
+                makePackEnabled={makePackEnabled}
                 soundShelfEnabled={soundShelfEnabled}
                 start={virtualRow.start}
                 virtualIndex={virtualRow.index}

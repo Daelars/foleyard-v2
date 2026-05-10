@@ -9,10 +9,7 @@ export function registerCommands(context: YardExtensionContext) {
     description: "Add the selected files to the Sound Shelf scratchpad.",
     scope: "selection",
     requiresSelection: true,
-    handler: async () => {
-      const service = createService(context);
-      return service.addSelected();
-    },
+    handler: () => createService(context),
   });
 
   context.services.commands.register({
@@ -21,10 +18,7 @@ export function registerCommands(context: YardExtensionContext) {
     description: "Remove the selected files from the Sound Shelf scratchpad.",
     scope: "selection",
     requiresSelection: true,
-    handler: async () => {
-      const service = createService(context);
-      return service.removeSelected();
-    },
+    handler: () => createService(context),
   });
 
   context.services.commands.register({
@@ -32,9 +26,6 @@ export function registerCommands(context: YardExtensionContext) {
     title: "Clear Shelf",
     description: "Remove all files from the Sound Shelf scratchpad.",
     scope: "global",
-    handler: async () => {
-      const service = createService(context);
-      return service.clear();
-    },
+    handler: () => createService(context),
   });
 }

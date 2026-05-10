@@ -1,0 +1,32 @@
+appId: com.foleyard.app
+productName: Foleyard
+directories:
+  output: dist-electron
+files:
+  - electron/**/*
+  - .next/**/*
+  - "!.next/dev/**"
+  - "!.next/cache/**"
+  - "!.next/trace*"
+  - "!.next/node_modules/@next/swc-*/**"
+  - "!.next/node_modules/better-sqlite3*/build/**/*.pdb"
+  - "!.next/node_modules/better-sqlite3*/build/**/*.lib"
+  - "!.next/node_modules/better-sqlite3*/build/**/*.obj"
+  - "!.next/node_modules/better-sqlite3*/build/**/*.iobj"
+  - "!.next/node_modules/better-sqlite3*/build/**/*.ipdb"
+  - "!.next/node_modules/better-sqlite3*/build/**/*.recipe"
+  - "!.next/node_modules/better-sqlite3*/build/**/*.tlog"
+  - "!.next/node_modules/better-sqlite3*/build/**/*.c"
+  - "!.next/node_modules/better-sqlite3*/build/**/*.cpp"
+  - "!.next/node_modules/better-sqlite3*/build/**/*.h"
+  - "!.next/node_modules/better-sqlite3*/build/**/test_extension.node"
+  - package.json
+asarUnpack:
+  - "**/*.node"
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+publish:
+  provider: github

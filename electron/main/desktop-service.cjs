@@ -24,6 +24,34 @@ async function resolveIndexedFile(fileId) {
   }
 }
 
+async function prepareDropRulesFile(fileId) {
+  try {
+    const response = await fetch(
+      `${DEV_SERVER_URL}/api/extensions/drop-rules/prepare-drag`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId }),
+      },
+    );
+    const data = await response.json();
+
+    if (!response.ok || !data.file) {
+      return { ok: false, error: data.error ?? "Drop Rules did not prepare a file" };
+    }
+
+    return { ok: true, file: data.file };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to prepare Drop Rules file",
+    };
+  }
+}
+
 function createDragIcon() {
   const size = 32;
   const canvas = Buffer.alloc(size * size * 4);
@@ -38,8 +66,17 @@ function createDragIcon() {
   return nativeImage.createFromBuffer(canvas, { width: size, height: size });
 }
 
-function startDragFile(event, payload) {
-  const filePath = payload?.filePath;
+async function startDragFile(event, payload) {
+  let filePath = payload?.filePath;
+  const fileId = payload?.fileId;
+
+  if (typeof fileId === "string" && fileId) {
+    const prepared = await prepareDropRulesFile(fileId);
+    if (prepared.ok) {
+      filePath = prepared.file.path;
+    }
+  }
+
   if (typeof filePath !== "string" || !filePath) {
     event.sender.send("desktop:action-error", "Missing file path");
     return;

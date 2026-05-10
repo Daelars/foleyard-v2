@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { createAppExtensionContext } from "@/lib/composition-root";
+import { createServiceWithStore, manifest } from "@foleyard/sound-shelf";
+
 import { isExtensionEnabled } from "@/lib/extensions/registry";
-import { removeFromSoundShelf } from "@/lib/extensions/sound-shelf-store";
+import { DbSoundShelfStore } from "@/lib/extensions/sound-shelf-store";
 
 export const dynamic = "force-dynamic";
 
@@ -23,5 +26,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json(removeFromSoundShelf(fileIds));
+  const context = createAppExtensionContext({
+    permissions: manifest.permissions,
+  });
+
+  const service = createServiceWithStore(context, new DbSoundShelfStore());
+
+  return NextResponse.json(service.removeSelected(fileIds));
 }

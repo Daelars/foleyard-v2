@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { Folder, Heart, List, Settings, Activity, Puzzle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,30 +62,30 @@ export function Sidebar({
   const activeNavItemClass =
     "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/10 hover:text-primary";
 
-  const handleSelectExtensions = () => {
+  const handleSelectExtensions = useCallback(() => {
     onSelectExtensions();
     onAction?.();
-  };
+  }, [onSelectExtensions, onAction]);
 
-  const handleSelectLibrary = () => {
+  const handleSelectLibrary = useCallback(() => {
     onSelectLibrary();
     onAction?.();
-  };
+  }, [onSelectLibrary, onAction]);
 
-  const handleSelectFavorites = () => {
+  const handleSelectFavorites = useCallback(() => {
     onSelectFavorites();
     onAction?.();
-  };
+  }, [onSelectFavorites, onAction]);
 
-  const handleSelectCollection = (id: string) => {
+  const handleSelectCollection = useCallback((id: string) => {
     onSelectCollection(id);
     onAction?.();
-  };
+  }, [onSelectCollection, onAction]);
 
-  const handleOpenSettings = () => {
+  const handleOpenSettings = useCallback(() => {
     onOpenSettings();
     onAction?.();
-  };
+  }, [onOpenSettings, onAction]);
 
   return (
     <aside

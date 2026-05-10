@@ -8,6 +8,7 @@ import {
   GripVertical,
   Heart,
   MoreHorizontal,
+  PackagePlus,
   Pause,
   Play,
   Puzzle,
@@ -49,8 +50,10 @@ export function FileTableFileRow({
   isSelectedFilePlaying,
   onSelect,
   onToggleFavorite,
+  onMakePackFile,
   searchQuery,
   showDesktopActions,
+  makePackEnabled,
   soundShelfEnabled,
   start,
   virtualIndex,
@@ -71,8 +74,10 @@ export function FileTableFileRow({
   isSelectedFilePlaying: boolean;
   onSelect: (file: FileTableFileRecord, index: number) => void;
   onToggleFavorite: (id: string) => Promise<void>;
+  onMakePackFile?: (file: FileTableFileRecord) => Promise<void>;
   searchQuery: string;
   showDesktopActions: boolean;
+  makePackEnabled: boolean;
   soundShelfEnabled: boolean;
   start: number;
   virtualIndex: number;
@@ -258,6 +263,15 @@ export function FileTableFileRow({
           <Copy />
           Copy path
         </ContextMenuItem>
+        {makePackEnabled ? (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => void onMakePackFile?.(file)}>
+              <PackagePlus />
+              Make Pack
+            </ContextMenuItem>
+          </>
+        ) : null}
         {soundShelfEnabled ? (
           <>
             <ContextMenuSeparator />

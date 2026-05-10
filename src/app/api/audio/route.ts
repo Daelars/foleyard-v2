@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import { getFileById } from '@/lib/db';
+import { recordRecentMakePackFile } from '@/lib/extensions/make-pack-recent-store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,7 +14,10 @@ export async function GET(request: NextRequest) {
 
   if (id) {
     const file = getFileById(id);
-    if (file) filePath = file.path;
+    if (file) {
+      filePath = file.path;
+      recordRecentMakePackFile(file.id);
+    }
   }
 
   if (!filePath) {

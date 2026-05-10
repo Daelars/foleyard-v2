@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -9,6 +10,15 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+
+# agent stuff
+
+/.agents
+/.skills
+/benchmarks
+/.docs
+/plan
+
 
 # testing
 /coverage
@@ -22,6 +32,10 @@
 /*.db
 /*.db-*
 
+# electron-builder output
+/dist-electron/
+dev-app-update.yml
+
 # next.js
 /.next/
 /out/
@@ -31,6 +45,7 @@
 
 # misc
 .DS_Store
+nul
 *.pem
 
 # debug

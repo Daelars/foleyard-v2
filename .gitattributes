@@ -1,0 +1,39 @@
+* text=auto eol=lf
+
+# Package manager lockfiles should stay byte-stable across platforms.
+bun.lock text eol=lf
+package-lock.json text eol=lf
+yarn.lock text eol=lf
+pnpm-lock.yaml text eol=lf
+
+# Source and project files.
+*.cjs text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.jsx text eol=lf
+*.md text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# Windows scripts.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets and generated data.
+*.asar binary
+*.blockmap binary
+*.db binary
+*.dll binary
+*.exe binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.node binary
+*.png binary
+*.sqlite binary
+*.webp binary

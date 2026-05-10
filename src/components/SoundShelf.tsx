@@ -1,7 +1,7 @@
 "use client";
 
-import { startTransition, useEffect, useState } from "react";
-import { Eraser, Puzzle, X } from "lucide-react";
+import { startTransition, useCallback, useEffect, useState } from "react";
+import { Eraser, PackagePlus, Puzzle, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -12,11 +12,15 @@ import type { SoundShelfViewItem } from "@foleyard/sound-shelf";
 type SoundShelfProps = {
   onSelectFile?: (fileId: string) => void;
   onItemCountChange?: (count: number) => void;
+  makePackEnabled?: boolean;
+  onMakePackShelf?: () => Promise<void>;
 };
 
 export function SoundShelf({
   onSelectFile,
   onItemCountChange,
+  makePackEnabled = false,
+  onMakePackShelf,
 }: SoundShelfProps) {
   const [items, setItems] = useState<SoundShelfViewItem[]>([]);
 
@@ -61,7 +65,7 @@ export function SoundShelf({
     };
   }, [onItemCountChange]);
 
-  const handleClear = async () => {
+  const handleClear = useCallback(async () => {
     const res = await fetch("/api/extensions/sound-shelf/clear", {
       method: "POST",
     });
@@ -69,9 +73,9 @@ export function SoundShelf({
     if (res.ok) {
       window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
     }
-  };
+  }, []);
 
-  const handleRemove = async (fileId: string) => {
+  const handleRemove = useCallback(async (fileId: string) => {
     const res = await fetch("/api/extensions/sound-shelf/remove", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -81,7 +85,7 @@ export function SoundShelf({
     if (res.ok) {
       window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
     }
-  };
+  }, []);
 
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
@@ -96,19 +100,34 @@ export function SoundShelf({
       </div>
 
       <div className="px-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-full justify-center gap-2 rounded-xl text-xs"
-          disabled={items.length === 0}
-          onClick={() => {
-            void handleClear();
-          }}
-        >
-          <Eraser className="size-3.5" />
-          Clear Shelf
-        </Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="justify-center gap-2 rounded-xl text-xs"
+            disabled={items.length === 0 || !makePackEnabled}
+            onClick={() => {
+              void onMakePackShelf?.();
+            }}
+          >
+            <PackagePlus className="size-3.5" />
+            Pack
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="justify-center gap-2 rounded-xl text-xs"
+            disabled={items.length === 0}
+            onClick={() => {
+              void handleClear();
+            }}
+          >
+            <Eraser className="size-3.5" />
+            Clear
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-1">

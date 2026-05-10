@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import type { YardExtensionContext, PermissionChecker } from "yard-core";
 
 import { SoundShelfService } from "./service";
+import { InMemorySoundShelfStore } from "./store";
 
 function createMockContext(fileIds: string[] = []): YardExtensionContext {
   const permissions: PermissionChecker = {
@@ -27,21 +28,23 @@ function createMockContext(fileIds: string[] = []): YardExtensionContext {
   } as unknown as YardExtensionContext;
 }
 
+function createService(context: YardExtensionContext) {
+  return new SoundShelfService(context, new InMemorySoundShelfStore());
+}
+
 describe("SoundShelfService", () => {
   let context: YardExtensionContext;
   let service: InstanceType<typeof SoundShelfService>;
 
   beforeEach(() => {
     context = createMockContext();
-    service = new SoundShelfService(context);
+    service = createService(context);
     service.clear();
   });
 
   describe("addSelected", () => {
     it("should add selected files to the shelf", () => {
-      context.selection.fileIds = ["file-1", "file-2"];
-
-      const result = service.addSelected();
+      const result = service.addSelected(["file-1", "file-2"]);
 
       expect(result.added).toBe(2);
       expect(result.remaining).toBe(2);
@@ -49,18 +52,14 @@ describe("SoundShelfService", () => {
     });
 
     it("should not add duplicates", () => {
-      context.selection.fileIds = ["file-1", "file-2", "file-1"];
-
-      const result = service.addSelected();
+      const result = service.addSelected(["file-1", "file-2", "file-1"]);
 
       expect(result.added).toBe(2);
       expect(result.remaining).toBe(2);
     });
 
     it("should handle empty selection", () => {
-      context.selection.fileIds = [];
-
-      const result = service.addSelected();
+      const result = service.addSelected([]);
 
       expect(result.added).toBe(0);
       expect(result.remaining).toBe(0);
@@ -75,9 +74,9 @@ describe("SoundShelfService", () => {
         list: () => [],
       } as unknown as PermissionChecker;
 
-      service = new SoundShelfService(context);
+      service = createService(context);
 
-      expect(() => service.addSelected()).toThrow(
+      expect(() => service.addSelected([])).toThrow(
         "Missing permission: library:read",
       );
     });
@@ -85,11 +84,9 @@ describe("SoundShelfService", () => {
 
   describe("removeSelected", () => {
     it("should remove selected files from the shelf", () => {
-      context.selection.fileIds = ["file-1", "file-2", "file-3"];
-      service.addSelected();
+      service.addSelected(["file-1", "file-2", "file-3"]);
 
-      context.selection.fileIds = ["file-1", "file-3"];
-      const result = service.removeSelected();
+      const result = service.removeSelected(["file-1", "file-3"]);
 
       expect(result.removed).toBe(2);
       expect(result.remaining).toBe(1);
@@ -98,22 +95,18 @@ describe("SoundShelfService", () => {
     });
 
     it("should handle removing files not in shelf", () => {
-      context.selection.fileIds = ["file-1"];
-      service.addSelected();
+      service.addSelected(["file-1"]);
 
-      context.selection.fileIds = ["file-999"];
-      const result = service.removeSelected();
+      const result = service.removeSelected(["file-999"]);
 
       expect(result.removed).toBe(0);
       expect(result.remaining).toBe(1);
     });
 
     it("should handle empty selection", () => {
-      context.selection.fileIds = ["file-1"];
-      service.addSelected();
+      service.addSelected(["file-1"]);
 
-      context.selection.fileIds = [];
-      const result = service.removeSelected();
+      const result = service.removeSelected([]);
 
       expect(result.removed).toBe(0);
       expect(result.remaining).toBe(1);
@@ -122,8 +115,7 @@ describe("SoundShelfService", () => {
 
   describe("clear", () => {
     it("should remove all items from the shelf", () => {
-      context.selection.fileIds = ["file-1", "file-2", "file-3"];
-      service.addSelected();
+      service.addSelected(["file-1", "file-2", "file-3"]);
 
       const result = service.clear();
 
@@ -142,8 +134,7 @@ describe("SoundShelfService", () => {
 
   describe("contains", () => {
     it("should return true for files in the shelf", () => {
-      context.selection.fileIds = ["file-1"];
-      service.addSelected();
+      service.addSelected(["file-1"]);
 
       expect(service.contains("file-1")).toBe(true);
     });
@@ -154,9 +145,8 @@ describe("SoundShelfService", () => {
   });
 
   describe("getItems", () => {
-    it("should return a copy of shelf items", () => {
-      context.selection.fileIds = ["file-1"];
-      service.addSelected();
+    it("should return a copy of shelf fileIds", () => {
+      service.addSelected(["file-1"]);
 
       const items = service.getItems();
       items.pop();

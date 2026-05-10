@@ -12,12 +12,12 @@ export function isDesktopDatabaseMode() {
   return DESKTOP_ENV_KEYS.some((key) => process.env[key] === "1");
 }
 
-function getProjectDatabasePath(filename = DATABASE_FILENAME) {
-  return path.join(process.cwd(), filename);
+function getProjectDatabasePath() {
+  return path.join(process.cwd(), DATABASE_FILENAME);
 }
 
 function getLegacyProjectDatabasePaths() {
-  return LEGACY_DATABASE_FILENAMES.map((filename) => path.join(process.cwd(), filename));
+  return [path.join(process.cwd(), "soundslop.sqlite")];
 }
 
 export function getDesktopUserDataDir() {
@@ -39,13 +39,17 @@ export function getDatabasePath() {
 }
 
 export function ensureDesktopDatabaseInitialized(databasePath = getDatabasePath()) {
-  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+  const isDesktopMode = isDesktopDatabaseMode();
+
+  if (isDesktopMode) {
+    fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+  }
 
   if (fs.existsSync(databasePath)) {
     return;
   }
 
-  const candidatePaths = isDesktopDatabaseMode()
+  const candidatePaths = isDesktopMode
     ? [
         getProjectDatabasePath(),
         ...getLegacyProjectDatabasePaths(),

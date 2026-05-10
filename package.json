@@ -15,7 +15,12 @@
     "prebuild": "node scripts/verify-workspace-root.cjs",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "build:desktop": "node scripts/clean-binary.cjs && node node_modules/@electron/rebuild/lib/cli.js -m . -o better-sqlite3 --force && next build && node scripts/rebuild-traced.cjs && electron-builder --config.extraMetadata.foleyardOpenDevTools=true --config.extraMetadata.foleyardResetDatabaseOnBuild=true && node scripts/postinstall.cjs",
+    "release": "node scripts/clean-binary.cjs && node node_modules/@electron/rebuild/lib/cli.js -m . -o better-sqlite3 --force && next build && node scripts/rebuild-traced.cjs && electron-builder --publish always && node scripts/postinstall.cjs",
+    "postinstall": "node scripts/postinstall.cjs",
+    "lint": "eslint",
+    "test": "npx vitest run",
+    "test:watch": "npx vitest"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -26,6 +31,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
+    "electron-updater": "^6.8.3",
     "lucide-react": "^1.11.0",
     "music-metadata": "^11.12.3",
     "next": "16.2.4",
@@ -50,6 +56,7 @@
     "concurrently": "^9.2.1",
     "drizzle-kit": "^0.31.10",
     "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",

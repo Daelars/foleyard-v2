@@ -1,5 +1,6 @@
 const { ipcMain } = require("electron");
 
+const { checkForUpdates, quitAndInstall, simulateUpdate } = require("./auto-updater.cjs");
 const {
   copyFilePath,
   openFileExternally,
@@ -9,9 +10,9 @@ const {
 const { reportMainProcessError } = require("./errors.cjs");
 
 function registerIpcHandlers() {
-  ipcMain.on("desktop:start-drag-file", (event, payload) => {
+  ipcMain.on("desktop:start-drag-file", async (event, payload) => {
     try {
-      startDragFile(event, payload);
+      await startDragFile(event, payload);
     } catch (error) {
       reportMainProcessError(error);
     }
@@ -33,6 +34,11 @@ function registerIpcHandlers() {
   ipcMain.handle("desktop:reveal-in-explorer", async (_event, fileId) =>
     revealInExplorer(fileId),
   );
+  ipcMain.handle("desktop:reveal-path", async (_event, path) => {
+    const { shell } = require("electron");
+    shell.showItemInFolder(path);
+    return { ok: true, path };
+  });
   ipcMain.handle("desktop:open-file-externally", async (_event, fileId) =>
     openFileExternally(fileId),
   );
@@ -63,6 +69,18 @@ function registerIpcHandlers() {
     return {
       isMaximized: window?.isMaximized() ?? false,
     };
+  });
+  ipcMain.handle("desktop:check-for-updates", async () => {
+    checkForUpdates();
+    return { ok: true };
+  });
+  ipcMain.handle("desktop:install-update", async () => {
+    quitAndInstall();
+    return { ok: true };
+  });
+  ipcMain.handle("desktop:simulate-update", async () => {
+    simulateUpdate();
+    return { ok: true };
   });
 }
 

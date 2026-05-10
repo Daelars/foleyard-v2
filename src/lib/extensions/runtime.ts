@@ -1,11 +1,11 @@
 import {
-  YardCommandRegistry,
   YardCoreError,
   YardExtensionRegistry,
   createYardExtensionContext,
 } from "@yard-core";
 
-export const commandRegistry = new YardCommandRegistry();
+import { createExtensionServices } from "@/lib/composition-root";
+
 export const extensionRegistry = new YardExtensionRegistry();
 
 export function registerExtensionCommands(
@@ -32,9 +32,7 @@ export function registerExtensionCommands(
   }
 
   const context = createYardExtensionContext({
-    services: {
-      commands: commandRegistry,
-    },
+    services: createExtensionServices(),
     selection: options?.selection,
     permissions: extension.manifest.permissions,
   });

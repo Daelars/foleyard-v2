@@ -2,6 +2,7 @@ const { spawn } = require("child_process");
 const waitOn = require("wait-on");
 
 require("./verify-workspace-root.cjs");
+const { main: ensureNativeModules } = require("./postinstall.cjs");
 
 const isWindows = process.platform === "win32";
 const env = { ...process.env, FOLEYARD_DESKTOP: "1" };
@@ -69,9 +70,16 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 async function main() {
+  await ensureNativeModules();
   await stopStaleProcesses();
 
-  nextProcess = run("node", ["node_modules/next/dist/bin/next", "dev", "--port", "3001"], {
+  nextProcess = run("node", [
+    "node_modules/next/dist/bin/next",
+    "dev",
+    "--webpack",
+    "--port",
+    "3001",
+  ], {
     env,
     detached: !isWindows,
   });

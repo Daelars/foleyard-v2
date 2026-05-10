@@ -1,9 +1,10 @@
 "use client";
 
-import { MoreHorizontal } from "lucide-react";
+import { useCallback } from "react";
+import { ArrowUpRight, MoreHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
 export type ExtensionGridItem = {
   id: string;
@@ -20,6 +21,18 @@ export type ExtensionGridItem = {
   permissions?: string[];
   surfaces?: string[];
   settingsCount?: number;
+  settings?: Array<{
+    id: string;
+    label: string;
+    description?: string;
+    type: "boolean" | "string" | "number" | "select" | "path";
+    defaultValue: unknown;
+    value: unknown;
+    options?: Array<{
+      label: string;
+      value: string;
+    }>;
+  }>;
 };
 
 type ExtensionGridProps = {
@@ -27,94 +40,137 @@ type ExtensionGridProps = {
   isLoading?: boolean;
   onToggleEnabled?: (extensionId: string, enabled: boolean) => void;
   onOpenDetails?: (extension: ExtensionGridItem) => void;
+  onRunCommand?: (extensionId: string, commandId: string) => void;
   pendingExtensionId?: string | null;
 };
 
 const skeletonCount = 6;
+
+function getPrimaryAction(extension: ExtensionGridItem): {
+  label: string;
+  command: string;
+} | null {
+  const map: Record<string, { label: string; command: string }> = {
+    "folder-janitor": {
+      label: "Scan library",
+      command: "folder-janitor.scan-library",
+    },
+    "library-gatherer": {
+      label: "Gather library",
+      command: "library-gatherer.gather",
+    },
+    "make-pack": {
+      label: "Make pack",
+      command: "make-pack.from-recent",
+    },
+    "sound-shelf": {
+      label: "Clear shelf",
+      command: "sound-shelf.clear",
+    },
+    "rename-hammer": {
+      label: "Rename files",
+      command: "rename-hammer.open",
+    },
+    "drop-rules": {
+      label: "Configure rules",
+      command: "drop-rules.prepare-drag",
+    },
+  };
+  return map[extension.id] ?? null;
+}
 
 function ExtensionCard({
   extension,
   isPending,
   onOpenDetails,
   onToggleEnabled,
+  onRunCommand,
 }: {
   extension: ExtensionGridItem;
   isPending: boolean;
   onOpenDetails?: (extension: ExtensionGridItem) => void;
   onToggleEnabled?: (extensionId: string, enabled: boolean) => void;
+  onRunCommand?: (extensionId: string, commandId: string) => void;
 }) {
+  const handleToggle = useCallback(() => {
+    onToggleEnabled?.(extension.id, !extension.enabled);
+  }, [extension.id, extension.enabled, onToggleEnabled]);
+
+  const primaryAction = getPrimaryAction(extension);
+
+  const handlePrimaryAction = useCallback(() => {
+    if (primaryAction) {
+      onRunCommand?.(extension.id, primaryAction.command);
+    }
+  }, [extension.id, primaryAction, onRunCommand]);
+
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border/40 bg-card/60 p-4 shadow-sm backdrop-blur-xl transition-[background-color,border-color] hover:bg-accent/50 hover:text-accent-foreground">
-      <div className="flex items-start gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/50 text-muted-foreground ring-1 ring-border/50">
-          <span className="text-xs font-bold">
-            {extension.name.slice(0, 2).toUpperCase()}
-          </span>
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{extension.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {extension.provider} · v{extension.version}
-          </p>
-        </div>
-      </div>
-      <p className="line-clamp-2 text-xs text-muted-foreground">
-        {extension.description}
-      </p>
-      <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-        <span
-          className={cn(
-            "rounded-full border px-2 py-1 ring-1",
-            extension.enabled
-              ? "border-primary/40 bg-primary/10 text-primary ring-primary/20"
-              : "border-border/40 bg-muted/50 ring-border/50",
-          )}
-        >
-          {extension.enabled ? "enabled" : "disabled"}
-        </span>
-        <span className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 ring-1 ring-border/50">
-          {extension.category}
-        </span>
-        {typeof extension.commandCount === "number" && (
-          <span className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 ring-1 ring-border/50">
-            {extension.commandCount} commands
-          </span>
-        )}
-        {typeof extension.settingsCount === "number" && (
-          <span className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 ring-1 ring-border/50">
-            {extension.settingsCount} settings
-          </span>
-        )}
-        {typeof extension.permissionCount === "number" && (
-          <span className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 ring-1 ring-border/50">
-            {extension.permissionCount} permissions
-          </span>
-        )}
-      </div>
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant={extension.enabled ? "outline" : "default"}
-          size="sm"
-          className="flex-1 rounded-lg text-xs"
+    <div className="relative flex min-h-64 flex-col overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-white/10 via-card to-card shadow-md sm:min-h-72 xl:min-h-80">
+      <div className="absolute right-3 top-3 z-10">
+        <Switch
+          checked={extension.enabled}
+          onCheckedChange={handleToggle}
           disabled={isPending}
-          onClick={() => onToggleEnabled?.(extension.id, !extension.enabled)}
-        >
-          {isPending
-            ? "Saving..."
-            : extension.enabled
-              ? "Disable"
-              : "Enable"}
-        </Button>
+        />
+      </div>
+
+      <div className="flex flex-1 flex-col p-3 pt-9 sm:p-4 sm:pt-10">
+        <div className="flex gap-3 pr-12 sm:gap-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/50 text-xs font-bold text-primary shadow-inner">
+            {extension.name.slice(0, 2).toUpperCase()}
+          </div>
+
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-foreground">
+              {extension.name}
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {extension.description}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-3 pb-1 sm:px-4">
+        <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/60 bg-muted/30 px-2.5 py-0.5 text-[10px] text-muted-foreground">
+          <span>v{extension.version}</span>
+          <span className="size-1 shrink-0 rounded-full bg-primary/80" />
+          <span>
+            {extension.provider === "foleyard" ? "Foleyard" : extension.provider}
+          </span>
+          <span className="size-1 shrink-0 rounded-full bg-primary/80" />
+          <span>{extension.category}</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 border-t border-border/60 p-2.5 sm:p-3">
+        {primaryAction && (
+          <Button
+            variant="ghost"
+            className="h-8 flex-1 justify-start gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-2.5 text-[11px] text-primary hover:bg-primary/15 hover:text-primary"
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePrimaryAction();
+            }}
+          >
+            <ArrowUpRight className="size-3 shrink-0" />
+            <span className="truncate">{primaryAction.label}</span>
+          </Button>
+        )}
+
+        {!primaryAction && <div className="flex-1" />}
+
         <Button
-          type="button"
           variant="ghost"
           size="icon"
-          className="size-8 rounded-lg text-muted-foreground"
-          onClick={() => onOpenDetails?.(extension)}
+          className="size-8 shrink-0 rounded-lg border border-border/70 bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenDetails?.(extension);
+          }}
         >
           <span className="sr-only">Details and settings</span>
-          <MoreHorizontal className="size-4" />
+          <MoreHorizontal className="size-3.5" />
         </Button>
       </div>
     </div>
@@ -123,21 +179,26 @@ function ExtensionCard({
 
 function ExtensionCardSkeleton() {
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border/40 bg-card/60 p-4 shadow-sm backdrop-blur-xl">
-      <div className="flex items-start gap-3">
-        <div className="size-10 animate-pulse rounded-lg bg-muted/50 ring-1 ring-border/50" />
-        <div className="flex-1 space-y-2">
-          <div className="h-4 w-24 animate-pulse rounded bg-muted/50" />
-          <div className="h-3 w-16 animate-pulse rounded bg-muted/50" />
+    <div className="relative flex min-h-64 flex-col overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-white/10 via-card to-card shadow-md sm:min-h-72 xl:min-h-80">
+      <div className="absolute right-3 top-3 h-4 w-7 animate-pulse rounded-full bg-muted/50" />
+      <div className="flex flex-1 flex-col p-3 pt-9">
+        <div className="flex gap-3 pr-12 sm:gap-4">
+          <div className="size-10 animate-pulse rounded-xl bg-muted/50 shadow-inner" />
+          <div className="flex-1 space-y-1.5 pt-0.5">
+            <div className="h-4 w-20 animate-pulse rounded bg-muted/50" />
+            <div className="space-y-1">
+              <div className="h-2.5 w-full animate-pulse rounded bg-muted/50" />
+              <div className="h-2.5 w-2/3 animate-pulse rounded bg-muted/50" />
+            </div>
+          </div>
         </div>
       </div>
-      <div className="space-y-2">
-        <div className="h-3 w-full animate-pulse rounded bg-muted/50" />
-        <div className="h-3 w-3/4 animate-pulse rounded bg-muted/50" />
+      <div className="px-3 pb-1">
+        <div className="h-5 w-36 max-w-full animate-pulse rounded-full bg-muted/50" />
       </div>
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2 border-t border-border/60 p-2.5">
         <div className="h-8 flex-1 animate-pulse rounded-lg bg-muted/50" />
-        <div className="h-8 w-8 animate-pulse rounded-lg bg-muted/50" />
+        <div className="size-8 animate-pulse rounded-lg bg-muted/50" />
       </div>
     </div>
   );
@@ -148,14 +209,15 @@ export function ExtensionGrid({
   isLoading = false,
   onOpenDetails,
   onToggleEnabled,
+  onRunCommand,
   pendingExtensionId = null,
 }: ExtensionGridProps) {
   const showEmptyState = !isLoading && extensions.length === 0;
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-6">
+    <div className="flex flex-1 flex-col px-6 py-6">
       {showEmptyState ? (
-        <div className="flex min-h-64 items-center justify-center rounded-2xl border border-dashed border-border/40 bg-card/60 px-6 text-center shadow-sm backdrop-blur-xl">
+        <div className="flex min-h-64 flex-1 items-center justify-center rounded-2xl border border-dashed border-border/40 bg-card/60 px-6 text-center shadow-sm backdrop-blur-xl">
           <div className="max-w-md space-y-2">
             <p className="text-sm font-medium">No extensions registered</p>
             <p className="text-sm text-muted-foreground">
@@ -165,7 +227,7 @@ export function ExtensionGrid({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))] gap-3 xl:grid-cols-[repeat(auto-fit,minmax(19rem,1fr))]">
           {isLoading
             ? Array.from({ length: skeletonCount }).map((_, index) => (
                 <ExtensionCardSkeleton key={index} />
@@ -177,6 +239,7 @@ export function ExtensionGrid({
                   isPending={pendingExtensionId === extension.id}
                   onOpenDetails={onOpenDetails}
                   onToggleEnabled={onToggleEnabled}
+                  onRunCommand={onRunCommand}
                 />
               ))}
         </div>

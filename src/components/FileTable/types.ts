@@ -23,4 +23,8 @@ export interface FileTableProps {
   searchQuery: string;
   isLoading: boolean;
   soundShelfEnabled?: boolean;
+  makePackEnabled?: boolean;
+  onMakePackFile?: (file: FileTableFileRecord) => Promise<void>;
+  folderJanitorEnabled?: boolean;
+  onScanFolder?: (folderPath: string) => void;
 }

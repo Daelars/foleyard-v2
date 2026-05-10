@@ -1,73 +1,79 @@
 import type { YardExtensionContext } from "yard-core";
 
-import type { SoundShelfResult, SoundShelfItem } from "./types";
-
-const shelf: SoundShelfItem[] = [];
+import type { SoundShelfResult } from "./types";
+import { InMemorySoundShelfStore, type SoundShelfStore } from "./store";
 
 export function createService(context: YardExtensionContext) {
-  return new SoundShelfService(context);
+  return new SoundShelfService(context, new InMemorySoundShelfStore());
+}
+
+export function createServiceWithStore(
+  context: YardExtensionContext,
+  store: SoundShelfStore,
+) {
+  return new SoundShelfService(context, store);
 }
 
 export class SoundShelfService {
-  constructor(private context: YardExtensionContext) {}
+  constructor(
+    private context: YardExtensionContext,
+    private store: SoundShelfStore,
+  ) {}
 
-  addSelected(): SoundShelfResult {
+  addSelected(fileIds: string[]): SoundShelfResult {
     this.context.permissions.require("library:read");
 
-    const selectedIds = this.context.selection.fileIds;
+    const current = new Set(this.store.getFileIds());
     let added = 0;
 
-    for (const id of selectedIds) {
-      if (!shelf.some((item) => item.fileId === id)) {
-        shelf.push({ fileId: id });
+    for (const id of fileIds) {
+      if (!current.has(id)) {
+        current.add(id);
         added++;
       }
     }
 
+    this.store.setFileIds(Array.from(current));
+
     return {
       added,
       removed: 0,
-      remaining: shelf.length,
+      remaining: current.size,
     };
   }
 
-  removeSelected(): SoundShelfResult {
+  removeSelected(fileIds: string[]): SoundShelfResult {
     this.context.permissions.require("library:read");
 
-    const selectedIds = new Set(this.context.selection.fileIds);
-    const before = shelf.length;
+    const targetIds = new Set(fileIds);
+    const current = this.store.getFileIds();
+    const next = current.filter((id) => !targetIds.has(id));
 
-    for (let index = shelf.length - 1; index >= 0; index -= 1) {
-      if (selectedIds.has(shelf[index].fileId)) {
-        shelf.splice(index, 1);
-      }
-    }
-
-    const removed = before - shelf.length;
+    this.store.setFileIds(next);
 
     return {
       added: 0,
-      removed,
-      remaining: shelf.length,
+      removed: current.length - next.length,
+      remaining: next.length,
     };
   }
 
   clear(): SoundShelfResult {
-    const removed = shelf.length;
-    shelf.length = 0;
+    const current = this.store.getFileIds();
+    this.store.setFileIds([]);
 
     return {
       added: 0,
-      removed,
+      removed: current.length,
       remaining: 0,
     };
   }
 
-  getItems(): SoundShelfItem[] {
-    return [...shelf];
+  getItems(): string[] {
+    return this.store.getFileIds();
   }
 
   contains(fileId: string): boolean {
-    return shelf.some((item) => item.fileId === fileId);
+    return this.store.getFileIds().some((id) => id === fileId);
   }
 }

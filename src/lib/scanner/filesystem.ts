@@ -81,6 +81,33 @@ export async function* streamAudioFileBatches(
   }
 }
 
+import type { FileSystemSeam } from "./scan-runner";
+
+export class RealFileSystemSeam implements FileSystemSeam {
+  async stat(filePath: string) {
+    const stats = await fs.stat(filePath);
+    return { size: stats.size, mtimeMs: stats.mtimeMs };
+  }
+
+  existsReadableDirectory(dirPath: string) {
+    return existsReadableDirectory(dirPath);
+  }
+
+  findFirstAudioFile(rootPath: string) {
+    return findFirstAudioFile(rootPath);
+  }
+
+  streamAudioFileBatches(
+    rootPath: string,
+    options?: {
+      batchSize?: number;
+      onDiscover?: (filePath: string) => void;
+    },
+  ) {
+    return streamAudioFileBatches(rootPath, options);
+  }
+}
+
 export async function collectAudioFiles(
   rootPath: string,
   onDiscover?: (filePath: string) => void,

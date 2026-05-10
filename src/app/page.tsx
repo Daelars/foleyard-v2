@@ -1,12 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, PanelLeft, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Bug, FileInput, Loader2, PackagePlus, PanelLeft, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";
 import { DesktopTitleBar } from "@/components/DesktopTitleBar";
 import { ExtensionGrid, type ExtensionGridItem } from "@/components/ExtensionGrid";
+import { FolderJanitorDialog } from "@/components/extensions/folder-janitor/FolderJanitorDialog";
+import { LibraryGathererDialog } from "@/components/extensions/library-gatherer/LibraryGathererDialog";
+import { MakePackDialog } from "@/components/extensions/make-pack/MakePackDialog";
+import { RenameHammerDialog } from "@/components/extensions/rename-hammer/RenameHammerDialog";
 import { FileTable } from "@/components/FileTable";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { Sidebar } from "@/components/Sidebar";
@@ -16,7 +20,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
+import { isDesktopApp } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
+import { useZoom } from "@/hooks/use-zoom";
+import { useScanPolling } from "@/hooks/use-scan-polling";
 
 interface FileRecord {
   id: string;
@@ -120,10 +127,26 @@ function HomeContent() {
   const [soundShelfItemCount, setSoundShelfItemCount] = useState(0);
   const [selectedExtension, setSelectedExtension] =
     useState<ExtensionGridItem | null>(null);
-
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
   const filesRequestIdRef = useRef(0);
   const directoriesRequestIdRef = useRef(0);
+
+  const { zoom, setZoom: handleUpdateZoom } = useZoom();
+
+  const [folderJanitorOpen, setFolderJanitorOpen] = useState(false);
+  const [folderJanitorTarget, setFolderJanitorTarget] = useState<
+    "library" | "folder" | "selection"
+  >("library");
+  const [folderJanitorFolderPath, setFolderJanitorFolderPath] = useState("");
+
+  const [gatherOpen, setGatherOpen] = useState(false);
+
+  const [packSource, setPackSource] = useState<
+    "selection" | "shelf" | "recent" | null
+  >(null);
+  const [packFileIds, setPackFileIds] = useState<string[]>([]);
+
+  const [renameHammerOpen, setRenameHammerOpen] = useState(false);
 
   const loadSoundShelfCount = useCallback(async () => {
     try {
@@ -593,9 +616,18 @@ function HomeContent() {
     }
   };
 
+  const extensionsRef = useRef(extensions);
+  extensionsRef.current = extensions;
+
   const handleToggleExtensionEnabled = useCallback(
     async (extensionId: string, enabled: boolean) => {
       setPendingExtensionId(extensionId);
+      const previousExtensions = extensionsRef.current;
+      setExtensions((current) =>
+        current.map((extension) =>
+          extension.id === extensionId ? { ...extension, enabled } : extension,
+        ),
+      );
 
       try {
         const res = await fetch("/api/extensions", {
@@ -625,6 +657,7 @@ function HomeContent() {
 
         toast.success(enabled ? "Extension enabled" : "Extension disabled");
       } catch (error) {
+        setExtensions(previousExtensions);
         toast.error(
           error instanceof Error
             ? error.message
@@ -635,6 +668,52 @@ function HomeContent() {
       }
     },
     [loadSoundShelfCount],
+  );
+
+  const handleUpdateExtensionSetting = useCallback(
+    async (extensionId: string, settingId: string, value: unknown) => {
+      const previousExtensions = extensionsRef.current;
+      setExtensions((current) =>
+        current.map((extension) =>
+          extension.id === extensionId
+            ? {
+                ...extension,
+                settings: extension.settings?.map((setting) =>
+                  setting.id === settingId ? { ...setting, value } : setting,
+                ),
+              }
+            : extension,
+        ),
+      );
+
+      try {
+        const res = await fetch("/api/extensions", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ extensionId, settingId, value }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error ?? "Failed to update extension setting");
+        }
+
+        setExtensions((current) =>
+          current.map((extension) =>
+            extension.id === extensionId ? data.extension : extension,
+          ),
+        );
+        toast.success("Extension setting saved");
+      } catch (error) {
+        setExtensions(previousExtensions);
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to update extension setting",
+        );
+      }
+    },
+    [],
   );
 
   const handleAddToCollection = async (collectionId: string) => {
@@ -666,41 +745,163 @@ function HomeContent() {
     }
   };
 
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | undefined;
-
-    if (scanStatus.running) {
-      interval = setInterval(async () => {
-        const res = await fetch("/api/scan");
-        const data = await res.json();
-        setScanStatus(data);
-
-        if (!data.running) {
-          void loadFiles();
-          void loadInitialData();
-          toast.success("Scan complete");
-        }
-      }, 2000);
-    }
-
-    return () => {
-      if (interval) {
-        clearInterval(interval);
+  const handleMakePack = useCallback(
+    async (
+      source: "selection" | "shelf" | "recent",
+      fileIds: string[] = [],
+    ) => {
+      if (source === "shelf" && !isDesktopApp()) {
+        toast.error("Make Pack needs the desktop app to choose an output folder");
+        return;
       }
-    };
-  }, [scanStatus.running, loadFiles, loadInitialData]);
+      setPackSource(source);
+      setPackFileIds(fileIds);
+    },
+    [],
+  );
 
-  const selectedPlaylistName =
+  const handleScanFolder = useCallback((folderPath: string) => {
+    setFolderJanitorTarget("folder");
+    setFolderJanitorFolderPath(folderPath);
+    setFolderJanitorOpen(true);
+  }, []);
+
+  const handleRunCommand = useCallback(
+    (extensionId: string, commandId: string) => {
+      switch (commandId) {
+        case "folder-janitor.scan-library":
+          setFolderJanitorTarget("library");
+          setFolderJanitorOpen(true);
+          break;
+        case "library-gatherer.preview-gather":
+        case "library-gatherer.gather":
+          setGatherOpen(true);
+          break;
+        case "sound-shelf.clear":
+          void fetch("/api/extensions/sound-shelf/clear", {
+            method: "POST",
+          }).then(() => {
+            window.dispatchEvent(
+              new CustomEvent(SOUND_SHELF_CHANGED_EVENT),
+            );
+          });
+          break;
+        case "make-pack.from-shelf":
+          setCurrentView("all");
+          setPackSource("shelf");
+          setPackFileIds([]);
+          break;
+        case "make-pack.from-recent":
+          setCurrentView("all");
+          setPackSource("recent");
+          setPackFileIds([]);
+          break;
+        case "rename-hammer.open":
+          setRenameHammerOpen(true);
+          break;
+        case "drop-rules.prepare-drag":
+          setCurrentView("all");
+          setShowSettings(true);
+          break;
+        default:
+          toast.info(`Command "${commandId}" has no quick action yet`);
+      }
+    },
+    [],
+  );
+
+  useScanPolling(
+    scanStatus,
+    useCallback((data) => setScanStatus(data), []),
+    useCallback(() => {
+      void loadFiles();
+      void loadInitialData();
+      toast.success("Scan complete");
+    }, [loadFiles, loadInitialData]),
+  );
+
+  const selectedPlaylistName = useMemo(() =>
     currentView === "collection"
-      ? (collections.find((collection) => collection.id === selectedCollection)
-          ?.name ?? null)
-      : null;
+      ? (collections.find((c) => c.id === selectedCollection)?.name ?? null)
+      : null,
+  [currentView, collections, selectedCollection]);
 
   const showExtensionsView = currentView === "extensions";
-  const soundShelfEnabled =
-    extensions.find((extension) => extension.id === "sound-shelf")?.enabled ??
-    false;
-  const showSoundShelf = soundShelfEnabled && soundShelfItemCount > 0;
+
+  const {
+    soundShelfEnabled,
+    makePackEnabled,
+    showSoundShelf,
+    folderJanitorEnabled,
+    libraryGathererEnabled,
+  } = useMemo(() => {
+    const shelf = extensions.find((e) => e.id === "sound-shelf")?.enabled ?? false;
+    const pack = extensions.find((e) => e.id === "make-pack")?.enabled ?? false;
+    const janitor = extensions.find((e) => e.id === "folder-janitor")?.enabled ?? false;
+    const gatherer = extensions.find((e) => e.id === "library-gatherer")?.enabled ?? false;
+    return {
+      soundShelfEnabled: shelf,
+      makePackEnabled: pack,
+      showSoundShelf: shelf && soundShelfItemCount > 0,
+      folderJanitorEnabled: janitor,
+      libraryGathererEnabled: gatherer,
+    };
+  }, [extensions, soundShelfItemCount]);
+
+  const handleOpenMobileSidebar = useCallback(() => setShowMobileSidebar(true), []);
+  const handleCloseMobileSidebar = useCallback(() => setShowMobileSidebar(false), []);
+  const handleOpenSettings = useCallback(() => setShowSettings(true), []);
+
+  const handleRecentPack = useCallback(() => {
+    void handleMakePack("recent");
+  }, [handleMakePack]);
+
+  const handleOpenScan = useCallback(() => {
+    setFolderJanitorTarget("library");
+    setFolderJanitorOpen(true);
+  }, []);
+
+  const handleOpenGather = useCallback(() => setGatherOpen(true), []);
+
+  const handleSelectFile = useCallback((file: FileRecord) => {
+    if (selectedFile?.id === file.id) {
+      audioPlayerRef.current?.togglePlayback();
+    } else {
+      setSelectedFile(file);
+    }
+  }, [selectedFile]);
+
+  const handleMakePackFile = useCallback(
+    (file: FileRecord) => handleMakePack("selection", [file.id]),
+    [handleMakePack],
+  );
+
+  const handleMakePackShelf = useCallback(
+    () => handleMakePack("shelf"),
+    [handleMakePack],
+  );
+
+  const handleShelfSelectFile = useCallback((fileId: string) => {
+    const match = files.find((f) => f.id === fileId);
+    if (match) setSelectedFile(match);
+  }, [files]);
+
+  const handleClosePlayer = useCallback(() => {
+    setSelectedFile(null);
+    setIsPlayerPlaying(false);
+  }, []);
+
+  const handleCloseExtensionDetails = useCallback((open: boolean) => {
+    if (!open) setSelectedExtension(null);
+  }, []);
+
+  const handleCloseGather = useCallback((open: boolean) => {
+    if (!open) setGatherOpen(false);
+  }, []);
+
+  const handleClosePack = useCallback((open: boolean) => {
+    if (!open) setPackSource(null);
+  }, []);
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-background font-sans">
@@ -713,7 +914,7 @@ function HomeContent() {
         selectedCollection={selectedCollection}
         tags={tags}
         scanStatus={scanStatus}
-        onOpenSettings={() => setShowSettings(true)}
+        onOpenSettings={handleOpenSettings}
         onSelectLibrary={showLibrary}
         onSelectFavorites={showFavorites}
         onSelectExtensions={showExtensions}
@@ -733,12 +934,12 @@ function HomeContent() {
             selectedCollection={selectedCollection}
             tags={tags}
             scanStatus={scanStatus}
-            onOpenSettings={() => setShowSettings(true)}
+            onOpenSettings={handleOpenSettings}
             onSelectLibrary={showLibrary}
             onSelectFavorites={showFavorites}
             onSelectExtensions={showExtensions}
             onSelectCollection={showCollection}
-            onAction={() => setShowMobileSidebar(false)}
+            onAction={handleCloseMobileSidebar}
           />
         </DialogContent>
       </Dialog>
@@ -752,7 +953,7 @@ function HomeContent() {
               variant="ghost"
               size="icon"
               className="size-10 rounded-xl border-border/40 bg-card/60 backdrop-blur-xl duration-200 animate-in fade-in-0 zoom-in-95 md:hidden"
-              onClick={() => setShowMobileSidebar(true)}
+              onClick={handleOpenMobileSidebar}
               aria-label="Open navigation menu"
             >
               <PanelLeft className="size-4" />
@@ -773,6 +974,42 @@ function HomeContent() {
             {isLoadingFiles && (
               <Loader2 className="size-4 animate-spin text-primary" />
             )}
+
+            {!showExtensionsView && makePackEnabled && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden h-10 gap-2 rounded-xl border-border/40 bg-card/60 text-xs shadow-sm backdrop-blur-xl sm:inline-flex"
+                onClick={handleRecentPack}
+              >
+                <PackagePlus className="size-4" />
+                Recent Pack
+              </Button>
+            )}
+
+            {!showExtensionsView && folderJanitorEnabled && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden h-10 gap-2 rounded-xl border-border/40 bg-card/60 text-xs shadow-sm backdrop-blur-xl sm:inline-flex"
+                onClick={handleOpenScan}
+              >
+                <Bug className="size-4" />
+                Scan for Issues
+              </Button>
+            )}
+
+            {!showExtensionsView && libraryGathererEnabled && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden h-10 gap-2 rounded-xl border-border/40 bg-card/60 text-xs shadow-sm backdrop-blur-xl sm:inline-flex"
+                onClick={handleOpenGather}
+              >
+                <FileInput className="size-4" />
+                Gather Library
+              </Button>
+            )}
           </div>
         </header>
 
@@ -782,6 +1019,7 @@ function HomeContent() {
             isLoading={isLoadingExtensions}
             onOpenDetails={setSelectedExtension}
             onToggleEnabled={handleToggleExtensionEnabled}
+            onRunCommand={handleRunCommand}
             pendingExtensionId={pendingExtensionId}
           />
         ) : (
@@ -796,30 +1034,25 @@ function HomeContent() {
                 onNavigateLibrary={showLibrary}
                 selectedFileId={selectedFile?.id ?? null}
                 isSelectedFilePlaying={isPlayerPlaying}
-                onSelect={(file) => {
-                  if (selectedFile?.id === file.id) {
-                    audioPlayerRef.current?.togglePlayback();
-                  } else {
-                    setSelectedFile(file);
-                  }
-                }}
+                onSelect={handleSelectFile}
                 onToggleFavorite={handleToggleFavorite}
                 searchQuery={debouncedSearchQuery}
                 isLoading={isLoadingFiles}
                 soundShelfEnabled={soundShelfEnabled}
+                makePackEnabled={makePackEnabled}
+                onMakePackFile={handleMakePackFile}
+                folderJanitorEnabled={folderJanitorEnabled}
+                onScanFolder={handleScanFolder}
               />
             </div>
 
             {showSoundShelf ? (
               <aside className="hidden w-80 shrink-0 border-l border-border/40 bg-card/60 backdrop-blur-xl lg:flex lg:flex-col">
                 <SoundShelf
+                  makePackEnabled={makePackEnabled}
+                  onMakePackShelf={handleMakePackShelf}
                   onItemCountChange={setSoundShelfItemCount}
-                  onSelectFile={(fileId) => {
-                    const match = files.find((file) => file.id === fileId);
-                    if (match) {
-                      setSelectedFile(match);
-                    }
-                  }}
+                  onSelectFile={handleShelfSelectFile}
                 />
               </aside>
             ) : null}
@@ -834,10 +1067,7 @@ function HomeContent() {
       <AudioPlayer
         ref={audioPlayerRef}
         selectedFile={selectedFile}
-        onClose={() => {
-          setSelectedFile(null);
-          setIsPlayerPlaying(false);
-        }}
+        onClose={handleClosePlayer}
         onPlaybackChange={setIsPlayerPlaying}
         onToggleFavorite={handleToggleFavorite}
         collections={collections}
@@ -860,15 +1090,14 @@ function HomeContent() {
         onDeleteTag={handleDeleteTag}
         extensions={extensions}
         onToggleExtension={handleToggleExtensionEnabled}
+        onUpdateExtensionSetting={handleUpdateExtensionSetting}
+        zoom={zoom}
+        onUpdateZoom={handleUpdateZoom}
       />
 
       <Dialog
         open={selectedExtension !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedExtension(null);
-          }
-        }}
+        onOpenChange={handleCloseExtensionDetails}
       >
         <DialogContent className="max-w-lg rounded-2xl border border-border/40 bg-card/95 p-6 backdrop-blur-2xl">
           <DialogTitle>
@@ -890,12 +1119,21 @@ function HomeContent() {
                 {selectedExtension.commands?.length ? (
                   <div className="flex flex-wrap gap-2">
                     {selectedExtension.commands.map((command) => (
-                      <span
+                      <button
                         key={command}
-                        className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 text-xs text-muted-foreground ring-1 ring-border/50"
+                        type="button"
+                        onClick={() => {
+                          setSelectedExtension(null);
+                          handleRunCommand(
+                            selectedExtension.id,
+                            command,
+                          );
+                        }}
+                        className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 text-xs text-muted-foreground ring-1 ring-border/50 transition-colors hover:bg-primary/10 hover:text-primary hover:ring-primary/30"
+                        title={`Run: ${command}`}
                       >
                         {command}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 ) : (
@@ -961,6 +1199,32 @@ function HomeContent() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <FolderJanitorDialog
+        open={folderJanitorOpen}
+        onOpenChange={setFolderJanitorOpen}
+        initialTarget={folderJanitorTarget}
+        initialFolderPath={
+          folderJanitorTarget === "folder" ? folderJanitorFolderPath : undefined
+        }
+      />
+
+      <LibraryGathererDialog
+        open={gatherOpen}
+        onOpenChange={handleCloseGather}
+      />
+
+      <MakePackDialog
+        open={packSource !== null}
+        onOpenChange={handleClosePack}
+        initialSource={packSource ?? "selection"}
+        initialFileIds={packFileIds}
+      />
+
+      <RenameHammerDialog
+        open={renameHammerOpen}
+        onOpenChange={setRenameHammerOpen}
+      />
     </div>
   );
 }

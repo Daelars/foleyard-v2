@@ -15,7 +15,27 @@ jobs:
           node-version: 22
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - run: bun run release
+      - run: bun run release:build
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+      - name: Verify release files
+        shell: pwsh
+        run: |
+          Get-ChildItem dist-electron
+          if (!(Test-Path "dist-electron/latest.yml")) {
+            throw "dist-electron/latest.yml was not generated"
+          }
+          if (!(Get-ChildItem "dist-electron/*.exe")) {
+            throw "No Windows installer was generated"
+          }
+      - uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          files: |
+            dist-electron/*.exe
+            dist-electron/*.exe.blockmap
+            dist-electron/latest.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}

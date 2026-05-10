@@ -17,6 +17,7 @@
     "start": "next start",
     "build:desktop": "node scripts/clean-binary.cjs && node node_modules/@electron/rebuild/lib/cli.js -m . -o better-sqlite3 --force && next build && node scripts/rebuild-traced.cjs && electron-builder --config.extraMetadata.foleyardOpenDevTools=true --config.extraMetadata.foleyardResetDatabaseOnBuild=true && node scripts/postinstall.cjs",
     "release": "node scripts/clean-binary.cjs && node node_modules/@electron/rebuild/lib/cli.js -m . -o better-sqlite3 --force && next build && node scripts/rebuild-traced.cjs && electron-builder --publish always && node scripts/postinstall.cjs",
+    "release:build": "node scripts/clean-binary.cjs && node node_modules/@electron/rebuild/lib/cli.js -m . -o better-sqlite3 --force && next build && node scripts/rebuild-traced.cjs && electron-builder --publish never && node scripts/postinstall.cjs",
     "release:prepare": "node scripts/prepare-release.cjs",
     "postinstall": "node scripts/postinstall.cjs",
     "lint": "eslint",

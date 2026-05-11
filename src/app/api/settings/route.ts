@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { addLibraryRoot, getLibraryRoot, getLibraryRoots, getLibraryStats, removeLibraryRoot } from '@/lib/db';
+import {
+  addLibraryRoot,
+  getLibraryRoot,
+  getLibraryRoots,
+  getLibraryStats,
+  getOnboardingVersion,
+  removeLibraryRoot,
+  setOnboardingVersion,
+} from '@/lib/db';
 import { validateLibraryRoot } from '@/lib/scanner';
+
+const CURRENT_ONBOARDING_VERSION = 1;
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,6 +21,7 @@ export async function GET() {
     libraryRoot: getLibraryRoot(),
     libraryRoots: getLibraryRoots(),
     stats: getLibraryStats(),
+    onboardingVersion: getOnboardingVersion(),
   });
 }
 
@@ -53,6 +64,15 @@ export async function POST(request: NextRequest) {
         libraryRoot: getLibraryRoot(),
         libraryRoots: getLibraryRoots(),
         stats: getLibraryStats(),
+      });
+    }
+
+    if (action === 'onboarding_complete') {
+      setOnboardingVersion(CURRENT_ONBOARDING_VERSION);
+
+      return NextResponse.json({
+        success: true,
+        onboardingVersion: getOnboardingVersion(),
       });
     }
 

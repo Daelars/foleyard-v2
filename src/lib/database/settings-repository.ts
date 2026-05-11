@@ -146,6 +146,33 @@ export class SqliteSettingsRepository implements SettingsRepository {
       removedFiles: removedRow?.count ?? 0,
     };
   }
+
+  getOnboardingVersion(): number {
+    const row = this.db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.key, "onboarding_version"))
+      .get();
+
+    const version = Number.parseInt(row?.value ?? "0", 10);
+    return Number.isFinite(version) ? version : 0;
+  }
+
+  setOnboardingVersion(version: number): void {
+    const now = new Date().toISOString();
+
+    this.db.insert(schema.settings)
+      .values({
+        key: "onboarding_version",
+        value: String(version),
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.settings.key,
+        set: { value: String(version), updatedAt: now },
+      })
+      .run();
+  }
 }
 
 let _settingsRepo: SqliteSettingsRepository | null = null;
@@ -166,3 +193,5 @@ export const clearLibraryData = () => getSettingsRepo().clearLibraryData();
 export const getExtensionEnabled = (extId: string) => getSettingsRepo().getExtensionEnabled(extId);
 export const setExtensionEnabled = (extId: string, enabled: boolean) => getSettingsRepo().setExtensionEnabled(extId, enabled);
 export const getLibraryStats = () => getSettingsRepo().getLibraryStats();
+export const getOnboardingVersion = () => getSettingsRepo().getOnboardingVersion();
+export const setOnboardingVersion = (version: number) => getSettingsRepo().setOnboardingVersion(version);

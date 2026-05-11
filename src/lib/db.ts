@@ -33,11 +33,13 @@ export {
   getLibraryRoot,
   getLibraryRoots,
   getLibraryStats,
+  getOnboardingVersion,
   addLibraryRoot,
   removeLibraryRoot,
   setExtensionEnabled,
   setLibraryRoot,
   setLibraryRoots,
+  setOnboardingVersion,
 } from "@/lib/database/settings-repository";
 export {
   attachTagToFile,

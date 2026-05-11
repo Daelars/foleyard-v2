@@ -10,6 +10,7 @@ import { ExtensionGrid, type ExtensionGridItem } from "@/components/ExtensionGri
 import { FolderJanitorDialog } from "@/components/extensions/folder-janitor/FolderJanitorDialog";
 import { LibraryGathererDialog } from "@/components/extensions/library-gatherer/LibraryGathererDialog";
 import { MakePackDialog } from "@/components/extensions/make-pack/MakePackDialog";
+import { OnboardingDialog } from "@/components/OnboardingDialog";
 import { RenameHammerDialog } from "@/components/extensions/rename-hammer/RenameHammerDialog";
 import { FileTable } from "@/components/FileTable";
 import { SettingsDialog } from "@/components/SettingsDialog";
@@ -80,6 +81,8 @@ const emptyScanStatus: ScanStatus = {
   error: null,
 };
 
+const CURRENT_ONBOARDING_VERSION = 1;
+
 export default function Home() {
   return (
     <AudioPlayerProvider>
@@ -108,14 +111,17 @@ function HomeContent() {
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [isPlayerPlaying, setIsPlayerPlaying] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [settings, setSettings] = useState<{
     libraryRoot: string | null;
     libraryRoots: string[];
+    onboardingVersion: number;
     stats: { activeFiles: number; removedFiles: number };
   }>({
     libraryRoot: null,
     libraryRoots: [],
+    onboardingVersion: 0,
     stats: { activeFiles: 0, removedFiles: 0 },
   });
   const [scanStatus, setScanStatus] = useState<ScanStatus>(emptyScanStatus);
@@ -328,12 +334,20 @@ function HomeContent() {
         extensionsRes.json(),
       ]);
 
+      const nextLibraryRoots =
+        settingsData.libraryRoots ??
+        (settingsData.libraryRoot ? [settingsData.libraryRoot] : []);
+      const nextOnboardingVersion = settingsData.onboardingVersion ?? 0;
+
       setSettings({
         ...settingsData,
-        libraryRoots:
-          settingsData.libraryRoots ??
-          (settingsData.libraryRoot ? [settingsData.libraryRoot] : []),
+        libraryRoots: nextLibraryRoots,
+        onboardingVersion: nextOnboardingVersion,
       });
+      setShowOnboarding(
+        nextOnboardingVersion < CURRENT_ONBOARDING_VERSION &&
+        nextLibraryRoots.length === 0,
+      );
       setCollections(collectionsData.collections ?? []);
       setTags(tagsData.tags ?? []);
       setScanStatus(scanData);
@@ -419,7 +433,7 @@ function HomeContent() {
     }
   };
 
-  const handleSaveRoot = async (path: string) => {
+  const saveLibraryRoot = async (path: string) => {
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
@@ -435,6 +449,7 @@ function HomeContent() {
       setSettings({
         libraryRoot: data.libraryRoot,
         libraryRoots: data.libraryRoots ?? (data.libraryRoot ? [data.libraryRoot] : []),
+        onboardingVersion: data.onboardingVersion ?? settings.onboardingVersion,
         stats: data.stats,
       });
       setScanStatus((current) => ({
@@ -442,14 +457,20 @@ function HomeContent() {
         libraryRoot: data.libraryRoot,
         stats: data.stats,
       }));
+      return true;
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to save settings",
       );
+      return false;
     }
   };
 
-  const handleStartScan = async () => {
+  const handleSaveRoot = async (path: string) => {
+    await saveLibraryRoot(path);
+  };
+
+  const startLibraryScan = async () => {
     try {
       const res = await fetch("/api/scan", { method: "POST" });
       const data = await res.json();
@@ -460,10 +481,44 @@ function HomeContent() {
 
       setScanStatus(data.status);
       toast.info("Scan started");
+      return true;
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to start scan",
       );
+      return false;
+    }
+  };
+
+  const handleStartScan = async () => {
+    await startLibraryScan();
+  };
+
+  const handleCompleteOnboarding = async () => {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "onboarding_complete" }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to complete onboarding");
+      }
+
+      setSettings((current) => ({
+        ...current,
+        onboardingVersion: data.onboardingVersion ?? CURRENT_ONBOARDING_VERSION,
+      }));
+      return true;
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to complete onboarding",
+      );
+      return false;
     }
   };
 
@@ -557,6 +612,7 @@ function HomeContent() {
       setSettings({
         libraryRoot: data.libraryRoot,
         libraryRoots: data.libraryRoots ?? (data.libraryRoot ? [data.libraryRoot] : []),
+        onboardingVersion: data.onboardingVersion ?? settings.onboardingVersion,
         stats: data.stats,
       });
     } catch (error) {
@@ -1096,6 +1152,14 @@ function HomeContent() {
         onUpdateExtensionSetting={handleUpdateExtensionSetting}
         zoom={zoom}
         onUpdateZoom={handleUpdateZoom}
+      />
+
+      <OnboardingDialog
+        open={showOnboarding}
+        onOpenChange={setShowOnboarding}
+        onSaveRoot={saveLibraryRoot}
+        onStartScan={startLibraryScan}
+        onComplete={handleCompleteOnboarding}
       />
 
       <Dialog

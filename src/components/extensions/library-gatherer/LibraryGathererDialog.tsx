@@ -1,10 +1,17 @@
-"use client"
+"use client";
 
-import { useState, useCallback } from "react"
-import { FileInput, FolderOpen, Loader2, Plus, Trash2, FolderSearch } from "lucide-react"
-import { toast } from "sonner"
+import { useState, useCallback } from "react";
+import {
+  FileInput,
+  FolderOpen,
+  Loader2,
+  Plus,
+  Trash2,
+  FolderSearch,
+} from "lucide-react";
+import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -12,107 +19,104 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@/components/ui/dialog"
-import {
-  RadioGroup,
-  RadioGroupItem,
-} from "@/components/ui/radio-group"
-import { Input } from "@/components/ui/input"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { getDesktopBridge, isDesktopApp } from "@/lib/desktop"
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { getDesktopBridge, isDesktopApp } from "@/lib/desktop";
 
 interface GatherFile {
-  sourcePath: string
-  outputPath: string
-  skipped: boolean
-  reason: string | null
+  sourcePath: string;
+  outputPath: string;
+  skipped: boolean;
+  reason: string | null;
 }
 
 interface GatherPreviewResult {
-  copied: number
-  skipped: number
-  files: GatherFile[]
-  reportPath: string
+  copied: number;
+  skipped: number;
+  files: GatherFile[];
+  reportPath: string;
 }
 
 interface GatherCompletedResult {
-  copied: number
-  skipped: number
-  reportPath: string
+  copied: number;
+  skipped: number;
+  reportPath: string;
 }
 
 export function LibraryGathererDialog({
   open,
   onOpenChange,
 }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [sourceFolders, setSourceFolders] = useState<string[]>([])
-  const [newFolderPath, setNewFolderPath] = useState("")
-  const [destDir, setDestDir] = useState("")
-  const [copyMode, setCopyMode] = useState<"copy" | "move">("copy")
-  const [isLoading, setIsLoading] = useState(false)
+  const [sourceFolders, setSourceFolders] = useState<string[]>([]);
+  const [newFolderPath, setNewFolderPath] = useState("");
+  const [destDir, setDestDir] = useState("");
+  const [copyMode, setCopyMode] = useState<"copy" | "move">("copy");
+  const [isLoading, setIsLoading] = useState(false);
   const [previewResult, setPreviewResult] =
-    useState<GatherPreviewResult | null>(null)
+    useState<GatherPreviewResult | null>(null);
   const [completedResult, setCompletedResult] =
-    useState<GatherCompletedResult | null>(null)
+    useState<GatherCompletedResult | null>(null);
 
   const handleAddFolder = useCallback(() => {
-    const path = newFolderPath.trim()
-    if (!path) return
+    const path = newFolderPath.trim();
+    if (!path) return;
 
     if (sourceFolders.includes(path)) {
-      toast.error("Folder already added")
-      return
+      toast.error("Folder already added");
+      return;
     }
 
-    setSourceFolders((prev) => [...prev, path])
-    setNewFolderPath("")
-  }, [newFolderPath, sourceFolders])
+    setSourceFolders((prev) => [...prev, path]);
+    setNewFolderPath("");
+  }, [newFolderPath, sourceFolders]);
 
   const handlePickFolder = useCallback(async () => {
     if (!isDesktopApp()) {
-      toast.error("Folder picker requires the desktop app")
-      return
+      toast.error("Folder picker requires the desktop app");
+      return;
     }
 
-    const result = await getDesktopBridge()?.pickFolder()
+    const result = await getDesktopBridge()?.pickFolder();
     if (result?.ok && result.path) {
-      setNewFolderPath(result.path)
+      setNewFolderPath(result.path);
     }
-  }, [])
+  }, []);
 
   const handleRemoveFolder = useCallback((path: string) => {
-    setSourceFolders((prev) => prev.filter((p) => p !== path))
-  }, [])
+    setSourceFolders((prev) => prev.filter((p) => p !== path));
+  }, []);
 
   const handlePickDest = useCallback(async () => {
     if (!isDesktopApp()) {
-      toast.error("Folder picker requires the desktop app")
-      return
+      toast.error("Folder picker requires the desktop app");
+      return;
     }
 
-    const result = await getDesktopBridge()?.pickFolder()
+    const result = await getDesktopBridge()?.pickFolder();
     if (result?.ok && result.path) {
-      setDestDir(result.path)
+      setDestDir(result.path);
     }
-  }, [])
+  }, []);
 
   const handlePreview = useCallback(async () => {
     if (sourceFolders.length === 0) {
-      toast.error("Add at least one source folder")
-      return
+      toast.error("Add at least one source folder");
+      return;
     }
     if (!destDir.trim()) {
-      toast.error("Choose a destination directory")
-      return
+      toast.error("Choose a destination directory");
+      return;
     }
 
-    setIsLoading(true)
-    setPreviewResult(null)
-    setCompletedResult(null)
+    setIsLoading(true);
+    setPreviewResult(null);
+    setCompletedResult(null);
 
     try {
       const res = await fetch("/api/extensions/library-gatherer/preview", {
@@ -122,27 +126,25 @@ export function LibraryGathererDialog({
           sourceDirectories: sourceFolders,
           destinationDirectory: destDir.trim(),
         }),
-      })
-      const data = await res.json()
+      });
+      const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error ?? "Preview failed")
+        throw new Error(data.error ?? "Preview failed");
       }
 
-      setPreviewResult(data)
+      setPreviewResult(data);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Preview failed"
-      )
+      toast.error(error instanceof Error ? error.message : "Preview failed");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [sourceFolders, destDir])
+  }, [sourceFolders, destDir]);
 
   const handleGather = useCallback(async () => {
-    if (sourceFolders.length === 0 || !destDir.trim()) return
+    if (sourceFolders.length === 0 || !destDir.trim()) return;
 
-    setIsLoading(true)
+    setIsLoading(true);
 
     try {
       const res = await fetch("/api/extensions/library-gatherer/gather", {
@@ -152,36 +154,32 @@ export function LibraryGathererDialog({
           sourceDirectories: sourceFolders,
           destinationDirectory: destDir.trim(),
         }),
-      })
-      const data = await res.json()
+      });
+      const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error ?? "Gather failed")
+        throw new Error(data.error ?? "Gather failed");
       }
 
-      setCompletedResult(data)
-      setPreviewResult(null)
-      toast.success(
-        `Gathered ${data.copied} files (${data.skipped} skipped)`
-      )
+      setCompletedResult(data);
+      setPreviewResult(null);
+      toast.success(`Gathered ${data.copied} files (${data.skipped} skipped)`);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Gather failed"
-      )
+      toast.error(error instanceof Error ? error.message : "Gather failed");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [sourceFolders, destDir])
+  }, [sourceFolders, destDir]);
 
   return (
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
-          setPreviewResult(null)
-          setCompletedResult(null)
+          setPreviewResult(null);
+          setCompletedResult(null);
         }
-        onOpenChange(nextOpen)
+        onOpenChange(nextOpen);
       }}
     >
       <DialogContent className="sm:max-w-lg">
@@ -230,15 +228,11 @@ export function LibraryGathererDialog({
                 placeholder="/path/to/sound/folder"
                 className="flex-1"
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") handleAddFolder()
+                  if (e.key === "Enter") handleAddFolder();
                 }}
               />
               {isDesktopApp() && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handlePickFolder}
-                >
+                <Button variant="outline" size="sm" onClick={handlePickFolder}>
                   <FolderOpen className="mr-1 size-3" />
                   Browse
                 </Button>
@@ -258,7 +252,9 @@ export function LibraryGathererDialog({
           <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
             <div className="flex items-center gap-2">
               <FolderOpen className="size-4 text-primary" />
-              <span className="text-sm font-medium">Main library destination</span>
+              <span className="text-sm font-medium">
+                Main library destination
+              </span>
             </div>
 
             <div className="flex gap-2">
@@ -283,13 +279,18 @@ export function LibraryGathererDialog({
               <span className="text-sm font-medium">Copy mode</span>
             </div>
 
-            <RadioGroup value={copyMode} onValueChange={(v) => setCopyMode(v as "copy" | "move")}>
+            <RadioGroup
+              value={copyMode}
+              onValueChange={(v) => setCopyMode(v as "copy" | "move")}
+            >
               <RadioGroupItem value="copy">
                 Copy files, keep originals
               </RadioGroupItem>
               <RadioGroupItem value="move">
                 Move files after copying
-                <span className="ml-1.5 text-xs text-muted-foreground">(advanced)</span>
+                <span className="ml-1.5 text-xs text-muted-foreground">
+                  (advanced)
+                </span>
               </RadioGroupItem>
             </RadioGroup>
           </section>
@@ -311,10 +312,7 @@ export function LibraryGathererDialog({
           {previewResult && previewResult.files.length > 0 && (
             <div className="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-border/40 bg-background/50 p-3">
               {previewResult.files.slice(0, 20).map((file, idx) => (
-                <p
-                  key={idx}
-                  className="truncate text-xs text-muted-foreground"
-                >
+                <p key={idx} className="truncate text-xs text-muted-foreground">
                   {file.sourcePath} → {file.outputPath}
                   {file.reason && (
                     <span className="text-muted-foreground/60">
@@ -359,7 +357,9 @@ export function LibraryGathererDialog({
                   <Button
                     variant="outline"
                     className="flex-1"
-                    onClick={() => getDesktopBridge()?.revealPath(completedResult.reportPath)}
+                    onClick={() =>
+                      getDesktopBridge()?.revealPath(completedResult.reportPath)
+                    }
                   >
                     <FileInput className="mr-2 size-4" />
                     Reveal report
@@ -377,9 +377,7 @@ export function LibraryGathererDialog({
                 variant="secondary"
                 onClick={handlePreview}
                 disabled={
-                  isLoading ||
-                  sourceFolders.length === 0 ||
-                  !destDir.trim()
+                  isLoading || sourceFolders.length === 0 || !destDir.trim()
                 }
               >
                 {isLoading ? (
@@ -390,9 +388,7 @@ export function LibraryGathererDialog({
               <Button
                 onClick={handleGather}
                 disabled={
-                  isLoading ||
-                  sourceFolders.length === 0 ||
-                  !destDir.trim()
+                  isLoading || sourceFolders.length === 0 || !destDir.trim()
                 }
               >
                 <FileInput className="mr-2 size-4" />
@@ -403,5 +399,5 @@ export function LibraryGathererDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

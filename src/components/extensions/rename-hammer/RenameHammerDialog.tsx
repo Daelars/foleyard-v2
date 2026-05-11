@@ -5,14 +5,7 @@ import { Hash, ArrowUpDown, Loader2, CaseSensitive } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog"
+import { ExtensionDialogShell } from "@/components/extensions/ExtensionDialogShell"
 import {
   Select,
   SelectTrigger,
@@ -161,17 +154,51 @@ export function RenameHammerDialog({
     setIsApplying(false)
   }, [])
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Rename Hammer</DialogTitle>
-          <DialogDescription>
-            Batch rename ugly sound filenames into clean searchable names.
-          </DialogDescription>
-        </DialogHeader>
+  const footer = (
+    <AlertDialog>
+      <AlertDialogTrigger
+        render={<Button disabled={!canApply} />}
+      >
+        <ArrowUpDown className="mr-2 size-4" />
+        Apply rename
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            Rename {changedCount} file
+            {changedCount !== 1 ? "s" : ""}?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            This will rename files on disk. You can undo the last rename
+            after applying.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleApply}
+            disabled={isApplying}
+          >
+            {isApplying ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : null}
+            Rename files
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
 
-        <div className="mt-6 space-y-6">
+  return (
+    <ExtensionDialogShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Rename Hammer"
+      description="Batch rename ugly sound filenames into clean searchable names."
+      icon={<CaseSensitive className="size-4" />}
+      maxWidth="xl"
+      footer={footer}
+    >
           <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
             <div className="flex items-center gap-2">
               <CaseSensitive className="size-4 text-primary" />
@@ -397,43 +424,6 @@ export function RenameHammerDialog({
               </AlertDescription>
             </Alert>
           )}
-        </div>
-
-        <DialogFooter showCloseButton>
-          <AlertDialog>
-            <AlertDialogTrigger
-              render={<Button disabled={!canApply} />}
-            >
-              <ArrowUpDown className="mr-2 size-4" />
-              Apply rename
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  Rename {changedCount} file
-                  {changedCount !== 1 ? "s" : ""}?
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will rename files on disk. You can undo the last rename
-                  after applying.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleApply}
-                  disabled={isApplying}
-                >
-                  {isApplying ? (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  ) : null}
-                  Rename files
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </ExtensionDialogShell>
   )
 }

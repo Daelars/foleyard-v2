@@ -13,14 +13,7 @@ import {
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog"
+import { ExtensionDialogShell } from "@/components/extensions/ExtensionDialogShell"
 import {
   RadioGroup,
   RadioGroupItem,
@@ -60,8 +53,10 @@ export function MakePackDialog({
     outputPath: string
   } | null>(null)
 
+  // Reset extension-local workflow state each time this modal opens.
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSource(initialSource)
       setPackName(
         initialSource === "selection"
@@ -146,17 +141,32 @@ export function MakePackDialog({
     cleanFilenames,
   ])
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Make Pack</DialogTitle>
-          <DialogDescription>
-            Turn selected sounds into a clean folder or zip.
-          </DialogDescription>
-        </DialogHeader>
+  const footer = !result ? (
+    <Button
+      onClick={handleMakePack}
+      disabled={
+        isLoading || !destDir.trim() || !packName.trim()
+      }
+    >
+      {isLoading ? (
+        <Loader2 className="mr-2 size-4 animate-spin" />
+      ) : (
+        <PackagePlus className="mr-2 size-4" />
+      )}
+      Make Pack
+    </Button>
+  ) : null
 
-        <div className="mt-6 space-y-6">
+  return (
+    <ExtensionDialogShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Make Pack"
+      description="Turn selected sounds into a clean folder or zip."
+      icon={<PackagePlus className="size-4" />}
+      footer={footer}
+      showCloseButton={!result}
+    >
           <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
             <div className="flex items-center gap-2">
               <PackagePlus className="size-4 text-primary" />
@@ -330,30 +340,10 @@ export function MakePackDialog({
             <div className="flex items-center gap-2 rounded-xl border border-dashed border-border/40 bg-muted/30 p-3">
               <FolderUp className="size-4 text-muted-foreground" />
               <p className="text-xs text-muted-foreground">
-                Set a destination and pack name above, then click "Make Pack"
+                Set a destination and pack name above, then click &quot;Make Pack&quot;
               </p>
             </div>
           )}
-        </div>
-
-        <DialogFooter showCloseButton={!result}>
-          {!result ? (
-            <Button
-              onClick={handleMakePack}
-              disabled={
-                isLoading || !destDir.trim() || !packName.trim()
-              }
-            >
-              {isLoading ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : (
-                <PackagePlus className="mr-2 size-4" />
-              )}
-              Make Pack
-            </Button>
-          ) : null}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </ExtensionDialogShell>
   )
 }

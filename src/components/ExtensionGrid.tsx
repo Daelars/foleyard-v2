@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { ArrowUpRight, MoreHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -105,7 +105,8 @@ function ExtensionCard({
   }, [extension.id, primaryAction, onRunCommand]);
 
   return (
-    <div className="relative flex min-h-64 flex-col overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-white/10 via-card to-card shadow-md sm:min-h-72 xl:min-h-80">
+    <div className="relative flex min-h-64 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-md sm:min-h-72 xl:min-h-80">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_8%,transparent),transparent_48%)]" />
       <div className="absolute right-3 top-3 z-10">
         <Switch
           checked={extension.enabled}
@@ -179,7 +180,8 @@ function ExtensionCard({
 
 function ExtensionCardSkeleton() {
   return (
-    <div className="relative flex min-h-64 flex-col overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-white/10 via-card to-card shadow-md sm:min-h-72 xl:min-h-80">
+    <div className="relative flex min-h-64 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-md sm:min-h-72 xl:min-h-80">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_8%,transparent),transparent_48%)]" />
       <div className="absolute right-3 top-3 h-4 w-7 animate-pulse rounded-full bg-muted/50" />
       <div className="flex flex-1 flex-col p-3 pt-9">
         <div className="flex gap-3 pr-12 sm:gap-4">
@@ -214,8 +216,32 @@ export function ExtensionGrid({
 }: ExtensionGridProps) {
   const showEmptyState = !isLoading && extensions.length === 0;
 
+  const [mouse, setMouse] = useState({ x: 50, y: 50 });
+
+  const handleGridMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setMouse({
+        x: ((e.clientX - rect.left) / rect.width) * 100,
+        y: ((e.clientY - rect.top) / rect.height) * 100,
+      });
+    },
+    [],
+  );
+
   return (
-    <div className="flex flex-1 flex-col px-6 py-6">
+    <div
+      className="relative flex flex-1 flex-col overflow-hidden px-6 py-6"
+      onMouseMove={handleGridMouseMove}
+    >
+      <div
+        className="pointer-events-none absolute inset-0 z-0"
+        style={{
+          background: `radial-gradient(circle 24rem at ${mouse.x}% ${mouse.y}%, color-mix(in oklab, var(--primary) 4%, transparent), transparent 54%)`,
+        }}
+      />
+
+      <div className="relative z-10 flex-1">
       {showEmptyState ? (
         <div className="flex min-h-64 flex-1 items-center justify-center rounded-2xl border border-dashed border-border/40 bg-card/60 px-6 text-center shadow-sm backdrop-blur-xl">
           <div className="max-w-md space-y-2">
@@ -244,6 +270,7 @@ export function ExtensionGrid({
               ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

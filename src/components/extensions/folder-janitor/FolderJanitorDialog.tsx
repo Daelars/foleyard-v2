@@ -5,27 +5,23 @@ import { Bug, Eye, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectPopup,
-  SelectItem,
-} from "@/components/ui/select";
+import { ExtensionDialogShell } from "@/components/extensions/ExtensionDialogShell";
 import {
   Accordion,
   AccordionItem,
   AccordionTrigger,
   AccordionContent,
 } from "@/components/ui/accordion";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -57,7 +53,7 @@ interface ScanResult {
 interface FolderJanitorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialTarget?: "library" | "folder" | "selection";
+  initialTarget?: "library" | "folder";
   initialFolderPath?: string;
 }
 
@@ -76,21 +72,27 @@ export function FolderJanitorDialog({
   initialTarget = "library",
   initialFolderPath,
 }: FolderJanitorDialogProps) {
-  const [scanTarget, setScanTarget] = useState<
-    "library" | "folder" | "selection"
-  >(initialTarget);
   const [isScanning, setIsScanning] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [allowCleanup, setAllowCleanup] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [confirmingCleanup, setConfirmingCleanup] = useState(false);
 
+  // Reset extension-local workflow state each time this modal opens.
   useEffect(() => {
     if (open) {
-      setScanTarget(initialTarget);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResult(null);
       setAllowCleanup(false);
+      setConfirmingCleanup(false);
     }
-  }, [open, initialTarget]);
+  }, [open]);
+
+  const isFolderScan = initialTarget === "folder" && Boolean(initialFolderPath);
+  const scanLabel = isFolderScan ? "Scan folder" : "Scan library";
+  const scanDescription = isFolderScan
+    ? initialFolderPath
+    : "Scans every indexed file across your configured library roots.";
 
   const handleScan = useCallback(async () => {
     setIsScanning(true);
@@ -99,21 +101,15 @@ export function FolderJanitorDialog({
     try {
       let res: Response;
 
-      if (scanTarget === "library") {
-        res = await fetch("/api/extensions/folder-janitor/scan-library", {
-          method: "POST",
-        });
-      } else if (scanTarget === "folder") {
+      if (isFolderScan) {
         res = await fetch("/api/extensions/folder-janitor/scan-folder", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ folderPath: initialFolderPath ?? "" }),
+          body: JSON.stringify({ folderPath: initialFolderPath }),
         });
       } else {
-        res = await fetch("/api/extensions/folder-janitor/scan-folder", {
+        res = await fetch("/api/extensions/folder-janitor/scan-library", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ folderPath: "" }),
         });
       }
 
@@ -129,7 +125,7 @@ export function FolderJanitorDialog({
     } finally {
       setIsScanning(false);
     }
-  }, [scanTarget, initialFolderPath]);
+  }, [initialFolderPath, isFolderScan]);
 
   const handleReveal = useCallback(async (fileId?: string, path?: string) => {
     const bridge = getDesktopBridge();
@@ -195,6 +191,19 @@ export function FolderJanitorDialog({
     }
   }, []);
 
+  const handleAllowCleanupChange = useCallback((checked: boolean) => {
+    if (checked) {
+      setConfirmingCleanup(true);
+    } else {
+      setAllowCleanup(false);
+    }
+  }, []);
+
+  const handleConfirmCleanup = useCallback(() => {
+    setAllowCleanup(true);
+    setConfirmingCleanup(false);
+  }, []);
+
   const issueCounts: Record<string, number> = result
     ? result.issues.reduce(
         (acc, issue) => {
@@ -206,220 +215,250 @@ export function FolderJanitorDialog({
     : {};
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Folder Janitor</DialogTitle>
-          <DialogDescription>
-            Find duplicates, broken files, empty folders, tiny junk files, and
-            weird formats.
-          </DialogDescription>
-        </DialogHeader>
+    <ExtensionDialogShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Folder Janitor"
+      description="Find duplicates, broken files, empty folders, tiny junk files, and weird formats."
+      icon={<Search className="size-4" />}
+      maxWidth="2xl"
+    >
+      <section className="space-y-4 rounded-xl p-4">
+        <div className="flex items-center gap-2">
+          <Search className="size-4 text-primary" />
+          <span className="text-sm font-medium">Scan target</span>
+        </div>
 
-        <div className="mt-6 space-y-6">
-          <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
-            <div className="flex items-center gap-2">
-              <Search className="size-4 text-primary" />
-              <span className="text-sm font-medium">Scan target</span>
-            </div>
+        <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
+          <div className="min-w-0 rounded-lg px-3 py-2.5">
+            <p className="text-sm font-medium">{scanLabel}</p>
+            <p
+              className="mt-0.5 truncate text-xs text-muted-foreground"
+              title={scanDescription}
+            >
+              {scanDescription}
+            </p>
+          </div>
 
-            <div className="flex items-end gap-2">
-              <div className="flex-1 space-y-1.5">
-                <Label>Scope</Label>
-                <Select
-                  value={scanTarget}
-                  onValueChange={(v: unknown) =>
-                    setScanTarget(v as "library" | "folder" | "selection")
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectPopup>
-                    <SelectItem value="library">Entire library</SelectItem>
-                    <SelectItem value="folder">Current folder</SelectItem>
-                    <SelectItem value="selection">Selected files</SelectItem>
-                  </SelectPopup>
-                </Select>
-              </div>
+          <Button
+            onClick={handleScan}
+            disabled={isScanning}
+            className="h-10 sm:min-w-36"
+          >
+            {isScanning ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Bug className="mr-2 size-4" />
+            )}
+            {isScanning ? "Scanning..." : "Scan for mess"}
+          </Button>
+        </div>
+      </section>
 
-              <Button onClick={handleScan} disabled={isScanning}>
-                {isScanning ? (
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <Bug className="mr-2 size-4" />
-                )}
-                {isScanning ? "Scanning..." : "Scan for mess"}
-              </Button>
-            </div>
-          </section>
-
-          {result && (
+      {result && (
+        <>
+          {result.issues.length === 0 ? (
+            <Alert>
+              <AlertDescription>
+                No issues found. Your library is clean.
+              </AlertDescription>
+            </Alert>
+          ) : (
             <>
-              {result.issues.length === 0 ? (
-                <Alert>
-                  <AlertDescription>
-                    No issues found. Your library is clean.
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <>
-                  <p className="text-sm text-muted-foreground">
+              <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
+                <div className="flex items-center gap-2">
+                  <Bug className="size-4 text-primary" />
+                  <span className="text-sm font-medium">Issue breakdown </span>
+                  <p className="text-sm text-muted-foreground/80">
                     Scanned {result.scannedFiles.toLocaleString()} files across{" "}
                     {result.scannedRoots.length} root
                     {result.scannedRoots.length !== 1 ? "s" : ""}. Found{" "}
                     {result.issues.length} issue
                     {result.issues.length !== 1 ? "s" : ""}.
                   </p>
+                </div>
 
-                  <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
-                    <div className="flex items-center gap-2">
-                      <Bug className="size-4 text-primary" />
-                      <span className="text-sm font-medium">
-                        Issue breakdown
-                      </span>
-                    </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-3">
+                  {ISSUE_GROUPS.map((group) => {
+                    const count = issueCounts?.[group.kind] ?? 0;
+                    return (
+                      <Card key={group.kind} size="sm">
+                        <CardContent className="flex flex-col gap-0.5">
+                          <p className="text-xs text-muted-foreground">
+                            {group.label}
+                          </p>
+                          <p className="text-xl font-semibold">{count}</p>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
 
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                      {ISSUE_GROUPS.map((group) => {
-                        const count = issueCounts?.[group.kind] ?? 0;
-                        return (
-                          <Card key={group.kind} size="sm">
-                            <CardContent className="flex flex-col gap-0.5">
-                              <p className="text-xs text-muted-foreground">
-                                {group.label}
-                              </p>
-                              <p className="text-xl font-semibold">{count}</p>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      id="allow-cleanup"
+                      checked={allowCleanup}
+                      onCheckedChange={handleAllowCleanupChange}
+                    />
+                    <Label
+                      htmlFor="allow-cleanup"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Allow cleanup actions
+                    </Label>
+                  </div>
+                  <Alert className="shrink-0 py-2">
+                    <AlertDescription className="text-xs">
+                      Read-only report. Enable cleanup above to remove files.
+                    </AlertDescription>
+                  </Alert>
+                </div>
 
-                    <div className="flex items-center gap-3 pt-2">
-                      <Switch
-                        id="allow-cleanup"
-                        checked={allowCleanup}
-                        onCheckedChange={setAllowCleanup}
-                      />
-                      <Label
-                        htmlFor="allow-cleanup"
-                        className="text-xs text-muted-foreground"
-                      >
-                        Allow cleanup actions (advanced)
-                      </Label>
-                    </div>
+                <Accordion>
+                  {ISSUE_GROUPS.map((group) => {
+                    const issues = result.issues.filter(
+                      (i) => i.kind === group.kind,
+                    );
+                    if (issues.length === 0) return null;
 
-                    <Accordion>
-                      {ISSUE_GROUPS.map((group) => {
-                        const issues = result.issues.filter(
-                          (i) => i.kind === group.kind,
-                        );
-                        if (issues.length === 0) return null;
+                    const allFileIds = issues.flatMap((i) => i.fileIds);
+                    const isFolderAction = group.kind === "empty-folder";
 
-                        const allFileIds = issues.flatMap((i) => i.fileIds);
-                        const isFolderAction = group.kind === "empty-folder";
+                    return (
+                      <AccordionItem key={group.kind} value={group.kind}>
+                        <AccordionTrigger>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{group.label}</span>
+                            <Badge variant="secondary">{issues.length}</Badge>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="space-y-1.5">
+                            {issues.map((issue, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-3 py-1.5"
+                              >
+                                <p
+                                  className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+                                  title={issue.path}
+                                >
+                                  {issue.message}
+                                </p>
 
-                        return (
-                          <AccordionItem key={group.kind} value={group.kind}>
-                            <AccordionTrigger>
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">
-                                  {group.label}
-                                </span>
-                                <Badge variant="secondary">
-                                  {issues.length}
-                                </Badge>
-                              </div>
-                            </AccordionTrigger>
-                            <AccordionContent>
-                              <div className="space-y-1.5">
-                                {issues.map((issue, idx) => (
-                                  <div
-                                    key={idx}
-                                    className="flex items-center gap-2 rounded-lg border border-border/40 bg-background/50 px-3 py-1.5"
+                                {isDesktopApp() && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleReveal(issue.fileIds[0], issue.path)
+                                    }
+                                    title="Reveal in Explorer"
                                   >
-                                    <p
-                                      className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
-                                      title={issue.path}
-                                    >
-                                      {issue.message}
-                                    </p>
+                                    <Eye className="mr-1 size-3" />
+                                    Reveal
+                                  </Button>
+                                )}
 
-                                    {isDesktopApp() && (
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() =>
-                                          handleReveal(
-                                            issue.fileIds[0],
-                                            issue.path,
-                                          )
-                                        }
-                                        title="Reveal in Explorer"
-                                      >
-                                        <Eye className="mr-1 size-3" />
-                                        Reveal
-                                      </Button>
-                                    )}
+                                {allowCleanup && isFolderAction && (
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleDeleteFolders([issue.path])
+                                    }
+                                    disabled={isRemoving}
+                                  >
+                                    Delete folder
+                                  </Button>
+                                )}
 
-                                    {allowCleanup &&
-                                      isFolderAction &&
-                                      issues.length > 0 &&
-                                      idx === 0 && (
-                                        <Button
-                                          variant="destructive"
-                                          size="sm"
-                                          onClick={() =>
-                                            handleDeleteFolders(
-                                              issues.map((i) => i.path),
-                                            )
-                                          }
-                                          disabled={isRemoving}
-                                          className="ml-2"
-                                        >
-                                          Delete all
-                                        </Button>
-                                      )}
-                                  </div>
-                                ))}
-                              </div>
-
-                              {allowCleanup &&
-                                allFileIds.length > 0 &&
-                                !isFolderAction && (
-                                  <div className="mt-2.5 flex justify-end">
+                                {allowCleanup &&
+                                  !isFolderAction &&
+                                  issue.fileIds.length > 0 && (
                                     <Button
                                       variant="destructive"
                                       size="sm"
-                                      onClick={() => handleRemove(allFileIds)}
+                                      onClick={() =>
+                                        handleRemove(issue.fileIds)
+                                      }
                                       disabled={isRemoving}
                                     >
-                                      Remove {issues.length} from library
+                                      Remove
                                     </Button>
-                                  </div>
-                                )}
-                            </AccordionContent>
-                          </AccordionItem>
-                        );
-                      })}
-                    </Accordion>
-                  </section>
-                </>
-              )}
+                                  )}
+                              </div>
+                            ))}
+                          </div>
 
-              <Alert>
-                <AlertDescription>
-                  No files were changed. This report only shows possible cleanup
-                  issues.
-                </AlertDescription>
-              </Alert>
+                          {allowCleanup &&
+                            isFolderAction &&
+                            issues.length > 0 && (
+                              <div className="mt-2.5 flex justify-end">
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleDeleteFolders(
+                                      issues.map((i) => i.path),
+                                    )
+                                  }
+                                  disabled={isRemoving}
+                                >
+                                  Delete all ({issues.length})
+                                </Button>
+                              </div>
+                            )}
+
+                          {allowCleanup &&
+                            !isFolderAction &&
+                            allFileIds.length > 0 && (
+                              <div className="mt-2.5 flex justify-end">
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleRemove(allFileIds)}
+                                  disabled={isRemoving}
+                                >
+                                  Remove {issues.length} from library
+                                </Button>
+                              </div>
+                            )}
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
+              </section>
+
+              <AlertDialog
+                open={confirmingCleanup}
+                onOpenChange={(open) => {
+                  if (!open) setConfirmingCleanup(false);
+                }}
+              >
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Enable cleanup actions?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This lets you permanently remove files from your library
+                      and delete empty folders from disk. These actions cannot
+                      be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleConfirmCleanup}>
+                      Enable
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </>
           )}
-        </div>
-
-        <DialogFooter showCloseButton />
-      </DialogContent>
-    </Dialog>
+        </>
+      )}
+    </ExtensionDialogShell>
   );
 }

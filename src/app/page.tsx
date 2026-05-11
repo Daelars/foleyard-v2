@@ -135,7 +135,7 @@ function HomeContent() {
 
   const [folderJanitorOpen, setFolderJanitorOpen] = useState(false);
   const [folderJanitorTarget, setFolderJanitorTarget] = useState<
-    "library" | "folder" | "selection"
+    "library" | "folder"
   >("library");
   const [folderJanitorFolderPath, setFolderJanitorFolderPath] = useState("");
 
@@ -617,7 +617,10 @@ function HomeContent() {
   };
 
   const extensionsRef = useRef(extensions);
-  extensionsRef.current = extensions;
+
+  useEffect(() => {
+    extensionsRef.current = extensions;
+  }, [extensions]);
 
   const handleToggleExtensionEnabled = useCallback(
     async (extensionId: string, enabled: boolean) => {

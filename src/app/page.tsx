@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bug, FileInput, Loader2, PackagePlus, PanelLeft, Search } from "lucide-react";
+import { Bug, FileInput, Loader2, PackagePlus, PanelLeft, Save, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";
@@ -21,10 +21,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
+import { interpretExtensionUiIntent } from "@/lib/extensions/ui-intent";
 import { isDesktopApp } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { useZoom } from "@/hooks/use-zoom";
 import { useScanPolling } from "@/hooks/use-scan-polling";
+import type { YardExtensionHostOutcome } from "@yard-core";
 
 interface FileRecord {
   id: string;
@@ -35,12 +37,15 @@ interface FileRecord {
   duration: number | null;
   fileSize: number | null;
   isFavorite: boolean;
+  tags: { id: string; name: string }[];
 }
 
 interface CollectionRecord {
   id: string;
   name: string;
   fileCount?: number;
+  isSmart?: boolean;
+  filter?: string | null;
 }
 
 interface TagRecord {
@@ -136,6 +141,13 @@ function HomeContent() {
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
   const filesRequestIdRef = useRef(0);
   const directoriesRequestIdRef = useRef(0);
+  const selectedFileRef = useRef(selectedFile);
+  const filesRef = useRef(files);
+  const tagsRef = useRef(tags);
+
+  useEffect(() => { selectedFileRef.current = selectedFile; }, [selectedFile]);
+  useEffect(() => { filesRef.current = files; }, [files]);
+  useEffect(() => { tagsRef.current = tags; }, [tags]);
 
   const { zoom, setZoom: handleUpdateZoom } = useZoom();
 
@@ -153,6 +165,9 @@ function HomeContent() {
   const [packFileIds, setPackFileIds] = useState<string[]>([]);
 
   const [renameHammerOpen, setRenameHammerOpen] = useState(false);
+  const [showSaveSearch, setShowSaveSearch] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
+  const [renamingCollection, setRenamingCollection] = useState<{ id: string; name: string } | null>(null);
 
   const loadSoundShelfCount = useCallback(async () => {
     try {
@@ -192,11 +207,24 @@ function HomeContent() {
   }, []);
 
   const showCollection = useCallback((collectionId: string) => {
+    const collection = collections.find((c) => c.id === collectionId);
+    if (collection?.isSmart && collection.filter) {
+      try {
+        const filter = JSON.parse(collection.filter) as { q?: string };
+        setSearchQuery(filter.q ?? "");
+        setCurrentView("all");
+        setSelectedCollection(collectionId);
+        setSelectedDirectory(null);
+        return;
+      } catch {
+        // Invalid filter JSON, fall through to regular view
+      }
+    }
     setCurrentView("collection");
     setSelectedCollection(collectionId);
     setSelectedDirectory(null);
     setSearchQuery("");
-  }, []);
+  }, [collections]);
 
   const navigateDirectory = useCallback((directory: string | null) => {
     setCurrentView(directory ? "directory" : "all");
@@ -405,7 +433,7 @@ function HomeContent() {
     };
   }, [loadFiles, loadDirectories]);
 
-  const handleToggleFavorite = async (id: string) => {
+  const handleToggleFavorite = useCallback(async (id: string) => {
     try {
       const res = await fetch("/api/files", {
         method: "PATCH",
@@ -422,18 +450,140 @@ function HomeContent() {
         ),
       );
 
-      if (selectedFile?.id === id) {
-        setSelectedFile({
-          ...selectedFile,
-          isFavorite: !selectedFile.isFavorite,
-        });
-      }
+      setSelectedFile((prev) =>
+        prev?.id === id ? { ...prev, isFavorite: !prev.isFavorite } : prev,
+      );
     } catch {
       toast.error("Failed to update favorite status");
     }
-  };
+  }, []);
 
-  const saveLibraryRoot = async (path: string) => {
+  const handleToggleFileTag = useCallback(async (fileId: string, tagId: string) => {
+    const currentFiles = filesRef.current;
+    const currentTags = tagsRef.current;
+    const currentSelectedFile = selectedFileRef.current;
+
+    const file = currentFiles.find((f) => f.id === fileId);
+    if (!file) return;
+
+    const alreadyAttached = file.tags.some((t) => t.id === tagId);
+    const action = alreadyAttached ? "detachTag" : "attachTag";
+
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.id === fileId
+          ? {
+              ...f,
+              tags: alreadyAttached
+                ? f.tags.filter((t) => t.id !== tagId)
+                : [...f.tags, currentTags.find((t) => t.id === tagId) ?? { id: tagId, name: "" }],
+            }
+          : f,
+      ),
+    );
+
+    if (currentSelectedFile?.id === fileId) {
+      setSelectedFile((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          tags: alreadyAttached
+            ? prev.tags.filter((t) => t.id !== tagId)
+            : [...prev.tags, currentTags.find((t) => t.id === tagId) ?? { id: tagId, name: "" }],
+        };
+      });
+    }
+
+    try {
+      await fetch("/api/files", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: fileId, action, tagId }),
+      });
+    } catch {
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.id === fileId ? file : f,
+        ),
+      );
+      if (currentSelectedFile?.id === fileId) {
+        setSelectedFile(file);
+      }
+      toast.error("Failed to update tag");
+    }
+  }, []);
+
+  const handleSaveSearch = useCallback(async (name: string) => {
+    if (!name.trim() || !debouncedSearchQuery.trim()) return;
+
+    try {
+      const res = await fetch(
+        "/api/extensions/smart-collections/save-search",
+        {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          query: debouncedSearchQuery.trim(),
+        }),
+        },
+      );
+      if (!res.ok) throw new Error();
+      await loadInitialData();
+      toast.success("Smart collection saved");
+      setShowSaveSearch(false);
+    } catch {
+      toast.error("Failed to save smart collection");
+    }
+  }, [debouncedSearchQuery, loadInitialData]);
+
+  const handleRenameCollection = useCallback(async (id: string, name: string) => {
+    if (!name.trim()) return;
+    try {
+      const res = await fetch("/api/collections", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rename", collectionId: id, name: name.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      void loadInitialData();
+      toast.success("Collection renamed");
+    } catch {
+      toast.error("Failed to rename collection");
+    }
+  }, [loadInitialData]);
+
+  const handleUpdateCollectionFilter = useCallback(async (id: string, filter: string) => {
+    try {
+      const res = await fetch("/api/collections", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update-filter", collectionId: id, filter }),
+      });
+      if (!res.ok) throw new Error();
+      void loadInitialData();
+      toast.success("Search filter updated");
+    } catch {
+      toast.error("Failed to update search filter");
+    }
+  }, [loadInitialData]);
+
+  const handleConvertToRegularCollection = useCallback(async (collectionId: string) => {
+    try {
+      const res = await fetch("/api/collections", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "convert-to-regular", collectionId }),
+      });
+      if (!res.ok) throw new Error();
+      void loadInitialData();
+      toast.success("Converted to playlist");
+    } catch {
+      toast.error("Failed to convert collection");
+    }
+  }, [loadInitialData]);
+
+  const saveLibraryRoot = useCallback(async (path: string) => {
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
@@ -464,13 +614,13 @@ function HomeContent() {
       );
       return false;
     }
-  };
+  }, [settings]);
 
-  const handleSaveRoot = async (path: string) => {
+  const handleSaveRoot = useCallback(async (path: string) => {
     await saveLibraryRoot(path);
-  };
+  }, [saveLibraryRoot]);
 
-  const startLibraryScan = async () => {
+  const startLibraryScan = useCallback(async () => {
     try {
       const res = await fetch("/api/scan", { method: "POST" });
       const data = await res.json();
@@ -488,13 +638,13 @@ function HomeContent() {
       );
       return false;
     }
-  };
+  }, []);
 
-  const handleStartScan = async () => {
+  const handleStartScan = useCallback(async () => {
     await startLibraryScan();
-  };
+  }, [startLibraryScan]);
 
-  const handleCompleteOnboarding = async () => {
+  const handleCompleteOnboarding = useCallback(async () => {
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
@@ -520,9 +670,9 @@ function HomeContent() {
       );
       return false;
     }
-  };
+  }, []);
 
-  const handleCreateCollection = async (name: string) => {
+  const handleCreateCollection = useCallback(async (name: string) => {
     if (!name.trim()) {
       return;
     }
@@ -542,9 +692,9 @@ function HomeContent() {
     } catch {
       toast.error("Failed to create playlist");
     }
-  };
+  }, [loadInitialData]);
 
-  const handleDeleteCollection = async (collectionId: string) => {
+  const executeDeleteCollection = useCallback(async (collectionId: string) => {
     const deletedCollection = collections.find(
       (collection) => collection.id === collectionId,
     );
@@ -585,9 +735,18 @@ function HomeContent() {
       }
       toast.error("Failed to delete playlist");
     }
-  };
+  }, [collections, selectedCollection]);
 
-  const handleRemoveRoot = async (path: string) => {
+  const handleDeleteCollection = useCallback(async (collectionId: string) => {
+    const collection = collections.find((c) => c.id === collectionId);
+    if (collection?.isSmart) {
+      setConfirmDelete({ id: collectionId, name: collection.name });
+      return;
+    }
+    await executeDeleteCollection(collectionId);
+  }, [collections, executeDeleteCollection]);
+
+  const handleRemoveRoot = useCallback(async (path: string) => {
     const previousSettings = settings;
     const nextRoots = settings.libraryRoots.filter((root) => root !== path);
 
@@ -623,9 +782,9 @@ function HomeContent() {
           : "Failed to remove library folder",
       );
     }
-  };
+  }, [settings]);
 
-  const handleCreateTag = async (name: string) => {
+  const handleCreateTag = useCallback(async (name: string) => {
     if (!name.trim()) {
       return;
     }
@@ -641,9 +800,9 @@ function HomeContent() {
     } catch {
       toast.error("Failed to create tag");
     }
-  };
+  }, [loadInitialData]);
 
-  const handleDeleteTag = async (tagId: string) => {
+  const handleDeleteTag = useCallback(async (tagId: string) => {
     const deletedTag = tags.find((tag) => tag.id === tagId);
     setTags((current) => current.filter((tag) => tag.id !== tagId));
 
@@ -670,7 +829,7 @@ function HomeContent() {
       }
       toast.error("Failed to delete tag");
     }
-  };
+  }, [tags]);
 
   const extensionsRef = useRef(extensions);
 
@@ -775,7 +934,7 @@ function HomeContent() {
     [],
   );
 
-  const handleAddToCollection = async (collectionId: string) => {
+  const handleAddToCollection = useCallback(async (collectionId: string) => {
     if (!selectedFile) {
       return;
     }
@@ -802,71 +961,95 @@ function HomeContent() {
     } catch {
       toast.error("Failed to add to playlist");
     }
-  };
+  }, [selectedFile, collections, loadInitialData]);
 
-  const handleMakePack = useCallback(
+  const executeHostedCommand = useCallback(
     async (
-      source: "selection" | "shelf" | "recent",
-      fileIds: string[] = [],
+      extensionId: string,
+      commandId: string,
+      selection?: { fileIds?: string[]; folderPath?: string },
+      input?: unknown,
     ) => {
-      if (source === "shelf" && !isDesktopApp()) {
-        toast.error("Make Pack needs the desktop app to choose an output folder");
-        return;
+      try {
+        const response = await fetch("/api/extensions/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ extensionId, commandId, selection, input }),
+        });
+        const outcome = (await response.json()) as YardExtensionHostOutcome;
+
+        if (!response.ok || !outcome.ok) {
+          throw new Error(
+            outcome.ok ? "Extension command failed" : outcome.message,
+          );
+        }
+
+        if (outcome.type === "ui-intent") {
+          const handled = interpretExtensionUiIntent(outcome.intent, {
+            openFolderJanitor: (payload) => {
+              setFolderJanitorTarget(payload.target);
+              setFolderJanitorFolderPath(
+                payload.target === "folder" ? payload.folderPath : "",
+              );
+              setFolderJanitorOpen(true);
+            },
+            openLibraryGatherer: () => setGatherOpen(true),
+            openMakePack: ({ source, fileIds }) => {
+              if (source === "shelf" && !isDesktopApp()) {
+                toast.error(
+                  "Make Pack needs the desktop app to choose an output folder",
+                );
+                return;
+              }
+              setCurrentView("all");
+              setPackSource(source);
+              setPackFileIds(fileIds);
+            },
+            openSettings: () => setShowSettings(true),
+          });
+
+          if (!handled) {
+            toast.info(`No UI handles intent "${outcome.intent.type}" yet`);
+          }
+        }
+
+        if (outcome.type === "value" && extensionId === "sound-shelf") {
+          window.dispatchEvent(
+            new CustomEvent(SOUND_SHELF_CHANGED_EVENT),
+          );
+        }
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to run extension command",
+        );
       }
-      setPackSource(source);
-      setPackFileIds(fileIds);
     },
     [],
   );
 
-  const handleScanFolder = useCallback((folderPath: string) => {
-    setFolderJanitorTarget("folder");
-    setFolderJanitorFolderPath(folderPath);
-    setFolderJanitorOpen(true);
-  }, []);
+  const handleScanFolder = useCallback(
+    (folderPath: string) => {
+      void executeHostedCommand(
+        "folder-janitor",
+        "folder-janitor.scan-folder",
+        { folderPath },
+      );
+    },
+    [executeHostedCommand],
+  );
 
   const handleRunCommand = useCallback(
     (extensionId: string, commandId: string) => {
-      switch (commandId) {
-        case "folder-janitor.scan-library":
-          setFolderJanitorTarget("library");
-          setFolderJanitorOpen(true);
-          break;
-        case "library-gatherer.preview-gather":
-        case "library-gatherer.gather":
-          setGatherOpen(true);
-          break;
-        case "sound-shelf.clear":
-          void fetch("/api/extensions/sound-shelf/clear", {
-            method: "POST",
-          }).then(() => {
-            window.dispatchEvent(
-              new CustomEvent(SOUND_SHELF_CHANGED_EVENT),
-            );
-          });
-          break;
-        case "make-pack.from-shelf":
-          setCurrentView("all");
-          setPackSource("shelf");
-          setPackFileIds([]);
-          break;
-        case "make-pack.from-recent":
-          setCurrentView("all");
-          setPackSource("recent");
-          setPackFileIds([]);
-          break;
-        case "rename-hammer.open":
-          setRenameHammerOpen(true);
-          break;
-        case "drop-rules.prepare-drag":
-          setCurrentView("all");
-          setShowSettings(true);
-          break;
-        default:
-          toast.info(`Command "${commandId}" has no quick action yet`);
+      if (commandId === "rename-hammer.open") {
+        setRenameHammerOpen(true);
+        return;
       }
+
+      void executeHostedCommand(extensionId, commandId);
     },
-    [],
+    [executeHostedCommand],
   );
 
   useScanPolling(
@@ -893,57 +1076,79 @@ function HomeContent() {
     showSoundShelf,
     folderJanitorEnabled,
     libraryGathererEnabled,
+    smartCollectionsEnabled,
+    viewingSmartCollection,
+    activeSmartCollectionId,
   } = useMemo(() => {
     const shelf = extensions.find((e) => e.id === "sound-shelf")?.enabled ?? false;
     const pack = extensions.find((e) => e.id === "make-pack")?.enabled ?? false;
     const janitor = extensions.find((e) => e.id === "folder-janitor")?.enabled ?? false;
     const gatherer = extensions.find((e) => e.id === "library-gatherer")?.enabled ?? false;
+    const smart = extensions.find((e) => e.id === "smart-collections")?.enabled ?? false;
+    const activeSmart = selectedCollection
+      ? collections.find((c) => c.id === selectedCollection && c.isSmart) ?? null
+      : null;
     return {
       soundShelfEnabled: shelf,
       makePackEnabled: pack,
       showSoundShelf: shelf && soundShelfItemCount > 0,
       folderJanitorEnabled: janitor,
       libraryGathererEnabled: gatherer,
+      smartCollectionsEnabled: smart,
+      viewingSmartCollection: activeSmart !== null,
+      activeSmartCollectionId: activeSmart?.id ?? null,
     };
-  }, [extensions, soundShelfItemCount]);
+  }, [extensions, soundShelfItemCount, selectedCollection, collections]);
 
   const handleOpenMobileSidebar = useCallback(() => setShowMobileSidebar(true), []);
   const handleCloseMobileSidebar = useCallback(() => setShowMobileSidebar(false), []);
   const handleOpenSettings = useCallback(() => setShowSettings(true), []);
 
   const handleRecentPack = useCallback(() => {
-    void handleMakePack("recent");
-  }, [handleMakePack]);
+    void executeHostedCommand("make-pack", "make-pack.from-recent");
+  }, [executeHostedCommand]);
 
   const handleOpenScan = useCallback(() => {
-    setFolderJanitorTarget("library");
-    setFolderJanitorOpen(true);
-  }, []);
+    void executeHostedCommand(
+      "folder-janitor",
+      "folder-janitor.scan-library",
+    );
+  }, [executeHostedCommand]);
 
-  const handleOpenGather = useCallback(() => setGatherOpen(true), []);
+  const handleOpenGather = useCallback(() => {
+    void executeHostedCommand(
+      "library-gatherer",
+      "library-gatherer.gather",
+    );
+  }, [executeHostedCommand]);
 
   const handleSelectFile = useCallback((file: FileRecord) => {
-    if (selectedFile?.id === file.id) {
+    if (selectedFileRef.current?.id === file.id) {
       audioPlayerRef.current?.togglePlayback();
     } else {
       setSelectedFile(file);
     }
-  }, [selectedFile]);
+  }, []);
 
   const handleMakePackFile = useCallback(
-    (file: FileRecord) => handleMakePack("selection", [file.id]),
-    [handleMakePack],
+    (file: FileRecord) =>
+      executeHostedCommand(
+        "make-pack",
+        "make-pack.from-selection",
+        { fileIds: [file.id] },
+      ),
+    [executeHostedCommand],
   );
 
   const handleMakePackShelf = useCallback(
-    () => handleMakePack("shelf"),
-    [handleMakePack],
+    () => executeHostedCommand("make-pack", "make-pack.from-shelf"),
+    [executeHostedCommand],
   );
 
   const handleShelfSelectFile = useCallback((fileId: string) => {
-    const match = files.find((f) => f.id === fileId);
+    const match = filesRef.current.find((f) => f.id === fileId);
     if (match) setSelectedFile(match);
-  }, [files]);
+  }, []);
 
   const handleClosePlayer = useCallback(() => {
     setSelectedFile(null);
@@ -978,6 +1183,9 @@ function HomeContent() {
         onSelectFavorites={showFavorites}
         onSelectExtensions={showExtensions}
         onSelectCollection={showCollection}
+        onRenameCollection={(id, name) => setRenamingCollection({ id, name })}
+        onConvertToRegularCollection={handleConvertToRegularCollection}
+        onDeleteCollection={handleDeleteCollection}
       />
 
       <Dialog open={showMobileSidebar} onOpenChange={setShowMobileSidebar}>
@@ -998,6 +1206,9 @@ function HomeContent() {
             onSelectFavorites={showFavorites}
             onSelectExtensions={showExtensions}
             onSelectCollection={showCollection}
+            onRenameCollection={(id, name) => setRenamingCollection({ id, name })}
+            onConvertToRegularCollection={handleConvertToRegularCollection}
+            onDeleteCollection={handleDeleteCollection}
             onAction={handleCloseMobileSidebar}
           />
         </DialogContent>
@@ -1019,14 +1230,47 @@ function HomeContent() {
             </Button>
 
             {!showExtensionsView && (
-              <div className="relative flex-1 duration-300 animate-in fade-in-0 slide-in-from-top-2 md:max-w-xl">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground/70" />
-                <Input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search library..."
-                  className="h-10 rounded-xl border-border/40 bg-card/60 pl-10 pr-4 text-sm leading-5 shadow-sm backdrop-blur-xl placeholder:text-muted-foreground/65 focus-visible:border-primary/50 focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
+              <div className="relative flex flex-1 items-center gap-2 duration-300 animate-in fade-in-0 slide-in-from-top-2 md:max-w-xl">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground/70" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search library..."
+                    className="h-10 rounded-xl border-border/40 bg-card/60 pl-10 pr-4 text-sm leading-5 shadow-sm backdrop-blur-xl placeholder:text-muted-foreground/65 focus-visible:border-primary/50 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
+                </div>
+                {smartCollectionsEnabled && searchQuery.trim() && (
+                  <>
+                    {viewingSmartCollection && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="hidden h-10 shrink-0 gap-2 rounded-xl border-border/40 bg-card/60 text-xs shadow-sm backdrop-blur-xl sm:inline-flex"
+                        onClick={() => {
+                          if (activeSmartCollectionId) {
+                            handleUpdateCollectionFilter(
+                              activeSmartCollectionId,
+                              JSON.stringify({ q: searchQuery.trim() }),
+                            );
+                          }
+                        }}
+                      >
+                        <Save className="size-4" />
+                        Update Search
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="hidden h-10 shrink-0 gap-2 rounded-xl border-border/40 bg-card/60 text-xs shadow-sm backdrop-blur-xl sm:inline-flex"
+                      onClick={() => setShowSaveSearch(true)}
+                    >
+                      <Save className="size-4" />
+                      Save Search
+                    </Button>
+                  </>
+                )}
               </div>
             )}
 
@@ -1102,6 +1346,8 @@ function HomeContent() {
                 onMakePackFile={handleMakePackFile}
                 folderJanitorEnabled={folderJanitorEnabled}
                 onScanFolder={handleScanFolder}
+                allTags={tags}
+                onToggleFileTag={handleToggleFileTag}
               />
             </div>
 
@@ -1131,6 +1377,8 @@ function HomeContent() {
         onToggleFavorite={handleToggleFavorite}
         collections={collections}
         onAddToCollection={handleAddToCollection}
+        allTags={tags}
+        onToggleFileTag={handleToggleFileTag}
       />
 
       <SettingsDialog
@@ -1145,6 +1393,7 @@ function HomeContent() {
         tags={tags}
         onCreateCollection={handleCreateCollection}
         onDeleteCollection={handleDeleteCollection}
+        onRenameCollection={(id, name) => setRenamingCollection({ id, name })}
         onCreateTag={handleCreateTag}
         onDeleteTag={handleDeleteTag}
         extensions={extensions}
@@ -1292,6 +1541,104 @@ function HomeContent() {
         open={renameHammerOpen}
         onOpenChange={setRenameHammerOpen}
       />
+
+      <Dialog open={showSaveSearch} onOpenChange={setShowSaveSearch}>
+        <DialogContent className="max-w-sm rounded-2xl border border-border/40 bg-card/95 p-6 backdrop-blur-2xl">
+          <DialogTitle className="text-lg font-semibold">Save Search</DialogTitle>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const data = new FormData(event.currentTarget);
+              const name = data.get("name") as string;
+              if (name.trim()) handleSaveSearch(name.trim());
+            }}
+            className="mt-4 space-y-4"
+          >
+            <Input
+              name="name"
+              placeholder="Collection name..."
+              autoFocus
+              className="rounded-xl border-border/40 bg-muted/50"
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowSaveSearch(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">
+                <Save className="size-4" />
+                Save
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmDelete !== null} onOpenChange={(open) => { if (!open) setConfirmDelete(null); }}>
+        <DialogContent className="max-w-sm rounded-2xl border border-border/40 bg-card/95 p-6 backdrop-blur-2xl">
+          <DialogTitle className="text-lg font-semibold">Delete Smart Collection</DialogTitle>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Delete smart collection &ldquo;{confirmDelete?.name}&rdquo;? This cannot be undone.
+          </p>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setConfirmDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirmDelete) executeDeleteCollection(confirmDelete.id);
+                setConfirmDelete(null);
+              }}
+            >
+              <Trash2 className="mr-2 size-4" />
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={renamingCollection !== null} onOpenChange={(open) => { if (!open) setRenamingCollection(null); }}>
+        <DialogContent className="max-w-sm rounded-2xl border border-border/40 bg-card/95 p-6 backdrop-blur-2xl">
+          <DialogTitle className="text-lg font-semibold">Rename Collection</DialogTitle>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const data = new FormData(event.currentTarget);
+              const name = data.get("name") as string;
+              if (name.trim() && renamingCollection) {
+                handleRenameCollection(renamingCollection.id, name.trim());
+                setRenamingCollection(null);
+              }
+            }}
+            className="mt-4 space-y-4"
+          >
+            <Input
+              key={renamingCollection?.id ?? "new"}
+              name="name"
+              defaultValue={renamingCollection?.name ?? ""}
+              placeholder="Collection name..."
+              autoFocus
+              className="rounded-xl border-border/40 bg-muted/50"
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setRenamingCollection(null)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">
+                Save
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

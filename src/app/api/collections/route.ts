@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   attachFileToCollection,
+  convertToRegularCollection,
   createCollection,
   deleteCollection,
   detachFileFromCollection,
   getAllCollections,
   getFiles,
+  renameCollection,
+  updateCollectionFilter,
 } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -25,7 +28,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, fileId, collectionId } = body;
+    const { name, fileId, collectionId, isSmart, filter } = body;
 
     if (fileId && collectionId) {
       attachFileToCollection(fileId, collectionId);
@@ -35,8 +38,38 @@ export async function POST(request: NextRequest) {
     const trimmedName = typeof name === 'string' ? name.trim() : '';
 
     if (trimmedName) {
-      const id = createCollection(trimmedName);
+      const id = createCollection(trimmedName, !!isSmart, filter ?? null);
       return NextResponse.json({ success: true, id });
+    }
+
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+  } catch {
+    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { action, collectionId, name, filter } = body;
+
+    if (!collectionId) {
+      return NextResponse.json({ error: 'collectionId is required' }, { status: 400 });
+    }
+
+    if (action === 'rename' && typeof name === 'string' && name.trim()) {
+      renameCollection(collectionId, name.trim());
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === 'update-filter' && typeof filter === 'string') {
+      updateCollectionFilter(collectionId, filter);
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === 'convert-to-regular') {
+      convertToRegularCollection(collectionId);
+      return NextResponse.json({ success: true });
     }
 
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });

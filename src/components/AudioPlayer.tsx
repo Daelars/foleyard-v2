@@ -20,6 +20,8 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       onToggleFavorite,
       collections,
       onAddToCollection,
+      allTags,
+      onToggleFileTag,
     },
     ref,
   ) {
@@ -37,6 +39,8 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         onToggleFavorite={onToggleFavorite}
         collections={collections}
         onAddToCollection={onAddToCollection}
+        allTags={allTags}
+        onToggleFileTag={onToggleFileTag}
       />
     );
   },
@@ -56,6 +60,8 @@ const AudioPlayerContent = forwardRef<
       onToggleFavorite,
       collections,
       onAddToCollection,
+      allTags,
+      onToggleFileTag,
     },
     ref,
   ) {
@@ -83,6 +89,8 @@ const AudioPlayerContent = forwardRef<
         title={playback.title}
         volume={playback.volume}
         waveformData={playback.waveformData}
+        allTags={allTags}
+        onToggleFileTag={onToggleFileTag}
       />
     );
   },

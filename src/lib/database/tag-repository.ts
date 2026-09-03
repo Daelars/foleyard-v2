@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { v4 as uuid } from "uuid";
 
@@ -54,6 +54,28 @@ export class SqliteTagRepository implements TagRepository {
       .run();
   }
 
+  getTagsForFiles(fileIds: string[]): Map<string, Tag[]> {
+    if (fileIds.length === 0) return new Map();
+
+    const rows = this.db
+      .select({
+        fileId: schema.fileTags.fileId,
+        tag: schema.tags,
+      })
+      .from(schema.fileTags)
+      .innerJoin(schema.tags, eq(schema.fileTags.tagId, schema.tags.id))
+      .where(inArray(schema.fileTags.fileId, fileIds))
+      .all();
+
+    const map = new Map<string, Tag[]>();
+    for (const row of rows) {
+      const tags = map.get(row.fileId) ?? [];
+      tags.push(row.tag as Tag);
+      map.set(row.fileId, tags);
+    }
+    return map;
+  }
+
   deleteTag(tagId: string) {
     this.sqlite.transaction(() => {
       this.db.delete(schema.fileTags).where(eq(schema.fileTags.tagId, tagId)).run();
@@ -72,6 +94,7 @@ function getTagRepo(): SqliteTagRepository {
 
 export const getAllTags = () => getTagRepo().getAllTags();
 export const getTagsForFile = (fileId: string) => getTagRepo().getTagsForFile(fileId);
+export const getTagsForFiles = (fileIds: string[]) => getTagRepo().getTagsForFiles(fileIds);
 export const createTag = (name: string) => getTagRepo().createTag(name);
 export const attachTagToFile = (fileId: string, tagId: string) => getTagRepo().attachTagToFile(fileId, tagId);
 export const detachTagFromFile = (fileId: string, tagId: string) => getTagRepo().detachTagFromFile(fileId, tagId);

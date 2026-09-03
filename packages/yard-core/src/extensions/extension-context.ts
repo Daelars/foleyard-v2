@@ -11,16 +11,22 @@ import {
 } from "./extension-permissions";
 import type { YardCommandRegistry } from "./extension-command-registry";
 
+export type YardExtensionSettings = {
+  get<T = unknown>(settingId: string): T | undefined;
+};
+
+export type YardExtensionFileService = {
+  markRemoved(fileIds: string[]): void;
+};
+
 export type YardExtensionContext = {
   services: {
     library?: LibraryService;
-    // TODO: replace with a stable extension-facing file service contract.
-    files?: unknown;
+    files?: YardExtensionFileService;
     collections?: CollectionService;
     tags?: TagService;
     favorites?: FavoriteService;
-    // TODO: replace with a stable extension-facing settings service contract.
-    settings?: unknown;
+    settings?: YardExtensionSettings;
     commands: YardCommandRegistry;
     events?: EventBus;
   };
@@ -29,6 +35,7 @@ export type YardExtensionContext = {
     folderPath?: string;
     collectionId?: string;
   };
+  input?: unknown;
   permissions: PermissionChecker;
 };
 
@@ -39,6 +46,7 @@ export type CreateYardExtensionContextOptions = {
     folderPath?: string;
     collectionId?: string;
   };
+  input?: unknown;
   permissions: YardPermission[];
 };
 
@@ -52,6 +60,7 @@ export function createYardExtensionContext(
       folderPath: options.selection?.folderPath,
       collectionId: options.selection?.collectionId,
     },
+    input: options.input,
     permissions: createPermissionChecker(options.permissions),
   };
 }

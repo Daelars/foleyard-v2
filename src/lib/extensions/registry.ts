@@ -7,30 +7,30 @@ import { getExtensionSettingValue } from "@/lib/extensions/settings-store";
 import { extensionRegistry } from "./runtime";
 
 import {
-  createService,
   manifest,
   registerCommands,
 } from "@foleyard/sound-shelf";
+import { DbSoundShelfStore } from "@/lib/extensions/sound-shelf-store";
 import {
-  createService as createMakePackService,
   manifest as makePackManifest,
   registerCommands as registerMakePackCommands,
 } from "@foleyard/make-pack";
 import {
-  createService as createDropRulesService,
   manifest as dropRulesManifest,
   registerCommands as registerDropRulesCommands,
 } from "@foleyard/drop-rules";
 import {
-  createService as createFolderJanitorService,
   manifest as folderJanitorManifest,
   registerCommands as registerFolderJanitorCommands,
 } from "@foleyard/folder-janitor";
 import {
-  createService as createLibraryGathererService,
   manifest as libraryGathererManifest,
   registerCommands as registerLibraryGathererCommands,
 } from "@foleyard/library-gatherer";
+import {
+  manifest as smartCollectionsManifest,
+  registerCommands as registerSmartCollectionsCommands,
+} from "@foleyard/smart-collections";
 
 function toGridItem(manifest: YardExtensionManifest): ExtensionGridItem {
   return {
@@ -65,54 +65,47 @@ function toGridItem(manifest: YardExtensionManifest): ExtensionGridItem {
 }
 
 export function registerAllExtensions() {
-  try {
+  if (!extensionRegistry.has(manifest.id)) {
     extensionRegistry.register({
       manifest,
-      registerCommands,
-      createService,
+      registerCommands: (context) =>
+        registerCommands(context, new DbSoundShelfStore()),
     });
-  } catch {
-    // Extension is already registered in this runtime.
   }
 
-  try {
+  if (!extensionRegistry.has(makePackManifest.id)) {
     extensionRegistry.register({
       manifest: makePackManifest,
       registerCommands: registerMakePackCommands,
-      createService: createMakePackService,
     });
-  } catch {
-    // Extension is already registered in this runtime.
   }
 
-  try {
+  if (!extensionRegistry.has(dropRulesManifest.id)) {
     extensionRegistry.register({
       manifest: dropRulesManifest,
       registerCommands: registerDropRulesCommands,
-      createService: createDropRulesService,
     });
-  } catch {
-    // Extension is already registered in this runtime.
   }
 
-  try {
+  if (!extensionRegistry.has(folderJanitorManifest.id)) {
     extensionRegistry.register({
       manifest: folderJanitorManifest,
       registerCommands: registerFolderJanitorCommands,
-      createService: createFolderJanitorService,
     });
-  } catch {
-    // Extension is already registered in this runtime.
   }
 
-  try {
+  if (!extensionRegistry.has(libraryGathererManifest.id)) {
     extensionRegistry.register({
       manifest: libraryGathererManifest,
       registerCommands: registerLibraryGathererCommands,
-      createService: createLibraryGathererService,
     });
-  } catch {
-    // Extension is already registered in this runtime.
+  }
+
+  if (!extensionRegistry.has(smartCollectionsManifest.id)) {
+    extensionRegistry.register({
+      manifest: smartCollectionsManifest,
+      registerCommands: registerSmartCollectionsCommands,
+    });
   }
 }
 

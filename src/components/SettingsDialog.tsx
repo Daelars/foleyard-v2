@@ -6,9 +6,11 @@ import {
   CheckCircle2,
   Database,
   Download,
+  Filter,
   ListMusic,
   FolderOpen,
   Loader2,
+  Pencil,
   Plus,
   RefreshCw,
   Save,
@@ -80,10 +82,11 @@ interface SettingsDialogProps {
     error: string | null;
   };
   onStartScan: () => Promise<void>;
-  collections: { id: string; name: string; fileCount?: number }[];
+  collections: { id: string; name: string; fileCount?: number; isSmart?: boolean; filter?: string | null }[];
   tags: { id: string; name: string; color: string }[];
   onCreateCollection: (name: string) => Promise<void>;
   onDeleteCollection: (id: string) => Promise<void>;
+  onRenameCollection?: (id: string, name: string) => void;
   onCreateTag: (name: string) => Promise<void>;
   onDeleteTag: (id: string) => Promise<void>;
   // New props for extensions
@@ -110,6 +113,7 @@ export function SettingsDialog({
   tags,
   onCreateCollection,
   onDeleteCollection,
+  onRenameCollection,
   onCreateTag,
   onDeleteTag,
   extensions = [],
@@ -136,6 +140,7 @@ export function SettingsDialog({
             tags={tags}
             onCreateCollection={onCreateCollection}
             onDeleteCollection={onDeleteCollection}
+            onRenameCollection={onRenameCollection}
             onCreateTag={onCreateTag}
             onDeleteTag={onDeleteTag}
             extensions={extensions}
@@ -161,6 +166,7 @@ type SettingsDialogBodyProps = Pick<
   | "tags"
   | "onCreateCollection"
   | "onDeleteCollection"
+  | "onRenameCollection"
   | "onCreateTag"
   | "onDeleteTag"
   | "extensions"
@@ -180,6 +186,7 @@ function SettingsDialogBody({
   tags,
   onCreateCollection,
   onDeleteCollection,
+  onRenameCollection,
   onCreateTag,
   onDeleteTag,
   extensions,
@@ -726,30 +733,56 @@ function SettingsDialogBody({
                       No playlists yet.
                     </div>
                   ) : (
-                    collections.map((collection) => (
-                      <div
-                        key={collection.id}
-                        className="group flex items-center gap-3 py-2.5 transition-colors hover:bg-accent/30"
-                      >
-                        <ListMusic className="ml-1 size-4 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">{collection.name}</p>
-                        </div>
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {collection.fileCount ?? 0}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="mr-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => handleDeleteCollection(collection.id, collection.name)}
-                          aria-label={`Delete playlist ${collection.name}`}
+                    collections.map((collection) => {
+                      const isSmart = collection.isSmart ?? false;
+                      return (
+                        <div
+                          key={collection.id}
+                          className="group flex items-center gap-3 py-2.5 transition-colors hover:bg-accent/30"
                         >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    ))
+                          {isSmart ? (
+                            <Filter className="ml-1 size-4 shrink-0 text-muted-foreground" />
+                          ) : (
+                            <ListMusic className="ml-1 size-4 shrink-0 text-muted-foreground" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">
+                              {collection.name}
+                              {isSmart && (
+                                <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 leading-tight align-middle">
+                                  Smart
+                                </Badge>
+                              )}
+                            </p>
+                          </div>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {collection.fileCount ?? 0}
+                          </span>
+                          {onRenameCollection && (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-muted-foreground opacity-0 transition-opacity hover:bg-accent/50 hover:text-accent-foreground group-hover:opacity-100"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => onRenameCollection(collection.id, collection.name)}
+                              aria-label={`Rename ${collection.name}`}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="mr-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => handleDeleteCollection(collection.id, collection.name)}
+                            aria-label={`Delete playlist ${collection.name}`}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </section>

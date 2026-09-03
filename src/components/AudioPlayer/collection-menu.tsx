@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderPlus } from "lucide-react";
+import { Filter, FolderPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,7 @@ export function AudioPlayerCollectionMenu({
   collections,
   onAddToCollection,
 }: {
-  collections: { id: string; name: string; fileCount?: number }[];
+  collections: { id: string; name: string; fileCount?: number; isSmart?: boolean }[];
   onAddToCollection: (collectionId: string) => Promise<void>;
 }) {
   return (
@@ -53,7 +53,13 @@ export function AudioPlayerCollectionMenu({
                 onClick={() => onAddToCollection(collection.id)}
                 className="text-popover-foreground"
               >
+                {collection.isSmart ? (
+                  <Filter className="mr-2 size-3.5 shrink-0 text-muted-foreground" />
+                ) : null}
                 <span className="truncate">{collection.name}</span>
+                {collection.isSmart ? (
+                  <span className="ml-1 text-[10px] text-muted-foreground/60">Smart</span>
+                ) : null}
                 {typeof collection.fileCount === "number" ? (
                   <span className="ml-auto text-xs text-muted-foreground">
                     {collection.fileCount}

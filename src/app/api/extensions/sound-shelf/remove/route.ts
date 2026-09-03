@@ -1,21 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { createAppExtensionContext } from "@/lib/composition-root";
-import { createServiceWithStore, manifest } from "@foleyard/sound-shelf";
+import { createAppExtensionHost } from "@/lib/extensions/host";
 
-import { isExtensionEnabled } from "@/lib/extensions/registry";
-import { DbSoundShelfStore } from "@/lib/extensions/sound-shelf-store";
+import { toHostFailureResponse } from "../../host-outcome";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  if (!isExtensionEnabled("sound-shelf")) {
-    return NextResponse.json(
-      { error: "Extension is disabled" },
-      { status: 403 },
-    );
-  }
-
   const body = (await request.json()) as { fileIds?: string[] };
   const fileIds = body.fileIds;
 
@@ -26,11 +17,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const context = createAppExtensionContext({
-    permissions: manifest.permissions,
+  const outcome = await createAppExtensionHost().execute({
+    extensionId: "sound-shelf",
+    commandId: "sound-shelf.remove-selected",
+    selection: { fileIds },
   });
 
-  const service = createServiceWithStore(context, new DbSoundShelfStore());
+  if (outcome.ok && outcome.type === "value") {
+    return NextResponse.json(outcome.value);
+  }
 
-  return NextResponse.json(service.removeSelected(fileIds));
+  return toHostFailureResponse(outcome);
 }

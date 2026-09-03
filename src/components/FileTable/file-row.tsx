@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useMemo } from "react";
 import {
   ChevronRight,
   Copy,
@@ -12,16 +13,21 @@ import {
   Pause,
   Play,
   Puzzle,
+  Tags,
   X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
+  ContextMenuCheckboxItem,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuLabel,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -34,10 +40,16 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
 import { cn, formatDuration } from "@/lib/utils";
 
+import { TagPicker, type TagItem } from "@/components/TagPicker";
+
 import { highlightMatch } from "./highlight-match";
 import type { FileTableFileRecord } from "./types";
 
-export function FileTableFileRow({
+function fileTagIdsMemo(file: FileTableFileRecord): Set<string> {
+  return new Set(file.tags.map((t) => t.id));
+}
+
+export const FileTableFileRow = memo(function FileTableFileRow({
   desktop,
   file,
   handleCopyPath,
@@ -55,6 +67,8 @@ export function FileTableFileRow({
   showDesktopActions,
   makePackEnabled,
   soundShelfEnabled,
+  allTags,
+  onToggleFileTag,
   start,
   virtualIndex,
 }: {
@@ -79,12 +93,16 @@ export function FileTableFileRow({
   showDesktopActions: boolean;
   makePackEnabled: boolean;
   soundShelfEnabled: boolean;
+  allTags?: TagItem[];
+  onToggleFileTag?: (fileId: string, tagId: string) => void;
   start: number;
   virtualIndex: number;
 }) {
   const dispatchSoundShelfChanged = () => {
     window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
   };
+
+  const fileTagIds = useMemo(() => fileTagIdsMemo(file), [file]);
 
   return (
     <ContextMenu>
@@ -127,6 +145,40 @@ export function FileTableFileRow({
                 {file.format ?? "???"}
               </span>
               <span>{formatDuration(file.duration)}</span>
+              {file.tags.length > 0 ? (
+                <div className="flex items-center gap-1">
+                  {file.tags.slice(0, 3).map((tag) => (
+                    <span
+                      key={tag.id}
+                      className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-normal text-primary ring-1 ring-primary/20"
+                    >
+                      {tag.name}
+                      <button
+                        type="button"
+                        className="hover:text-destructive"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onToggleFileTag?.(file.id, tag.id);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  {file.tags.length > 3 ? (
+                    <span className="text-[9px] text-muted-foreground">
+                      +{file.tags.length - 3}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              <TagPicker
+                allTags={allTags ?? []}
+                fileTagIds={fileTagIds}
+                onToggleTag={(tagId) => onToggleFileTag?.(file.id, tagId)}
+                label="Tags"
+                align="start"
+              />
             </div>
           </div>
 
@@ -263,6 +315,33 @@ export function FileTableFileRow({
           <Copy />
           Copy path
         </ContextMenuItem>
+        <>
+          <ContextMenuSeparator />
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Tags className="size-4" />
+              Tags
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="w-48 max-h-64 overflow-y-auto">
+              {allTags && allTags.length > 0 ? (
+                allTags.map((tag) => (
+                  <ContextMenuCheckboxItem
+                    key={tag.id}
+                    checked={file.tags.some((t) => t.id === tag.id)}
+                    onCheckedChange={() => onToggleFileTag?.(file.id, tag.id)}
+                    className="text-popover-foreground"
+                  >
+                    {tag.name}
+                  </ContextMenuCheckboxItem>
+                ))
+              ) : (
+                <ContextMenuItem disabled className="text-muted-foreground">
+                  No tags yet
+                </ContextMenuItem>
+              )}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        </>
         {makePackEnabled ? (
           <>
             <ContextMenuSeparator />
@@ -312,4 +391,4 @@ export function FileTableFileRow({
       </ContextMenuContent>
     </ContextMenu>
   );
-}
+});

@@ -108,6 +108,36 @@ export class FolderJanitorService {
       issues,
     };
   }
+
+  removeFiles(fileIds: string[]) {
+    this.context.permissions.require("files:write");
+    const files = this.context.services.files;
+    if (!files) {
+      throw new Error("File service unavailable");
+    }
+
+    files.markRemoved(fileIds);
+    return { removed: fileIds.length };
+  }
+
+  deleteFolders(paths: string[]) {
+    this.context.permissions.require("files:delete");
+
+    return {
+      results: paths.map((folderPath) => {
+        try {
+          fs.rmdirSync(folderPath);
+          return { path: folderPath, ok: true };
+        } catch (error) {
+          return {
+            path: folderPath,
+            ok: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+          };
+        }
+      }),
+    };
+  }
 }
 
 async function findEmptyFolders(root: string): Promise<string[]> {

@@ -1,7 +1,9 @@
 "use client";
 
+import { useMemo } from "react";
 import { Pause, Play, X } from "lucide-react";
 
+import { TagPicker, type TagItem } from "@/components/TagPicker";
 import { AudioScrubber } from "@/components/ui/waveform";
 import { Button } from "@/components/ui/button";
 
@@ -28,8 +30,10 @@ export function AudioPlayerShell({
   title,
   volume,
   waveformData,
+  allTags,
+  onToggleFileTag,
 }: {
-  collections: { id: string; name: string; fileCount?: number }[];
+  collections: { id: string; name: string; fileCount?: number; isSmart?: boolean }[];
   currentTime: number;
   effectiveDuration: number;
   file: AudioPlayerFileRecord;
@@ -45,6 +49,8 @@ export function AudioPlayerShell({
   title: string;
   volume: number;
   waveformData: number[];
+  allTags?: TagItem[];
+  onToggleFileTag?: (fileId: string, tagId: string) => void;
 }) {
   return (
     <div className="fixed inset-x-4 bottom-4 z-50 md:left-[17rem] md:right-6">
@@ -74,8 +80,35 @@ export function AudioPlayerShell({
 
           <div className="min-w-0 flex-1 md:flex md:h-full md:flex-col md:justify-center">
             <div className="mb-2 hidden items-center justify-between gap-3 md:flex">
-              <div className="min-w-0 truncate text-base font-semibold leading-none text-card-foreground">
-                {title || file.filename}
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="min-w-0 truncate text-base font-semibold leading-none text-card-foreground">
+                  {title || file.filename}
+                </div>
+                {file.tags.length > 0 ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    {file.tags.map((tag) => (
+                      <span
+                        key={tag.id}
+                        className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-normal text-primary ring-1 ring-primary/20"
+                      >
+                        {tag.name}
+                        <button
+                          type="button"
+                          className="hover:text-destructive"
+                          onClick={() => onToggleFileTag?.(file.id, tag.id)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <TagPicker
+                  allTags={allTags ?? []}
+                  fileTagIds={useMemo(() => new Set(file.tags.map((t) => t.id)), [file])}
+                  onToggleTag={(tagId) => onToggleFileTag?.(file.id, tagId)}
+                  label="Tags"
+                />
               </div>
 
               <Button

@@ -1,7 +1,7 @@
 "use client";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRef } from "react";
+import { memo, useMemo, useRef } from "react";
 
 import { FileTableBreadcrumbBar } from "@/components/FileTable/breadcrumb-bar";
 import { useFileTableDesktopActions } from "@/components/FileTable/desktop-actions";
@@ -12,7 +12,7 @@ import type { FileTableProps } from "@/components/FileTable/types";
 
 export type { FileTableProps } from "@/components/FileTable/types";
 
-export function FileTable({
+export const FileTable = memo(function FileTable({
   files,
   directories,
   currentDirectory,
@@ -30,13 +30,18 @@ export function FileTable({
   onMakePackFile,
   folderJanitorEnabled = false,
   onScanFolder,
+  allTags,
+  onToggleFileTag,
 }: FileTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const desktopActions = useFileTableDesktopActions(onSelect);
-  const items = [
-    ...directories.map((directory) => ({ type: "directory" as const, data: directory })),
-    ...files.map((file) => ({ type: "file" as const, data: file })),
-  ];
+  const items = useMemo(
+    () => [
+      ...directories.map((directory) => ({ type: "directory" as const, data: directory })),
+      ...files.map((file) => ({ type: "file" as const, data: file })),
+    ],
+    [directories, files],
+  );
 
   const virtualizer = useVirtualizer({
     count: items.length,
@@ -141,6 +146,8 @@ export function FileTable({
                 soundShelfEnabled={soundShelfEnabled}
                 start={virtualRow.start}
                 virtualIndex={virtualRow.index}
+                allTags={allTags}
+                onToggleFileTag={onToggleFileTag}
               />
             );
           })}
@@ -148,4 +155,4 @@ export function FileTable({
       </div>
     </div>
   );
-}
+});

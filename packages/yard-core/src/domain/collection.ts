@@ -3,4 +3,6 @@ export interface Collection {
   name: string;
   createdAt?: string | null;
   fileCount?: number;
+  isSmart?: boolean;
+  filter?: string | null;
 }

@@ -33,6 +33,12 @@ export const manifest: YardExtensionManifest = {
       description: "Remove all files from the Sound Shelf scratchpad.",
       scope: "global",
     },
+    {
+      id: "sound-shelf.list",
+      title: "List Shelf",
+      description: "List the files in the Sound Shelf scratchpad.",
+      scope: "global",
+    },
   ],
   settings,
   surfaces: ["context-menu", "sidebar"],

@@ -10,11 +10,9 @@ import { SqliteSettingsRepository } from "@/lib/database/settings-repository";
 import { SqliteBrowseRepository } from "@/lib/database/browse-repository";
 
 import type { CollectionService, FavoriteService, LibraryService, TagService } from "@yard-core";
-import { EventBus, YardCommandRegistry } from "@yard-core";
+import { EventBus } from "@yard-core";
 
 import type { YardExtensionContext } from "@yard-core";
-import { createYardExtensionContext } from "@yard-core";
-import type { YardPermission } from "@yard-core";
 
 export type AppServices = {
   fileRepository: SqliteAudioFileRepository;
@@ -27,7 +25,6 @@ export type AppServices = {
   collectionService: CollectionService;
   favoriteService: FavoriteService;
   eventBus: EventBus;
-  commandRegistry: YardCommandRegistry;
 };
 
 let _services: AppServices | null = null;
@@ -43,7 +40,6 @@ export function getAppServices(): AppServices {
     const settingsRepo = new SqliteSettingsRepository(sqlite);
     const browseRepo = new SqliteBrowseRepository(sqlite);
     const eventBus = new EventBus();
-    const commandRegistry = new YardCommandRegistry();
 
     _services = {
       fileRepository: fileRepo,
@@ -60,31 +56,32 @@ export function getAppServices(): AppServices {
       collectionService: collectionRepo,
       favoriteService: fileRepo,
       eventBus,
-      commandRegistry,
     };
   }
   return _services;
 }
 
-export function createExtensionServices(): YardExtensionContext["services"] {
+export function createExtensionServices(): Omit<
+  YardExtensionContext["services"],
+  "commands" | "settings"
+> {
   const services = getAppServices();
   return {
     library: services.libraryService,
-    files: services.fileRepository,
+    files: {
+      markRemoved: (fileIds) => {
+        const removedAt = new Date().toISOString();
+        for (const fileId of fileIds) {
+          const file = services.fileRepository.getFileById(fileId);
+          if (file) {
+            services.fileRepository.markFileRemoved(file.path, removedAt);
+          }
+        }
+      },
+    },
     collections: services.collectionService,
     tags: services.tagService,
     favorites: services.favoriteService,
-    commands: services.commandRegistry,
     events: services.eventBus,
   };
-}
-
-export function createAppExtensionContext(options: {
-  permissions: YardPermission[];
-  selection?: { fileIds?: string[]; folderPath?: string; collectionId?: string };
-}): YardExtensionContext {
-  return createYardExtensionContext({
-    services: createExtensionServices(),
-    ...options,
-  });
 }

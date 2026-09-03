@@ -6,6 +6,7 @@ export interface AudioPlayerFileRecord {
   duration: number | null;
   fileSize: number | null;
   isFavorite: boolean;
+  tags: { id: string; name: string }[];
 }
 
 export interface AudioPlayerProps {
@@ -13,8 +14,10 @@ export interface AudioPlayerProps {
   onClose: () => void;
   onPlaybackChange?: (isPlaying: boolean) => void;
   onToggleFavorite: (id: string) => Promise<void>;
-  collections: { id: string; name: string; fileCount?: number }[];
+  collections: { id: string; name: string; fileCount?: number; isSmart?: boolean }[];
   onAddToCollection: (collectionId: string) => Promise<void>;
+  allTags?: { id: string; name: string }[];
+  onToggleFileTag?: (fileId: string, tagId: string) => void;
 }
 
 export interface AudioPlayerRef {

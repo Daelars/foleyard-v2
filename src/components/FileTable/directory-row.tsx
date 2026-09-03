@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { ChevronRight, Folder, Scan } from "lucide-react";
 
 import {
@@ -9,7 +10,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 
-export function FileTableDirectoryRow({
+export const FileTableDirectoryRow = memo(function FileTableDirectoryRow({
   dir,
   start,
   onNavigate,
@@ -61,4 +62,4 @@ export function FileTableDirectoryRow({
       </ContextMenuContent>
     </ContextMenu>
   );
-}
+});

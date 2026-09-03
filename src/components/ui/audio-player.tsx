@@ -110,6 +110,8 @@ export function AudioPlayerProvider<TData = unknown>({
   const [readyState, setReadyState] = useState<number>(0)
   const [networkState, setNetworkState] = useState<number>(0)
   const [time, setTime] = useState<number>(0)
+  const timeRafRef = useRef<number | null>(null)
+  const timeRef = useRef(0)
   const [duration, setDuration] = useState<number | undefined>(undefined)
   const [error, setError] = useState<MediaError | null>(null)
   const [activeItem, _setActiveItem] = useState<AudioPlayerItem<TData> | null>(
@@ -222,7 +224,15 @@ export function AudioPlayerProvider<TData = unknown>({
     const audio = audioRef.current
     if (!audio) return
 
-    const onTimeUpdate = () => setTime(audio.currentTime)
+    const onTimeUpdate = () => {
+      timeRef.current = audio.currentTime
+      if (timeRafRef.current === null) {
+        timeRafRef.current = requestAnimationFrame(() => {
+          timeRafRef.current = null
+          setTime(timeRef.current)
+        })
+      }
+    }
     const onPlay = () => setPaused(false)
     const onPause = () => setPaused(true)
     const onDurationChange = () => setDuration(audio.duration)

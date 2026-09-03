@@ -1,17 +1,36 @@
 "use client";
 
 import { useCallback } from "react";
-import { Folder, Heart, List, Settings, Activity, Puzzle } from "lucide-react";
+import { Filter, Folder, Heart, List, MoreVertical, Pencil, Settings, Activity, Puzzle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DotmSquare3 } from "@/components/ui/dotm-square-3";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
+export interface SidebarCollection {
+  id: string;
+  name: string;
+  fileCount?: number;
+  isSmart?: boolean;
+  filter?: string | null;
+}
 
 interface SidebarProps {
   currentView: "all" | "favorites" | "extensions" | "collection" | "directory";
-  collections: { id: string; name: string; fileCount?: number }[];
+  collections: SidebarCollection[];
   selectedCollection: string | null;
   tags: { id: string; name: string; color: string }[];
   scanStatus: {
@@ -27,6 +46,9 @@ interface SidebarProps {
   onSelectFavorites: () => void;
   onSelectExtensions: () => void;
   onSelectCollection: (id: string) => void;
+  onRenameCollection?: (id: string, name: string) => void;
+  onConvertToRegularCollection?: (id: string) => void;
+  onDeleteCollection?: (id: string) => void;
   onAction?: () => void;
 }
 
@@ -42,6 +64,9 @@ export function Sidebar({
   onSelectFavorites,
   onSelectExtensions,
   onSelectCollection,
+  onRenameCollection,
+  onConvertToRegularCollection,
+  onDeleteCollection,
   onAction,
 }: SidebarProps) {
   const libraryActive = currentView === "all" || currentView === "directory";
@@ -81,6 +106,18 @@ export function Sidebar({
     onSelectCollection(id);
     onAction?.();
   }, [onSelectCollection, onAction]);
+
+  const handleRenameCollection = useCallback((id: string, name: string) => {
+    onRenameCollection?.(id, name);
+  }, [onRenameCollection]);
+
+  const handleConvertToRegularCollection = useCallback((id: string) => {
+    onConvertToRegularCollection?.(id);
+  }, [onConvertToRegularCollection]);
+
+  const handleDeleteCollection = useCallback((id: string) => {
+    onDeleteCollection?.(id);
+  }, [onDeleteCollection]);
 
   const handleOpenSettings = useCallback(() => {
     onOpenSettings();
@@ -151,26 +188,129 @@ export function Sidebar({
             <div className="space-y-1">
               {collections.map((collection) => {
                 const active = selectedCollection === collection.id;
+                const isSmart = collection.isSmart ?? false;
+
+                const filterHint = isSmart && collection.filter
+                  ? (() => {
+                      try {
+                        const parsed = JSON.parse(collection.filter) as Record<string, string>;
+                        return Object.entries(parsed).map(([k, v]) => `${k}: "${v}"`).join(", ");
+                      } catch {
+                        return "";
+                      }
+                    })()
+                  : "";
+
+                const countEl = typeof collection.fileCount === "number" ? (
+                  <span className={cn("text-[10px] tabular-nums", active ? "text-primary" : "text-muted-foreground")}>
+                    {collection.fileCount}
+                  </span>
+                ) : null;
+
+                const actionMenu = (onRenameCollection || onConvertToRegularCollection || onDeleteCollection) && (
+                  <div className="flex items-center gap-0.5">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <span
+                            className="size-5 flex items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreVertical className="size-3" />
+                          </span>
+                        }
+                      />
+                      <DropdownMenuContent align="end" className="w-44">
+                        {onRenameCollection && (
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRenameCollection(collection.id, collection.name);
+                            }}
+                          >
+                            <Pencil className="mr-2 size-3.5" />
+                            Rename
+                          </DropdownMenuItem>
+                        )}
+                        {isSmart && onConvertToRegularCollection && (
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConvertToRegularCollection(collection.id);
+                            }}
+                          >
+                            <Filter className="mr-2 size-3.5" />
+                            Convert to Playlist
+                          </DropdownMenuItem>
+                        )}
+                        {onDeleteCollection && (
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteCollection(collection.id);
+                            }}
+                          >
+                            <Trash2 className="mr-2 size-3.5" />
+                            Delete
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                );
 
                 return (
-                  <Button
-                    key={collection.id}
-                    variant="ghost"
-                    className={cn(
-                      "h-8 text-sm font-normal",
-                      navItemClass,
-                      active && activeNavItemClass,
+                  <div key={collection.id} className="group">
+                    {isSmart && filterHint ? (
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              className={cn(
+                                "h-8 w-full text-sm font-normal",
+                                navItemClass,
+                                active && activeNavItemClass,
+                              )}
+                              onClick={() => handleSelectCollection(collection.id)}
+                            >
+                              <Filter className={cn("size-3.5 shrink-0", active && "text-primary")} />
+                              <span className="truncate">{collection.name}</span>
+                              <span className="ml-auto flex items-center gap-0.5">
+                                {countEl}
+                                {actionMenu}
+                              </span>
+                            </Button>
+                          }
+                        />
+                        <TooltipContent side="right" className="text-xs">
+                          {filterHint}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        className={cn(
+                          "h-8 w-full text-sm font-normal",
+                          navItemClass,
+                          active && activeNavItemClass,
+                        )}
+                        onClick={() => handleSelectCollection(collection.id)}
+                      >
+                        {isSmart ? (
+                          <Filter className={cn("size-3.5 shrink-0", active && "text-primary")} />
+                        ) : (
+                          <Folder className={cn("size-3.5 shrink-0", active && "text-primary")} />
+                        )}
+                        <span className="truncate">{collection.name}</span>
+                        <span className="ml-auto flex items-center gap-0.5">
+                          {countEl}
+                          {actionMenu}
+                        </span>
+                      </Button>
                     )}
-                      onClick={() => handleSelectCollection(collection.id)}
-                  >
-                    <Folder className={cn("size-3.5", active && "text-primary")} />
-                    <span className="truncate">{collection.name}</span>
-                    {typeof collection.fileCount === "number" && (
-                      <span className={cn("ml-auto text-[10px]", active ? "text-primary" : "text-muted-foreground")}>
-                        {collection.fileCount}
-                      </span>
-                    )}
-                  </Button>
+                  </div>
                 );
               })}
               {collections.length === 0 && (

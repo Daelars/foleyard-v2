@@ -8,7 +8,19 @@ const ZOOM_MAX = 200;
 const ZOOM_STEP = 10;
 
 export function useZoom() {
-  const [zoom, setZoom] = useState(100);
+  const [zoom, setZoom] = useState(() => {
+    if (typeof window === "undefined") {
+      return 100;
+    }
+
+    const savedZoom = window.localStorage.getItem(ZOOM_STORAGE_KEY);
+    if (!savedZoom) {
+      return 100;
+    }
+
+    const level = Number.parseInt(savedZoom, 10);
+    return Number.isNaN(level) ? 100 : level;
+  });
 
   const handleUpdateZoom = useCallback((level: number) => {
     setZoom(level);
@@ -18,16 +30,6 @@ export function useZoom() {
   const hardResetZoom = useCallback(() => {
     localStorage.removeItem(ZOOM_STORAGE_KEY);
     window.location.reload();
-  }, []);
-
-  useEffect(() => {
-    const savedZoom = localStorage.getItem(ZOOM_STORAGE_KEY);
-    if (savedZoom) {
-      const level = Number.parseInt(savedZoom, 10);
-      if (!Number.isNaN(level)) {
-        setZoom(level);
-      }
-    }
   }, []);
 
   useEffect(() => {

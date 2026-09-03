@@ -1,27 +1,31 @@
 import { NextResponse } from "next/server";
 
-import { createAppExtensionContext } from "@/lib/composition-root";
-import { createServiceWithStore, manifest } from "@foleyard/sound-shelf";
-
 import { getFileById } from "@/lib/db";
-import { isExtensionEnabled } from "@/lib/extensions/registry";
-import { DbSoundShelfStore } from "@/lib/extensions/sound-shelf-store";
+import { createAppExtensionHost } from "@/lib/extensions/host";
+
+import { toHostFailureResponse } from "../host-outcome";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  if (!isExtensionEnabled("sound-shelf")) {
+  const outcome = await createAppExtensionHost().execute<string[]>({
+    extensionId: "sound-shelf",
+    commandId: "sound-shelf.list",
+  });
+
+  if (!outcome.ok && outcome.reason === "extension-disabled") {
     return NextResponse.json({ items: [] });
   }
 
-  const context = createAppExtensionContext({
-    permissions: manifest.permissions,
-  });
+  if (!outcome.ok) {
+    return toHostFailureResponse(outcome);
+  }
 
-  const service = createServiceWithStore(context, new DbSoundShelfStore());
+  if (outcome.type === "ui-intent") {
+    return NextResponse.json({ error: "Unexpected UI intent" }, { status: 500 });
+  }
 
-  const items = service
-    .getItems()
+  const items = outcome.value
     .map((fileId) => {
       const file = getFileById(fileId);
       if (!file) {

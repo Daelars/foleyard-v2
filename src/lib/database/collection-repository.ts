@@ -1,4 +1,4 @@
-import { and, asc, count, eq, sql } from "drizzle-orm";
+import { and, asc, count, eq, like, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { v4 as uuid } from "uuid";
 
@@ -20,11 +20,13 @@ export class SqliteCollectionRepository implements CollectionRepository {
   }
 
   getAllCollections(): Collection[] {
-    return this.db
+    const collections = this.db
       .select({
         id: schema.collections.id,
         name: schema.collections.name,
         createdAt: schema.collections.createdAt,
+        isSmart: schema.collections.isSmart,
+        filter: schema.collections.filter,
         fileCount: count(schema.files.id),
       })
       .from(schema.collections)
@@ -32,13 +34,50 @@ export class SqliteCollectionRepository implements CollectionRepository {
       .leftJoin(schema.files, and(eq(schema.files.id, schema.fileCollections.fileId), sql`${schema.files.removedAt} IS NULL`))
       .groupBy(schema.collections.id)
       .orderBy(asc(schema.collections.name))
-      .all() as Collection[];
+      .all() as unknown as Collection[];
+
+    for (const c of collections) {
+      if (c.isSmart && c.filter) {
+        try {
+          const parsed = JSON.parse(c.filter) as { q?: string };
+          if (parsed.q) {
+            const result = this.db
+              .select({ count: count() })
+              .from(schema.files)
+              .where(
+                and(
+                  sql`${schema.files.removedAt} IS NULL`,
+                  like(schema.files.filename, `%${parsed.q}%`),
+                ),
+              )
+              .get() as { count: number } | undefined;
+            c.fileCount = result?.count ?? 0;
+          }
+        } catch {
+          // Invalid filter JSON, leave fileCount as-is
+        }
+      }
+    }
+
+    return collections;
   }
 
-  createCollection(name: string): string {
+  createCollection(name: string, isSmart?: boolean, filter?: string): string {
     const id = uuid();
-    this.db.insert(schema.collections).values({ id, name }).run();
+    this.db.insert(schema.collections).values({ id, name, isSmart: isSmart ? 1 : 0, filter }).run();
     return id;
+  }
+
+  createSmartCollection(name: string, filter: string): string {
+    return this.createCollection(name, true, filter);
+  }
+
+  renameCollection(id: string, name: string): void {
+    this.db.update(schema.collections).set({ name }).where(eq(schema.collections.id, id)).run();
+  }
+
+  updateCollectionFilter(id: string, filter: string): void {
+    this.db.update(schema.collections).set({ filter }).where(eq(schema.collections.id, id)).run();
   }
 
   deleteCollection(collectionId: string): void {
@@ -65,6 +104,49 @@ export class SqliteCollectionRepository implements CollectionRepository {
       )
       .run();
   }
+
+  convertToRegularCollection(collectionId: string): void {
+    const collection = this.db
+      .select({ filter: schema.collections.filter })
+      .from(schema.collections)
+      .where(eq(schema.collections.id, collectionId))
+      .get() as { filter: string | null } | undefined;
+
+    if (collection?.filter) {
+      try {
+        const parsed = JSON.parse(collection.filter) as { q?: string };
+        if (parsed.q) {
+          const files = this.db
+            .select({ id: schema.files.id })
+            .from(schema.files)
+            .where(
+              and(
+                sql`${schema.files.removedAt} IS NULL`,
+                like(schema.files.filename, `%${parsed.q}%`),
+              ),
+            )
+            .all() as { id: string }[];
+
+          const insertValues = files.map((f) => ({
+            fileId: f.id,
+            collectionId,
+          }));
+
+          if (insertValues.length > 0) {
+            this.db.insert(schema.fileCollections).values(insertValues).onConflictDoNothing().run();
+          }
+        }
+      } catch {
+        // Invalid filter JSON, skip file attachment
+      }
+    }
+
+    this.db
+      .update(schema.collections)
+      .set({ isSmart: 0, filter: null })
+      .where(eq(schema.collections.id, collectionId))
+      .run();
+  }
 }
 
 let _collectionRepo: SqliteCollectionRepository | null = null;
@@ -76,7 +158,11 @@ function getCollectionRepo(): SqliteCollectionRepository {
 }
 
 export const getAllCollections = () => getCollectionRepo().getAllCollections();
-export const createCollection = (name: string) => getCollectionRepo().createCollection(name);
+export const createCollection = (name: string, isSmart?: boolean, filter?: string) => getCollectionRepo().createCollection(name, isSmart, filter);
+export const createSmartCollection = (name: string, filter: string) => getCollectionRepo().createSmartCollection(name, filter);
+export const renameCollection = (id: string, name: string) => getCollectionRepo().renameCollection(id, name);
+export const updateCollectionFilter = (id: string, filter: string) => getCollectionRepo().updateCollectionFilter(id, filter);
 export const deleteCollection = (collectionId: string) => getCollectionRepo().deleteCollection(collectionId);
 export const attachFileToCollection = (fileId: string, collectionId: string) => getCollectionRepo().attachFileToCollection(fileId, collectionId);
 export const detachFileFromCollection = (fileId: string, collectionId: string) => getCollectionRepo().detachFileFromCollection(fileId, collectionId);
+export const convertToRegularCollection = (collectionId: string) => getCollectionRepo().convertToRegularCollection(collectionId);

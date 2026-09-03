@@ -7,6 +7,12 @@ export interface FileTableFileRecord {
   duration: number | null;
   fileSize: number | null;
   isFavorite: boolean;
+  tags: { id: string; name: string }[];
+}
+
+export interface FileTableFileTag {
+  id: string;
+  name: string;
 }
 
 export interface FileTableProps {
@@ -27,4 +33,6 @@ export interface FileTableProps {
   onMakePackFile?: (file: FileTableFileRecord) => Promise<void>;
   folderJanitorEnabled?: boolean;
   onScanFolder?: (folderPath: string) => void;
+  allTags?: FileTableFileTag[];
+  onToggleFileTag?: (fileId: string, tagId: string) => void;
 }

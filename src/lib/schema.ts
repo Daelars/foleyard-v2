@@ -46,6 +46,8 @@ export const collections = sqliteTable('collections', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  isSmart: integer('is_smart').notNull().default(0),
+  filter: text('filter'),
 });
 
 export const fileCollections = sqliteTable(

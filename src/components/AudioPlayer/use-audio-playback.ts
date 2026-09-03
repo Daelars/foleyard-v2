@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { computeAndCachePeaks } from "@/lib/client-waveform";
+
 import type { AudioPlayerFileRecord } from "./types";
 
 const VOLUME_STORAGE_KEY = "foleyard-volume";
@@ -17,7 +19,10 @@ export function useAudioPlayback(
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [waveformData] = useState<number[]>([]);
+  const [waveform, setWaveform] = useState<{
+    fileId: string;
+    data: number[];
+  } | null>(null);
   const [volume, setVolume] = useState(() => {
     if (typeof window === "undefined") {
       return 0.72;
@@ -78,6 +83,22 @@ export function useAudioPlayback(
       if (audioRef.current === audio) {
         audioRef.current = null;
       }
+    };
+  }, [selectedFile.id]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    computeAndCachePeaks(selectedFile.id, controller.signal)
+      .then((peaks) => {
+        if (!controller.signal.aborted) {
+          setWaveform({ fileId: selectedFile.id, data: peaks });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      controller.abort();
     };
   }, [selectedFile.id]);
 
@@ -152,6 +173,6 @@ export function useAudioPlayback(
     title,
     togglePlayback,
     volume,
-    waveformData,
+    waveformData: waveform?.fileId === selectedFile.id ? waveform.data : [],
   };
 }

@@ -125,6 +125,10 @@ export class YardExtensionRegistry {
     this.extensions.set(extension.manifest.id, extension);
   }
 
+  has(extensionId: string): boolean {
+    return this.extensions.has(extensionId);
+  }
+
   unregister(extensionId: string): void {
     this.extensions.delete(extensionId);
   }

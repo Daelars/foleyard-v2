@@ -27,6 +27,16 @@ export type PermissionChecker = {
   list(): YardPermission[];
 };
 
+export class YardPermissionError extends YardCoreError {
+  constructor(readonly permission: YardPermission) {
+    super(
+      `Missing required permission "${permission}".`,
+      "EXTENSION_PERMISSION_DENIED",
+    );
+    this.name = "YardPermissionError";
+  }
+}
+
 export function createPermissionChecker(
   permissions: YardPermission[],
 ): PermissionChecker {
@@ -38,9 +48,7 @@ export function createPermissionChecker(
     },
     require(permission: YardPermission) {
       if (!grantedPermissions.has(permission)) {
-        throw new YardCoreError(
-          `Missing required permission "${permission}".`,
-        );
+        throw new YardPermissionError(permission);
       }
     },
     list() {

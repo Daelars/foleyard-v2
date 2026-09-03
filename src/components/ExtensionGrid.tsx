@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ArrowUpRight, MoreHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -67,13 +67,9 @@ function getPrimaryAction(extension: ExtensionGridItem): {
       label: "Clear shelf",
       command: "sound-shelf.clear",
     },
-    "rename-hammer": {
-      label: "Rename files",
-      command: "rename-hammer.open",
-    },
     "drop-rules": {
       label: "Configure rules",
-      command: "drop-rules.prepare-drag",
+      command: "drop-rules.open-settings",
     },
   };
   return map[extension.id] ?? null;
@@ -217,14 +213,22 @@ export function ExtensionGrid({
   const showEmptyState = !isLoading && extensions.length === 0;
 
   const [mouse, setMouse] = useState({ x: 50, y: 50 });
+  const rafRef = useRef<number | null>(null);
+  const mouseRef = useRef({ x: 50, y: 50 });
 
   const handleGridMouseMove = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const rect = e.currentTarget.getBoundingClientRect();
-      setMouse({
+      mouseRef.current = {
         x: ((e.clientX - rect.left) / rect.width) * 100,
         y: ((e.clientY - rect.top) / rect.height) * 100,
-      });
+      };
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = null;
+          setMouse({ ...mouseRef.current });
+        });
+      }
     },
     [],
   );

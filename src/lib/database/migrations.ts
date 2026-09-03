@@ -78,6 +78,9 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   ensureColumn(sqlite, "files", "directory", "directory TEXT");
   ensureColumn(sqlite, "files", "codec", "codec TEXT");
 
+  ensureColumn(sqlite, "collections", "is_smart", "is_smart INTEGER DEFAULT 0");
+  ensureColumn(sqlite, "collections", "filter", "filter TEXT");
+
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_filename ON files(filename)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_removed_at ON files(removed_at)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_is_favorite ON files(is_favorite)`);

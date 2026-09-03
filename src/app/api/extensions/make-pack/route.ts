@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { createAppExtensionContext } from "@/lib/composition-root";
-import { createService, manifest, type MakePackFile } from "@foleyard/make-pack";
+import type { MakePackFile } from "@foleyard/make-pack";
 
 import { getFileById } from "@/lib/db";
-import { isExtensionEnabled } from "@/lib/extensions/registry";
+import { createAppExtensionHost } from "@/lib/extensions/host";
 import { getRecentMakePackFileIds } from "@/lib/extensions/make-pack-recent-store";
 import { DbSoundShelfStore } from "@/lib/extensions/sound-shelf-store";
+
+import { toHostFailureResponse } from "../host-outcome";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,13 +41,6 @@ function hydrateFiles(fileIds: string[]): MakePackFile[] {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isExtensionEnabled("make-pack")) {
-    return NextResponse.json(
-      { error: "Extension is disabled" },
-      { status: 403 },
-    );
-  }
-
   const body = (await request.json()) as {
     source?: "selection" | "shelf" | "recent";
     fileIds?: string[];
@@ -80,26 +74,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const context = createAppExtensionContext({
-    permissions: manifest.permissions,
+  const commandId = `make-pack.from-${body.source}`;
+  const outcome = await createAppExtensionHost().execute({
+    extensionId: "make-pack",
+    commandId,
     selection: { fileIds },
-  });
-
-  try {
-    const result = await createService(context).createPack({
-      source: body.source,
+    input: {
       files: hydrateFiles(fileIds),
       destinationDirectory: body.destinationDirectory,
       packName: body.packName,
       outputFormat: body.outputFormat,
-      includeManifest: true,
-    });
+    },
+  });
 
-    return NextResponse.json(result);
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to make pack" },
-      { status: 500 },
-    );
+  if (outcome.ok && outcome.type === "value") {
+    return NextResponse.json(outcome.value);
   }
+
+  return toHostFailureResponse(outcome);
 }

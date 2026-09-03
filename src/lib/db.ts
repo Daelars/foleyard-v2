@@ -5,10 +5,13 @@ export {
 } from "@/lib/database/browse-repository";
 export {
   attachFileToCollection,
+  convertToRegularCollection,
   createCollection,
   deleteCollection,
   detachFileFromCollection,
   getAllCollections,
+  renameCollection,
+  updateCollectionFilter,
 } from "@/lib/database/collection-repository";
 export {
   batchMarkRemoved,
@@ -48,6 +51,7 @@ export {
   detachTagFromFile,
   getAllTags,
   getTagsForFile,
+  getTagsForFiles,
 } from "@/lib/database/tag-repository";
 
 export type FileRecord = typeof import("@/lib/schema").files.$inferSelect;

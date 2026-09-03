@@ -10,7 +10,7 @@ export function highlightMatch(text: string, query: string): React.ReactNode {
     part.toLowerCase() === query.toLowerCase() ? (
       <mark
         key={index}
-        className="rounded-sm bg-primary/30 px-0.5 text-primary-foreground"
+        className="rounded-sm bg-accent-fill/30 px-0.5 text-zinc-50"
       >
         {part}
       </mark>

@@ -19,18 +19,18 @@ export function FileTableBreadcrumbBar({
   onNavigateLibrary: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 border-b border-border/40 bg-card/60 px-6 py-2 backdrop-blur-xl">
+    <div className="flex items-center gap-2 border-b border-white/5 px-6 py-2">
       <Button
         variant="ghost"
         size="icon"
-        className="size-7 rounded-full"
+        className="size-7 rounded-full text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
         onClick={onBack}
       >
         <ChevronLeft className="size-4" />
       </Button>
-      <div className="flex items-center gap-1 overflow-hidden text-xs font-medium text-muted-foreground">
+      <div className="flex items-center gap-1 overflow-hidden text-xs font-medium text-zinc-400">
         <span
-          className="cursor-pointer transition-colors hover:text-accent-foreground"
+          className="cursor-pointer transition-colors hover:text-accent-text"
           onClick={onNavigateLibrary}
         >
           Library
@@ -41,8 +41,8 @@ export function FileTableBreadcrumbBar({
                 <span className="opacity-40">/</span>
                 <span
                   className={cn(
-                    "max-w-[150px] cursor-pointer truncate transition-colors hover:text-accent-foreground",
-                    index === allParts.length - 1 && "font-bold text-foreground",
+                    "max-w-[150px] cursor-pointer truncate transition-colors hover:text-accent-text",
+                    index === allParts.length - 1 && "font-bold text-zinc-100",
                   )}
                   onClick={() => onNavigate(allParts.slice(0, index + 1).join("/"))}
                 >
@@ -54,7 +54,7 @@ export function FileTableBreadcrumbBar({
         {currentPlaylistName ? (
           <>
             <span className="opacity-40">/</span>
-            <span className="flex max-w-[220px] items-center gap-1 truncate font-bold text-foreground">
+            <span className="flex max-w-[220px] items-center gap-1 truncate font-bold text-zinc-100">
               <ListMusic className="size-3" />
               {currentPlaylistName}
             </span>

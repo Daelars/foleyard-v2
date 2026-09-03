@@ -109,10 +109,8 @@ export const FileTableFileRow = memo(function FileTableFileRow({
       <ContextMenuTrigger>
         <div
           className={cn(
-            "group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-border/35 px-4 py-2 transition-[background-color,color,box-shadow] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-            isSelected
-              ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--primary)] backdrop-blur"
-              : "hover:bg-accent/50 hover:text-accent-foreground hover:backdrop-blur",
+            "group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-white/5 px-4 py-2 transition-[background-color,color,box-shadow] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            isSelected ? "bg-accent-fill/10" : "hover:bg-white/[0.04]",
             isDragging && "opacity-60",
           )}
           style={{
@@ -121,27 +119,33 @@ export const FileTableFileRow = memo(function FileTableFileRow({
           }}
           onClick={() => onSelect(file, virtualIndex)}
         >
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted/45 ring-1 ring-border/50">
+          {isSelected && (
+            <span className="pointer-events-none absolute inset-y-2 left-0 w-[3px] rounded-full bg-accent-fill shadow-glow-accent" />
+          )}
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10">
             {isSelected && isSelectedFilePlaying ? (
-              <Pause className="size-4 fill-current text-primary transition-all" />
+              <Pause className="size-4 fill-current text-accent-text transition-all" />
             ) : (
               <Play
                 className={cn(
                   "size-4 transition-all",
                   isSelected
-                    ? "fill-current text-primary"
-                    : "text-muted-foreground/60 group-hover:text-muted-foreground",
+                    ? "fill-current text-accent-text"
+                    : "text-zinc-500 group-hover:text-zinc-300",
                 )}
               />
             )}
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium text-foreground transition-colors group-hover:text-primary">
+            <div className={cn(
+              "truncate text-sm font-medium transition-colors group-hover:text-zinc-50",
+              isSelected ? "font-semibold text-zinc-50" : "text-zinc-100",
+            )}>
               {highlightMatch(file.filename, searchQuery)}
             </div>
-            <div className="mt-1 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <span className="rounded bg-muted/50 px-1.5 py-0.5 text-[9px] ring-1 ring-border/50">
+            <div className="mt-1 flex items-center gap-3 font-mono text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] ring-1 ring-white/10">
                 {file.format ?? "???"}
               </span>
               <span>{formatDuration(file.duration)}</span>
@@ -150,7 +154,7 @@ export const FileTableFileRow = memo(function FileTableFileRow({
                   {file.tags.slice(0, 3).map((tag) => (
                     <span
                       key={tag.id}
-                      className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-normal text-primary ring-1 ring-primary/20"
+                      className="inline-flex items-center gap-1 rounded-full bg-accent-fill/15 px-1.5 py-0.5 font-mono text-[9px] font-normal text-accent-text ring-1 ring-accent-fill/20"
                     >
                       {tag.name}
                       <button
@@ -166,7 +170,7 @@ export const FileTableFileRow = memo(function FileTableFileRow({
                     </span>
                   ))}
                   {file.tags.length > 3 ? (
-                    <span className="text-[9px] text-muted-foreground">
+                    <span className="font-mono text-[9px] text-zinc-500">
                       +{file.tags.length - 3}
                     </span>
                   ) : null}
@@ -192,11 +196,11 @@ export const FileTableFileRow = memo(function FileTableFileRow({
                       tabIndex={0}
                       draggable
                       className={cn(
-                        "flex size-8 items-center justify-center rounded-full text-muted-foreground/65 opacity-0 transition-all group-hover:opacity-100",
+                        "flex size-8 items-center justify-center rounded-full text-zinc-500 opacity-0 transition-all group-hover:opacity-100",
                         showDesktopActions && "opacity-100",
                         isDragging && "cursor-grabbing",
                         !isDragging &&
-                          "cursor-grab hover:bg-accent/50 hover:text-accent-foreground",
+                          "cursor-grab hover:bg-white/5 hover:text-zinc-200",
                       )}
                       onClick={(event) => event.stopPropagation()}
                       onMouseDown={(event) => {
@@ -228,8 +232,8 @@ export const FileTableFileRow = memo(function FileTableFileRow({
                     className={cn(
                       "size-8 rounded-full transition-all",
                       file.isFavorite
-                        ? "bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary"
-                        : "text-muted-foreground/60 hover:bg-accent/50 hover:text-accent-foreground",
+                        ? "text-accent-fill hover:text-accent-fill"
+                        : "text-zinc-500 hover:bg-white/5 hover:text-accent-text",
                     )}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -253,7 +257,7 @@ export const FileTableFileRow = memo(function FileTableFileRow({
                       variant="ghost"
                       size="icon"
                       className={cn(
-                        "size-8 rounded-full text-muted-foreground/60 opacity-0 transition-all hover:bg-accent/50 hover:text-accent-foreground group-hover:opacity-100",
+                        "size-8 rounded-full text-zinc-500 opacity-0 transition-all hover:bg-white/5 hover:text-zinc-200 group-hover:opacity-100",
                         isSelected && "opacity-100",
                       )}
                       onClick={(event) => event.stopPropagation()}
@@ -285,9 +289,9 @@ export const FileTableFileRow = memo(function FileTableFileRow({
 
             <ChevronRight
               className={cn(
-                "size-4 text-muted-foreground transition-transform",
+                "size-4 text-zinc-500 transition-transform",
                 isSelected
-                  ? "translate-x-1 text-primary"
+                  ? "translate-x-1 text-accent-text"
                   : "group-hover:translate-x-0.5",
               )}
             />

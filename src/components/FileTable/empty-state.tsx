@@ -14,16 +14,16 @@ export function FileTableEmptyState({
   onBack: () => void;
 }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center p-8 text-center text-muted-foreground">
-      <div className="mb-4 flex size-16 items-center justify-center rounded-full border border-border/40 bg-card/60 shadow-lg backdrop-blur-xl">
+    <div className="flex flex-1 flex-col items-center justify-center p-8 text-center text-zinc-500">
+      <div className="mb-4 flex size-16 items-center justify-center rounded-full border border-white/10 bg-white/[0.03]">
         <Play className="size-8 opacity-20" />
       </div>
-      <h3 className="text-lg font-medium">No sounds found</h3>
+      <h3 className="text-lg font-semibold text-zinc-300">No sounds found</h3>
       {(currentDirectory || currentPlaylistName) && (
         <Button
           variant="outline"
           size="sm"
-          className="mt-4 gap-2 rounded-xl"
+          className="mt-4 gap-2 rounded-xl border-white/10 bg-white/5 text-zinc-200 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100"
           onClick={onBack}
         >
           <ChevronLeft className="size-4" /> Go Back

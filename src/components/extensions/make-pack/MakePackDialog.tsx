@@ -7,7 +7,6 @@ import {
   Loader2,
   PackagePlus,
   FileAudio,
-  FileJson,
   FileText,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -20,7 +19,6 @@ import {
 } from "@/components/ui/radio-group"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { getDesktopBridge, isDesktopApp } from "@/lib/desktop"
@@ -30,6 +28,7 @@ interface MakePackDialogProps {
   onOpenChange: (open: boolean) => void
   initialSource?: "selection" | "shelf" | "recent"
   initialFileIds?: string[]
+  initialOutputFormat?: "folder" | "zip"
 }
 
 export function MakePackDialog({
@@ -37,16 +36,16 @@ export function MakePackDialog({
   onOpenChange,
   initialSource = "selection",
   initialFileIds = [],
+  initialOutputFormat = "zip",
 }: MakePackDialogProps) {
   const [source, setSource] = useState<"selection" | "shelf" | "recent">(
     initialSource
   )
   const [packName, setPackName] = useState("")
   const [destDir, setDestDir] = useState("")
-  const [outputFormat, setOutputFormat] = useState<"folder" | "zip">("zip")
-  const [includeTracklist, setIncludeTracklist] = useState(true)
-  const [includeMetadata, setIncludeMetadata] = useState(true)
-  const [cleanFilenames, setCleanFilenames] = useState(true)
+  const [outputFormat, setOutputFormat] = useState<"folder" | "zip">(
+    initialOutputFormat
+  )
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<{
     fileCount: number
@@ -66,13 +65,10 @@ export function MakePackDialog({
             : "Recent Sounds Pack"
       )
       setDestDir("")
-      setOutputFormat("zip")
-      setIncludeTracklist(true)
-      setIncludeMetadata(true)
-      setCleanFilenames(true)
+      setOutputFormat(initialOutputFormat)
       setResult(null)
     }
-  }, [open, initialSource])
+  }, [open, initialSource, initialOutputFormat])
 
   const handlePickDest = useCallback(async () => {
     if (!isDesktopApp()) {
@@ -105,9 +101,6 @@ export function MakePackDialog({
         destinationDirectory: destDir.trim(),
         packName: packName.trim(),
         outputFormat,
-        includeTracklist,
-        includeMetadata,
-        cleanFilenames,
       }
 
       const res = await fetch("/api/extensions/make-pack", {
@@ -136,9 +129,6 @@ export function MakePackDialog({
     destDir,
     packName,
     outputFormat,
-    includeTracklist,
-    includeMetadata,
-    cleanFilenames,
   ])
 
   const footer = !result ? (
@@ -250,70 +240,6 @@ export function MakePackDialog({
               <RadioGroupItem value="folder">Folder</RadioGroupItem>
               <RadioGroupItem value="zip">Zip archive</RadioGroupItem>
             </RadioGroup>
-          </section>
-
-          <section className="space-y-3 rounded-xl border border-border/40 bg-muted/30 p-4">
-            <div className="flex items-center gap-2">
-              <FileJson className="size-4 text-primary" />
-              <span className="text-sm font-medium">Pack options</span>
-            </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <Label
-                  htmlFor="include-tracklist"
-                  className="text-sm font-normal"
-                >
-                  Include tracklist
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Add a markdown tracklist file
-                </p>
-              </div>
-              <Switch
-                id="include-tracklist"
-                checked={includeTracklist}
-                onCheckedChange={setIncludeTracklist}
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <Label
-                  htmlFor="include-metadata"
-                  className="text-sm font-normal"
-                >
-                  Include metadata JSON
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Export file metadata as JSON
-                </p>
-              </div>
-              <Switch
-                id="include-metadata"
-                checked={includeMetadata}
-                onCheckedChange={setIncludeMetadata}
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <Label
-                  htmlFor="clean-filenames"
-                  className="text-sm font-normal"
-                >
-                  Clean filenames
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Normalize whitespace and special chars
-                </p>
-              </div>
-              <Switch
-                id="clean-filenames"
-                checked={cleanFilenames}
-                onCheckedChange={setCleanFilenames}
-              />
-            </div>
           </section>
 
           {result ? (

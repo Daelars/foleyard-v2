@@ -20,7 +20,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +55,6 @@ export function LibraryGathererDialog({
   const [sourceFolders, setSourceFolders] = useState<string[]>([]);
   const [newFolderPath, setNewFolderPath] = useState("");
   const [destDir, setDestDir] = useState("");
-  const [copyMode, setCopyMode] = useState<"copy" | "move">("copy");
   const [isLoading, setIsLoading] = useState(false);
   const [previewResult, setPreviewResult] =
     useState<GatherPreviewResult | null>(null);
@@ -271,28 +269,6 @@ export function LibraryGathererDialog({
                 </Button>
               )}
             </div>
-          </section>
-
-          <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
-            <div className="flex items-center gap-2">
-              <FileInput className="size-4 text-primary" />
-              <span className="text-sm font-medium">Copy mode</span>
-            </div>
-
-            <RadioGroup
-              value={copyMode}
-              onValueChange={(v) => setCopyMode(v as "copy" | "move")}
-            >
-              <RadioGroupItem value="copy">
-                Copy files, keep originals
-              </RadioGroupItem>
-              <RadioGroupItem value="move">
-                Move files after copying
-                <span className="ml-1.5 text-xs text-muted-foreground">
-                  (advanced)
-                </span>
-              </RadioGroupItem>
-            </RadioGroup>
           </section>
 
           {previewResult && (

@@ -42,7 +42,10 @@ function toGridItem(manifest: YardExtensionManifest): ExtensionGridItem {
     category: manifest.category,
     enabled: getExtensionEnabled(manifest.id),
     commandCount: manifest.commands.length,
-    commands: manifest.commands.map((command) => command.title),
+    commands: manifest.commands.map((command) => ({
+      id: command.id,
+      title: command.title,
+    })),
     permissionCount: manifest.permissions.length,
     permissions: [...manifest.permissions],
     surfaceCount: manifest.surfaces?.length ?? 0,

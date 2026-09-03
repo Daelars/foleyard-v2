@@ -16,7 +16,11 @@ afterEach(() => {
   }
 });
 
-function createHost(options?: { enabled?: boolean; permissions?: string[] }) {
+function createHost(options?: {
+  enabled?: boolean;
+  permissions?: string[];
+  settings?: Record<string, unknown>;
+}) {
   const registry = new YardExtensionRegistry();
   registry.register({
     manifest: options?.permissions
@@ -28,7 +32,8 @@ function createHost(options?: { enabled?: boolean; permissions?: string[] }) {
   return new YardExtensionHost({
     registry,
     isEnabled: () => options?.enabled ?? true,
-    getSettingValue: (_extensionId, _settingId, defaultValue) => defaultValue,
+    getSettingValue: (_extensionId, settingId, defaultValue) =>
+      options?.settings?.[settingId] ?? defaultValue,
   });
 }
 
@@ -165,5 +170,47 @@ describe("Make Pack commands", () => {
         },
       }),
     ).resolves.toMatchObject({ ok: false, reason: "permission-denied" });
+  });
+
+  it("falls back to the host-resolved default format", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "make-pack-command-"));
+    tempDirectories.push(root);
+
+    await expect(
+      createHost({ settings: { "default-format": "zip" } }).execute({
+        extensionId: "make-pack",
+        commandId: "make-pack.from-shelf",
+        input: {
+          files: [createSourceFile(root)],
+          destinationDirectory: path.join(root, "packs"),
+          packName: "format-pack",
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      type: "value",
+      value: { ok: true, outputFormat: "zip" },
+    });
+  });
+
+  it("uses the folder default format without an override", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "make-pack-command-"));
+    tempDirectories.push(root);
+
+    await expect(
+      createHost().execute({
+        extensionId: "make-pack",
+        commandId: "make-pack.from-shelf",
+        input: {
+          files: [createSourceFile(root)],
+          destinationDirectory: path.join(root, "packs"),
+          packName: "format-pack",
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      type: "value",
+      value: { ok: true, outputFormat: "folder" },
+    });
   });
 });

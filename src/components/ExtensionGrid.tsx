@@ -17,7 +17,10 @@ export type ExtensionGridItem = {
   commandCount?: number;
   permissionCount?: number;
   surfaceCount?: number;
-  commands?: string[];
+  commands?: Array<{
+    id: string;
+    title: string;
+  }>;
   permissions?: string[];
   surfaces?: string[];
   settingsCount?: number;

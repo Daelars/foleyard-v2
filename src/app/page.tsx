@@ -1104,6 +1104,13 @@ function HomeContent() {
   const handleCloseMobileSidebar = useCallback(() => setShowMobileSidebar(false), []);
   const handleOpenSettings = useCallback(() => setShowSettings(true), []);
 
+  const makePackDefaultFormat = useMemo(() => {
+    const value = extensions
+      .find((e) => e.id === "make-pack")
+      ?.settings?.find((s) => s.id === "default-format")?.value;
+    return value === "zip" || value === "folder" ? value : "zip";
+  }, [extensions]);
+
   const handleRecentPack = useCallback(() => {
     void executeHostedCommand("make-pack", "make-pack.from-recent");
   }, [executeHostedCommand]);
@@ -1436,19 +1443,19 @@ function HomeContent() {
                   <div className="flex flex-wrap gap-2">
                     {selectedExtension.commands.map((command) => (
                       <button
-                        key={command}
+                        key={command.id}
                         type="button"
                         onClick={() => {
                           setSelectedExtension(null);
                           handleRunCommand(
                             selectedExtension.id,
-                            command,
+                            command.id,
                           );
                         }}
                         className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 text-xs text-muted-foreground ring-1 ring-border/50 transition-colors hover:bg-primary/10 hover:text-primary hover:ring-primary/30"
-                        title={`Run: ${command}`}
+                        title={`Run: ${command.title}`}
                       >
-                        {command}
+                        {command.title}
                       </button>
                     ))}
                   </div>
@@ -1535,6 +1542,7 @@ function HomeContent() {
         onOpenChange={handleClosePack}
         initialSource={packSource ?? "selection"}
         initialFileIds={packFileIds}
+        initialOutputFormat={makePackDefaultFormat}
       />
 
       <RenameHammerDialog

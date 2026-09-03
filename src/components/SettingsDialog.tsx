@@ -776,7 +776,7 @@ function SettingsDialogBody({
                             className="mr-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => handleDeleteCollection(collection.id, collection.name)}
-                            aria-label={`Delete playlist ${collection.name}`}
+                                aria-label={`Delete collection ${collection.name}`}
                           >
                             <Trash2 className="size-4" />
                           </Button>

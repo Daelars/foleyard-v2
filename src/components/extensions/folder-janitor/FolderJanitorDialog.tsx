@@ -59,11 +59,11 @@ interface FolderJanitorDialogProps {
 
 const ISSUE_GROUPS: { kind: IssueKind; label: string }[] = [
   { kind: "duplicate", label: "Duplicates" },
-  { kind: "missing-file", label: "Missing Files" },
-  { kind: "broken", label: "Broken Files" },
-  { kind: "tiny-file", label: "Tiny Files" },
-  { kind: "weird-format", label: "Unusual Formats" },
-  { kind: "empty-folder", label: "Empty Folders" },
+  { kind: "missing-file", label: "Missing files" },
+  { kind: "broken", label: "Broken files" },
+  { kind: "tiny-file", label: "Tiny files" },
+  { kind: "weird-format", label: "Unusual formats" },
+  { kind: "empty-folder", label: "Empty folders" },
 ];
 
 export function FolderJanitorDialog({
@@ -219,7 +219,7 @@ export function FolderJanitorDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Folder Janitor"
-      description="Find duplicates, broken files, empty folders, tiny junk files, and weird formats."
+      description="Find duplicates, broken files, empty folders, tiny files, and unusual formats."
       icon={<Search className="size-4" />}
       maxWidth="2xl"
     >
@@ -250,7 +250,7 @@ export function FolderJanitorDialog({
             ) : (
               <Bug className="mr-2 size-4" />
             )}
-            {isScanning ? "Scanning..." : "Scan for mess"}
+            {isScanning ? "Scanning..." : "Scan for issues"}
           </Button>
         </div>
       </section>

@@ -528,7 +528,7 @@ function SettingsDialogBody({
           <TabsContent value="library" className="m-0 flex-1 p-8 outline-none">
             <div className="mx-auto w-full max-w-4xl space-y-8">
               <div>
-                <h3 className="text-lg font-semibold tracking-tight">Library Location</h3>
+                <h3 className="text-lg font-semibold tracking-tight">Library location</h3>
                 <p className="text-sm text-muted-foreground">
                   The primary folder where your audio samples are stored.
                 </p>
@@ -538,7 +538,7 @@ function SettingsDialogBody({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <FolderOpen className="size-4 text-primary" />
-                    <span className="text-sm font-medium">Library Folders</span>
+                    <span className="text-sm font-medium">Library folders</span>
                   </div>
                   {settings.libraryRoots.length > 0 ? (
                     <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-accent/50 hover:text-accent-foreground">Configured</Badge>
@@ -639,7 +639,7 @@ function SettingsDialogBody({
               <Separator className="opacity-50" />
 
               <div>
-                <h3 className="text-lg font-semibold tracking-tight">Scan & Index</h3>
+                <h3 className="text-lg font-semibold tracking-tight">Scan & index</h3>
                 <p className="text-sm text-muted-foreground">
                   Synchronize your database with the local filesystem.
                 </p>
@@ -650,7 +650,7 @@ function SettingsDialogBody({
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                        <RefreshCw className={cn("size-4 text-primary", scanStatus.running && "animate-spin")} />
-                       <span className="text-sm font-medium">Library Sync</span>
+                       <span className="text-sm font-medium">Library sync</span>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Refreshes metadata and discovers new files.
@@ -689,7 +689,7 @@ function SettingsDialogBody({
           <TabsContent value="metadata" className="m-0 flex-1 p-8 outline-none">
             <div className="mx-auto max-w-3xl space-y-10">
               <div>
-                <h3 className="text-lg font-semibold tracking-tight">Playlists & Tags</h3>
+                <h3 className="text-lg font-semibold tracking-tight">Playlists & tags</h3>
                 <p className="text-sm text-muted-foreground">
                   Manage library organization without leaving the settings panel.
                 </p>
@@ -859,7 +859,7 @@ function SettingsDialogBody({
           <TabsContent value="extensions" className="m-0 flex-1 p-6 outline-none">
             <div className="w-full space-y-8">
               <div>
-                <h3 className="text-lg font-semibold tracking-tight">Extension Management</h3>
+                <h3 className="text-lg font-semibold tracking-tight">Extension management</h3>
                 <p className="text-sm text-muted-foreground">
                   Enable or disable workflow tools and third-party integrations.
                 </p>
@@ -1006,7 +1006,7 @@ function SettingsDialogBody({
                    <div className="space-y-1">
                      <div className="flex items-center gap-2">
                        <Monitor className="size-4 text-primary" />
-                       <span className="text-sm font-medium">Interface Zoom</span>
+                       <span className="text-sm font-medium">Interface zoom</span>
                      </div>
                      <p className="text-xs text-muted-foreground">
                         Scale the entire UI. Useful for high-DPI screens.
@@ -1054,15 +1054,14 @@ function SettingsDialogBody({
                    </div>
                    <div className="min-w-0 flex-1">
                      <p className="text-sm font-semibold">Foleyard</p>
-                     <p className="text-xs text-muted-foreground">Professional Sound Library Engine</p>
+                      <p className="text-xs text-muted-foreground">Local-first sound library</p>
                    </div>
                    <Badge variant="secondary" className="h-6 px-3">v2.1.0-alpha</Badge>
                    <Badge variant="outline" className="h-6 px-3">Desktop Core</Badge>
                 </div>
 
                 <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                   Foleyard is an open-source audio asset manager designed for speed and reliability.
-                   Built for sound designers, composers, and game developers who need instant access to their sonic palette.
+                   Foleyard is an open-source sound library. It indexes local audio so you can search and organize it.
                 </p>
 
                 <div className="flex gap-2 border-t border-border/40 pt-4">
@@ -1569,7 +1568,7 @@ function ValidationMessage({ result }: { result: ValidationResult }) {
       )}
       <div className="min-w-0">
         <p className="font-semibold text-sm">
-          {result.valid ? "Path Verified" : "Invalid Folder"}
+              {result.valid ? "Path verified" : "Invalid folder"}
         </p>
         <p className="mt-0.5 text-xs opacity-80">
           {result.valid

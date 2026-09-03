@@ -194,7 +194,7 @@ export function RenameHammerDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Rename Hammer"
-      description="Batch rename ugly sound filenames into clean searchable names."
+      description="Batch rename sound files into clean, searchable names."
       icon={<CaseSensitive className="size-4" />}
       maxWidth="xl"
       footer={footer}

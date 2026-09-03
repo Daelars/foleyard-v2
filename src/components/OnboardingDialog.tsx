@@ -214,10 +214,10 @@ export function OnboardingDialog({
           </DialogTitle>
           <DialogDescription>
             {step === "welcome"
-              ? "Set up your sound library so Foleyard can index, search, and organize your audio assets."
+              ? "Foleyard keeps your local sounds indexed and searchable. Setup takes a minute."
               : null}
             {step === "folder"
-              ? "Choose the folder where your samples, recordings, or sound effects live."
+              ? "Choose the folder where your sounds live."
               : null}
             {step === "scan"
               ? "Start a scan now, or skip it and scan from Settings later."

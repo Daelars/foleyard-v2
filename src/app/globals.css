@@ -51,6 +51,14 @@
   --shadow-offset-y: 0.25rem;
   --letter-spacing: -0.025em;
   --spacing: 0.25rem;
+  /* Reskin visual-language tokens (ratified token law, issue #16). Fixed brand
+     values, theme-independent, so every reskin slice reads them from one place
+     instead of hard-coding accent hex. */
+  --canvas: #0b0b10;
+  --shell: #101014;
+  --accent-fill: #f0503c;
+  --accent-fill-hover: #ff5a44;
+  --accent-text: #ff7a66;
   --shadow-2xs: 0rem 0.25rem 0.5rem 0rem hsl(240 9.8039% 10% / 0.05);
   --shadow-xs: 0rem 0.25rem 0.5rem 0rem hsl(240 9.8039% 10% / 0.05);
   --shadow-sm:
@@ -140,6 +148,11 @@
   --shadow-opacity: var(--shadow-opacity);
   --color-shadow-color: var(--shadow-color);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-canvas: var(--canvas);
+  --color-shell: var(--shell);
+  --color-accent-fill: var(--accent-fill);
+  --color-accent-fill-hover: var(--accent-fill-hover);
+  --color-accent-text: var(--accent-text);
 }
 
 body {

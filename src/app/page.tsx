@@ -1224,12 +1224,12 @@ function HomeContent() {
       <main className="relative flex min-w-0 flex-1 flex-col bg-background/40 backdrop-blur-md">
         <DesktopTitleBar />
 
-        <header className="shrink-0 border-b border-border/40 bg-card/60 px-4 py-3 backdrop-blur-xl md:px-5">
+        <header className="shrink-0 border-b border-white/5 px-4 py-3 md:px-5">
           <div className="flex h-10 items-center gap-3">
             <Button
               variant="ghost"
               size="icon"
-              className="size-10 rounded-xl border-border/40 bg-card/60 backdrop-blur-xl duration-200 animate-in fade-in-0 zoom-in-95 md:hidden"
+              className="size-10 rounded-xl border-white/10 bg-white/5 duration-200 animate-in fade-in-0 zoom-in-95 hover:border-accent-fill/50 md:hidden"
               onClick={handleOpenMobileSidebar}
               aria-label="Open navigation menu"
             >
@@ -1239,12 +1239,12 @@ function HomeContent() {
             {!showExtensionsView && (
               <div className="relative flex flex-1 items-center gap-2 duration-300 animate-in fade-in-0 slide-in-from-top-2 md:max-w-xl">
                 <div className="relative flex-1">
-                  <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground/70" />
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-4 -translate-y-1/2 text-zinc-500" />
                   <Input
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Search library..."
-                    className="h-10 rounded-xl border-border/40 bg-card/60 pl-10 pr-4 text-sm leading-5 shadow-sm backdrop-blur-xl placeholder:text-muted-foreground/65 focus-visible:border-primary/50 focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className="h-10 rounded-xl border-white/10 bg-white/[0.04] pl-10 pr-4 text-sm font-medium leading-5 text-zinc-50 shadow-none backdrop-blur-none placeholder:font-normal placeholder:text-zinc-600 focus-visible:border-accent-fill/60 focus-visible:bg-white/[0.06] focus-visible:ring-0 focus-visible:ring-offset-0"
                   />
                 </div>
                 {smartCollectionsEnabled && searchQuery.trim() && (
@@ -1253,7 +1253,7 @@ function HomeContent() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="hidden h-10 shrink-0 gap-2 rounded-xl border-border/40 bg-card/60 text-xs shadow-sm backdrop-blur-xl sm:inline-flex"
+                        className="hidden h-10 shrink-0 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
                         onClick={() => {
                           if (activeSmartCollectionId) {
                             handleUpdateCollectionFilter(
@@ -1270,7 +1270,7 @@ function HomeContent() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="hidden h-10 shrink-0 gap-2 rounded-xl border-border/40 bg-card/60 text-xs shadow-sm backdrop-blur-xl sm:inline-flex"
+                      className="hidden h-10 shrink-0 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
                       onClick={() => setShowSaveSearch(true)}
                     >
                       <Save className="size-4" />
@@ -1282,14 +1282,14 @@ function HomeContent() {
             )}
 
             {isLoadingFiles && (
-              <Loader2 className="size-4 animate-spin text-primary" />
+              <Loader2 className="size-4 animate-spin text-accent-text" />
             )}
 
             {!showExtensionsView && makePackEnabled && (
               <Button
                 variant="outline"
                 size="sm"
-                className="hidden h-10 gap-2 rounded-xl border-border/40 bg-card/60 text-xs shadow-sm backdrop-blur-xl sm:inline-flex"
+                className="hidden h-10 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
                 onClick={handleRecentPack}
               >
                 <PackagePlus className="size-4" />
@@ -1301,7 +1301,7 @@ function HomeContent() {
               <Button
                 variant="outline"
                 size="sm"
-                className="hidden h-10 gap-2 rounded-xl border-border/40 bg-card/60 text-xs shadow-sm backdrop-blur-xl sm:inline-flex"
+                className="hidden h-10 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
                 onClick={handleOpenScan}
               >
                 <Bug className="size-4" />
@@ -1313,7 +1313,7 @@ function HomeContent() {
               <Button
                 variant="outline"
                 size="sm"
-                className="hidden h-10 gap-2 rounded-xl border-border/40 bg-card/60 text-xs shadow-sm backdrop-blur-xl sm:inline-flex"
+                className="hidden h-10 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
                 onClick={handleOpenGather}
               >
                 <FileInput className="size-4" />

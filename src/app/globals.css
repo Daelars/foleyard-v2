@@ -59,6 +59,11 @@
   --accent-fill: #f0503c;
   --accent-fill-hover: #ff5a44;
   --accent-text: #ff7a66;
+  /* Accent glow. Ratified glow policy (#16): survives only on the play button,
+     the active rail item, and the selected-row bar. Kept here so surfaces read
+     the accent rgba from the theme layer instead of hard-coding it. */
+  --shadow-glow-accent: 0 0 18px rgba(240, 80, 60, 0.25);
+  --shadow-glow-accent-strong: 0 0 24px rgba(240, 80, 60, 0.45);
   --shadow-2xs: 0rem 0.25rem 0.5rem 0rem hsl(240 9.8039% 10% / 0.05);
   --shadow-xs: 0rem 0.25rem 0.5rem 0rem hsl(240 9.8039% 10% / 0.05);
   --shadow-sm:
@@ -153,6 +158,8 @@
   --color-accent-fill: var(--accent-fill);
   --color-accent-fill-hover: var(--accent-fill-hover);
   --color-accent-text: var(--accent-text);
+  --shadow-glow-accent: var(--shadow-glow-accent);
+  --shadow-glow-accent-strong: var(--shadow-glow-accent-strong);
 }
 
 body {

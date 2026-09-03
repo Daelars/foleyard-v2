@@ -81,11 +81,11 @@ export function Sidebar({
       ? `${scanStatus.indexed ?? scanStatus.discovered} files indexed`
       : "Ready to scan library";
   const sectionHeaderClass =
-    "px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70";
+    "px-2 font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500";
   const navItemClass =
-    "w-full justify-start gap-3 rounded-xl text-muted-foreground transition-[background-color,color,box-shadow] duration-200 hover:bg-accent/50 hover:text-accent-foreground";
+    "w-full justify-start gap-3 rounded-xl border border-transparent text-zinc-400 transition-[background-color,color,box-shadow,border-color] duration-200 hover:border-white/10 hover:bg-white/5 hover:text-zinc-100";
   const activeNavItemClass =
-    "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/10 hover:text-primary";
+    "border-accent-fill/50 bg-accent-fill/15 text-accent-text shadow-glow-accent hover:border-accent-fill/50 hover:bg-accent-fill/15 hover:text-accent-text";
 
   const handleSelectExtensions = useCallback(() => {
     onSelectExtensions();
@@ -127,16 +127,23 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "relative flex w-64 shrink-0 flex-col overflow-hidden border-r border-border/40 bg-card/60 backdrop-blur-xl animate-in fade-in-0 slide-in-from-left-3 duration-300",
+        "relative flex w-64 shrink-0 flex-col overflow-hidden border-r border-white/10 animate-in fade-in-0 slide-in-from-left-3 duration-300",
         className,
       )}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_12%,transparent),transparent_36%)]" />
       <div className="relative flex flex-col gap-4 p-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold tracking-tight px-2">Foleyard</h2>
+          <div className="flex items-center gap-2.5 px-1">
+            <span className="flex size-8 items-center justify-center rounded-xl bg-accent-fill text-sm font-black text-white">
+              F
+            </span>
+            <h2 className="text-lg font-extrabold tracking-tighter text-zinc-50">
+              Foleyard
+            </h2>
+          </div>
           {scanStatus.running && (
-             <Activity className="size-4 text-primary animate-pulse" />
+             <Activity className="size-4 text-accent-text animate-pulse" />
           )}
         </div>
 
@@ -149,7 +156,7 @@ export function Sidebar({
             )}
             onClick={handleSelectLibrary}
           >
-            <List className={cn("size-4", libraryActive && "text-primary")} />
+            <List className={cn("size-4", libraryActive && "text-accent-text")} />
             Library
           </Button>
           <Button
@@ -160,7 +167,7 @@ export function Sidebar({
             )}
             onClick={handleSelectFavorites}
           >
-            <Heart className={cn("size-4", favoritesActive && "fill-current text-primary")} />
+            <Heart className={cn("size-4", favoritesActive && "fill-accent-fill text-accent-fill")} />
             Favorites
           </Button>
           <Button
@@ -171,7 +178,7 @@ export function Sidebar({
             )}
             onClick={handleSelectExtensions}
           >
-            <Puzzle className={cn("size-4", extensionsActive && "text-primary")} />
+            <Puzzle className={cn("size-4", extensionsActive && "text-accent-text")} />
             Extensions
           </Button>
         </div>
@@ -202,7 +209,7 @@ export function Sidebar({
                   : "";
 
                 const countEl = typeof collection.fileCount === "number" ? (
-                  <span className={cn("text-[10px] tabular-nums", active ? "text-primary" : "text-muted-foreground")}>
+                  <span className={cn("font-mono text-[10px] tabular-nums", active ? "text-accent-text" : "text-zinc-500")}>
                     {collection.fileCount}
                   </span>
                 ) : null;
@@ -213,7 +220,7 @@ export function Sidebar({
                       <DropdownMenuTrigger
                         render={
                           <span
-                            className="size-5 flex items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                            className="size-5 flex items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 text-zinc-500 hover:text-zinc-100 hover:bg-white/5"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <MoreVertical className="size-3" />
@@ -275,7 +282,7 @@ export function Sidebar({
                               )}
                               onClick={() => handleSelectCollection(collection.id)}
                             >
-                              <Filter className={cn("size-3.5 shrink-0", active && "text-primary")} />
+                              <Filter className={cn("size-3.5 shrink-0", active && "text-accent-text")} />
                               <span className="truncate">{collection.name}</span>
                               <span className="ml-auto flex items-center gap-0.5">
                                 {countEl}
@@ -299,9 +306,9 @@ export function Sidebar({
                         onClick={() => handleSelectCollection(collection.id)}
                       >
                         {isSmart ? (
-                          <Filter className={cn("size-3.5 shrink-0", active && "text-primary")} />
+                          <Filter className={cn("size-3.5 shrink-0", active && "text-accent-text")} />
                         ) : (
-                          <Folder className={cn("size-3.5 shrink-0", active && "text-primary")} />
+                          <Folder className={cn("size-3.5 shrink-0", active && "text-accent-text")} />
                         )}
                         <span className="truncate">{collection.name}</span>
                         <span className="ml-auto flex items-center gap-0.5">
@@ -314,7 +321,7 @@ export function Sidebar({
                 );
               })}
               {collections.length === 0 && (
-                <p className="text-xs text-muted-foreground px-2 py-1">No playlists yet</p>
+                <p className="text-xs text-zinc-500 px-2 py-1">No playlists yet</p>
               )}
             </div>
           </section>
@@ -328,7 +335,7 @@ export function Sidebar({
                 <Badge
                   key={tag.id}
                   variant="outline"
-                  className="cursor-pointer px-2 py-0.5 text-[10px] transition-colors hover:bg-accent/50 hover:text-accent-foreground"
+                  className="cursor-pointer rounded-full px-2 py-0.5 font-mono text-[10px] transition-colors hover:brightness-125"
                   style={{
                     borderColor: tag.color + "40",
                     backgroundColor: tag.color + "10",
@@ -339,15 +346,15 @@ export function Sidebar({
                 </Badge>
               ))}
               {tags.length === 0 && (
-                 <p className="text-xs text-muted-foreground">No tags yet</p>
+                 <p className="text-xs text-zinc-500">No tags yet</p>
               )}
             </div>
           </section>
         </div>
       </ScrollArea>
 
-      <div className="relative border-t border-border/40 bg-card/60 p-4 backdrop-blur-xl">
-        <div className="mb-4 rounded-2xl border border-border/40 bg-card/60 p-3 shadow-sm backdrop-blur-xl">
+      <div className="relative border-t border-white/5 p-4">
+        <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.02] p-3">
           <div className="flex items-center gap-3">
             <DotmSquare3
               size={24}
@@ -360,20 +367,20 @@ export function Sidebar({
               className={cn(
                 "shrink-0",
                 scanStatus.running
-                  ? "text-primary"
+                  ? "text-accent-text"
                   : scanComplete
-                    ? "text-foreground"
-                    : "text-muted-foreground/70",
+                    ? "text-zinc-100"
+                    : "text-zinc-500",
               )}
             />
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
+              <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500">
                 <span>Status</span>
-                <span className={scanStatus.running ? "text-primary" : "text-muted-foreground"}>
+                <span className={scanStatus.running ? "text-accent-text" : "text-zinc-400"}>
                   {scanStatus.phase}
                 </span>
               </div>
-              <p className="mt-1 text-[10px] text-muted-foreground">
+              <p className="mt-1 text-[10px] text-zinc-500">
                 {statusDetail}
               </p>
             </div>
@@ -383,7 +390,7 @@ export function Sidebar({
         <Button
           variant="outline"
           size="sm"
-          className="w-full gap-2 rounded-xl text-xs transition-[background-color,color,box-shadow] duration-200"
+          className="w-full gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-200 shadow-none backdrop-blur-none transition-[background-color,color,box-shadow,border-color] duration-200 hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100"
           onClick={handleOpenSettings}
         >
           <Settings className="size-3.5" />

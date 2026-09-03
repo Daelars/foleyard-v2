@@ -1175,7 +1175,7 @@ function HomeContent() {
   }, []);
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-background font-sans">
+    <div className="relative flex h-full overflow-hidden bg-background font-sans">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_10%,transparent),transparent_32%),radial-gradient(circle_at_bottom_right,color-mix(in_oklab,var(--foreground)_5%,transparent),transparent_38%)]" />
 
       <Sidebar
@@ -1198,7 +1198,7 @@ function HomeContent() {
       <Dialog open={showMobileSidebar} onOpenChange={setShowMobileSidebar}>
         <DialogContent
           showCloseButton={false}
-          className="left-0 top-0 h-screen w-[calc(100%-3rem)] max-w-80 translate-x-0 translate-y-0 rounded-none border-r border-border/40 bg-card/80 p-0 shadow-2xl backdrop-blur-2xl duration-300 ease-out data-open:slide-in-from-left-8 data-open:fade-in-0 data-closed:slide-out-to-left-8 data-closed:fade-out-0 sm:max-w-80"
+          className="left-0 top-0 h-full w-[calc(100%-3rem)] max-w-80 translate-x-0 translate-y-0 rounded-none border-r border-border/40 bg-card/80 p-0 shadow-2xl backdrop-blur-2xl duration-300 ease-out data-open:slide-in-from-left-8 data-open:fade-in-0 data-closed:slide-out-to-left-8 data-closed:fade-out-0 sm:max-w-80"
         >
           <DialogTitle className="sr-only">Navigation Menu</DialogTitle>
           <Sidebar

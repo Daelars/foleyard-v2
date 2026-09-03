@@ -528,8 +528,8 @@ function SettingsDialogBody({
           <TabsContent value="library" className="m-0 flex-1 p-8 outline-none">
             <div className="mx-auto w-full max-w-4xl space-y-8">
               <div>
-                <h3 className="font-serif text-2xl tracking-tight">Library location</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h3 className="text-lg font-semibold tracking-tight">Library location</h3>
+                <p className="text-sm text-muted-foreground">
                   The primary folder where your audio samples are stored.
                 </p>
               </div>
@@ -639,8 +639,8 @@ function SettingsDialogBody({
               <Separator className="opacity-50" />
 
               <div>
-                <h3 className="font-serif text-2xl tracking-tight">Scan & index</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h3 className="text-lg font-semibold tracking-tight">Scan & index</h3>
+                <p className="text-sm text-muted-foreground">
                   Synchronize your database with the local filesystem.
                 </p>
               </div>
@@ -689,8 +689,8 @@ function SettingsDialogBody({
           <TabsContent value="metadata" className="m-0 flex-1 p-8 outline-none">
             <div className="mx-auto max-w-3xl space-y-10">
               <div>
-                <h3 className="font-serif text-2xl tracking-tight">Playlists & tags</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h3 className="text-lg font-semibold tracking-tight">Playlists & tags</h3>
+                <p className="text-sm text-muted-foreground">
                   Manage library organization without leaving the settings panel.
                 </p>
               </div>
@@ -859,8 +859,8 @@ function SettingsDialogBody({
           <TabsContent value="extensions" className="m-0 flex-1 p-6 outline-none">
             <div className="w-full space-y-8">
               <div>
-                <h3 className="font-serif text-2xl tracking-tight">Extension management</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h3 className="text-lg font-semibold tracking-tight">Extension management</h3>
+                <p className="text-sm text-muted-foreground">
                   Enable or disable workflow tools and third-party integrations.
                 </p>
               </div>
@@ -995,8 +995,8 @@ function SettingsDialogBody({
           <TabsContent value="appearance" className="m-0 flex-1 p-8 outline-none">
             <div className="mx-auto w-full max-w-2xl space-y-8">
               <div>
-                <h3 className="font-serif text-2xl tracking-tight">Appearance</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h3 className="text-lg font-semibold tracking-tight">Appearance</h3>
+                <p className="text-sm text-muted-foreground">
                   Customize how Foleyard looks on your display.
                 </p>
               </div>

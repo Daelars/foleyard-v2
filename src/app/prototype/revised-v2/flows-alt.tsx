@@ -662,7 +662,6 @@ export function AltColorFields() {
               >
                 {collection.name.slice(0, 2).toUpperCase()}
               </span>
-              <div className="relative flex w-full items-center gap-3 p-4">
               <button
                 type="button"
                 onClick={() => {
@@ -671,8 +670,8 @@ export function AltColorFields() {
                   setConfirmDeleteId(null);
                 }}
                 aria-expanded={open}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left transition-transform active:scale-[0.99]"
-                >
+                className="relative flex w-full items-center gap-3 p-4 text-left transition-transform active:scale-[0.99]"
+              >
                   <span className="min-w-0 flex-1">
                     {renaming ? (
                       <span
@@ -685,16 +684,14 @@ export function AltColorFields() {
                           value={renameDraft}
                           onChange={(event) => setRenameDraft(event.target.value)}
                           onBlur={commitRename}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        commitTagRename();
-                        setEditingTag(null);
-                      }
-                      if (event.key === "Escape") {
-                        setEditingTag(null);
-                      }
-                    }}
-                    aria-label="Rename tag — Enter saves, Escape cancels"
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              commitRename();
+                            }
+                            if (event.key === "Escape") {
+                              setRenamingId(null);
+                            }
+                          }}
                           aria-label="Rename collection"
                           className="w-full rounded-lg border border-accent-fill/60 bg-black/40 px-2 py-1 text-base font-bold tracking-tight text-zinc-50 focus:outline-none"
                         />
@@ -714,7 +711,6 @@ export function AltColorFields() {
                     className={`size-4 shrink-0 text-zinc-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
                   />
                 </button>
-              </div>
               <div
                 className={`relative grid transition-all duration-300 ease-out ${
                   open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"

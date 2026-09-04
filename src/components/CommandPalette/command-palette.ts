@@ -108,8 +108,8 @@ export function buildPaletteEntries(input: PaletteBuildInput): PaletteEntry[] {
     true,
   );
   push(
-    { id: "view:tools", label: "Go to Tools", section: "view", hint: "view" },
-    ["Go to Tools", "Go to Extensions", "Extensions"],
+    { id: "view:tools", label: "Go to Extensions", section: "view", hint: "view" },
+    ["Go to Extensions", "Extensions", "Go to Tools", "Tools"],
     true,
   );
   push(

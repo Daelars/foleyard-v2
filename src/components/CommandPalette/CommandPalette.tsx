@@ -1,9 +1,102 @@
 "use client";
 
-import type { RefObject } from "react";
-import { CornerDownLeft, Search } from "lucide-react";
+import type { ReactNode, RefObject } from "react";
+import {
+  Archive,
+  CornerDownLeft,
+  Heart,
+  Layers,
+  Library,
+  ListMusic,
+  Music,
+  Pause,
+  Play,
+  Repeat,
+  Search,
+  Settings,
+  SkipBack,
+  SkipForward,
+  Star,
+} from "lucide-react";
 
-import type { PaletteEntry } from "./command-palette";
+import type { PaletteEntry, PaletteSection } from "./command-palette";
+
+const SECTION_TITLES: Record<PaletteSection, string> = {
+  view: "Views",
+  transport: "Transport",
+  file: "File",
+  tool: "Tools",
+  sound: "Sounds",
+};
+
+const TILE_CLASS =
+  "flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-fill/12 text-accent-text";
+
+function EntryTile({ entry }: { entry: PaletteEntry }) {
+  const separator = entry.id.indexOf(":");
+  const kind = separator === -1 ? entry.id : entry.id.slice(0, separator);
+  const rest = separator === -1 ? "" : entry.id.slice(separator + 1);
+
+  if (kind === "view") {
+    const icon =
+      rest === "library" ? (
+        <Library className="size-4" />
+      ) : rest === "favorites" ? (
+        <Star className="size-4" />
+      ) : rest === "shelf" ? (
+        <ListMusic className="size-4" />
+      ) : rest === "tools" ? (
+        <Layers className="size-4" />
+      ) : (
+        <Settings className="size-4" />
+      );
+    return <span className={TILE_CLASS}>{icon}</span>;
+  }
+
+  if (kind === "transport") {
+    const icon =
+      rest === "toggle-play" ? (
+        entry.label === "Pause" ? (
+          <Pause className="size-4" />
+        ) : (
+          <Play className="size-4" />
+        )
+      ) : rest === "next" ? (
+        <SkipForward className="size-4" />
+      ) : rest === "prev" ? (
+        <SkipBack className="size-4" />
+      ) : (
+        <Repeat className="size-4" />
+      );
+    return <span className={TILE_CLASS}>{icon}</span>;
+  }
+
+  if (kind === "file") {
+    return (
+      <span className={TILE_CLASS}>
+        {rest === "toggle-favorite" ? (
+          <Heart className="size-4" />
+        ) : (
+          <Archive className="size-4" />
+        )}
+      </span>
+    );
+  }
+
+  if (kind === "tool") {
+    return (
+      <span className={`${TILE_CLASS} text-xs font-bold`}>
+        {entry.label.slice(0, 2).toUpperCase()}
+      </span>
+    );
+  }
+
+  return (
+    <span className={TILE_CLASS}>
+      <Music className="size-4" />
+    </span>
+  );
+}
 
 type CommandPaletteProps = {
   open: boolean;
@@ -31,6 +124,39 @@ export function CommandPalette({
   if (!open) {
     return null;
   }
+
+  let lastSection: PaletteSection | null = null;
+
+  const rows: ReactNode[] = [];
+  entries.forEach((entry, index) => {
+    if (entry.section !== lastSection) {
+      lastSection = entry.section;
+      rows.push(
+        <p
+          key={`section-${entry.section}`}
+          className="px-3 pb-1 pt-2 font-mono text-[10px] uppercase tracking-widest text-zinc-600"
+        >
+          {SECTION_TITLES[entry.section]}
+        </p>,
+      );
+    }
+
+    rows.push(
+      <button
+        key={entry.id}
+        type="button"
+        onClick={() => onSelectEntry(entry)}
+        onMouseEnter={() => onHoverEntry(index)}
+        className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm transition-colors ${index === activeIndex ? "bg-accent-fill/15 text-accent-text" : "text-zinc-200"}`}
+      >
+        <EntryTile entry={entry} />
+        <span className="min-w-0 flex-1 truncate">{entry.label}</span>
+        {index === activeIndex ? (
+          <CornerDownLeft className="size-3.5 shrink-0" />
+        ) : null}
+      </button>,
+    );
+  });
 
   return (
     <div
@@ -64,25 +190,7 @@ export function CommandPalette({
               No matches.
             </p>
           ) : (
-            entries.map((entry, index) => (
-              <button
-                key={entry.id}
-                type="button"
-                onClick={() => onSelectEntry(entry)}
-                onMouseEnter={() => onHoverEntry(index)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors ${index === activeIndex ? "bg-accent-fill/15 text-accent-text" : "text-zinc-200"}`}
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  {entry.label}
-                </span>
-                <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-zinc-600">
-                  {entry.hint}
-                </span>
-                {index === activeIndex ? (
-                  <CornerDownLeft className="size-3.5 shrink-0" />
-                ) : null}
-              </button>
-            ))
+            rows
           )}
         </div>
       </div>

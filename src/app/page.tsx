@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Loader2, PackagePlus, PanelLeft, Save, Search, Trash2, X } from "lucide-react";
+import { Loader2, PackagePlus, PanelLeft, Save, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";
@@ -44,12 +44,6 @@ import { IconRail, type RailView } from "@/components/IconRail";
 import { AudioPlayerProvider } from "@/components/ui/audio-player";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
 import { interpretExtensionUiIntent } from "@/lib/extensions/ui-intent";
@@ -310,6 +304,9 @@ function HomeContent() {
     handleClearSelection();
   }, [handleClearSelection]);
 
+  const handleFilterTag = useCallback((id: string | null) => {
+    setSelectedTagId(id);
+  }, []);
   const showCollection = useCallback((collectionId: string) => {
     const collection = collections.find((c) => c.id === collectionId);
     if (collection?.isSmart && collection.filter) {
@@ -331,6 +328,17 @@ function HomeContent() {
     setSearchQuery("");
     handleClearSelection();
   }, [collections, handleClearSelection]);
+
+  const handleFilterCollection = useCallback(
+    (id: string | null) => {
+      if (id) {
+        showCollection(id);
+      } else {
+        showLibrary();
+      }
+    },
+    [showCollection, showLibrary],
+  );
 
   const navigateDirectory = useCallback((directory: string | null) => {
     setCurrentView(directory ? "directory" : "all");
@@ -1397,12 +1405,6 @@ function HomeContent() {
               ? (selectedDirectory?.split(/[\\/]/).pop() ?? "Library")
               : "Library";
 
-  const showLibraryFilter =
-    currentView === "all" ||
-    currentView === "favorites" ||
-    currentView === "collection" ||
-    currentView === "directory";
-
   const {
     soundShelfEnabled,
     makePackEnabled,
@@ -1921,6 +1923,12 @@ function HomeContent() {
         onSelectExtensions={showExtensions}
         onOpenSettings={handleOpenSettings}
         settingsActive={showSettings}
+        collections={collections}
+        tags={tags}
+        selectedCollection={selectedCollection}
+        selectedTagId={selectedTagId}
+        onSelectCollection={handleFilterCollection}
+        onSelectTag={handleFilterTag}
       />
 
       <Dialog open={showMobileSidebar} onOpenChange={setShowMobileSidebar}>
@@ -1954,6 +1962,18 @@ function HomeContent() {
               handleCloseMobileSidebar();
             }}
             settingsActive={showSettings}
+            collections={collections}
+            tags={tags}
+            selectedCollection={selectedCollection}
+            selectedTagId={selectedTagId}
+            onSelectCollection={(id) => {
+              handleFilterCollection(id);
+              handleCloseMobileSidebar();
+            }}
+            onSelectTag={(id) => {
+              handleFilterTag(id);
+              handleCloseMobileSidebar();
+            }}
           />
         </DialogContent>
       </Dialog>
@@ -2077,119 +2097,6 @@ function HomeContent() {
                 ) : null}
               </div>
             ) : null}
-            {showLibraryFilter ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-9 gap-2 rounded-xl px-3 text-xs"
-                        aria-label="Filter by collection"
-                      >
-                        <span className="max-w-36 truncate">
-                          {selectedCollection
-                            ? (collections.find((collection) => collection.id === selectedCollection)?.name ?? "Collection")
-                            : "All collections"}
-                        </span>
-                        <ChevronDown className="size-3.5 shrink-0 text-zinc-500" />
-                      </Button>
-                    }
-                  />
-                  <DropdownMenuContent align="end" className="w-52">
-                    <DropdownMenuItem
-                      onClick={() => showLibrary()}
-                      className="text-popover-foreground"
-                    >
-                      {!selectedCollection ? (
-                        <Check className="size-4 shrink-0 text-accent-text" />
-                      ) : (
-                        <span className="size-4 shrink-0" />
-                      )}
-                      All collections
-                    </DropdownMenuItem>
-                    {collections.map((collection) => (
-                      <DropdownMenuItem
-                        key={collection.id}
-                        onClick={() => showCollection(collection.id)}
-                        className="text-popover-foreground"
-                      >
-                        {selectedCollection === collection.id ? (
-                          <Check className="size-4 shrink-0 text-accent-text" />
-                        ) : (
-                          <span className="size-4 shrink-0" />
-                        )}
-                        <span className="truncate">{collection.name}</span>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-9 gap-2 rounded-xl px-3 text-xs"
-                        aria-label="Filter by tag"
-                      >
-                        <span className="max-w-36 truncate">
-                          {selectedTagId
-                            ? (tags.find((tag) => tag.id === selectedTagId)?.name ?? "Tag")
-                            : "All tags"}
-                        </span>
-                        <ChevronDown className="size-3.5 shrink-0 text-zinc-500" />
-                      </Button>
-                    }
-                  />
-                  <DropdownMenuContent align="end" className="w-52">
-                    <DropdownMenuItem
-                      onClick={() => setSelectedTagId(null)}
-                      className="text-popover-foreground"
-                    >
-                      {!selectedTagId ? (
-                        <Check className="size-4 shrink-0 text-accent-text" />
-                      ) : (
-                        <span className="size-4 shrink-0" />
-                      )}
-                      All tags
-                    </DropdownMenuItem>
-                    {tags.map((tag) => (
-                      <DropdownMenuItem
-                        key={tag.id}
-                        onClick={() => setSelectedTagId(tag.id)}
-                        className="text-popover-foreground"
-                      >
-                        {selectedTagId === tag.id ? (
-                          <Check className="size-4 shrink-0 text-accent-text" />
-                        ) : (
-                          <span className="size-4 shrink-0" />
-                        )}
-                        <span className="truncate">{tag.name}</span>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                {selectedCollection || selectedTagId ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-9 rounded-xl"
-                    onClick={() => {
-                      setSelectedTagId(null);
-                      showLibrary();
-                    }}
-                    aria-label="Clear collection and tag filters"
-                  >
-                    <X className="size-4" />
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
           </div>
           {showExtensionsView || showShelfView ? (
             <p className="mt-1.5 text-sm font-medium text-zinc-400">
@@ -2210,29 +2117,30 @@ function HomeContent() {
             pendingExtensionId={pendingExtensionId}
           />
         ) : (
-          <div className="flex min-h-0 flex-1">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              {selectedIds.length > 1 ? (
-                <div className="px-4 pt-3 md:px-5">
-                  <SelectionBulkBar
-                    count={selectedIds.length}
-                    tags={tags}
-                    soundShelfEnabled={soundShelfEnabled}
-                    onSaveAll={() => void handleBulkSaveAll()}
-                    onAddToQueue={handleBulkAddToQueue}
-                    onAddToShelf={() => void handleBulkAddToShelf()}
-                    onTag={(tagId) => void handleBulkTag(tagId)}
-                    onRemove={() =>
-                      setConfirmBulkRemove({
-                        choice: removeDefault,
-                        ids: selectedIdsRef.current,
-                      })
-                    }
-                    onClear={handleClearSelection}
-                  />
-                </div>
-              ) : null}
-              <FileTable
+          <>
+            {selectedIds.length > 1 ? (
+              <div className="px-4 pt-3 md:px-5">
+                <SelectionBulkBar
+                  count={selectedIds.length}
+                  tags={tags}
+                  soundShelfEnabled={soundShelfEnabled}
+                  onSaveAll={() => void handleBulkSaveAll()}
+                  onAddToQueue={handleBulkAddToQueue}
+                  onAddToShelf={() => void handleBulkAddToShelf()}
+                  onTag={(tagId) => void handleBulkTag(tagId)}
+                  onRemove={() =>
+                    setConfirmBulkRemove({
+                      choice: removeDefault,
+                      ids: selectedIdsRef.current,
+                    })
+                  }
+                  onClear={handleClearSelection}
+                />
+              </div>
+            ) : null}
+            <div className="flex min-h-0 flex-1">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <FileTable
                 files={orderedFiles}
                 directories={directories}
                 currentDirectory={selectedDirectory}
@@ -2257,8 +2165,9 @@ function HomeContent() {
                 sortDir={sortDir}
                 onFlipSort={flipSort}
               />
+              </div>
             </div>
-          </div>
+          </>
         )}
 
       </main>

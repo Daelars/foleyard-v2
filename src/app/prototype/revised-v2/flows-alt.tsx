@@ -444,6 +444,7 @@ export function AltColorFields() {
 
   const pickTag = (id: string | null) => {
     setActiveTag(id);
+    setEditingTag(null);
     setConfirmTagDelete(false);
   };
 
@@ -486,10 +487,13 @@ export function AltColorFields() {
         <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
           Tags
         </p>
-        <button
-          type="button"
-          onClick={() => setShowTagComposer((show) => !show)}
-          aria-label="New tag"
+          <button
+            type="button"
+            onClick={() => {
+              setShowTagComposer((show) => !show);
+              setEditingTag(null);
+            }}
+            aria-label="New tag"
           className="flex size-5 items-center justify-center rounded-full border border-dashed border-white/20 text-zinc-500 transition-all hover:border-accent-fill/60 hover:text-accent-text active:scale-90"
         >
           <Plus className="size-3" />
@@ -659,13 +663,14 @@ export function AltColorFields() {
                 {collection.name.slice(0, 2).toUpperCase()}
               </span>
               <div className="relative flex w-full items-center gap-3 p-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setExpanded(open ? null : collection.id);
-                    setConfirmDeleteId(null);
-                  }}
-                  aria-expanded={open}
+              <button
+                type="button"
+                onClick={() => {
+                  setExpanded(open ? null : collection.id);
+                  setEditingTag(null);
+                  setConfirmDeleteId(null);
+                }}
+                aria-expanded={open}
                   className="flex min-w-0 flex-1 items-center gap-3 text-left transition-transform active:scale-[0.99]"
                 >
                   <span className="min-w-0 flex-1">
@@ -680,14 +685,16 @@ export function AltColorFields() {
                           value={renameDraft}
                           onChange={(event) => setRenameDraft(event.target.value)}
                           onBlur={commitRename}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              commitRename();
-                            }
-                            if (event.key === "Escape") {
-                              setRenamingId(null);
-                            }
-                          }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        commitTagRename();
+                        setEditingTag(null);
+                      }
+                      if (event.key === "Escape") {
+                        setEditingTag(null);
+                      }
+                    }}
+                    aria-label="Rename tag — Enter saves, Escape cancels"
                           aria-label="Rename collection"
                           className="w-full rounded-lg border border-accent-fill/60 bg-black/40 px-2 py-1 text-base font-bold tracking-tight text-zinc-50 focus:outline-none"
                         />
@@ -837,13 +844,14 @@ export function AltColorFields() {
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => {
-            setNewName("");
-            setNewColor("#f0503c");
-            setShowComposer(true);
-          }}
+          <button
+            type="button"
+            onClick={() => {
+              setNewName("");
+              setNewColor("#f0503c");
+              setShowComposer(true);
+              setEditingTag(null);
+            }}
           className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 py-3 text-xs font-semibold text-zinc-500 transition-all hover:border-accent-fill/50 hover:text-accent-text active:scale-[0.99]"
         >
           <Plus className="size-3.5" /> New collection

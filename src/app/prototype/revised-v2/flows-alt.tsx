@@ -552,61 +552,68 @@ export function AltColorFields() {
       ) : null}
 
       {activeTagRecord ? (
-        <div className="field-rise mt-2 flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-          <span
-            className="size-3 shrink-0 rounded-full"
-            style={{ backgroundColor: tagColorFor(activeTagRecord.id, activeTagRecord.color) }}
-          />
-          <input
-            value={tagDraft}
-            onChange={(event) => setTagDraft(event.target.value)}
-            onBlur={commitTagRename}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                (event.target as HTMLInputElement).blur();
+        <div className="field-rise mt-2 w-full max-w-2xl rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="size-3 shrink-0 rounded-full"
+              style={{ backgroundColor: tagColorFor(activeTagRecord.id, activeTagRecord.color) }}
+            />
+            <input
+              value={tagDraft}
+              onChange={(event) => setTagDraft(event.target.value)}
+              onBlur={commitTagRename}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  (event.target as HTMLInputElement).blur();
+                }
+                if (event.key === "Escape") {
+                  setTagDraft(activeTagRecord.name);
+                  (event.target as HTMLInputElement).blur();
+                }
+              }}
+              aria-label="Rename tag"
+              title="Rename tag"
+              placeholder="Tag name…"
+              className="min-w-32 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 placeholder:font-normal placeholder:text-zinc-600 focus:border-accent-fill/60 focus:outline-none"
+            />
+            <Swatches
+              value={tagColorFor(activeTagRecord.id, activeTagRecord.color)}
+              onPick={(next) =>
+                setTagColors((prev) => ({ ...prev, [activeTagRecord.id]: next }))
               }
-              if (event.key === "Escape") {
-                setTagDraft(activeTagRecord.name);
-                (event.target as HTMLInputElement).blur();
-              }
-            }}
-            aria-label="Rename tag"
-            className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-xs font-semibold text-zinc-100 transition-colors hover:border-white/10 focus:border-accent-fill/60 focus:bg-black/30 focus:outline-none"
-          />
-          <Swatches
-            value={tagColorFor(activeTagRecord.id, activeTagRecord.color)}
-            onPick={(next) =>
-              setTagColors((prev) => ({ ...prev, [activeTagRecord.id]: next }))
-            }
-          />
-          {confirmTagDelete ? (
-            <>
+            />
+            {confirmTagDelete ? (
+              <>
+                <button
+                  type="button"
+                  onClick={deleteTag}
+                  className="shrink-0 rounded-lg bg-destructive/15 px-3 py-1.5 text-xs font-semibold text-destructive transition-all hover:bg-destructive/25 active:scale-95"
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmTagDelete(false)}
+                  aria-label="Cancel delete"
+                  className="flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-100"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </>
+            ) : (
               <button
                 type="button"
-                onClick={deleteTag}
-                className="shrink-0 rounded-lg bg-destructive/15 px-3 py-1.5 text-xs font-semibold text-destructive transition-all hover:bg-destructive/25 active:scale-95"
+                onClick={() => setConfirmTagDelete(true)}
+                aria-label={`Delete tag ${activeTagRecord.name}`}
+                className="flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-600 transition-all hover:bg-destructive/10 hover:text-destructive active:scale-90"
               >
-                Confirm
+                <Trash2 className="size-3.5" />
               </button>
-              <button
-                type="button"
-                onClick={() => setConfirmTagDelete(false)}
-                aria-label="Cancel delete"
-                className="flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-100"
-              >
-                <X className="size-3.5" />
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmTagDelete(true)}
-              aria-label={`Delete tag ${activeTagRecord.name}`}
-              className="flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-600 transition-all hover:bg-destructive/10 hover:text-destructive active:scale-90"
-            >
-              <Trash2 className="size-3.5" />
-            </button>
-          )}
+            )}
+          </div>
+          <p className="mt-2 text-[11px] text-zinc-600">
+            Editing “{activeTagRecord.name}” — rename, recolor, or delete it. Click its chip again to dismiss.
+          </p>
         </div>
       ) : null}
 

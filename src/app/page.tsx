@@ -340,17 +340,6 @@ function HomeContent() {
     handleClearSelection();
   }, [collections, handleClearSelection]);
 
-  const handleFilterCollection = useCallback(
-    (id: string | null) => {
-      if (id) {
-        showCollection(id);
-      } else {
-        showLibrary();
-      }
-    },
-    [showCollection, showLibrary],
-  );
-
   const navigateDirectory = useCallback((directory: string | null) => {
     setCurrentView(directory ? "directory" : "all");
     setSelectedCollection(null);
@@ -2048,12 +2037,6 @@ function HomeContent() {
         onSelectOrganize={showOrganize}
         onOpenSettings={handleOpenSettings}
         settingsActive={showSettings}
-        collections={collections}
-        tags={tags}
-        selectedCollection={selectedCollection}
-        selectedTagId={selectedTagId}
-        onSelectCollection={handleFilterCollection}
-        onSelectTag={handleFilterTag}
       />
 
       <Dialog open={showMobileSidebar} onOpenChange={setShowMobileSidebar}>
@@ -2091,18 +2074,6 @@ function HomeContent() {
               handleCloseMobileSidebar();
             }}
             settingsActive={showSettings}
-            collections={collections}
-            tags={tags}
-            selectedCollection={selectedCollection}
-            selectedTagId={selectedTagId}
-            onSelectCollection={(id) => {
-              handleFilterCollection(id);
-              handleCloseMobileSidebar();
-            }}
-            onSelectTag={(id) => {
-              handleFilterTag(id);
-              handleCloseMobileSidebar();
-            }}
           />
         </DialogContent>
       </Dialog>

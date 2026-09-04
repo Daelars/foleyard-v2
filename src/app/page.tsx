@@ -1175,8 +1175,8 @@ function HomeContent() {
   }, []);
 
   return (
-    <div className="relative flex h-full overflow-hidden bg-background font-sans">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_10%,transparent),transparent_32%),radial-gradient(circle_at_bottom_right,color-mix(in_oklab,var(--foreground)_5%,transparent),transparent_38%)]" />
+    <div className="relative flex h-full overflow-hidden bg-canvas font-sans">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--accent-fill)_13%,transparent),transparent_38%),radial-gradient(circle_at_bottom_right,color-mix(in_oklab,var(--accent-fill)_6%,transparent),transparent_40%)]" />
 
       <Sidebar
         className="hidden md:flex"
@@ -1221,7 +1221,7 @@ function HomeContent() {
         </DialogContent>
       </Dialog>
 
-      <main className="relative flex min-w-0 flex-1 flex-col bg-background/40 backdrop-blur-md">
+      <main className="relative flex min-w-0 flex-1 flex-col bg-transparent">
         <DesktopTitleBar />
 
         <header className="shrink-0 border-b border-white/5 px-4 py-3 md:px-5">

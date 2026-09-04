@@ -132,7 +132,7 @@ export function AudioPlayerShell({
                   variant="ghost"
                   size="icon"
                   onClick={onClose}
-                  className="size-8 shrink-0 rounded-full text-muted-foreground"
+                  className="size-8 shrink-0 rounded-full text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
                   aria-label="Close player"
                 >
                   <X className="size-4" />

@@ -34,9 +34,9 @@ function RadioGroupItem({
       )}
       {...props}
     >
-      <div className="flex size-4 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card shadow-sm transition-colors group-data-checked/radio:border-primary group-data-checked/radio:bg-primary group-data-hovered/radio:border-primary/50 group-focus-visible/radio:ring-2 group-focus-visible/radio:ring-primary group-focus-visible/radio:ring-offset-2 group-focus-visible/radio:ring-offset-background group-disabled/radio:cursor-not-allowed group-disabled/radio:opacity-50">
+      <div className="flex size-4 shrink-0 items-center justify-center rounded-full border border-white/15 bg-transparent transition-colors group-data-checked/radio:border-accent-fill group-data-checked/radio:bg-accent-fill group-data-hovered/radio:border-accent-fill/50 group-focus-visible/radio:ring-2 group-focus-visible/radio:ring-primary group-focus-visible/radio:ring-offset-2 group-focus-visible/radio:ring-offset-background group-disabled/radio:cursor-not-allowed group-disabled/radio:opacity-50">
         <RadioPrimitive.Indicator className="flex items-center justify-center">
-          <Circle className="size-2 fill-primary-foreground text-primary-foreground" />
+          <Circle className="size-2 fill-white text-white" />
         </RadioPrimitive.Indicator>
       </div>
       {children}

@@ -233,7 +233,7 @@ export function FolderJanitorDialog({
           <div className="min-w-0 rounded-lg px-3 py-2.5">
             <p className="text-sm font-medium">{scanLabel}</p>
             <p
-              className="mt-0.5 truncate text-xs text-muted-foreground"
+              className="mt-0.5 truncate text-xs text-zinc-500"
               title={scanDescription}
             >
               {scanDescription}
@@ -284,7 +284,7 @@ export function FolderJanitorDialog({
                     return (
                       <Card key={group.kind} size="sm">
                         <CardContent className="flex flex-col gap-0.5">
-                          <p className="text-xs text-muted-foreground">
+                          <p className="font-mono text-xs uppercase tracking-widest text-zinc-500">
                             {group.label}
                           </p>
                           <p className="text-xl font-semibold">{count}</p>
@@ -303,7 +303,7 @@ export function FolderJanitorDialog({
                     />
                     <Label
                       htmlFor="allow-cleanup"
-                      className="text-xs text-muted-foreground"
+                      className="text-xs text-zinc-500"
                     >
                       Allow cleanup actions
                     </Label>
@@ -341,7 +341,7 @@ export function FolderJanitorDialog({
                                 className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5"
                               >
                                 <p
-                                  className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+                                  className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-400"
                                   title={issue.path}
                                 >
                                   {issue.message}

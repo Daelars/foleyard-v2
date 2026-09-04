@@ -39,7 +39,7 @@ export function TagPicker({
           <Button
             variant="ghost"
             size="icon"
-            className="size-8 rounded-full text-muted-foreground/60 hover:bg-accent/50 hover:text-accent-foreground"
+            className="size-8 rounded-full text-zinc-500 hover:bg-white/5 hover:text-zinc-200"
             onClick={(event: React.MouseEvent) => event.stopPropagation()}
             aria-label="Manage tags"
           >
@@ -49,12 +49,12 @@ export function TagPicker({
       />
       <DropdownMenuContent align={align} className="w-48 max-h-64 overflow-y-auto">
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="text-muted-foreground">
+          <DropdownMenuLabel className="text-zinc-500">
             {label}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {allTags.length === 0 ? (
-            <DropdownMenuItem disabled className="text-muted-foreground">
+            <DropdownMenuItem disabled className="text-zinc-500">
               No tags yet
             </DropdownMenuItem>
           ) : (

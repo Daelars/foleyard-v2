@@ -376,14 +376,14 @@ export const AudioPlayerProgress = ({
         Number.isNaN(player.duration)
       }
     >
-      <SliderPrimitive.Track className="bg-muted relative h-[4px] w-full grow overflow-hidden rounded-full">
-        <SliderPrimitive.Range className="bg-primary absolute h-full" />
+      <SliderPrimitive.Track className="relative h-[4px] w-full grow overflow-hidden rounded-full bg-white/10">
+        <SliderPrimitive.Range className="absolute h-full bg-accent-fill" />
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb
         className="relative flex h-0 w-0 items-center justify-center opacity-0 group-hover/player:opacity-100 focus-visible:opacity-100 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
         data-slot="slider-thumb"
       >
-        <div className="bg-foreground absolute size-3 rounded-full" />
+        <div className="absolute size-3 rounded-full bg-zinc-100" />
       </SliderPrimitive.Thumb>
     </SliderPrimitive.Root>
   )
@@ -397,7 +397,7 @@ export const AudioPlayerTime = ({
   return (
     <span
       {...otherProps}
-      className={cn("text-muted-foreground text-sm tabular-nums", className)}
+      className={cn("text-sm tabular-nums text-zinc-400", className)}
     >
       {formatTime(time)}
     </span>
@@ -412,7 +412,7 @@ export const AudioPlayerDuration = ({
   return (
     <span
       {...otherProps}
-      className={cn("text-muted-foreground text-sm tabular-nums", className)}
+      className={cn("text-sm tabular-nums text-zinc-400", className)}
     >
       {player.duration !== null &&
       player.duration !== undefined &&

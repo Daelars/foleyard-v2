@@ -19,7 +19,7 @@ function SelectTrigger({
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       className={cn(
-        "flex h-10 w-full items-center justify-between gap-2 rounded-xl border border-border/40 bg-card/60 px-3 py-2 text-sm shadow-sm backdrop-blur-xl placeholder:text-muted-foreground/65 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 data-open:border-primary/50",
+        "flex h-10 w-full items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus-visible:border-accent-fill/50 focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 data-open:border-accent-fill/50",
         className
       )}
       {...props}
@@ -54,7 +54,7 @@ function SelectPopup({
         <SelectPrimitive.Popup
           data-slot="select-popup"
           className={cn(
-            "z-50 min-w-[8rem] overflow-hidden rounded-xl border border-border/40 bg-card/95 p-1 shadow-xl backdrop-blur-2xl data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "z-50 min-w-[8rem] overflow-hidden rounded-xl border border-white/10 bg-shell/95 p-1 text-zinc-100 shadow-xl backdrop-blur-2xl data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className
           )}
           {...props}
@@ -73,7 +73,7 @@ function SelectItem({
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "relative flex w-full cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-none select-none data-highlighted:bg-accent/50 data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
+        "relative flex w-full cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-zinc-200 outline-none select-none data-highlighted:bg-accent-fill/15 data-highlighted:text-accent-text data-disabled:pointer-events-none data-disabled:opacity-50",
         className
       )}
       {...props}

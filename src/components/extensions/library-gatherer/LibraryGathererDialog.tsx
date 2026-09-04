@@ -288,10 +288,10 @@ export function LibraryGathererDialog({
           {previewResult && previewResult.files.length > 0 && (
             <div className="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-white/10 bg-white/5 p-3">
               {previewResult.files.slice(0, 20).map((file, idx) => (
-                <p key={idx} className="truncate text-xs text-muted-foreground">
+                <p key={idx} className="truncate font-mono text-xs text-zinc-400">
                   {file.sourcePath} → {file.outputPath}
                   {file.reason && (
-                    <span className="text-muted-foreground/60">
+                    <span className="text-zinc-600">
                       {" "}
                       ({file.reason})
                     </span>
@@ -299,7 +299,7 @@ export function LibraryGathererDialog({
                 </p>
               ))}
               {previewResult.files.length > 20 && (
-                <p className="text-xs text-muted-foreground">
+                <p className="font-mono text-xs text-zinc-500">
                   ...and {previewResult.files.length - 20} more
                 </p>
               )}
@@ -314,7 +314,7 @@ export function LibraryGathererDialog({
                   {completedResult.copied.toLocaleString()} files copied,{" "}
                   {completedResult.skipped.toLocaleString()} skipped.
                   <br />
-                  <span className="text-xs text-muted-foreground">
+                  <span className="font-mono text-xs text-zinc-500">
                     Report saved to {completedResult.reportPath}
                   </span>
                 </AlertDescription>

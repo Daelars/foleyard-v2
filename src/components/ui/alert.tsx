@@ -14,7 +14,7 @@ function Alert({
       className={cn(
         "flex flex-col gap-1 rounded-xl border px-4 py-3 text-sm",
         variant === "default"
-          ? "border-border/40 bg-muted/30 text-foreground"
+          ? "border-white/10 bg-white/[0.04] text-zinc-200"
           : "border-destructive/20 bg-destructive/10 text-destructive",
         className
       )}
@@ -37,7 +37,7 @@ function AlertDescription({ className, ...props }: React.ComponentProps<"div">) 
   return (
     <div
       data-slot="alert-description"
-      className={cn("text-sm leading-relaxed text-muted-foreground [&_strong]:font-medium [&_strong]:text-foreground", className)}
+      className={cn("text-sm leading-relaxed text-zinc-400 [&_strong]:font-medium [&_strong]:text-zinc-100", className)}
       {...props}
     />
   )

@@ -46,4 +46,64 @@ describe("theme token law", () => {
       expect(page, `page.tsx must not hard-code ${hex.source}`).not.toMatch(hex);
     }
   });
+
+  // Consistency sweep (#33): no inventoried surface carries old-skin tokens.
+  // Overlays keep their popover/shell backgrounds; everything else reads zinc,
+  // white/10 outlines, white/5 dividers, and the accent-fill utilities.
+  it("keeps old-skin tokens out of every inventoried surface", () => {
+    const surfaces = [
+      "./page.tsx",
+      "../components/Sidebar.tsx",
+      "../components/SoundShelf.tsx",
+      "../components/ExtensionGrid.tsx",
+      "../components/SettingsDialog.tsx",
+      "../components/OnboardingDialog.tsx",
+      "../components/DesktopTitleBar.tsx",
+      "../components/UpdateNotifier.tsx",
+      "../components/TagPicker.tsx",
+      "../components/FileTable/file-row.tsx",
+      "../components/AudioPlayer/collection-menu.tsx",
+      "../components/AudioPlayer/player-shell.tsx",
+      "../components/extensions/folder-janitor/FolderJanitorDialog.tsx",
+      "../components/extensions/library-gatherer/LibraryGathererDialog.tsx",
+      "../components/extensions/make-pack/MakePackDialog.tsx",
+      "../components/extensions/rename-hammer/RenameHammerDialog.tsx",
+      "../components/ui/accordion.tsx",
+      "../components/ui/alert.tsx",
+      "../components/ui/audio-player.tsx",
+      "../components/ui/badge.tsx",
+      "../components/ui/button.tsx",
+      "../components/ui/card.tsx",
+      "../components/ui/context-menu.tsx",
+      "../components/ui/dropdown-menu.tsx",
+      "../components/ui/radio-group.tsx",
+      "../components/ui/select.tsx",
+      "../components/ui/slider.tsx",
+      "../components/ui/table.tsx",
+      "../components/ui/tabs.tsx",
+      "../components/ui/tooltip.tsx",
+    ];
+    const banned = [
+      "muted-foreground",
+      "border-border",
+      "bg-card",
+      "bg-muted",
+      "text-foreground",
+      "bg-accent/",
+      "text-accent-foreground",
+      "hover:bg-accent/",
+      "bg-primary",
+      "text-primary",
+      "border-primary",
+    ];
+    for (const surface of surfaces) {
+      const source = fs.readFileSync(new URL(surface, import.meta.url), "utf8");
+      for (const token of banned) {
+        expect(
+          source,
+          `${surface} must not carry old-skin token ${token}`,
+        ).not.toContain(token);
+      }
+    }
+  });
 });

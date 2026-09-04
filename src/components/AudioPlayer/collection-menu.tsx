@@ -38,12 +38,12 @@ export function AudioPlayerCollectionMenu({
         className="w-60"
       >
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="text-muted-foreground">
+          <DropdownMenuLabel className="text-zinc-500">
             Playlists
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {collections.length === 0 ? (
-            <DropdownMenuItem disabled className="text-muted-foreground">
+            <DropdownMenuItem disabled className="text-zinc-500">
               No playlists found
             </DropdownMenuItem>
           ) : (
@@ -54,14 +54,14 @@ export function AudioPlayerCollectionMenu({
                 className="text-popover-foreground"
               >
                 {collection.isSmart ? (
-                  <Filter className="mr-2 size-3.5 shrink-0 text-muted-foreground" />
+                  <Filter className="mr-2 size-3.5 shrink-0 text-zinc-500" />
                 ) : null}
                 <span className="truncate">{collection.name}</span>
                 {collection.isSmart ? (
-                  <span className="ml-1 text-[10px] text-muted-foreground/60">Smart</span>
+                  <span className="ml-1 text-[10px] text-zinc-500">Smart</span>
                 ) : null}
                 {typeof collection.fileCount === "number" ? (
-                  <span className="ml-auto text-xs text-muted-foreground">
+                  <span className="ml-auto font-mono text-xs tabular-nums text-zinc-500">
                     {collection.fileCount}
                   </span>
                 ) : null}

@@ -339,7 +339,7 @@ export const FileTableFileRow = memo(function FileTableFileRow({
                   </ContextMenuCheckboxItem>
                 ))
               ) : (
-                <ContextMenuItem disabled className="text-muted-foreground">
+                <ContextMenuItem disabled className="text-zinc-500">
                   No tags yet
                 </ContextMenuItem>
               )}

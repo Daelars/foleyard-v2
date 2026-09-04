@@ -1359,7 +1359,7 @@ function HomeContent() {
             </div>
 
             {showSoundShelf ? (
-              <aside className="hidden w-80 shrink-0 border-l border-border/40 bg-card/60 backdrop-blur-xl lg:flex lg:flex-col">
+              <aside className="hidden w-80 shrink-0 border-l border-white/10 lg:flex lg:flex-col">
                 <SoundShelf
                   makePackEnabled={makePackEnabled}
                   onMakePackShelf={handleMakePackShelf}

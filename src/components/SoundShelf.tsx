@@ -90,11 +90,11 @@ export function SoundShelf({
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
       <div className="flex items-center gap-2 px-2">
-        <Puzzle className="size-4 text-muted-foreground" />
-        <h3 className="text-sm font-semibold text-muted-foreground">
+        <Puzzle className="size-4 text-accent-text" />
+        <h3 className="text-sm font-semibold text-zinc-200">
           Sound Shelf
         </h3>
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="ml-auto font-mono text-xs text-zinc-500">
           {items.length} {items.length === 1 ? "item" : "items"}
         </span>
       </div>
@@ -105,7 +105,7 @@ export function SoundShelf({
             type="button"
             variant="outline"
             size="sm"
-            className="justify-center gap-2 rounded-xl text-xs"
+            className="justify-center gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-200 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.08] hover:text-zinc-100"
             disabled={items.length === 0 || !makePackEnabled}
             onClick={() => {
               void onMakePackShelf?.();
@@ -118,7 +118,7 @@ export function SoundShelf({
             type="button"
             variant="outline"
             size="sm"
-            className="justify-center gap-2 rounded-xl text-xs"
+            className="justify-center gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-200 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.08] hover:text-zinc-100"
             disabled={items.length === 0}
             onClick={() => {
               void handleClear();
@@ -131,23 +131,28 @@ export function SoundShelf({
       </div>
 
       <div className="space-y-1">
+        {items.length === 0 && (
+          <p className="px-2 py-6 text-center text-xs text-zinc-500">
+            No sounds on the shelf yet
+          </p>
+        )}
         {items.map((item) => (
           <div
             key={item.fileId}
             className={cn(
-              "flex cursor-pointer items-center gap-3 rounded-lg border border-border/40 bg-card/60 px-3 py-2 shadow-sm backdrop-blur-xl transition-[background-color,color] hover:bg-accent/50 hover:text-accent-foreground",
+              "flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 transition-[background-color,color] hover:bg-white/[0.08]",
             )}
             onClick={() => onSelectFile?.(item.fileId)}
           >
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm">{item.filename}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="truncate text-sm text-zinc-100">{item.filename}</p>
+              <p className="font-mono text-xs text-zinc-500">
                 {item.format ?? "???"} · {formatDuration(item.duration)}
               </p>
             </div>
             <button
               type="button"
-              className="shrink-0 rounded-full p-1 text-muted-foreground transition-[background-color,color] hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="shrink-0 rounded-full p-1 text-zinc-500 transition-[background-color,color] hover:bg-destructive/15 hover:text-destructive focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               onClick={(event) => {
                 event.stopPropagation();
                 void handleRemove(item.fileId);

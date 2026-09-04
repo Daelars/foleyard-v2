@@ -6,7 +6,7 @@ import { RowDesigns } from "./row-designs";
 
 export default function ShowcasePage() {
   return (
-    <div className="min-h-full bg-canvas pb-20 font-sans text-zinc-100 antialiased">
+    <div className="min-h-0 flex-1 overflow-y-auto bg-canvas pb-20 font-sans text-zinc-100 antialiased">
       <p className="border-b border-white/10 bg-black/40 px-4 py-1.5 text-center font-mono text-[11px] text-accent-text">
         SHOWCASE — throwaway design review. Five directions per element, all fake data.
       </p>

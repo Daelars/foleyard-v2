@@ -11,6 +11,12 @@ import {
   type PaletteEntry,
 } from "@/components/CommandPalette/command-palette";
 import { CommandPalette } from "@/components/CommandPalette/CommandPalette";
+import {
+  DEFAULT_SHORTCUTS,
+  isTypingTarget,
+  matchShortcutKey,
+  shouldSkipSpace,
+} from "@/components/Shortcuts/shortcuts";
 import { SelectionBulkBar } from "@/components/FileTable/bulk-bar";
 import {
   clearSelection,
@@ -138,6 +144,7 @@ function HomeContent() {
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [currentView, setCurrentView] = useState<
     "all" | "favorites" | "extensions" | "collection" | "directory" | "shelf"
   >("all");
@@ -1418,6 +1425,40 @@ function HomeContent() {
     selectionAnchorRef.current = file.id;
   }, []);
 
+  const handleMoveSelection = useCallback(
+    (direction: 1 | -1) => {
+      const visible = filesRef.current;
+      if (visible.length === 0) {
+        return;
+      }
+
+      const currentId =
+        selectedFileRef.current?.id ??
+        selectedIdsRef.current[selectedIdsRef.current.length - 1];
+      const index = visible.findIndex((file) => file.id === currentId);
+      const next =
+        visible[(index + direction + visible.length) % visible.length];
+      if (!next) {
+        return;
+      }
+
+      playIds(
+        visible.map((listed) => listed.id),
+        next.id,
+      );
+      setSelectedFile(next);
+      setSelectedIds([next.id]);
+      selectionAnchorRef.current = next.id;
+
+      const row = document.querySelector(`[data-file-id="${CSS.escape(next.id)}"]`);
+      if (row instanceof HTMLElement) {
+        row.scrollIntoView({ block: "nearest" });
+        row.focus({ preventScroll: true });
+      }
+    },
+    [playIds],
+  );
+
   const handleTrackEnded = useCallback(() => {
     const nextId = advanceIfEnabled();
     if (!nextId) {
@@ -1761,6 +1802,56 @@ function HomeContent() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [paletteOpen, paletteEntries, activePaletteIndex, handlePaletteSelect]);
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      if (paletteOpen) {
+        return;
+      }
+
+      if (matchShortcutKey(event, DEFAULT_SHORTCUTS["toggle-playback"])) {
+        if (shouldSkipSpace(event.target)) {
+          return;
+        }
+
+        event.preventDefault();
+        audioPlayerRef.current?.togglePlayback();
+        return;
+      }
+
+      if (isTypingTarget(event.target)) {
+        return;
+      }
+
+      if (matchShortcutKey(event, DEFAULT_SHORTCUTS["focus-search"])) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (
+        matchShortcutKey(event, DEFAULT_SHORTCUTS["toggle-favorite"])
+      ) {
+        const current = selectedFileRef.current;
+        if (current) {
+          void handleToggleFavorite(current.id);
+        }
+      } else if (matchShortcutKey(event, DEFAULT_SHORTCUTS["move-next"])) {
+        event.preventDefault();
+        handleMoveSelection(1);
+      } else if (matchShortcutKey(event, DEFAULT_SHORTCUTS["move-prev"])) {
+        event.preventDefault();
+        handleMoveSelection(-1);
+      } else if (matchShortcutKey(event, DEFAULT_SHORTCUTS["open-settings"])) {
+        event.preventDefault();
+        setShowSettings(true);
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [paletteOpen, handleMoveSelection, handleToggleFavorite]);
+
   const handleCloseExtensionDetails = useCallback((open: boolean) => {
     if (!open) setSelectedExtension(null);
   }, []);
@@ -1843,10 +1934,11 @@ function HomeContent() {
 
             {!hideHeaderActions && (
               <div className="relative flex flex-1 items-center gap-2 duration-300 animate-in fade-in-0 slide-in-from-top-2 md:max-w-xl">
-                <div className="relative flex-1">
-                  <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-4 -translate-y-1/2 text-zinc-500" />
-                  <Input
-                    value={searchQuery}
+                  <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-4 -translate-y-1/2 text-zinc-500" />
+                    <Input
+                      ref={searchInputRef}
+                      value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Search library..."
                     className="h-10 rounded-xl border-white/10 bg-white/[0.04] pl-10 pr-4 text-sm font-medium leading-5 text-zinc-50 shadow-none backdrop-blur-none placeholder:font-normal placeholder:text-zinc-600 focus-visible:border-accent-fill/60 focus-visible:bg-white/[0.06] focus-visible:ring-0 focus-visible:ring-offset-0"

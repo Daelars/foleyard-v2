@@ -1422,23 +1422,23 @@ function HomeContent() {
         open={selectedExtension !== null}
         onOpenChange={handleCloseExtensionDetails}
       >
-        <DialogContent className="max-w-lg rounded-2xl border border-border/40 bg-card/95 p-6 backdrop-blur-2xl">
-          <DialogTitle>
+        <DialogContent className="max-w-lg rounded-2xl border border-white/10 bg-shell/95 p-6 backdrop-blur-2xl">
+          <DialogTitle className="text-lg font-extrabold tracking-tight text-zinc-50">
             {selectedExtension?.name ?? "Extension details"}
           </DialogTitle>
           {selectedExtension ? (
             <div className="space-y-5 text-sm">
               <div className="space-y-1">
-                <p className="text-muted-foreground">
+                <p className="text-zinc-400">
                   {selectedExtension.description}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="font-mono text-xs text-zinc-500">
                   {selectedExtension.provider} · v{selectedExtension.version}
                 </p>
               </div>
 
               <div className="space-y-2">
-                <h3 className="text-sm font-medium">Commands</h3>
+                <h3 className="text-sm font-semibold text-zinc-200">Commands</h3>
                 {selectedExtension.commands?.length ? (
                   <div className="flex flex-wrap gap-2">
                     {selectedExtension.commands.map((command) => (
@@ -1452,7 +1452,7 @@ function HomeContent() {
                             command.id,
                           );
                         }}
-                        className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 text-xs text-muted-foreground ring-1 ring-border/50 transition-colors hover:bg-primary/10 hover:text-primary hover:ring-primary/30"
+                        className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-zinc-300 ring-1 ring-white/10 transition-colors hover:border-accent-fill/50 hover:bg-accent-fill/10 hover:text-accent-text hover:ring-accent-fill/30"
                         title={`Run: ${command.title}`}
                       >
                         {command.title}
@@ -1460,60 +1460,60 @@ function HomeContent() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-zinc-500">
                     No commands exposed.
                   </p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <h3 className="text-sm font-medium">Permissions</h3>
+                <h3 className="text-sm font-semibold text-zinc-200">Permissions</h3>
                 {selectedExtension.permissions?.length ? (
                   <div className="flex flex-wrap gap-2">
                     {selectedExtension.permissions.map((permission) => (
                       <span
                         key={permission}
-                        className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 text-xs text-muted-foreground ring-1 ring-border/50"
+                        className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-zinc-400 ring-1 ring-white/10"
                       >
                         {permission}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-zinc-500">
                     No permissions declared.
                   </p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <h3 className="text-sm font-medium">Surfaces</h3>
+                <h3 className="text-sm font-semibold text-zinc-200">Surfaces</h3>
                 {selectedExtension.surfaces?.length ? (
                   <div className="flex flex-wrap gap-2">
                     {selectedExtension.surfaces.map((surface) => (
                       <span
                         key={surface}
-                        className="rounded-full border border-border/40 bg-muted/50 px-2 py-1 text-xs text-muted-foreground ring-1 ring-border/50"
+                        className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-zinc-400 ring-1 ring-white/10"
                       >
                         {surface}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-zinc-500">
                     No UI surfaces declared.
                   </p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <h3 className="text-sm font-medium">Settings</h3>
+                <h3 className="text-sm font-semibold text-zinc-200">Settings</h3>
                 {selectedExtension.settingsCount ? (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-zinc-500">
                     This extension exposes {selectedExtension.settingsCount} configurable settings.
                   </p>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-zinc-500">
                     This extension has no configurable settings yet.
                   </p>
                 )}

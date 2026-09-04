@@ -17,7 +17,7 @@ type Selection = { kind: "collection" | "tag"; id: string };
 
 const DETAIL_FILES = ["Metal Door Slam", "Glass Break Small", "Gravel Footsteps"];
 
-function useFlowState() {
+export function useFlowState() {
   const [selection, setSelection] = useState<Selection>({ kind: "collection", id: "c2" });
   const [collectionColors, setCollectionColors] = useState<Record<string, string>>({
     c1: "#f0503c",
@@ -178,8 +178,11 @@ function FlowARows({
   );
 }
 
-function FlowA() {
-  const flow = useFlowState();
+export type FlowControls = ReturnType<typeof useFlowState>;
+
+export function FlowA(external?: Partial<FlowControls>) {
+  const inner = useFlowState();
+  const flow = { ...inner, ...external };
   const { selection, collectionColors, setCollectionColors, tagColors, setTagColors } = flow;
   const color =
     selection.kind === "collection"
@@ -205,8 +208,9 @@ function FlowA() {
   );
 }
 
-function FlowB() {
-  const flow = useFlowState();
+export function FlowB(external?: Partial<FlowControls>) {
+  const inner = useFlowState();
+  const flow = { ...inner, ...external };
   const { selection, setSelection, collectionColors, setCollectionColors } = flow;
   const selectedCollection =
     selection.kind === "collection"
@@ -274,8 +278,9 @@ function FlowB() {
   );
 }
 
-function FlowC() {
-  const flow = useFlowState();
+export function FlowC(external?: Partial<FlowControls>) {
+  const inner = useFlowState();
+  const flow = { ...inner, ...external };
   const { selection, setSelection, collectionColors, setCollectionColors, tagColors, setTagColors } = flow;
   const color =
     selection.kind === "collection"

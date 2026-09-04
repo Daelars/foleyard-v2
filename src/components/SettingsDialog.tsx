@@ -36,6 +36,16 @@ import {
   Dialog,
   DialogContent as BaseDialogContent,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -126,7 +136,7 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <BaseDialogContent className="flex !h-[85vh] !max-h-[850px] !w-[96vw] !max-w-6xl flex-col overflow-hidden border-border/40 bg-card/95 p-0 shadow-2xl backdrop-blur-2xl sm:!w-[94vw] lg:!w-[92vw]">
+      <BaseDialogContent className="flex !h-[85vh] !max-h-[850px] !w-[96vw] !max-w-6xl flex-col overflow-hidden border-white/10 bg-shell/95 p-0 shadow-2xl backdrop-blur-2xl sm:!w-[94vw] lg:!w-[92vw]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_12%,transparent),transparent_34%)]" />
         {open ? (
           <SettingsDialogBody
@@ -204,6 +214,7 @@ function SettingsDialogBody({
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newTagName, setNewTagName] = useState("");
   const [expandedExtensionId, setExpandedExtensionId] = useState<string | null>(null);
+  const [confirmRemoveRoot, setConfirmRemoveRoot] = useState<string | null>(null);
   const manualUpdateToastRef = useRef<string | number | null>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const collectionInputRef = useRef<HTMLInputElement>(null);
@@ -408,6 +419,14 @@ function SettingsDialogBody({
     await onRemoveRoot(path);
   };
 
+  const handleConfirmRemoveRoot = async () => {
+    const path = confirmRemoveRoot;
+    setConfirmRemoveRoot(null);
+    if (path) {
+      await handleRemoveRoot(path);
+    }
+  };
+
   const handleStartScan = async () => {
     setIsStartingScan(true);
 
@@ -447,15 +466,16 @@ function SettingsDialogBody({
   };
 
   return (
+    <>
     <Tabs defaultValue="library" orientation="vertical" className="relative flex h-full min-h-0 flex-1 flex-row gap-0 bg-transparent">
       {/* Sidebar Navigation */}
-      <aside className="flex w-64 shrink-0 flex-col border-r border-border/40 bg-card/60 backdrop-blur-xl">
+      <aside className="flex w-64 shrink-0 flex-col border-r border-white/10">
         <div className="p-6">
-          <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight">
-            <Database className="size-5 text-primary" />
+          <h2 className="flex items-center gap-2 text-xl font-extrabold tracking-tighter text-zinc-50">
+            <Database className="size-5 text-accent-text" />
             Settings
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 font-mono text-xs text-zinc-500">
             v2.1.0-alpha · Foleyard Core
           </p>
         </div>
@@ -463,28 +483,28 @@ function SettingsDialogBody({
         <TabsList className="flex flex-col items-stretch justify-start bg-transparent p-2">
           <TabsTrigger
             value="library"
-            className="justify-start gap-3 rounded-lg px-4 py-2.5 text-sm transition-all hover:bg-accent/50 hover:text-accent-foreground data-active:bg-primary/10 data-active:text-primary data-active:shadow-[inset_3px_0_0_var(--primary)]"
+            className="justify-start gap-3 rounded-xl border border-transparent px-4 py-2.5 text-sm text-zinc-400 transition-all hover:border-white/10 hover:bg-white/5 hover:text-zinc-200 data-active:border-accent-fill/50 data-active:bg-accent-fill/15 data-active:text-accent-text data-active:shadow-glow-accent"
           >
             <FolderOpen className="size-4" />
             Library & Storage
           </TabsTrigger>
           <TabsTrigger
             value="metadata"
-            className="justify-start gap-3 rounded-lg px-4 py-2.5 text-sm transition-all hover:bg-accent/50 hover:text-accent-foreground data-active:bg-primary/10 data-active:text-primary data-active:shadow-[inset_3px_0_0_var(--primary)]"
+            className="justify-start gap-3 rounded-xl border border-transparent px-4 py-2.5 text-sm text-zinc-400 transition-all hover:border-white/10 hover:bg-white/5 hover:text-zinc-200 data-active:border-accent-fill/50 data-active:bg-accent-fill/15 data-active:text-accent-text data-active:shadow-glow-accent"
           >
             <ListMusic className="size-4" />
             Playlists & Tags
           </TabsTrigger>
           <TabsTrigger
             value="extensions"
-            className="justify-start gap-3 rounded-lg px-4 py-2.5 text-sm transition-all hover:bg-accent/50 hover:text-accent-foreground data-active:bg-primary/10 data-active:text-primary data-active:shadow-[inset_3px_0_0_var(--primary)]"
+            className="justify-start gap-3 rounded-xl border border-transparent px-4 py-2.5 text-sm text-zinc-400 transition-all hover:border-white/10 hover:bg-white/5 hover:text-zinc-200 data-active:border-accent-fill/50 data-active:bg-accent-fill/15 data-active:text-accent-text data-active:shadow-glow-accent"
           >
             <Layers className="size-4" />
             Extensions
           </TabsTrigger>
           <TabsTrigger
             value="appearance"
-            className="justify-start gap-3 rounded-lg px-4 py-2.5 text-sm transition-all hover:bg-accent/50 hover:text-accent-foreground data-active:bg-primary/10 data-active:text-primary data-active:shadow-[inset_3px_0_0_var(--primary)]"
+            className="justify-start gap-3 rounded-xl border border-transparent px-4 py-2.5 text-sm text-zinc-400 transition-all hover:border-white/10 hover:bg-white/5 hover:text-zinc-200 data-active:border-accent-fill/50 data-active:bg-accent-fill/15 data-active:text-accent-text data-active:shadow-glow-accent"
           >
             <Monitor className="size-4" />
             Appearance
@@ -492,7 +512,7 @@ function SettingsDialogBody({
           <Separator className="my-2 mx-4 opacity-50" />
           <TabsTrigger
             value="about"
-            className="justify-start gap-3 rounded-lg px-4 py-2.5 text-sm transition-all hover:bg-accent/50 hover:text-accent-foreground data-active:bg-primary/10 data-active:text-primary data-active:shadow-[inset_3px_0_0_var(--primary)]"
+            className="justify-start gap-3 rounded-xl border border-transparent px-4 py-2.5 text-sm text-zinc-400 transition-all hover:border-white/10 hover:bg-white/5 hover:text-zinc-200 data-active:border-accent-fill/50 data-active:bg-accent-fill/15 data-active:text-accent-text data-active:shadow-glow-accent"
           >
             <Info className="size-4" />
             About
@@ -500,7 +520,7 @@ function SettingsDialogBody({
         </TabsList>
 
         <div className="mt-auto p-4">
-          <div className="rounded-lg border border-border/40 bg-card/60 p-3 shadow-sm backdrop-blur-xl">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
              <div className="flex items-center gap-3">
               <DotmSquare3
                 size={20}
@@ -508,11 +528,11 @@ function SettingsDialogBody({
                 speed={1.2}
                 animated={scanStatus.running}
                 pattern="full"
-                className={scanStatus.running ? "text-primary" : "text-muted-foreground/50"}
+                className={scanStatus.running ? "text-accent-text" : "text-zinc-500"}
               />
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</p>
-                <p className="truncate text-[11px] font-medium">
+                <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-500">Status</p>
+                <p className="truncate text-[11px] font-medium text-zinc-200">
                   {scanStatus.running ? scanStatus.phase : "Service Online"}
                 </p>
               </div>
@@ -522,14 +542,14 @@ function SettingsDialogBody({
       </aside>
 
       {/* Content Area */}
-      <main className="relative flex flex-1 flex-col overflow-hidden bg-background/35 backdrop-blur-md">
+      <main className="relative flex flex-1 flex-col overflow-hidden">
         <ScrollArea className="h-full">
           {/* LIBRARY TAB */}
           <TabsContent value="library" className="m-0 flex-1 p-8 outline-none">
             <div className="mx-auto w-full max-w-4xl space-y-8">
               <div>
-                <h3 className="text-lg font-semibold tracking-tight">Library location</h3>
-                <p className="text-sm text-muted-foreground">
+                <h3 className="text-lg font-semibold tracking-tight text-zinc-50">Library location</h3>
+                <p className="text-sm text-zinc-400">
                   The primary folder where your audio samples are stored.
                 </p>
               </div>
@@ -537,13 +557,13 @@ function SettingsDialogBody({
               <section className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <FolderOpen className="size-4 text-primary" />
-                    <span className="text-sm font-medium">Library folders</span>
+                    <FolderOpen className="size-4 text-accent-text" />
+                    <span className="text-sm font-medium text-zinc-200">Library folders</span>
                   </div>
                   {settings.libraryRoots.length > 0 ? (
-                    <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-accent/50 hover:text-accent-foreground">Configured</Badge>
+                    <Badge variant="secondary" className="rounded-full bg-accent-fill/15 font-mono text-accent-text">Configured</Badge>
                   ) : (
-                    <Badge variant="outline" className="border-primary/50 text-primary">Required</Badge>
+                    <Badge variant="outline" className="rounded-full border-accent-fill/50 font-mono text-accent-text">Required</Badge>
                   )}
                 </div>
 
@@ -556,13 +576,13 @@ function SettingsDialogBody({
                         setValidationResult(null);
                       }}
                       placeholder="e.g. C:\Samples or /Volumes/Audio"
-                      className="h-10 flex-1 border-border/40 bg-background font-mono text-sm shadow-none"
+                      className="h-10 flex-1 rounded-xl border-white/10 bg-black/30 font-mono text-sm shadow-none"
                     />
                     <Button
                       variant="outline"
                       onClick={handleBrowse}
                       disabled={isValidating}
-                      className="h-10 rounded-lg border-border/40 px-4 hover:bg-accent/50 hover:text-accent-foreground"
+                      className="h-10 rounded-xl border-white/10 bg-white/5 px-4 text-zinc-200 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.08] hover:text-zinc-100"
                     >
                       {isValidating ? (
                         <Loader2 className="size-4 animate-spin" />
@@ -581,23 +601,23 @@ function SettingsDialogBody({
                     />
                   </div>
 
-                  <div className="divide-y divide-border/40 border-y border-border/40">
+                  <div className="divide-y divide-white/5 border-y border-white/10">
                     {settings.libraryRoots.length === 0 ? (
-                      <div className="py-4 text-sm text-muted-foreground">
+                      <div className="py-4 text-sm text-zinc-500">
                         No library folders added.
                       </div>
                     ) : (
                       settings.libraryRoots.map((root) => (
                         <div key={root} className="flex items-center gap-3 py-2.5">
-                          <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
-                          <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                          <FolderOpen className="size-4 shrink-0 text-zinc-500" />
+                          <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-200">
                             {root}
                           </span>
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => void handleRemoveRoot(root)}
+                            className="text-zinc-500 hover:bg-destructive/15 hover:text-destructive"
+                            onClick={() => setConfirmRemoveRoot(root)}
                             aria-label={`Remove library folder ${root}`}
                           >
                             <Trash2 className="size-4" />
@@ -612,7 +632,7 @@ function SettingsDialogBody({
                   ) : null}
 
                   <div className="flex items-center justify-between gap-4 pt-2">
-                    <p className="text-xs text-muted-foreground leading-relaxed">
+                    <p className="text-xs text-zinc-500 leading-relaxed">
                       Add every folder you want included in scans.
                     </p>
                     <Button
@@ -639,8 +659,8 @@ function SettingsDialogBody({
               <Separator className="opacity-50" />
 
               <div>
-                <h3 className="text-lg font-semibold tracking-tight">Scan & index</h3>
-                <p className="text-sm text-muted-foreground">
+                <h3 className="text-lg font-semibold tracking-tight text-zinc-50">Scan & index</h3>
+                <p className="text-sm text-zinc-400">
                   Synchronize your database with the local filesystem.
                 </p>
               </div>
@@ -649,10 +669,10 @@ function SettingsDialogBody({
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                       <RefreshCw className={cn("size-4 text-primary", scanStatus.running && "animate-spin")} />
-                       <span className="text-sm font-medium">Library sync</span>
+                       <RefreshCw className={cn("size-4 text-accent-text", scanStatus.running && "animate-spin")} />
+                       <span className="text-sm font-medium text-zinc-200">Library sync</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-zinc-500">
                       Refreshes metadata and discovers new files.
                     </p>
                   </div>
@@ -1095,6 +1115,39 @@ function SettingsDialogBody({
         </ScrollArea>
       </main>
     </Tabs>
+
+    <AlertDialog
+      open={confirmRemoveRoot !== null}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setConfirmRemoveRoot(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove library folder?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {confirmRemoveRoot ? (
+              <>
+                <span className="font-mono text-xs text-zinc-300">{confirmRemoveRoot}</span>
+                <br />
+                This folder will no longer be scanned or indexed. Your files on
+                disk are not deleted.
+              </>
+            ) : null}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive/15 text-destructive hover:bg-destructive/25"
+            onClick={() => void handleConfirmRemoveRoot()}
+          >
+            Remove folder
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
@@ -1551,14 +1604,14 @@ function ValidationMessage({ result }: { result: ValidationResult }) {
   return (
     <div
       className={cn(
-        "flex gap-3 border-y p-4 transition-all animate-in fade-in slide-in-from-top-2",
+        "flex gap-3 rounded-xl border p-4 transition-all animate-in fade-in slide-in-from-top-2",
         result.valid
-          ? "border-primary/30 bg-primary/10 text-foreground"
+          ? "border-accent-fill/30 bg-accent-fill/10 text-zinc-100"
           : "border-destructive/30 bg-destructive/10 text-destructive",
       )}
     >
       {result.valid ? (
-        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
+        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent-fill/20 text-accent-text">
           <CheckCircle2 className="size-4" />
         </div>
       ) : (
@@ -1576,7 +1629,7 @@ function ValidationMessage({ result }: { result: ValidationResult }) {
             : result.error}
         </p>
         {result.valid && result.normalizedPath ? (
-          <div className="mt-2 border-y border-border/40 bg-muted/30 py-1.5 font-mono text-[10px] text-muted-foreground">
+          <div className="mt-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 font-mono text-[10px] text-zinc-400">
             {result.normalizedPath}
           </div>
         ) : null}
@@ -1597,16 +1650,16 @@ function ScanStat({
   variant?: "default" | "success" | "error";
 }) {
   return (
-    <div className="group border-y border-border/40 p-3 transition-colors hover:bg-accent/30">
-      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground group-hover:text-primary transition-colors">
+    <div className="group rounded-xl border border-white/10 bg-white/[0.02] p-3 transition-colors hover:bg-white/5">
+      <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-accent-text transition-colors">
         {icon}
         {label}
       </div>
       <p className={cn(
-        "mt-1 truncate font-mono text-lg font-bold",
-        variant === "success" && "text-primary",
+        "mt-1 truncate font-mono text-lg font-bold tabular-nums",
+        variant === "success" && "text-accent-text",
         variant === "error" && "text-destructive",
-        variant === "default" && "text-foreground"
+        variant === "default" && "text-zinc-100"
       )}>
         {value}
       </p>

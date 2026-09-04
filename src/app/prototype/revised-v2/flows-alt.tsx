@@ -93,6 +93,15 @@ export function AltRailDetail() {
           backgroundImage: `radial-gradient(circle at 88% 0%, ${color}45, transparent 92%)`,
         }}
       >
+        <div
+          className="m-3 rounded-2xl bg-black/60 p-2 backdrop-blur-md"
+          style={{
+            WebkitMaskImage:
+              "radial-gradient(100% 100% at 50% 50%, black 38%, transparent 98%)",
+            maskImage:
+              "radial-gradient(100% 100% at 50% 50%, black 38%, transparent 98%)",
+          }}
+        >
         <div className="flex items-center gap-4 p-5">
           <span
             className="flex size-16 shrink-0 items-center justify-center rounded-2xl text-xl font-bold"
@@ -131,6 +140,7 @@ export function AltRailDetail() {
           >
             {isCollection ? "Open" : "Filter library"}
           </span>
+        </div>
         </div>
       </div>
     </div>

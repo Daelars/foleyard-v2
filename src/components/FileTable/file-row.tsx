@@ -1,14 +1,12 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import {
-  ChevronRight,
   Copy,
   ExternalLink,
   FolderOpen,
   GripVertical,
   Heart,
-  MoreHorizontal,
   PackagePlus,
   Pause,
   Play,
@@ -17,7 +15,6 @@ import {
   X,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuCheckboxItem,
@@ -30,24 +27,12 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
 import { cn, formatDuration } from "@/lib/utils";
 
-import { TagPicker, type TagItem } from "@/components/TagPicker";
-
 import { highlightMatch } from "./highlight-match";
 import type { FileTableFileRecord } from "./types";
-
-function fileTagIdsMemo(file: FileTableFileRecord): Set<string> {
-  return new Set(file.tags.map((t) => t.id));
-}
 
 export const FileTableFileRow = memo(function FileTableFileRow({
   desktop,
@@ -101,7 +86,7 @@ export const FileTableFileRow = memo(function FileTableFileRow({
   showDesktopActions: boolean;
   makePackEnabled: boolean;
   soundShelfEnabled: boolean;
-  allTags?: TagItem[];
+  allTags?: { id: string; name: string }[];
   onToggleFileTag?: (fileId: string, tagId: string) => void;
   start: number;
   virtualIndex: number;
@@ -110,16 +95,24 @@ export const FileTableFileRow = memo(function FileTableFileRow({
     window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
   };
 
-  const fileTagIds = useMemo(() => fileTagIdsMemo(file), [file]);
+  const meta = [file.format, ...file.tags.map((tag) => tag.name)]
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
 
   return (
     <ContextMenu>
       <ContextMenuTrigger>
         <div
           className={cn(
-            "group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-white/5 px-4 py-2 transition-[background-color,color,box-shadow] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-            isSelected ? "bg-accent-fill/10" : "hover:bg-white/[0.04]",
-            isMultiSelected && !isSelected && "bg-accent-fill/5",
+            "group absolute left-0 top-0 grid w-full cursor-pointer items-center gap-3 border-b border-white/5 px-3 outline-none transition-[background-color,color] last:border-0",
+            desktop
+              ? "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px_28px]"
+              : "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px]",
+            isSelected
+              ? "bg-accent-fill/10"
+              : isMultiSelected
+                ? "bg-accent-fill/5"
+                : "hover:bg-white/[0.04]",
             isDragging && "opacity-60",
           )}
           style={{
@@ -139,81 +132,77 @@ export const FileTableFileRow = memo(function FileTableFileRow({
           {isSelected && (
             <span className="pointer-events-none absolute inset-y-2 left-0 w-[3px] rounded-full bg-accent-fill shadow-glow-accent" />
           )}
-          <input
-            type="checkbox"
-            checked={isMultiSelected}
-            onChange={() => onToggleSelect?.(file)}
-            onClick={(event) => event.stopPropagation()}
-            onMouseDown={(event) => event.stopPropagation()}
-            aria-label={`Select ${file.filename}`}
-            className="size-4 shrink-0 cursor-pointer accent-accent-fill opacity-60 transition-opacity outline-none hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 checked:opacity-100"
-          />
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10">
+          <span className="flex justify-center">
+            <input
+              type="checkbox"
+              checked={isMultiSelected}
+              onChange={() => onToggleSelect?.(file)}
+              onClick={(event) => event.stopPropagation()}
+              onMouseDown={(event) => event.stopPropagation()}
+              aria-label={`Select ${file.filename}`}
+              className="size-4 cursor-pointer accent-accent-fill opacity-60 transition-opacity outline-none hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 checked:opacity-100"
+            />
+          </span>
+          <span
+            className={cn(
+              "flex justify-center",
+              isSelected && isSelectedFilePlaying
+                ? "text-accent-text"
+                : "text-zinc-500",
+            )}
+          >
             {isSelected && isSelectedFilePlaying ? (
-              <Pause className="size-4 fill-current text-accent-text transition-all" />
+              <Pause className="size-4" />
             ) : (
-              <Play
+              <Play className="size-4" />
+            )}
+          </span>
+          <span className="min-w-0">
+            <span
+              className={cn(
+                "block truncate text-[15px] font-medium",
+                isSelected ? "font-semibold text-zinc-50" : "text-zinc-100",
+              )}
+            >
+              {highlightMatch(file.filename, searchQuery)}
+            </span>
+            {meta ? (
+              <span className="mt-0.5 block truncate font-mono text-[11px] text-zinc-400">
+                {meta}
+              </span>
+            ) : null}
+          </span>
+          <span className="text-right font-mono text-xs font-medium tabular-nums text-zinc-300">
+            {formatDuration(file.duration)}
+          </span>
+          <span className="flex justify-center">
+            <button
+              type="button"
+              aria-label={
+                file.isFavorite
+                  ? `Unsave ${file.filename}`
+                  : `Save ${file.filename}`
+              }
+              onClick={(event) => {
+                event.stopPropagation();
+                void onToggleFavorite(file.id);
+              }}
+              className="flex justify-center outline-none"
+            >
+              <Heart
                 className={cn(
-                  "size-4 transition-all",
-                  isSelected
-                    ? "fill-current text-accent-text"
-                    : "text-zinc-500 group-hover:text-zinc-300",
+                  "size-4 transition-colors",
+                  file.isFavorite
+                    ? "fill-accent-fill text-accent-fill"
+                    : isMultiSelected
+                      ? "text-accent-text/70"
+                      : "text-zinc-600 hover:text-accent-text",
                 )}
               />
-            )}
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className={cn(
-              "truncate text-sm font-medium transition-colors group-hover:text-zinc-50",
-              isSelected ? "font-semibold text-zinc-50" : "text-zinc-100",
-            )}>
-              {highlightMatch(file.filename, searchQuery)}
-            </div>
-            <div className="mt-1 flex items-center gap-3 font-mono text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-              <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] ring-1 ring-white/10">
-                {file.format ?? "???"}
-              </span>
-              <span>{formatDuration(file.duration)}</span>
-              {file.tags.length > 0 ? (
-                <div className="flex items-center gap-1">
-                  {file.tags.slice(0, 3).map((tag) => (
-                    <span
-                      key={tag.id}
-                      className="inline-flex items-center gap-1 rounded-full bg-accent-fill/15 px-1.5 py-0.5 font-mono text-[9px] font-normal text-accent-text ring-1 ring-accent-fill/20"
-                    >
-                      {tag.name}
-                      <button
-                        type="button"
-                        className="hover:text-destructive"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onToggleFileTag?.(file.id, tag.id);
-                        }}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                  {file.tags.length > 3 ? (
-                    <span className="font-mono text-[9px] text-zinc-500">
-                      +{file.tags.length - 3}
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-              <TagPicker
-                allTags={allTags ?? []}
-                fileTagIds={fileTagIds}
-                onToggleTag={(tagId) => onToggleFileTag?.(file.id, tagId)}
-                label="Tags"
-                align="start"
-              />
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
-            {desktop ? (
+            </button>
+          </span>
+          {desktop ? (
+            <span className="flex justify-center">
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -247,81 +236,8 @@ export const FileTableFileRow = memo(function FileTableFileRow({
                 />
                 <TooltipContent>Drag into another app</TooltipContent>
               </Tooltip>
-            ) : null}
-
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={cn(
-                      "size-8 rounded-full transition-all",
-                      file.isFavorite
-                        ? "text-accent-fill hover:text-accent-fill"
-                        : "text-zinc-500 hover:bg-white/5 hover:text-accent-text",
-                    )}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void onToggleFavorite(file.id);
-                    }}
-                  >
-                    <Heart className={cn("size-4", file.isFavorite && "fill-current")} />
-                  </Button>
-                }
-              />
-              <TooltipContent>
-                {file.isFavorite ? "Remove from favorites" : "Add to favorites"}
-              </TooltipContent>
-            </Tooltip>
-
-            {desktop ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={cn(
-                        "size-8 rounded-full text-zinc-500 opacity-0 transition-all hover:bg-white/5 hover:text-zinc-200 group-hover:opacity-100",
-                        isSelected && "opacity-100",
-                      )}
-                      onClick={(event) => event.stopPropagation()}
-                      aria-label="More file actions"
-                    >
-                      <MoreHorizontal className="size-4" />
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent
-                  align="end"
-                  className="w-44"
-                >
-                  <DropdownMenuItem onClick={() => void handleRevealInExplorer(file)}>
-                    <FolderOpen className="size-4" />
-                    Reveal in Explorer
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void handleOpenFile(file)}>
-                    <ExternalLink className="size-4" />
-                    Open file
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void handleCopyPath(file)}>
-                    <Copy className="size-4" />
-                    Copy path
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
-
-            <ChevronRight
-              className={cn(
-                "size-4 text-zinc-500 transition-transform",
-                isSelected
-                  ? "translate-x-1 text-accent-text"
-                  : "group-hover:translate-x-0.5",
-              )}
-            />
-          </div>
+            </span>
+          ) : null}
         </div>
       </ContextMenuTrigger>
 

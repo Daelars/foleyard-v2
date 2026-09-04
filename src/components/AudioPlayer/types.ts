@@ -22,8 +22,6 @@ export interface AudioPlayerProps {
   nextTitle?: string | null;
   collections: { id: string; name: string; fileCount?: number; isSmart?: boolean }[];
   onAddToCollection: (collectionId: string) => Promise<void>;
-  allTags?: { id: string; name: string }[];
-  onToggleFileTag?: (fileId: string, tagId: string) => void;
 }
 
 export interface AudioPlayerRef {

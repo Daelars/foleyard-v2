@@ -21,6 +21,8 @@ export interface SelectModifiers {
   metaKey?: boolean;
 }
 
+export type FileTableSortKey = "filename" | "duration";
+
 export interface FileTableProps {
   files: FileTableFileRecord[];
   directories: string[];
@@ -47,4 +49,7 @@ export interface FileTableProps {
   onScanFolder?: (folderPath: string) => void;
   allTags?: FileTableFileTag[];
   onToggleFileTag?: (fileId: string, tagId: string) => void;
+  sortKey: FileTableSortKey;
+  sortDir: 1 | -1;
+  onFlipSort: (key: FileTableSortKey) => void;
 }

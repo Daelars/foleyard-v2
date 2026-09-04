@@ -3,10 +3,8 @@
 import { useMemo } from "react";
 import { Pause, Play, Repeat, SkipBack, SkipForward, X } from "lucide-react";
 
-import { TagPicker, type TagItem } from "@/components/TagPicker";
 import { AudioScrubber } from "@/components/ui/waveform";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 
 import { formatTime } from "./format-time";
 import { AudioPlayerCollectionMenu } from "./collection-menu";
@@ -36,8 +34,6 @@ export function AudioPlayerShell({
   title,
   volume,
   waveformData,
-  allTags,
-  onToggleFileTag,
 }: {
   collections: { id: string; name: string; fileCount?: number; isSmart?: boolean }[];
   currentTime: number;
@@ -60,26 +56,18 @@ export function AudioPlayerShell({
   title: string;
   volume: number;
   waveformData: number[];
-  allTags?: TagItem[];
-  onToggleFileTag?: (fileId: string, tagId: string) => void;
 }) {
   const meta = useMemo(() => {
-    const parts = [
-      file.format ?? undefined,
-      ...file.tags.map((tag) => tag.name),
-    ].filter((part): part is string => Boolean(part));
-
+    const parts: string[] = [];
+    if (file.format) {
+      parts.push(file.format);
+    }
     if (nextTitle) {
       parts.push(`next: ${nextTitle}`);
     }
 
     return parts.join(" · ");
-  }, [file.format, file.tags, nextTitle]);
-
-  const fileTagIds = useMemo(
-    () => new Set(file.tags.map((t) => t.id)),
-    [file],
-  );
+  }, [file.format, nextTitle]);
 
   return (
     <footer className="relative shrink-0 border-t border-white/10">
@@ -102,9 +90,9 @@ export function AudioPlayerShell({
             aria-label={isPlaying ? "Pause audio" : "Play audio"}
           >
             {isPlaying ? (
-              <Pause className="size-4 fill-current" />
+              <Pause className="size-4" />
             ) : (
-              <Play className="ml-0.5 size-4 fill-current" />
+              <Play className="size-4 pl-0.5" />
             )}
           </Button>
           <Button
@@ -119,60 +107,15 @@ export function AudioPlayerShell({
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <p className="truncate text-[13px] font-semibold leading-tight text-zinc-100">
-              {title || file.filename}
-            </p>
+          <p className="truncate text-[13px] font-semibold leading-tight text-zinc-100">
+            {title || file.filename}
             {meta ? (
-              <span className="hidden min-w-0 flex-1 truncate font-mono text-[11px] font-normal text-zinc-500 sm:block">
+              <span className="ml-2 font-mono text-[11px] font-normal text-zinc-500">
                 {meta}
               </span>
             ) : null}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="ml-auto size-7 shrink-0 rounded-full text-zinc-500 hover:bg-white/5 hover:text-zinc-200 sm:ml-0"
-              aria-label="Close player"
-            >
-              <X className="size-3.5" />
-            </Button>
-          </div>
-          {file.tags.length > 0 ? (
-            <div className="mt-1 flex items-center gap-1">
-              {file.tags.map((tag) => (
-                <span
-                  key={tag.id}
-                  className="inline-flex items-center gap-1 rounded-full bg-accent-fill/15 px-1.5 py-0.5 font-mono text-[10px] font-normal text-accent-text ring-1 ring-accent-fill/20"
-                >
-                  {tag.name}
-                  <button
-                    type="button"
-                    className="hover:text-destructive"
-                    onClick={() => onToggleFileTag?.(file.id, tag.id)}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-              <TagPicker
-                allTags={allTags ?? []}
-                fileTagIds={fileTagIds}
-                onToggleTag={(tagId) => onToggleFileTag?.(file.id, tagId)}
-                label="Tags"
-              />
-            </div>
-          ) : (
-            <div className="mt-1">
-              <TagPicker
-                allTags={allTags ?? []}
-                fileTagIds={fileTagIds}
-                onToggleTag={(tagId) => onToggleFileTag?.(file.id, tagId)}
-                label="Tags"
-              />
-            </div>
-          )}
-          <div className="mt-1">
+          </p>
+          <div className="mt-1 max-w-2xl">
             <AudioScrubber
               data={waveformData}
               currentTime={currentTime}
@@ -190,12 +133,9 @@ export function AudioPlayerShell({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
           <span className="hidden shrink-0 font-mono text-[11px] tabular-nums text-zinc-400 sm:block">
             {formatTime(currentTime)} / {formatTime(effectiveDuration)}
-          </span>
-          <span className="shrink-0 font-mono text-[11px] tabular-nums text-zinc-400 sm:hidden">
-            {formatTime(currentTime)}
           </span>
           <AudioPlayerFavoriteButton
             fileId={file.id}
@@ -206,22 +146,34 @@ export function AudioPlayerShell({
             collections={collections}
             onAddToCollection={onAddToCollection}
           />
-          <AudioPlayerVolumeControl
-            isMuted={isMuted}
-            onToggleMuted={onToggleMuted}
-            onVolumeChange={onVolumeChange}
-            volume={volume}
-          />
-          <label className="flex shrink-0 cursor-pointer items-center gap-1.5" title="Autoplay queue">
-            <Repeat
-              className={autoplay ? "size-3.5 text-accent-text" : "size-3.5 text-zinc-600"}
+          <div className="hidden lg:block">
+            <AudioPlayerVolumeControl
+              isMuted={isMuted}
+              onToggleMuted={onToggleMuted}
+              onVolumeChange={onVolumeChange}
+              volume={volume}
             />
-            <Switch
-              checked={autoplay}
-              onCheckedChange={onToggleAutoplay}
-              aria-label="Autoplay queue"
-            />
-          </label>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onToggleAutoplay(!autoplay)}
+            className={`size-8 shrink-0 rounded-full hover:bg-white/10 ${autoplay ? "text-accent-text hover:text-accent-text" : "text-zinc-400 hover:text-zinc-100"}`}
+            aria-label={autoplay ? "Turn autoplay off" : "Turn autoplay on"}
+            aria-pressed={autoplay}
+            title={autoplay ? "Autoplay on" : "Autoplay off"}
+          >
+            <Repeat className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="size-8 shrink-0 rounded-full text-zinc-500 hover:bg-white/5 hover:text-zinc-200"
+            aria-label="Close player"
+          >
+            <X className="size-3.5" />
+          </Button>
         </div>
       </div>
     </footer>

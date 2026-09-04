@@ -1,17 +1,9 @@
 "use client";
 
-import { Fragment, type RefObject } from "react";
+import type { RefObject } from "react";
 import { CornerDownLeft, Search } from "lucide-react";
 
-import type { PaletteEntry, PaletteSection } from "./command-palette";
-
-const SECTION_TITLES: Record<PaletteSection, string> = {
-  view: "Views",
-  transport: "Transport",
-  file: "File",
-  tool: "Tools",
-  sound: "Sounds",
-};
+import type { PaletteEntry } from "./command-palette";
 
 type CommandPaletteProps = {
   open: boolean;
@@ -39,8 +31,6 @@ export function CommandPalette({
   if (!open) {
     return null;
   }
-
-  let lastSection: PaletteSection | null = null;
 
   return (
     <div
@@ -74,36 +64,25 @@ export function CommandPalette({
               No matches.
             </p>
           ) : (
-            entries.map((entry, index) => {
-              const showHeader = entry.section !== lastSection;
-              lastSection = entry.section;
-
-              return (
-                <Fragment key={entry.id}>
-                  {showHeader ? (
-                    <p className="px-3 pb-1 pt-2 font-mono text-[10px] uppercase tracking-widest text-zinc-600">
-                      {SECTION_TITLES[entry.section]}
-                    </p>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => onSelectEntry(entry)}
-                    onMouseEnter={() => onHoverEntry(index)}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors ${index === activeIndex ? "bg-accent-fill/15 text-accent-text" : "text-zinc-200"}`}
-                  >
-                    <span className="min-w-0 flex-1 truncate">
-                      {entry.label}
-                    </span>
-                    <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-zinc-600">
-                      {entry.hint}
-                    </span>
-                    {index === activeIndex ? (
-                      <CornerDownLeft className="size-3.5 shrink-0" />
-                    ) : null}
-                  </button>
-                </Fragment>
-              );
-            })
+            entries.map((entry, index) => (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => onSelectEntry(entry)}
+                onMouseEnter={() => onHoverEntry(index)}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors ${index === activeIndex ? "bg-accent-fill/15 text-accent-text" : "text-zinc-200"}`}
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {entry.label}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-zinc-600">
+                  {entry.hint}
+                </span>
+                {index === activeIndex ? (
+                  <CornerDownLeft className="size-3.5 shrink-0" />
+                ) : null}
+              </button>
+            ))
           )}
         </div>
       </div>

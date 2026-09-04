@@ -34,6 +34,9 @@ export const FileTable = memo(function FileTable({
   onScanFolder,
   allTags,
   onToggleFileTag,
+  sortKey,
+  sortDir,
+  onFlipSort,
 }: FileTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const desktopActions = useFileTableDesktopActions(onSelect);
@@ -112,13 +115,14 @@ export const FileTable = memo(function FileTable({
       <FileTableEmptyState
         currentDirectory={currentDirectory}
         currentCollectionName={currentCollectionName}
+        searchQuery={searchQuery}
         onBack={handleBack}
       />
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col px-4 pb-4 md:px-5">
       {(currentDirectory || currentCollectionName) && !searchQuery && (
         <FileTableBreadcrumbBar
           currentDirectory={currentDirectory}
@@ -129,12 +133,44 @@ export const FileTable = memo(function FileTable({
         />
       )}
 
+      {items.length > 0 && (
+        <div
+          className={`grid items-center gap-3 border-b border-white/10 px-3 pb-2 font-mono text-[11px] font-semibold uppercase tracking-widest text-zinc-400 ${
+            desktopActions.desktop
+              ? "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px_28px]"
+              : "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px]"
+          }`}
+        >
+          <span />
+          <span />
+          <button
+            type="button"
+            onClick={() => onFlipSort("filename")}
+            className="text-left transition-colors hover:text-accent-text"
+          >
+            Name{" "}
+            {sortKey === "filename" ? (sortDir === 1 ? "↑ " : "↓ ") : ""}
+          </button>
+          <button
+            type="button"
+            onClick={() => onFlipSort("duration")}
+            className="text-right transition-colors hover:text-accent-text"
+          >
+            Time{" "}
+            {sortKey === "duration" ? (sortDir === 1 ? "↑ " : "↓ ") : ""}
+          </button>
+          <span />
+          {desktopActions.desktop ? <span /> : null}
+        </div>
+      )}
+
       <div
         ref={parentRef}
-        className="foleyard-library-scroll flex-1 overflow-y-auto"
+        className="foleyard-library-scroll min-h-0 flex-1 overflow-y-auto"
         onKeyDown={handleRowKeyDown}
       >
         <div
+          className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"
           style={{
             height: `${virtualizer.getTotalSize()}px`,
             width: "100%",
@@ -153,6 +189,7 @@ export const FileTable = memo(function FileTable({
                   onNavigate={onNavigate}
                   folderJanitorEnabled={folderJanitorEnabled}
                   onScanFolder={onScanFolder}
+                  desktop={desktopActions.desktop}
                 />
               );
             }

@@ -104,104 +104,76 @@ function ExtensionCard({
   }, [extension.id, primaryAction, onRunCommand]);
 
   return (
-    <div className="relative flex min-h-64 flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] sm:min-h-72 xl:min-h-80">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_8%,transparent),transparent_48%)]" />
-      <div className="absolute right-3 top-3 z-10">
-        <Switch
-          checked={extension.enabled}
-          onCheckedChange={handleToggle}
-          disabled={isPending}
-          aria-label={`Toggle ${extension.name}`}
-        />
+    <div className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition-colors hover:bg-white/[0.06]">
+      <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent-fill/12 text-lg font-bold text-accent-text">
+        {extension.name.slice(0, 2).toUpperCase()}
       </div>
 
-      <div className="flex flex-1 flex-col p-3 pt-9 sm:p-4 sm:pt-10">
-        <div className="flex gap-3 pr-12 sm:gap-4">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent-fill/12 text-lg font-bold text-accent-text">
-            {extension.name.slice(0, 2).toUpperCase()}
-          </div>
-
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-zinc-100">
-              {extension.name}
-            </h3>
-            <p className="mt-1 text-xs leading-5 text-zinc-400">
-              {extension.description}
-            </p>
-          </div>
-        </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold leading-tight text-zinc-50">
+          {extension.name}
+        </p>
+        <p className="mt-0.5 truncate text-xs font-medium text-zinc-400">
+          {extension.description}
+        </p>
+        <p className="mt-1 font-mono text-[10px] text-zinc-500">
+          v{extension.version} ·{" "}
+          {extension.settingsCount
+            ? `${extension.settingsCount} settings`
+            : "no settings"}
+        </p>
       </div>
 
-      <div className="px-3 pb-1 sm:px-4">
-        <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-mono text-[10px] text-zinc-500">
-          <span>v{extension.version}</span>
-          <span className="size-1 shrink-0 rounded-full bg-accent-fill/80" />
-          <span>
-            {extension.settingsCount ? `${extension.settingsCount} settings` : "no settings"}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2 border-t border-white/5 p-2.5 sm:p-3">
-        {primaryAction && (
-          <Button
-            variant="ghost"
-            className="h-8 flex-1 justify-start gap-1.5 rounded-lg border border-accent-fill/40 bg-accent-fill/10 px-2.5 text-[11px] text-accent-text hover:bg-accent-fill/15 hover:text-accent-text"
-            onClick={(e) => {
-              e.stopPropagation();
-              handlePrimaryAction();
-            }}
-          >
-            <ArrowUpRight className="size-3 shrink-0" />
-            <span className="truncate">{primaryAction.label}</span>
-          </Button>
-        )}
-
-        {!primaryAction && <div className="flex-1" />}
-
+      {primaryAction && (
         <Button
           variant="ghost"
-          size="icon"
-          className="size-8 shrink-0 rounded-lg border border-white/10 bg-white/5 text-zinc-400 hover:border-accent-fill/50 hover:bg-white/[0.08] hover:text-zinc-100"
+          className="hidden h-8 shrink-0 gap-1.5 rounded-lg border border-accent-fill/40 bg-accent-fill/10 px-2.5 text-[11px] text-accent-text hover:bg-accent-fill/15 hover:text-accent-text sm:inline-flex"
           onClick={(e) => {
             e.stopPropagation();
-            onOpenDetails?.(extension);
+            handlePrimaryAction();
           }}
-          aria-label={`View ${extension.name} details`}
-          title="Extension details"
         >
-          <span className="sr-only">Extension details</span>
-          <Info className="size-3.5" />
+          <ArrowUpRight className="size-3 shrink-0" />
+          <span className="truncate">{primaryAction.label}</span>
         </Button>
-      </div>
+      )}
+
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8 shrink-0 rounded-lg border border-white/10 bg-white/5 text-zinc-400 hover:border-accent-fill/50 hover:bg-white/[0.08] hover:text-zinc-100"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenDetails?.(extension);
+        }}
+        aria-label={`View ${extension.name} details`}
+        title="Extension details"
+      >
+        <span className="sr-only">Extension details</span>
+        <Info className="size-3.5" />
+      </Button>
+
+      <Switch
+        checked={extension.enabled}
+        onCheckedChange={handleToggle}
+        disabled={isPending}
+        aria-label={`Toggle ${extension.name}`}
+        className="shrink-0"
+      />
     </div>
   );
 }
 
 function ExtensionCardSkeleton() {
   return (
-    <div className="relative flex min-h-64 flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] sm:min-h-72 xl:min-h-80">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_8%,transparent),transparent_48%)]" />
-      <div className="absolute right-3 top-3 h-6 w-11 animate-pulse rounded-full bg-white/5" />
-      <div className="flex flex-1 flex-col p-3 pt-9">
-        <div className="flex gap-3 pr-12 sm:gap-4">
-          <div className="size-11 animate-pulse rounded-xl bg-white/5" />
-          <div className="flex-1 space-y-1.5 pt-0.5">
-            <div className="h-4 w-20 animate-pulse rounded bg-white/5" />
-            <div className="space-y-1">
-              <div className="h-2.5 w-full animate-pulse rounded bg-white/5" />
-              <div className="h-2.5 w-2/3 animate-pulse rounded bg-white/5" />
-            </div>
-          </div>
-        </div>
+    <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+      <div className="size-11 shrink-0 animate-pulse rounded-xl bg-white/5" />
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="h-4 w-32 animate-pulse rounded bg-white/5" />
+        <div className="h-3 w-full animate-pulse rounded bg-white/5" />
       </div>
-      <div className="px-3 pb-1">
-        <div className="h-5 w-36 max-w-full animate-pulse rounded-full bg-white/5" />
-      </div>
-      <div className="flex items-center gap-2 border-t border-white/5 p-2.5">
-        <div className="h-8 flex-1 animate-pulse rounded-lg bg-white/5" />
-        <div className="size-8 animate-pulse rounded-lg bg-white/5" />
-      </div>
+      <div className="size-8 shrink-0 animate-pulse rounded-lg bg-white/5" />
+      <div className="h-6 w-11 shrink-0 animate-pulse rounded-full bg-white/5" />
     </div>
   );
 }
@@ -261,7 +233,7 @@ export function ExtensionGrid({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))] gap-3 xl:grid-cols-[repeat(auto-fit,minmax(19rem,1fr))]">
+        <div className="grid gap-3 xl:grid-cols-2">
           {isLoading
             ? Array.from({ length: skeletonCount }).map((_, index) => (
                 <ExtensionCardSkeleton key={index} />

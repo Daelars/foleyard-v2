@@ -1,24 +1,27 @@
 "use client";
 
-import { ChevronLeft, Play } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
 export function FileTableEmptyState({
   currentDirectory,
   currentCollectionName,
+  searchQuery,
   onBack,
 }: {
   currentDirectory: string | null;
   currentCollectionName?: string | null;
+  searchQuery?: string;
   onBack: () => void;
 }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center p-8 text-center text-zinc-500">
-      <div className="mb-4 flex size-16 items-center justify-center rounded-full border border-white/10 bg-white/[0.03]">
-        <Play className="size-8 opacity-20" />
-      </div>
-      <h3 className="text-lg font-semibold text-zinc-300">No sounds found</h3>
+    <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+      <p className="py-12 text-2xl font-semibold text-zinc-500">
+        {searchQuery
+          ? `Nothing matches "${searchQuery}".`
+          : "Nothing here yet."}
+      </p>
       {(currentDirectory || currentCollectionName) && (
         <Button
           variant="outline"

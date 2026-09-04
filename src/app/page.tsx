@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bug, Command, FileInput, Loader2, PackagePlus, PanelLeft, Save, Search, Trash2, X } from "lucide-react";
+import { Loader2, PackagePlus, PanelLeft, Save, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";
@@ -200,8 +200,37 @@ function HomeContent() {
   const tagsRef = useRef(tags);
 
   useEffect(() => { selectedFileRef.current = selectedFile; }, [selectedFile]);
-  useEffect(() => { filesRef.current = files; }, [files]);
   useEffect(() => { tagsRef.current = tags; }, [tags]);
+
+  const [sortKey, setSortKey] = useState<"filename" | "duration">("filename");
+  const [sortDir, setSortDir] = useState<1 | -1>(1);
+
+  const flipSort = useCallback(
+    (key: "filename" | "duration") => {
+      if (key === sortKey) {
+        setSortDir((prevDir) => (prevDir === 1 ? -1 : 1));
+      } else {
+        setSortKey(key);
+        setSortDir(1);
+      }
+    },
+    [sortKey],
+  );
+
+  const orderedFiles = useMemo(() => {
+    const sorted = [...files];
+    sorted.sort((a, b) => {
+      if (sortKey === "duration") {
+        const av = a.duration ?? Number.POSITIVE_INFINITY;
+        const bv = b.duration ?? Number.POSITIVE_INFINITY;
+        return (av - bv) * sortDir;
+      }
+      return a.filename.localeCompare(b.filename) * sortDir;
+    });
+    return sorted;
+  }, [files, sortKey, sortDir]);
+
+  useEffect(() => { filesRef.current = orderedFiles; }, [orderedFiles]);
 
   const { zoom, setZoom: handleUpdateZoom } = useZoom();
 
@@ -1372,7 +1401,6 @@ function HomeContent() {
     soundShelfEnabled,
     makePackEnabled,
     folderJanitorEnabled,
-    libraryGathererEnabled,
     smartCollectionsEnabled,
     viewingSmartCollection,
     activeSmartCollectionId,
@@ -1380,7 +1408,6 @@ function HomeContent() {
     const shelf = extensions.find((e) => e.id === "sound-shelf")?.enabled ?? false;
     const pack = extensions.find((e) => e.id === "make-pack")?.enabled ?? false;
     const janitor = extensions.find((e) => e.id === "folder-janitor")?.enabled ?? false;
-    const gatherer = extensions.find((e) => e.id === "library-gatherer")?.enabled ?? false;
     const smart = extensions.find((e) => e.id === "smart-collections")?.enabled ?? false;
     const activeSmart = selectedCollection
       ? collections.find((c) => c.id === selectedCollection && c.isSmart) ?? null
@@ -1389,7 +1416,6 @@ function HomeContent() {
       soundShelfEnabled: shelf,
       makePackEnabled: pack,
       folderJanitorEnabled: janitor,
-      libraryGathererEnabled: gatherer,
       smartCollectionsEnabled: smart,
       viewingSmartCollection: activeSmart !== null,
       activeSmartCollectionId: activeSmart?.id ?? null,
@@ -1406,24 +1432,6 @@ function HomeContent() {
       ?.settings?.find((s) => s.id === "default-format")?.value;
     return value === "zip" || value === "folder" ? value : "zip";
   }, [extensions]);
-
-  const handleRecentPack = useCallback(() => {
-    void executeHostedCommand("make-pack", "make-pack.from-recent");
-  }, [executeHostedCommand]);
-
-  const handleOpenScan = useCallback(() => {
-    void executeHostedCommand(
-      "folder-janitor",
-      "folder-janitor.scan-library",
-    );
-  }, [executeHostedCommand]);
-
-  const handleOpenGather = useCallback(() => {
-    void executeHostedCommand(
-      "library-gatherer",
-      "library-gatherer.gather",
-    );
-  }, [executeHostedCommand]);
 
   const handleSelectFile = useCallback((file: FileRecord, _index: number, modifiers: SelectModifiers = {}) => {
     if (modifiers.shiftKey) {
@@ -1661,14 +1669,14 @@ function HomeContent() {
 
   const paletteSounds = useMemo(
     () =>
-      files.map((file) => ({
+      orderedFiles.map((file) => ({
         id: file.id,
         filename: file.filename,
         format: file.format,
         duration: file.duration,
         tags: file.tags.map((tag) => tag.name),
       })),
-    [files],
+    [orderedFiles],
   );
 
   const paletteEntries = useMemo(
@@ -1952,12 +1960,12 @@ function HomeContent() {
       <main className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-transparent">
         <DesktopTitleBar />
 
-        <header className="shrink-0 border-b border-white/5 px-4 py-3 md:px-5">
-          <div className="flex h-10 items-center gap-3">
+        <header className="shrink-0 px-4 pt-4 md:px-5">
+          <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="icon"
-              className="size-10 rounded-xl border-white/10 bg-white/5 duration-200 animate-in fade-in-0 zoom-in-95 hover:border-accent-fill/50 md:hidden"
+              className="size-10 shrink-0 rounded-xl border-white/10 bg-white/5 duration-200 animate-in fade-in-0 zoom-in-95 hover:border-accent-fill/50 md:hidden"
               onClick={handleOpenMobileSidebar}
               aria-label="Open navigation menu"
             >
@@ -1965,119 +1973,80 @@ function HomeContent() {
             </Button>
 
             {!hideHeaderActions && (
-              <div className="relative flex flex-1 items-center gap-2 duration-300 animate-in fade-in-0 slide-in-from-top-2 md:max-w-xl">
-                  <div className="relative flex-1">
-                    <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-4 -translate-y-1/2 text-zinc-500" />
-                    <Input
-                      ref={searchInputRef}
-                      value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search library..."
-                    className="h-10 rounded-xl border-white/10 bg-white/[0.04] pl-10 pr-4 text-sm font-medium leading-5 text-zinc-50 shadow-none backdrop-blur-none placeholder:font-normal placeholder:text-zinc-600 focus-visible:border-accent-fill/60 focus-visible:bg-white/[0.06] focus-visible:ring-0 focus-visible:ring-offset-0"
-                  />
-                </div>
-                {smartCollectionsEnabled && searchQuery.trim() && (
-                  <>
-                    {viewingSmartCollection && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="hidden h-10 shrink-0 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
-                        onClick={() => {
-                          if (activeSmartCollectionId) {
-                            handleUpdateCollectionFilter(
-                              activeSmartCollectionId,
-                              JSON.stringify({ q: searchQuery.trim() }),
-                            );
-                          }
-                        }}
-                      >
-                        <Save className="size-4" />
-                        Update Search
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="hidden h-10 shrink-0 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
-                      onClick={() => setShowSaveSearch(true)}
-                    >
-                      <Save className="size-4" />
-                      Save Search
-                    </Button>
-                  </>
+              <div className="flex flex-1 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 transition-all focus-within:border-accent-fill/60 focus-within:bg-white/[0.06] focus-within:shadow-glow-accent">
+                <Search className="size-4 shrink-0 text-zinc-500" />
+                <input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search sounds by name, tag, or format..."
+                  aria-label="Search sounds"
+                  className="w-full bg-transparent py-2.5 text-[15px] font-medium text-zinc-50 placeholder:font-normal placeholder:text-zinc-600 focus:outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="shrink-0 rounded-md px-2 py-1 font-mono text-[11px] text-zinc-500 hover:text-zinc-100"
+                  >
+                    Clear
+                  </button>
                 )}
+                <button
+                  type="button"
+                  onClick={openPalette}
+                  aria-label="Open command palette"
+                  title="Command palette (Ctrl+K)"
+                  className="hidden shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 font-mono text-[11px] text-zinc-400 hover:border-accent-fill/50 hover:text-zinc-100 sm:flex"
+                >
+                  {"\u2318"}K{" "}
+                  <span className="text-zinc-600">{files.length}</span>
+                </button>
               </div>
             )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="hidden h-10 shrink-0 gap-2 rounded-xl border-white/10 bg-white/5 px-3 font-mono text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
-              onClick={openPalette}
-              aria-label="Open command palette"
-              title="Command palette (Ctrl+K)"
-            >
-              <Command className="size-4" />
-              <span className="text-zinc-600">{files.length}</span>
-            </Button>
+            {smartCollectionsEnabled && searchQuery.trim() && (
+              <>
+                {viewingSmartCollection && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="hidden h-10 shrink-0 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
+                    onClick={() => {
+                      if (activeSmartCollectionId) {
+                        handleUpdateCollectionFilter(
+                          activeSmartCollectionId,
+                          JSON.stringify({ q: searchQuery.trim() }),
+                        );
+                      }
+                    }}
+                  >
+                    <Save className="size-4" />
+                    Update Search
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="hidden h-10 shrink-0 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
+                  onClick={() => setShowSaveSearch(true)}
+                >
+                  <Save className="size-4" />
+                  Save Search
+                </Button>
+              </>
+            )}
 
             {isLoadingFiles && (
-              <Loader2 className="size-4 animate-spin text-accent-text" />
-            )}
-
-            {!showExtensionsView && makePackEnabled && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="hidden h-10 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
-                onClick={handleRecentPack}
-              >
-                <PackagePlus className="size-4" />
-                Recent Pack
-              </Button>
-            )}
-
-            {!showExtensionsView && folderJanitorEnabled && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="hidden h-10 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
-                onClick={handleOpenScan}
-              >
-                <Bug className="size-4" />
-                Scan for Issues
-              </Button>
-            )}
-
-            {!showExtensionsView && libraryGathererEnabled && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="hidden h-10 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
-                onClick={handleOpenGather}
-              >
-                <FileInput className="size-4" />
-                Gather Library
-              </Button>
+              <Loader2 className="size-4 shrink-0 animate-spin text-accent-text" />
             )}
           </div>
         </header>
 
         <div className="px-4 pt-4 md:px-5">
-          <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
-            <div className="min-w-0">
-              <h1 className="truncate text-5xl font-extrabold tracking-tighter text-zinc-50">
-                {viewHeading}
-              </h1>
-              <p className="mt-1.5 text-sm font-medium text-zinc-400">
-                {showExtensionsView
-                  ? "Optional workflows. Flip one on and it joins the workspace."
-                  : showShelfView
-                    ? "Sounds under review."
-                    : `${files.length} ${files.length === 1 ? "sound" : "sounds"}`}
-              </p>
-            </div>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-2">
+            <h1 className="text-5xl font-extrabold tracking-tighter text-zinc-50">
+              {viewHeading}
+            </h1>
             <span className="flex-1" />
             {showShelfView ? (
               <div className="flex flex-wrap items-center gap-2">
@@ -2162,6 +2131,13 @@ function HomeContent() {
               </div>
             ) : null}
           </div>
+          <p className="mt-1.5 text-sm font-medium text-zinc-400">
+            {showExtensionsView
+              ? "Optional workflows. Flip one on and it joins the workspace."
+              : showShelfView
+                ? "Sounds under review."
+                : `${files.length} ${files.length === 1 ? "sound" : "sounds"}`}
+          </p>
         </div>
 
         {showExtensionsView ? (
@@ -2197,7 +2173,7 @@ function HomeContent() {
                 </div>
               ) : null}
               <FileTable
-                files={files}
+                files={orderedFiles}
                 directories={directories}
                 currentDirectory={selectedDirectory}
                 currentCollectionName={selectedCollectionName}
@@ -2218,6 +2194,9 @@ function HomeContent() {
                 onScanFolder={handleScanFolder}
                 allTags={tags}
                 onToggleFileTag={handleToggleFileTag}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onFlipSort={flipSort}
               />
             </div>
           </div>
@@ -2240,8 +2219,6 @@ function HomeContent() {
         onToggleFavorite={handleToggleFavorite}
         collections={collections}
         onAddToCollection={handleAddToCollection}
-        allTags={tags}
-        onToggleFileTag={handleToggleFileTag}
       />
 
       <CommandPalette

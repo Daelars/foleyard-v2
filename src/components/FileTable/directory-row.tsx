@@ -16,34 +16,47 @@ export const FileTableDirectoryRow = memo(function FileTableDirectoryRow({
   onNavigate,
   folderJanitorEnabled,
   onScanFolder,
+  desktop = false,
 }: {
   dir: string;
   start: number;
   onNavigate: (dir: string) => void;
   folderJanitorEnabled?: boolean;
   onScanFolder?: (folderPath: string) => void;
+  desktop?: boolean;
 }) {
   const label = dir.split(/[\\/]/).pop() || dir;
 
   const row = (
     <div
-      className="group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-white/5 px-4 py-2 transition-[background-color,color] hover:bg-white/[0.04]"
+      className={`group absolute left-0 top-0 grid w-full cursor-pointer items-center gap-3 border-b border-white/5 px-3 outline-none transition-[background-color,color] last:border-0 hover:bg-white/[0.04] ${
+        desktop
+          ? "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px_28px]"
+          : "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px]"
+      }`}
       style={{
         height: "64px",
         transform: `translateY(${start}px)`,
       }}
       onClick={() => onNavigate(dir)}
     >
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-fill/12 text-accent-text ring-1 ring-accent-fill/20">
-        <Folder className="size-5 fill-accent-fill/10 transition-colors group-hover:text-accent-text" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold text-zinc-100">{label}</div>
-        <div className="mt-0.5 font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+      <span />
+      <span className="flex justify-center text-zinc-500">
+        <Folder className="size-4" />
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-[15px] font-medium text-zinc-100">
+          {label}
+        </span>
+        <span className="mt-0.5 block truncate font-mono text-[11px] text-zinc-400">
           Folder
-        </div>
-      </div>
-      <ChevronRight className="mr-2 size-4 text-zinc-500 transition-transform group-hover:translate-x-1" />
+        </span>
+      </span>
+      <span />
+      <span className="flex justify-center">
+        <ChevronRight className="size-4 text-zinc-600 transition-transform group-hover:translate-x-0.5 group-hover:text-zinc-400" />
+      </span>
+      {desktop ? <span /> : null}
     </div>
   );
 

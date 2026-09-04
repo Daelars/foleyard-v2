@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { attachTagToFile, createTag, deleteTag, detachTagFromFile, getAllTags, getTagsForFile, updateTagColor } from '@/lib/db';
+import { attachTagToFile, createTag, deleteTag, detachTagFromFile, getAllTags, getTagsForFile, renameTag, updateTagColor } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -60,10 +60,15 @@ export async function DELETE(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { tagId, color } = body;
+    const { tagId, color, name } = body;
 
     if (typeof tagId !== 'string' || !tagId) {
       return NextResponse.json({ error: 'tagId is required' }, { status: 400 });
+    }
+
+    if (typeof name === 'string' && name.trim()) {
+      renameTag(tagId, name.trim());
+      return NextResponse.json({ success: true });
     }
 
     if (color !== null && (typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color))) {

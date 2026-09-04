@@ -53,6 +53,7 @@ export {
   getAllTags,
   getTagsForFile,
   getTagsForFiles,
+  renameTag,
   updateTagColor,
 } from "@/lib/database/tag-repository";
 

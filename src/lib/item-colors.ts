@@ -27,3 +27,15 @@ export function resolveItemColor(
 ): string {
   return isHexColor(color) ? color : fallbackItemColor(name);
 }
+
+export function onColorText(hex: string): string {
+  const normalized = hex.replace("#", "");
+  if (normalized.length < 6) {
+    return "#ffffff";
+  }
+  const r = parseInt(normalized.slice(0, 2), 16) / 255;
+  const g = parseInt(normalized.slice(2, 4), 16) / 255;
+  const b = parseInt(normalized.slice(4, 6), 16) / 255;
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.55 ? "#101014" : "#ffffff";
+}

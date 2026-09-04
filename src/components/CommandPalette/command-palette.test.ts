@@ -57,6 +57,7 @@ describe("palette command builder", () => {
       "view:library",
       "view:favorites",
       "view:shelf",
+      "view:organize",
       "view:tools",
       "view:settings",
       "transport:toggle-play",

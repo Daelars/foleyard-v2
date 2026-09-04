@@ -7,13 +7,14 @@ import {
   Library,
   ListMusic,
   Settings,
+  Shapes,
   Star,
   Tags,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-export type RailView = "library" | "favorites" | "shelf" | "extensions";
+export type RailView = "library" | "favorites" | "shelf" | "extensions" | "organize";
 
 export type RailCollection = {
   id: string;
@@ -66,6 +67,7 @@ export function IconRail({
   onSelectFavorites,
   onSelectShelf,
   onSelectExtensions,
+  onSelectOrganize,
   onOpenSettings,
   settingsActive = false,
   collections = [],
@@ -83,6 +85,7 @@ export function IconRail({
   onSelectFavorites: () => void;
   onSelectShelf: () => void;
   onSelectExtensions: () => void;
+  onSelectOrganize: () => void;
   onOpenSettings: () => void;
   settingsActive?: boolean;
   collections?: RailCollection[];
@@ -190,6 +193,14 @@ export function IconRail({
       badge: shelfCount,
       active: activeView === "shelf",
       onSelect: onSelectShelf,
+    },
+    {
+      id: "organize",
+      label: "Organize",
+      icon: <Shapes className="size-5" />,
+      active: activeView === "organize",
+      expanded: false,
+      onSelect: onSelectOrganize,
     },
     {
       id: "extensions",

@@ -39,6 +39,7 @@ import { MakePackDialog } from "@/components/extensions/make-pack/MakePackDialog
 import { OnboardingDialog } from "@/components/OnboardingDialog";
 import { RenameHammerDialog } from "@/components/extensions/rename-hammer/RenameHammerDialog";
 import { FileTable } from "@/components/FileTable";
+import { OrganizeView } from "@/components/OrganizeView";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { IconRail, type RailView } from "@/components/IconRail";
 import { AudioPlayerProvider } from "@/components/ui/audio-player";
@@ -159,7 +160,7 @@ function HomeContent() {
   const [removeDefault, setRemoveDefault] =
     useState<RemoveDefault>(loadRemoveDefault);
   const [currentView, setCurrentView] = useState<
-    "all" | "favorites" | "extensions" | "collection" | "directory" | "shelf"
+    "all" | "favorites" | "extensions" | "collection" | "directory" | "shelf" | "organize"
   >("all");
   const [selectedCollection, setSelectedCollection] = useState<string | null>(
     null,
@@ -298,6 +299,15 @@ function HomeContent() {
 
   const showShelf = useCallback(() => {
     setCurrentView("shelf");
+    setSelectedCollection(null);
+    setSelectedDirectory(null);
+    setSelectedTagId(null);
+    setSearchQuery("");
+    handleClearSelection();
+  }, [handleClearSelection]);
+
+  const showOrganize = useCallback(() => {
+    setCurrentView("organize");
     setSelectedCollection(null);
     setSelectedDirectory(null);
     setSelectedTagId(null);
@@ -997,9 +1007,9 @@ function HomeContent() {
     }
   }, []);
 
-  const handleCreateCollection = useCallback(async (name: string) => {
+  const handleCreateCollection = useCallback(async (name: string, color?: string) => {
     if (!name.trim()) {
-      return;
+      return null;
     }
 
     try {
@@ -1012,10 +1022,21 @@ function HomeContent() {
         throw new Error();
       }
 
+      const data = (await res.json()) as { id?: string };
+      if (color && data.id) {
+        await fetch("/api/collections", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "update-color", collectionId: data.id, color }),
+        });
+      }
+
       void loadInitialData();
       toast.success("Collection created");
+      return data.id ?? null;
     } catch {
       toast.error("Failed to create collection");
+      return null;
     }
   }, [loadInitialData]);
 
@@ -1104,21 +1125,36 @@ function HomeContent() {
     }
   }, [settings]);
 
-  const handleCreateTag = useCallback(async (name: string) => {
+  const handleCreateTag = useCallback(async (name: string, color?: string) => {
     if (!name.trim()) {
-      return;
+      return null;
     }
 
     try {
-      await fetch("/api/tags", {
+      const res = await fetch("/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim() }),
       });
+      if (!res.ok) {
+        throw new Error();
+      }
+
+      const data = (await res.json()) as { id?: string };
+      if (color && data.id) {
+        await fetch("/api/tags", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tagId: data.id, color }),
+        });
+      }
+
       void loadInitialData();
       toast.success("Tag created");
+      return data.id ?? null;
     } catch {
       toast.error("Failed to create tag");
+      return null;
     }
   }, [loadInitialData]);
 
@@ -1150,6 +1186,74 @@ function HomeContent() {
       toast.error("Failed to delete tag");
     }
   }, [tags]);
+
+  const handleRenameTag = useCallback(async (tagId: string, name: string) => {
+    if (!name.trim()) {
+      return;
+    }
+
+    setTags((current) =>
+      current.map((tag) => (tag.id === tagId ? { ...tag, name: name.trim() } : tag)),
+    );
+
+    try {
+      const res = await fetch("/api/tags", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagId, name: name.trim() }),
+      });
+      if (!res.ok) {
+        throw new Error();
+      }
+
+      toast.success("Tag renamed");
+    } catch {
+      void loadInitialData();
+      toast.error("Failed to rename tag");
+    }
+  }, [loadInitialData]);
+
+  const handleUpdateTagColor = useCallback(async (tagId: string, color: string) => {
+    setTags((current) =>
+      current.map((tag) => (tag.id === tagId ? { ...tag, color } : tag)),
+    );
+
+    try {
+      const res = await fetch("/api/tags", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagId, color }),
+      });
+      if (!res.ok) {
+        throw new Error();
+      }
+    } catch {
+      void loadInitialData();
+      toast.error("Failed to update tag color");
+    }
+  }, [loadInitialData]);
+
+  const handleUpdateCollectionColor = useCallback(async (collectionId: string, color: string) => {
+    setCollections((current) =>
+      current.map((collection) =>
+        collection.id === collectionId ? { ...collection, color } : collection,
+      ),
+    );
+
+    try {
+      const res = await fetch("/api/collections", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update-color", collectionId, color }),
+      });
+      if (!res.ok) {
+        throw new Error();
+      }
+    } catch {
+      void loadInitialData();
+      toast.error("Failed to update collection color");
+    }
+  }, [loadInitialData]);
 
   const extensionsRef = useRef(extensions);
 
@@ -1390,7 +1494,8 @@ function HomeContent() {
 
   const showExtensionsView = currentView === "extensions";
   const showShelfView = currentView === "shelf";
-  const hideHeaderActions = showExtensionsView || showShelfView;
+  const showOrganizeView = currentView === "organize";
+  const hideHeaderActions = showExtensionsView || showShelfView || showOrganizeView;
 
   const railView: RailView | null =
     currentView === "all" ||
@@ -1403,7 +1508,9 @@ function HomeContent() {
           ? "shelf"
           : currentView === "extensions"
             ? "extensions"
-            : null;
+            : currentView === "organize"
+              ? "organize"
+              : null;
 
   const viewHeading =
     currentView === "favorites"
@@ -1412,11 +1519,13 @@ function HomeContent() {
         ? "Tools"
         : currentView === "shelf"
           ? "Shelf"
-          : currentView === "collection"
-            ? (selectedCollectionName ?? "Library")
-            : currentView === "directory"
-              ? (selectedDirectory?.split(/[\\/]/).pop() ?? "Library")
-              : "Library";
+          : currentView === "organize"
+            ? "Organize"
+            : currentView === "collection"
+              ? (selectedCollectionName ?? "Library")
+              : currentView === "directory"
+                ? (selectedDirectory?.split(/[\\/]/).pop() ?? "Library")
+                : "Library";
 
   const {
     soundShelfEnabled,
@@ -1737,6 +1846,7 @@ function HomeContent() {
           else if (rest === "favorites") showFavorites();
           else if (rest === "shelf") showShelf();
           else if (rest === "tools") showExtensions();
+          else if (rest === "organize") showOrganize();
           else if (rest === "settings") setShowSettings(true);
           break;
         }
@@ -1782,6 +1892,7 @@ function HomeContent() {
       showFavorites,
       showShelf,
       showExtensions,
+      showOrganize,
       handleStepNext,
       handleStepPrev,
       autoplay,
@@ -1934,6 +2045,7 @@ function HomeContent() {
         onSelectFavorites={showFavorites}
         onSelectShelf={showShelf}
         onSelectExtensions={showExtensions}
+        onSelectOrganize={showOrganize}
         onOpenSettings={handleOpenSettings}
         settingsActive={showSettings}
         collections={collections}
@@ -1968,6 +2080,10 @@ function HomeContent() {
             }}
             onSelectExtensions={() => {
               showExtensions();
+              handleCloseMobileSidebar();
+            }}
+            onSelectOrganize={() => {
+              showOrganize();
               handleCloseMobileSidebar();
             }}
             onOpenSettings={() => {
@@ -2138,11 +2254,13 @@ function HomeContent() {
               </div>
             ) : null}
           </div>
-          {showExtensionsView || showShelfView ? (
+          {showExtensionsView || showShelfView || showOrganizeView ? (
             <p className="mt-1.5 text-sm font-medium text-zinc-400">
               {showExtensionsView
                 ? "Optional workflows. Flip one on and it joins the workspace."
-                : "Sounds under review."}
+                : showOrganizeView
+                  ? "Collections and tags in one place."
+                  : "Sounds under review."}
             </p>
           ) : null}
         </div>
@@ -2156,6 +2274,24 @@ function HomeContent() {
             onRunCommand={handleRunCommand}
             pendingExtensionId={pendingExtensionId}
           />
+        ) : showOrganizeView ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <OrganizeView
+              collections={collections}
+              tags={tags}
+              selectedTagId={selectedTagId}
+              onOpenCollection={showCollection}
+              onCreateCollection={handleCreateCollection}
+              onRenameCollection={handleRenameCollection}
+              onDeleteCollection={executeDeleteCollection}
+              onUpdateCollectionColor={handleUpdateCollectionColor}
+              onCreateTag={handleCreateTag}
+              onRenameTag={handleRenameTag}
+              onDeleteTag={handleDeleteTag}
+              onUpdateTagColor={handleUpdateTagColor}
+              onSelectTag={handleFilterTag}
+            />
+          </div>
         ) : (
           <>
             {selectedIds.length > 1 ? (

@@ -41,6 +41,10 @@ export class SqliteTagRepository implements TagRepository {
     return id;
   }
 
+  renameTag(tagId: string, name: string): void {
+    this.db.update(schema.tags).set({ name }).where(eq(schema.tags.id, tagId)).run();
+  }
+
   updateTagColor(tagId: string, color: string | null): void {
     this.db.update(schema.tags).set({ color }).where(eq(schema.tags.id, tagId)).run();
   }
@@ -100,6 +104,7 @@ export const getAllTags = () => getTagRepo().getAllTags();
 export const getTagsForFile = (fileId: string) => getTagRepo().getTagsForFile(fileId);
 export const getTagsForFiles = (fileIds: string[]) => getTagRepo().getTagsForFiles(fileIds);
 export const createTag = (name: string) => getTagRepo().createTag(name);
+export const renameTag = (tagId: string, name: string) => getTagRepo().renameTag(tagId, name);
 export const updateTagColor = (tagId: string, color: string | null) => getTagRepo().updateTagColor(tagId, color);
 export const attachTagToFile = (fileId: string, tagId: string) => getTagRepo().attachTagToFile(fileId, tagId);
 export const detachTagFromFile = (fileId: string, tagId: string) => getTagRepo().detachTagFromFile(fileId, tagId);

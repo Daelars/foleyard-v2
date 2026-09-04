@@ -95,11 +95,11 @@ interface SettingsDialogProps {
   onStartScan: () => Promise<void>;
   collections: { id: string; name: string; fileCount?: number; isSmart?: boolean; filter?: string | null }[];
   tags: { id: string; name: string; color: string }[];
-  onCreateCollection: (name: string) => Promise<void>;
+  onCreateCollection: (name: string, color?: string) => Promise<string | null | void>;
   onDeleteCollection: (id: string) => Promise<void>;
   onRenameCollection?: (id: string, name: string) => void;
   onConvertToRegularCollection?: (id: string) => void;
-  onCreateTag: (name: string) => Promise<void>;
+  onCreateTag: (name: string, color?: string) => Promise<string | null | void>;
   onDeleteTag: (id: string) => Promise<void>;
   // New props for extensions
   extensions: ExtensionGridItem[];

@@ -474,8 +474,6 @@ export function AltColorFields() {
     setConfirmTagDelete(false);
   };
 
-  const editingTagRecord = editingTag ? (tags.find((t) => t.id === editingTag) ?? null) : null;
-
   return (
     <div>
       <style>{`@keyframes field-rise {
@@ -496,26 +494,91 @@ export function AltColorFields() {
         >
           <Plus className="size-3" />
         </button>
-        {activeTag ? (
-          <button
-            type="button"
-            onClick={() => openTagEditor(activeTag)}
-            aria-label="Edit active tag"
-            className="flex h-5 items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2 font-mono text-[10px] uppercase tracking-widest text-zinc-400 transition-all hover:border-accent-fill/50 hover:text-accent-text active:scale-95"
-          >
-            <Pencil className="size-3" /> Edit
-          </button>
-        ) : null}
       </div>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
+      <div className="mt-1.5 flex flex-wrap items-start gap-1.5">
         {tags.map((tag) => {
           const color = tagColorFor(tag.id, tag.color);
           const active = activeTag === tag.id;
+          if (editingTag === tag.id) {
+            return (
+              <span
+                key={tag.id}
+                className="field-rise w-full max-w-md rounded-2xl border border-accent-fill/50 bg-accent-fill/[0.07] p-2"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                  <input
+                    autoFocus
+                    value={tagDraft}
+                    onChange={(event) => setTagDraft(event.target.value)}
+                    onBlur={commitTagRename}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        setEditingTag(null);
+                      }
+                      if (event.key === "Escape") {
+                        setTagDraft(tag.name);
+                        setEditingTag(null);
+                      }
+                    }}
+                    aria-label="Rename tag"
+                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs font-semibold text-zinc-100 focus:border-accent-fill/60 focus:outline-none"
+                  />
+                  {confirmTagDelete ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={deleteTag}
+                        className="shrink-0 rounded-lg bg-destructive/15 px-2.5 py-1 text-xs font-semibold text-destructive transition-all hover:bg-destructive/25 active:scale-95"
+                      >
+                        Sure?
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmTagDelete(false)}
+                        aria-label="Cancel delete"
+                        className="flex size-6 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-100"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmTagDelete(true)}
+                        aria-label={`Delete tag ${tag.name}`}
+                        className="flex size-6 shrink-0 items-center justify-center rounded-lg text-zinc-600 transition-all hover:bg-destructive/10 hover:text-destructive active:scale-90"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingTag(null)}
+                        aria-label="Done editing"
+                        className="flex size-6 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-100"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </>
+                  )}
+                </span>
+                <span className="mt-1.5 flex items-center gap-2 px-1 pb-0.5">
+                  <Swatches
+                    value={color}
+                    onPick={(next) => setTagColors((prev) => ({ ...prev, [tag.id]: next }))}
+                  />
+                </span>
+              </span>
+            );
+          }
           return (
             <button
               key={tag.id}
               type="button"
               onClick={() => pickTag(active ? null : tag.id)}
+              onDoubleClick={() => openTagEditor(tag.id)}
+              title="Click to filter · double-click to edit"
               style={active ? { borderColor: `${color}80`, backgroundColor: `${color}14` } : undefined}
               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-all active:scale-95 ${
                 active ? "border" : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.06]"
@@ -567,82 +630,6 @@ export function AltColorFields() {
               Add tag
             </button>
           </div>
-        </div>
-      ) : null}
-
-      {editingTagRecord ? (
-        <div className="field-rise mt-2 w-full max-w-2xl rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className="size-3 shrink-0 rounded-full"
-              style={{ backgroundColor: tagColorFor(editingTagRecord.id, editingTagRecord.color) }}
-            />
-            <input
-              value={tagDraft}
-              onChange={(event) => setTagDraft(event.target.value)}
-              onBlur={commitTagRename}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  (event.target as HTMLInputElement).blur();
-                }
-                if (event.key === "Escape") {
-                  setTagDraft(editingTagRecord.name);
-                  (event.target as HTMLInputElement).blur();
-                }
-              }}
-              aria-label="Rename tag"
-              title="Rename tag"
-              placeholder="Tag name…"
-              className="min-w-32 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 placeholder:font-normal placeholder:text-zinc-600 focus:border-accent-fill/60 focus:outline-none"
-            />
-            <Swatches
-              value={tagColorFor(editingTagRecord.id, editingTagRecord.color)}
-              onPick={(next) =>
-                setTagColors((prev) => ({ ...prev, [editingTagRecord.id]: next }))
-              }
-            />
-            {confirmTagDelete ? (
-              <>
-                <button
-                  type="button"
-                  onClick={deleteTag}
-                  className="shrink-0 rounded-lg bg-destructive/15 px-3 py-1.5 text-xs font-semibold text-destructive transition-all hover:bg-destructive/25 active:scale-95"
-                >
-                  Confirm
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmTagDelete(false)}
-                  aria-label="Cancel delete"
-                  className="flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-100"
-                >
-                  <X className="size-3.5" />
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setConfirmTagDelete(true)}
-                  aria-label={`Delete tag ${editingTagRecord.name}`}
-                  className="flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-600 transition-all hover:bg-destructive/10 hover:text-destructive active:scale-90"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditingTag(null)}
-                  aria-label="Close tag editor"
-                  className="flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-100"
-                >
-                  <X className="size-3.5" />
-                </button>
-              </>
-            )}
-          </div>
-          <p className="mt-2 text-[11px] text-zinc-600">
-            Editing “{editingTagRecord.name}” — the filter pill stays put either way.
-          </p>
         </div>
       ) : null}
 

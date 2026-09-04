@@ -198,7 +198,7 @@ export function OnboardingDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-xl">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_18%,transparent),transparent_42%)]" />
-        <DialogHeader className="relative border-b border-border/35 px-6 py-5 pr-12">
+        <DialogHeader className="relative border-b border-white/5 px-6 py-5 pr-12">
           <div className="mb-3 flex items-center gap-2">
             <StepDot active={step === "welcome"} completed={step !== "welcome"} />
             <StepLine active={step !== "welcome"} />
@@ -206,8 +206,8 @@ export function OnboardingDialog({
             <StepLine active={step === "scan"} />
             <StepDot active={step === "scan"} completed={false} />
           </div>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Sparkles className="size-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-xl font-extrabold tracking-tight text-zinc-50">
+            <Sparkles className="size-5 text-accent-text" />
             {step === "welcome" ? "Welcome to Foleyard" : null}
             {step === "folder" ? "Add your first audio folder" : null}
             {step === "scan" ? "Your library is ready" : null}
@@ -228,14 +228,14 @@ export function OnboardingDialog({
         <div className="relative px-6 py-6">
           {step === "welcome" ? (
             <div className="space-y-5">
-              <div className="rounded-2xl border border-border/40 bg-card/60 p-5 shadow-sm backdrop-blur-xl">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
                 <div className="flex items-start gap-4">
-                  <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-accent-fill/12 text-accent-text">
                     <Music2 className="size-6" />
                   </div>
                   <div className="space-y-2">
                     <p className="font-medium">Build a searchable sound library.</p>
-                    <p className="text-sm leading-6 text-muted-foreground">
+                    <p className="text-sm leading-6 text-zinc-400">
                       Foleyard starts by indexing one local folder. You can add more folders later from Settings.
                     </p>
                   </div>
@@ -259,7 +259,7 @@ export function OnboardingDialog({
                     setValidationResult(null);
                   }}
                   placeholder="e.g. C:\\Samples or /Volumes/Audio"
-                  className="h-10 flex-1 border-border/40 bg-background font-mono text-sm"
+                  className="h-10 flex-1 border-white/10 bg-black/30 font-mono text-sm"
                 />
                 <Button
                   variant="outline"
@@ -300,12 +300,12 @@ export function OnboardingDialog({
 
           {step === "scan" ? (
             <div className="space-y-5">
-              <div className="rounded-2xl border border-primary/30 bg-primary/10 p-5">
+              <div className="rounded-2xl border border-accent-fill/30 bg-accent-fill/10 p-5">
                 <div className="flex items-start gap-4">
-                  <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" />
+                  <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-accent-text" />
                   <div className="space-y-1">
                     <p className="font-medium">Folder added.</p>
-                    <p className="text-sm leading-6 text-muted-foreground">
+                    <p className="text-sm leading-6 text-zinc-400">
                       Scanning discovers audio files and writes their metadata into the local database.
                     </p>
                   </div>
@@ -332,28 +332,28 @@ function StepDot({ active, completed }: { active: boolean; completed: boolean })
   return (
     <span
       className={cn(
-        "flex size-2.5 rounded-full border border-border/50 bg-muted",
-        active && "border-primary bg-primary",
-        completed && "border-primary/70 bg-primary/70",
+        "flex size-2.5 rounded-full border border-white/15 bg-white/10",
+        active && "border-accent-fill bg-accent-fill",
+        completed && "border-accent-fill/70 bg-accent-fill/70",
       )}
     />
   );
 }
 
 function StepLine({ active }: { active: boolean }) {
-  return <span className={cn("h-px w-8 bg-border", active && "bg-primary/70")} />;
+  return <span className={cn("h-px w-8 bg-white/10", active && "bg-accent-fill/70")} />;
 }
 
 function ValidationMessage({ result }: { result: ValidationResult }) {
   if (result.valid) {
     return (
-      <div className="rounded-xl border border-primary/25 bg-primary/10 p-3 text-sm">
-        <div className="flex items-center gap-2 font-medium text-primary">
+      <div className="rounded-xl border border-accent-fill/25 bg-accent-fill/10 p-3 text-sm">
+        <div className="flex items-center gap-2 font-medium text-accent-text">
           <CheckCircle2 className="size-4" />
           {result.audioFileCount} audio {result.audioFileCount === 1 ? "file" : "files"} found
         </div>
         {result.normalizedPath ? (
-          <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+          <p className="mt-1 truncate font-mono text-xs text-zinc-400">
             {result.normalizedPath}
           </p>
         ) : null}

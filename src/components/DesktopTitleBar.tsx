@@ -25,8 +25,8 @@ function TitleBarButton({
       style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
       className={
         danger
-          ? "flex h-10 w-12 items-center justify-center text-muted-foreground transition-[background-color,color] hover:bg-destructive hover:text-destructive-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          : "flex h-10 w-12 items-center justify-center text-muted-foreground transition-[background-color,color] hover:bg-accent/50 hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          ? "flex h-10 w-12 items-center justify-center text-zinc-400 transition-[background-color,color] hover:bg-destructive hover:text-destructive-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          : "flex h-10 w-12 items-center justify-center text-zinc-400 transition-[background-color,color] hover:bg-white/5 hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       }
     >
       {children}
@@ -73,7 +73,7 @@ export function DesktopTitleBar() {
   return (
     <div
       style={{ WebkitAppRegion: "drag" } as CSSProperties}
-      className="flex h-10 shrink-0 items-center border-b border-border/40 bg-card/60 pl-3 backdrop-blur-xl"
+      className="flex h-10 shrink-0 items-center border-b border-white/10 pl-3"
     >
       <div className="flex-1" />
 

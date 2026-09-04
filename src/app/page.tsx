@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, PackagePlus, PanelLeft, Save, Search, Trash2, X } from "lucide-react";
+import { Loader2, PackagePlus, PanelLeft, Save, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";

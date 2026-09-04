@@ -39,7 +39,7 @@ function ContextMenuContent({
         <ContextMenuPrimitive.Popup
           data-slot="context-menu-content"
           className={cn(
-            "z-50 min-w-44 origin-(--transform-origin) overflow-hidden rounded-xl border border-white/10 bg-popover/95 p-1 text-popover-foreground shadow-lg backdrop-blur-xl duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "z-50 min-w-44 origin-(--transform-origin) overflow-hidden rounded-xl border border-white/10 bg-shell/90 p-1 text-popover-foreground shadow-glow-accent backdrop-blur-2xl duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className,
           )}
           {...props}
@@ -161,7 +161,7 @@ function ContextMenuSubContent({
         <ContextMenuPrimitive.Popup
           data-slot="context-menu-sub-content"
           className={cn(
-            "z-50 min-w-36 origin-(--transform-origin) overflow-hidden rounded-xl border border-white/10 bg-popover/95 p-1 text-popover-foreground shadow-lg backdrop-blur-xl duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "z-50 min-w-36 origin-(--transform-origin) overflow-hidden rounded-xl border border-white/10 bg-shell/90 p-1 text-popover-foreground shadow-glow-accent backdrop-blur-2xl duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className,
           )}
           {...props}

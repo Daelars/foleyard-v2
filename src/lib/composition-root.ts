@@ -1,8 +1,4 @@
-import { createDatabaseConnection } from "@/lib/database/connection";
-import {
-  getDatabasePath,
-  ensureDesktopDatabaseInitialized,
-} from "@/lib/database-path";
+import { sqlite } from "@/lib/database/connection";
 import { SqliteAudioFileRepository } from "@/lib/database/file-repository";
 import { SqliteTagRepository } from "@/lib/database/tag-repository";
 import { SqliteCollectionRepository } from "@/lib/database/collection-repository";
@@ -31,9 +27,6 @@ let _services: AppServices | null = null;
 
 export function getAppServices(): AppServices {
   if (!_services) {
-    const databasePath = getDatabasePath();
-    ensureDesktopDatabaseInitialized(databasePath);
-    const { sqlite } = createDatabaseConnection(databasePath);
     const fileRepo = new SqliteAudioFileRepository(sqlite);
     const tagRepo = new SqliteTagRepository(sqlite);
     const collectionRepo = new SqliteCollectionRepository(sqlite);

@@ -4,12 +4,12 @@ import type { PathValidation } from "@yard-core";
 
 import { existsReadableDirectory, findFirstAudioFile } from "./filesystem";
 
-export async function validateLibraryRoot(inputPath: string): Promise<PathValidation> {
+export async function validateLibraryRoot(inputPath: string, filesystem = { existsReadableDirectory, findFirstAudioFile }): Promise<PathValidation> {
   const normalizedPath = path.resolve(inputPath.trim());
 
   try {
-    await existsReadableDirectory(normalizedPath);
-    const firstAudioFile = await findFirstAudioFile(normalizedPath);
+    await filesystem.existsReadableDirectory(normalizedPath);
+    const firstAudioFile = await filesystem.findFirstAudioFile(normalizedPath);
 
     return {
       valid: true,

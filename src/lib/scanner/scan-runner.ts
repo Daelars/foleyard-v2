@@ -1,192 +1,23 @@
+import { createScanStatus, resetScanStatus, finishScanStatus } from "./progress";
+import { discoverRoots } from "./discovery";
+import { validateLibraryRoot } from "./validation";
+import { markRemovedFiles } from "./reconcile";
 import path from "path";
 
 import type {
   AudioFileRepository,
-  AudioFileTouchEntry,
   PathValidation,
-  ScanFileRecord,
   ScanStatus,
   ScannerService,
   SettingsRepository,
 } from "@yard-core";
 
-export interface FileSystemSeam {
-  stat(filePath: string): Promise<{ size: number; mtimeMs: number }>;
-  existsReadableDirectory(dirPath: string): Promise<void>;
-  findFirstAudioFile(rootPath: string): Promise<string | null>;
-  streamAudioFileBatches(
-    rootPath: string,
-    options?: {
-      batchSize?: number;
-      onDiscover?: (filePath: string) => void;
-      onError?: (directory: string, error: unknown) => void;
-      maxDepth?: number;
-    },
-  ): AsyncGenerator<string[], void, void>;
-}
+import type { FileSystemSeam, MetadataSeam, ExistingFileRecord, MetadataUpdateRecord } from "./types";
+export type { FileSystemSeam, MetadataSeam } from "./types";
+import { createMetadataQueue } from "./metadata-queue";
 
-export interface MetadataSeam {
-  extract(
-    filePath: string,
-    options?: {
-      fileSize?: number;
-      filename?: string;
-      format?: string | null;
-      fullParse?: boolean;
-    },
-  ): Promise<{
-    filename: string;
-    format: string | null;
-    codec: string | null;
-    duration: number | null;
-    sampleRate: number | null;
-    bitDepth: number | null;
-    channels: number | null;
-    fileSize: number | null;
-  }>;
-}
-
-type ExistingFileRecord = {
-  id: string;
-  path: string;
-  filename: string;
-  libraryRoot: string | null;
-  directory: string | null;
-  format: string | null;
-  duration: number | null;
-  sampleRate: number | null;
-  bitDepth: number | null;
-  channels: number | null;
-  fileSize: number | null;
-  isFavorite: boolean;
-  removedAt: string | null;
-  lastScannedAt: string | null;
-  mtimeMs: number | null;
-};
-
-type MetadataUpdateRecord = {
-  path: string;
-  codec: string | null;
-  duration: number | null;
-  sampleRate: number | null;
-  bitDepth: number | null;
-  channels: number | null;
-  fileSize: number | null;
-};
-
-type MetadataTask = {
-  filePath: string;
-  fileSize: number;
-  filename: string;
-  format: string | null;
-};
-
-const DISCOVERY_BATCH_SIZE = 500;
 const METADATA_CONCURRENCY = 8;
 const METADATA_WRITE_BATCH_SIZE = 250;
-
-function normalizeDirectory(rootPath: string, filePath: string) {
-  const relativeDirectory = path.relative(rootPath, path.dirname(filePath));
-  return relativeDirectory === "." ? null : relativeDirectory || null;
-}
-
-function normalizeStoredDirectory(directory: string | null | undefined) {
-  return directory == null ? null : directory.replace(/\\/g, "/");
-}
-
-function createMetadataQueue(
-  concurrency: number,
-  onResult: (record: MetadataUpdateRecord) => void,
-  extractor: MetadataSeam,
-  onError: () => void,
-) {
-  const pending: MetadataTask[] = [];
-  let activeCount = 0;
-  let fatalError: Error | null = null;
-  let cancelled = false;
-
-  const runNext = () => {
-    while (activeCount < concurrency && pending.length > 0 && !fatalError && !cancelled) {
-      const task = pending.shift()!;
-      activeCount += 1;
-
-      (async () => {
-        try {
-          let metadata;
-          try {
-            metadata = await extractor.extract(task.filePath, {
-              fileSize: task.fileSize,
-              filename: task.filename,
-              format: task.format,
-              fullParse: false,
-            });
-          } catch {
-            onError();
-            return;
-          }
-
-          if (!cancelled) {
-            onResult({
-              path: task.filePath,
-              codec: metadata.codec,
-              duration: metadata.duration,
-              sampleRate: metadata.sampleRate,
-              bitDepth: metadata.bitDepth,
-              channels: metadata.channels,
-              fileSize: metadata.fileSize,
-            });
-          }
-        } catch (error) {
-          fatalError = error instanceof Error ? error : new Error(String(error));
-        } finally {
-          activeCount -= 1;
-          runNext();
-        }
-      })();
-    }
-  };
-
-  return {
-    enqueue(task: MetadataTask) {
-      if (cancelled) return;
-      if (fatalError) {
-        throw fatalError;
-      }
-
-      pending.push(task);
-      runNext();
-    },
-    async onIdle(timeoutMs = 30000) {
-      if (fatalError) {
-        throw fatalError;
-      }
-
-      if (activeCount === 0 && pending.length === 0) {
-        return;
-      }
-
-      const start = Date.now();
-      while (true) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 1));
-        if (fatalError) {
-          throw fatalError;
-        }
-
-        if (activeCount === 0 && pending.length === 0) {
-          return;
-        }
-
-        if (Date.now() - start > timeoutMs) {
-          throw new Error("Metadata queue timed out");
-        }
-      }
-    },
-    cancel() {
-      cancelled = true;
-      pending.length = 0;
-    },
-  };
-}
 
 export class ScanRunner implements ScannerService {
   private fileRepo: AudioFileRepository;
@@ -196,25 +27,7 @@ export class ScanRunner implements ScannerService {
   private metadataExtractor: MetadataSeam;
   private onProgress?: (status: ScanStatus) => void;
 
-  private status: ScanStatus = {
-    running: false,
-    phase: "idle",
-    discovered: 0,
-    indexed: 0,
-    skippedUnchanged: 0,
-    metadataProcessed: 0,
-    added: 0,
-    updated: 0,
-    removed: 0,
-    failed: 0,
-    errors: 0,
-    total: 0,
-    startedAt: null,
-    finishedAt: null,
-    error: null,
-    libraryRoot: null,
-    lastScanSummary: null,
-  };
+  private status = createScanStatus();
 
   private activeScan: Promise<void> | null = null;
 
@@ -239,30 +52,7 @@ export class ScanRunner implements ScannerService {
   }
 
   async validateLibraryRoot(inputPath: string): Promise<PathValidation> {
-    const normalizedPath = path.resolve(inputPath.trim());
-
-    try {
-      await this.fs.existsReadableDirectory(normalizedPath);
-      const firstAudioFile = await this.fs.findFirstAudioFile(normalizedPath);
-
-      return {
-        valid: true,
-        normalizedPath,
-        readable: true,
-        audioFileCount: firstAudioFile ? 1 : 0,
-        samples: firstAudioFile ? [path.relative(normalizedPath, firstAudioFile)] : [],
-        error: null,
-      };
-    } catch (error) {
-      return {
-        valid: false,
-        normalizedPath,
-        readable: false,
-        audioFileCount: 0,
-        samples: [],
-        error: error instanceof Error ? error.message : "Validation failed",
-      };
-    }
+    return validateLibraryRoot(inputPath, this.fs);
   }
 
   saveLibraryRoot(libraryRoot: string): void {
@@ -297,164 +87,36 @@ export class ScanRunner implements ScannerService {
     return { started: true, status: this.getStatus() };
   }
 
+  private phaseContext() {
+    return { fileRepo: this.fileRepo, fs: this.fs, status: this.status, emitProgress: () => this.emitProgress(), incrementScanErrors: () => this.incrementScanErrors() };
+  }
+
   private emitProgress() {
     this.onProgress?.({ ...this.status });
   }
 
-  private resetScanStatus(libraryRoot: string) {
-    Object.assign(this.status, {
-      running: true,
-      phase: "validating" as const,
-      discovered: 0,
-      indexed: 0,
-      skippedUnchanged: 0,
-      metadataProcessed: 0,
-      added: 0,
-      updated: 0,
-      removed: 0,
-      failed: 0,
-      errors: 0,
-      total: 0,
-      startedAt: new Date().toISOString(),
-      finishedAt: null,
-      error: null,
-      libraryRoot,
-      lastScanSummary: null,
-    });
-    this.emitProgress();
-  }
+  private resetScanStatus(libraryRoot: string) { resetScanStatus(this.status, libraryRoot); this.emitProgress(); }
 
   private incrementScanErrors(count = 1) {
     this.status.errors += count;
     this.status.failed = this.status.errors;
   }
 
-  private async processDiscoveredBatch(
-    filePaths: string[],
-    normalizedRoot: string,
-    lastScannedAt: string,
-    seenPaths: Set<string>,
-    metadataQueue: ReturnType<typeof createMetadataQueue>,
-  ) {
-    const existingByPath = new Map(
-      this.fileRepo.getFilesByPaths(filePaths).map((file) => [file.path, file]),
-    );
-    const touchEntries: AudioFileTouchEntry[] = [];
-    const upsertRecords: ScanFileRecord[] = [];
-
-    const statResults = await Promise.all(
-      filePaths.map(async (filePath) => {
-        try {
-          const stats = await this.fs.stat(filePath);
-          return { filePath, stats };
-        } catch {
-          this.incrementScanErrors();
-          return null;
-        }
-      }),
-    );
-
-    for (const result of statResults) {
-      if (!result) {
-        continue;
-      }
-
-      const { filePath, stats } = result;
-      const existing = existingByPath.get(filePath);
-      const filename = path.basename(filePath);
-      const format = path.extname(filePath).toLowerCase().slice(1) || null;
-      const mtimeMs = Math.trunc(stats.mtimeMs);
-      const directory = normalizeDirectory(normalizedRoot, filePath);
-      const changed =
-        !existing ||
-        existing.fileSize !== stats.size ||
-        existing.mtimeMs !== mtimeMs ||
-        existing.removedAt !== null ||
-        normalizeStoredDirectory(existing.directory) !== normalizeStoredDirectory(directory);
-      const ownershipChanged = existing?.libraryRoot !== normalizedRoot;
-
-      seenPaths.add(filePath);
-      this.status.indexed += 1;
-
-      if (!changed && !ownershipChanged && existing) {
-        touchEntries.push({ path: filePath, lastScannedAt, libraryRoot: normalizedRoot });
-        this.status.skippedUnchanged += 1;
-        continue;
-      }
-
-      upsertRecords.push({
-        path: filePath,
-        filename,
-        libraryRoot: normalizedRoot,
-        directory,
-        format,
-        codec: null,
-        duration: null,
-        sampleRate: null,
-        bitDepth: null,
-        channels: null,
-        fileSize: stats.size,
-        mtimeMs,
-        removedAt: null,
-        lastScannedAt,
-      });
-
-      if (existing) {
-        this.status.updated += 1;
-      } else {
-        this.status.added += 1;
-      }
-    }
-
-    this.fileRepo.batchTouchFiles(touchEntries, lastScannedAt);
-    this.fileRepo.batchUpsertFiles(upsertRecords, lastScannedAt);
-
-    for (const record of upsertRecords) {
-      metadataQueue.enqueue({
-        filePath: record.path,
-        fileSize: record.fileSize ?? 0,
-        filename: record.filename,
-        format: record.format,
-      });
-    }
-  }
+  
 
   private flushMetadataUpdates(metadataUpdates: MetadataUpdateRecord[]) {
     if (metadataUpdates.length === 0) {
       return;
     }
 
-    const batch = metadataUpdates.splice(0, metadataUpdates.length);
+    const batch = metadataUpdates.slice();
     this.fileRepo.batchUpdateFileMetadata(batch, new Date().toISOString());
+    metadataUpdates.splice(0, batch.length);
   }
 
-  private markRemovedFiles(
-    allExistingFiles: ExistingFileRecord[],
-    seenPaths: Set<string>,
-    now: string,
-  ) {
-    this.status.phase = "cleaning";
-    this.emitProgress();
-    const removedAt = new Date().toISOString();
-    const removedPaths: string[] = [];
-
-    for (const file of allExistingFiles) {
-      if (seenPaths.has(file.path) || file.removedAt !== null) {
-        continue;
-      }
-
-      removedPaths.push(file.path);
-      this.status.removed += 1;
-    }
-
-    this.fileRepo.batchMarkRemoved(removedPaths, removedAt, now);
-
-    const relinkedFiles = this.fileRepo.reconcileMovedFiles();
-    this.status.removed = Math.max(0, this.status.removed - relinkedFiles);
-  }
+  private markRemovedFiles(allExistingFiles: ExistingFileRecord[], seenPaths: Set<string>, now: string) { return markRemovedFiles(this.phaseContext(), allExistingFiles, seenPaths, now); }
 
   private async runScan(libraryRoots: string[]) {
-    this.resetScanStatus(libraryRoots.join(path.delimiter));
     let metadataQueue: ReturnType<typeof createMetadataQueue> | null = null;
     const metadataUpdates: MetadataUpdateRecord[] = [];
 
@@ -476,80 +138,21 @@ export class ScanRunner implements ScannerService {
         () => this.incrementScanErrors(),
       );
 
-      for (const libraryRoot of libraryRoots) {
-        this.status.phase = "validating";
-        this.emitProgress();
-        const validation = await this.validateLibraryRoot(libraryRoot);
-        if (!validation.valid || !validation.normalizedPath) {
-          throw new Error(validation.error ?? "Invalid library root");
-        }
-
-        const normalizedRoot = validation.normalizedPath;
-        this.status.phase = "discovering";
-        this.emitProgress();
-
-        for await (const batch of this.fs.streamAudioFileBatches(normalizedRoot, {
-          batchSize: DISCOVERY_BATCH_SIZE,
-          onDiscover: () => {
-            this.status.discovered += 1;
-            this.status.total = this.status.discovered;
-          },
-          onError: () => this.incrementScanErrors(),
-        })) {
-          this.status.phase = "indexing";
-          this.emitProgress();
-          await this.processDiscoveredBatch(
-            batch,
-            normalizedRoot,
-            lastScannedAt,
-            seenPaths,
-            metadataQueue,
-          );
-        }
-      }
+      const healthyRoots = await discoverRoots(this.phaseContext(), libraryRoots, lastScannedAt, seenPaths, metadataQueue);
 
       this.status.phase = "metadata";
       this.emitProgress();
       await metadataQueue.onIdle();
       this.flushMetadataUpdates(metadataUpdates);
 
-      this.markRemovedFiles(allExistingFiles, seenPaths, lastScannedAt);
+      this.markRemovedFiles(allExistingFiles.filter((file) => file.libraryRoot !== null && healthyRoots.has(file.libraryRoot)), seenPaths, lastScannedAt);
 
-      this.status.phase = "complete";
-      this.status.finishedAt = new Date().toISOString();
-      this.status.lastScanSummary = {
-        discovered: this.status.discovered,
-        indexed: this.status.indexed,
-        skippedUnchanged: this.status.skippedUnchanged,
-        metadataProcessed: this.status.metadataProcessed,
-        added: this.status.added,
-        updated: this.status.updated,
-        removed: this.status.removed,
-        failed: this.status.failed,
-        errors: this.status.errors,
-        finishedAt: this.status.finishedAt,
-      };
+      finishScanStatus(this.status);
       this.emitProgress();
     } catch (error) {
       metadataQueue?.cancel();
-      metadataUpdates.length = 0;
-      this.status.phase = "error";
-      this.status.finishedAt = new Date().toISOString();
-      this.status.error = error instanceof Error ? error.message : "Scan failed";
-      this.status.lastScanSummary = {
-        discovered: this.status.discovered,
-        indexed: this.status.indexed,
-        skippedUnchanged: this.status.skippedUnchanged,
-        metadataProcessed: this.status.metadataProcessed,
-        added: this.status.added,
-        updated: this.status.updated,
-        removed: this.status.removed,
-        failed: Math.max(1, this.status.failed),
-        errors: Math.max(1, this.status.errors),
-        finishedAt: this.status.finishedAt,
-      };
-      this.status.failed = Math.max(1, this.status.failed);
-      this.status.errors = Math.max(1, this.status.errors);
+      try { this.flushMetadataUpdates(metadataUpdates); } catch (flushError) { console.error("Could not persist buffered scan metadata", flushError); }
+      finishScanStatus(this.status, error);
       this.emitProgress();
     } finally {
       this.status.running = false;

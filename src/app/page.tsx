@@ -23,7 +23,6 @@ import { RenameHammerDialog } from "@/components/extensions/rename-hammer/Rename
 import { FileTable } from "@/components/FileTable";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { IconRail, type RailView } from "@/components/IconRail";
-import { SoundShelf } from "@/components/SoundShelf";
 import { AudioPlayerProvider } from "@/components/ui/audio-player";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -283,7 +282,33 @@ function HomeContent() {
     const requestId = filesRequestIdRef.current + 1;
     filesRequestIdRef.current = requestId;
 
-    if (currentView === "extensions" || currentView === "shelf") {
+    if (currentView === "shelf") {
+      setIsLoadingFiles(true);
+      try {
+        const res = await fetch("/api/extensions/sound-shelf");
+        if (!res.ok) {
+          throw new Error("Failed to fetch shelf");
+        }
+
+        const data = await res.json();
+        if (filesRequestIdRef.current === requestId) {
+          const items = (data.items ?? []) as FileRecord[];
+          setFiles(items);
+          setSoundShelfItemCount(items.length);
+        }
+      } catch {
+        if (filesRequestIdRef.current === requestId) {
+          toast.error("Failed to load shelf");
+        }
+      } finally {
+        if (filesRequestIdRef.current === requestId) {
+          setIsLoadingFiles(false);
+        }
+      }
+      return;
+    }
+
+    if (currentView === "extensions") {
       setFiles([]);
       setIsLoadingFiles(false);
       return;
@@ -454,9 +479,17 @@ function HomeContent() {
     };
   }, [loadInitialData]);
 
+  const currentViewRef = useRef(currentView);
+  useEffect(() => {
+    currentViewRef.current = currentView;
+  }, [currentView]);
+
   useEffect(() => {
     const handleSoundShelfChanged = () => {
       void loadSoundShelfCount();
+      if (currentViewRef.current === "shelf") {
+        void loadFiles();
+      }
     };
 
     window.addEventListener(SOUND_SHELF_CHANGED_EVENT, handleSoundShelfChanged);
@@ -466,7 +499,7 @@ function HomeContent() {
         handleSoundShelfChanged,
       );
     };
-  }, [loadSoundShelfCount]);
+  }, [loadSoundShelfCount, loadFiles]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1281,7 +1314,6 @@ function HomeContent() {
   const {
     soundShelfEnabled,
     makePackEnabled,
-    showSoundShelf,
     folderJanitorEnabled,
     libraryGathererEnabled,
     smartCollectionsEnabled,
@@ -1299,14 +1331,13 @@ function HomeContent() {
     return {
       soundShelfEnabled: shelf,
       makePackEnabled: pack,
-      showSoundShelf: shelf && soundShelfItemCount > 0,
       folderJanitorEnabled: janitor,
       libraryGathererEnabled: gatherer,
       smartCollectionsEnabled: smart,
       viewingSmartCollection: activeSmart !== null,
       activeSmartCollectionId: activeSmart?.id ?? null,
     };
-  }, [extensions, soundShelfItemCount, selectedCollection, collections]);
+  }, [extensions, selectedCollection, collections]);
 
   const handleOpenMobileSidebar = useCallback(() => setShowMobileSidebar(true), []);
   const handleCloseMobileSidebar = useCallback(() => setShowMobileSidebar(false), []);
@@ -1396,18 +1427,20 @@ function HomeContent() {
     [executeHostedCommand],
   );
 
-  const handleShelfSelectFile = useCallback((fileId: string) => {
-    const match = filesRef.current.find((f) => f.id === fileId);
-    if (match) {
-      playIds(
-        filesRef.current.map((listed) => listed.id),
-        match.id,
-      );
-      setSelectedFile(match);
-      setSelectedIds([match.id]);
-      selectionAnchorRef.current = match.id;
+  const handleClearShelf = useCallback(async () => {
+    try {
+      const res = await fetch("/api/extensions/sound-shelf/clear", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        throw new Error();
+      }
+
+      window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
+    } catch {
+      toast.error("Failed to clear Shelf");
     }
-  }, [playIds]);
+  }, []);
 
   const handleClosePlayer = useCallback(() => {
     clearQueue();
@@ -1596,6 +1629,34 @@ function HomeContent() {
               </p>
             </div>
             <span className="flex-1" />
+            {showShelfView ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {makePackEnabled && files.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 gap-2 rounded-xl px-3 text-xs"
+                    onClick={() => void handleMakePackShelf()}
+                  >
+                    <PackagePlus className="size-4" />
+                    Pack Shelf
+                  </Button>
+                ) : null}
+                {files.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 gap-2 rounded-xl px-3 text-xs text-zinc-400 hover:text-red-400"
+                    onClick={() => void handleClearShelf()}
+                  >
+                    <X className="size-4" />
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             {showLibraryFilter ? (
               <div className="flex flex-wrap items-center gap-2">
                 <select
@@ -1662,17 +1723,6 @@ function HomeContent() {
             onRunCommand={handleRunCommand}
             pendingExtensionId={pendingExtensionId}
           />
-        ) : showShelfView ? (
-          <div className="flex min-h-0 flex-1">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              <SoundShelf
-                makePackEnabled={makePackEnabled}
-                onMakePackShelf={handleMakePackShelf}
-                onItemCountChange={setSoundShelfItemCount}
-                onSelectFile={handleShelfSelectFile}
-              />
-            </div>
-          </div>
         ) : (
           <div className="flex min-h-0 flex-1">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1726,17 +1776,6 @@ function HomeContent() {
                 onToggleFileTag={handleToggleFileTag}
               />
             </div>
-
-            {showSoundShelf && !showShelfView ? (
-              <aside className="hidden w-80 shrink-0 border-l border-white/10 lg:flex lg:flex-col">
-                <SoundShelf
-                  makePackEnabled={makePackEnabled}
-                  onMakePackShelf={handleMakePackShelf}
-                  onItemCountChange={setSoundShelfItemCount}
-                  onSelectFile={handleShelfSelectFile}
-                />
-              </aside>
-            ) : null}
           </div>
         )}
 

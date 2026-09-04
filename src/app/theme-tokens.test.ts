@@ -54,7 +54,6 @@ describe("theme token law", () => {
     const surfaces = [
       "./page.tsx",
       "../components/IconRail.tsx",
-      "../components/SoundShelf.tsx",
       "../components/ExtensionGrid.tsx",
       "../components/SettingsDialog.tsx",
       "../components/OnboardingDialog.tsx",

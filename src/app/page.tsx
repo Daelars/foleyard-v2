@@ -236,13 +236,21 @@ function HomeContent() {
   }, [files, sortKey, sortDir]);
 
   useEffect(() => { filesRef.current = orderedFiles; }, [orderedFiles]);
-  useEffect(() => {
+  // Prune selection state when the visible file list changes. This adjusts
+  // state during render (comparing against the previously seen list) rather
+  // than in an effect, so no cascading render is scheduled after commit.
+  const [prevOrderedFiles, setPrevOrderedFiles] = useState(orderedFiles);
+  if (prevOrderedFiles !== orderedFiles) {
+    setPrevOrderedFiles(orderedFiles);
     const visibleIds = new Set(orderedFiles.map((file) => file.id));
     setSelectedIds((current) => current.filter((id) => visibleIds.has(id)));
     setSelectedFile((current) => {
       if (!current) return null;
       return orderedFiles.find((file) => file.id === current.id) ?? current;
     });
+  }
+  useEffect(() => {
+    const visibleIds = new Set(orderedFiles.map((file) => file.id));
     if (selectionAnchorRef.current && !visibleIds.has(selectionAnchorRef.current)) {
       selectionAnchorRef.current = null;
     }

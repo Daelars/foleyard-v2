@@ -31,10 +31,10 @@ class FakeFileSystem implements FileSystemSeam {
     return file;
   }
 
-  async existsReadableDirectory(_dirPath: string) {
+  async existsReadableDirectory() {
   }
 
-  async findFirstAudioFile(_rootPath: string) {
+  async findFirstAudioFile() {
     return null;
   }
 
@@ -54,15 +54,7 @@ class FakeFileSystem implements FileSystemSeam {
 }
 
 class FakeMetadata implements MetadataSeam {
-  async extract(
-    filePath: string,
-    _options?: {
-      fileSize?: number;
-      filename?: string;
-      format?: string | null;
-      fullParse?: boolean;
-    },
-  ) {
+  async extract(filePath: string) {
     return {
       filename: filePath.split("/").pop() ?? "unknown",
       format: filePath.split(".").pop() ?? null,

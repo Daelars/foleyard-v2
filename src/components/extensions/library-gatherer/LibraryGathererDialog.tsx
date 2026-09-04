@@ -189,9 +189,9 @@ export function LibraryGathererDialog({
         </DialogHeader>
 
         <div className="mt-6 space-y-6">
-          <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
+          <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
             <div className="flex items-center gap-2">
-              <FolderSearch className="size-4 text-primary" />
+              <FolderSearch className="size-4 text-accent-text" />
               <span className="text-sm font-medium">Source folders</span>
               {sourceFolders.length > 0 && (
                 <Badge variant="secondary">{sourceFolders.length}</Badge>
@@ -203,7 +203,7 @@ export function LibraryGathererDialog({
                 {sourceFolders.map((folder) => (
                   <div
                     key={folder}
-                    className="flex items-center justify-between rounded-lg border border-border/40 bg-background/50 px-3 py-1.5"
+                    className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-1.5"
                   >
                     <p className="truncate text-sm">{folder}</p>
                     <Button
@@ -247,9 +247,9 @@ export function LibraryGathererDialog({
             </div>
           </section>
 
-          <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
+          <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
             <div className="flex items-center gap-2">
-              <FolderOpen className="size-4 text-primary" />
+              <FolderOpen className="size-4 text-accent-text" />
               <span className="text-sm font-medium">
                 Main library destination
               </span>
@@ -286,7 +286,7 @@ export function LibraryGathererDialog({
           )}
 
           {previewResult && previewResult.files.length > 0 && (
-            <div className="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-border/40 bg-background/50 p-3">
+            <div className="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-white/10 bg-white/5 p-3">
               {previewResult.files.slice(0, 20).map((file, idx) => (
                 <p key={idx} className="truncate text-xs text-muted-foreground">
                   {file.sourcePath} → {file.outputPath}

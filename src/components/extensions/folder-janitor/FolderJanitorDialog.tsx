@@ -225,7 +225,7 @@ export function FolderJanitorDialog({
     >
       <section className="space-y-4 rounded-xl p-4">
         <div className="flex items-center gap-2">
-          <Search className="size-4 text-primary" />
+          <Search className="size-4 text-accent-text" />
           <span className="text-sm font-medium">Scan target</span>
         </div>
 
@@ -265,11 +265,11 @@ export function FolderJanitorDialog({
             </Alert>
           ) : (
             <>
-              <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
+              <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
                 <div className="flex items-center gap-2">
-                  <Bug className="size-4 text-primary" />
+                  <Bug className="size-4 text-accent-text" />
                   <span className="text-sm font-medium">Issue breakdown </span>
-                  <p className="text-sm text-muted-foreground/80">
+                  <p className="text-sm text-zinc-400">
                     Scanned {result.scannedFiles.toLocaleString()} files across{" "}
                     {result.scannedRoots.length} root
                     {result.scannedRoots.length !== 1 ? "s" : ""}. Found{" "}
@@ -338,7 +338,7 @@ export function FolderJanitorDialog({
                             {issues.map((issue, idx) => (
                               <div
                                 key={idx}
-                                className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-3 py-1.5"
+                                className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5"
                               >
                                 <p
                                   className="min-w-0 flex-1 truncate text-xs text-muted-foreground"

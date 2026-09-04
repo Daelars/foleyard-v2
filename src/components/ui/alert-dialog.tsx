@@ -28,7 +28,7 @@ function AlertDialogOverlay({
       data-slot="alert-dialog-overlay"
       forceRender
       className={cn(
-        "fixed inset-0 isolate z-50 bg-background/40 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-black/60 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}
       style={{ backdropFilter: "blur(8px)" }}
@@ -49,7 +49,7 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl border border-border/40 bg-card/95 p-6 text-sm text-card-foreground shadow-2xl backdrop-blur-2xl duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl border border-white/10 bg-shell/95 p-6 text-sm text-zinc-100 shadow-2xl backdrop-blur-2xl duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
@@ -61,7 +61,7 @@ function AlertDialogContent({
             render={
               <Button
                 variant="ghost"
-                className="absolute right-3 top-3 rounded-full text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                className="absolute right-3 top-3 rounded-full text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
                 size="icon-sm"
               />
             }
@@ -108,7 +108,7 @@ function AlertDialogTitle({
   return (
     <AlertDialogPrimitive.Title
       data-slot="alert-dialog-title"
-      className={cn("font-heading text-base leading-none font-medium", className)}
+      className={cn("font-heading text-base leading-none font-semibold text-zinc-50", className)}
       {...props}
     />
   )
@@ -121,7 +121,7 @@ function AlertDialogDescription({
   return (
     <AlertDialogPrimitive.Description
       data-slot="alert-dialog-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-sm text-zinc-400", className)}
       {...props}
     />
   )

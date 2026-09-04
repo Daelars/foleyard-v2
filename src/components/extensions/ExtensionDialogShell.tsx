@@ -57,9 +57,9 @@ export function ExtensionDialogShell({
           widthClass[maxWidth],
         )}
       >
-        <DialogHeader className="border-b border-border/35 px-6 py-5 pr-12">
-          <DialogTitle className="flex items-center gap-2">
-            {icon ? <span className="text-primary">{icon}</span> : null}
+        <DialogHeader className="border-b border-white/5 px-6 py-5 pr-12">
+          <DialogTitle className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-zinc-50">
+            {icon ? <span className="text-accent-text">{icon}</span> : null}
             {title}
           </DialogTitle>
           {description ? (
@@ -74,9 +74,9 @@ export function ExtensionDialogShell({
         </div>
 
         {(footer || showCloseButton) && (
-          <div className="flex flex-col-reverse gap-2 border-t border-border/35 bg-card/80 px-6 py-4 sm:flex-row sm:justify-end">
+          <div className="flex flex-col-reverse gap-2 border-t border-white/5 bg-white/[0.02] px-6 py-4 sm:flex-row sm:justify-end">
             {showCloseButton ? (
-              <DialogClose render={<Button variant="outline" />}>
+              <DialogClose render={<Button variant="outline" className="border-white/15 bg-white/5 text-zinc-200 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.08] hover:text-zinc-100" />}>
                 Close
               </DialogClose>
             ) : null}

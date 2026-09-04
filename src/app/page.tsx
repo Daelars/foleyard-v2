@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bug, FileInput, Loader2, PackagePlus, PanelLeft, Save, Search, Trash2 } from "lucide-react";
+import { Bug, FileInput, Loader2, PackagePlus, PanelLeft, Save, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";
@@ -22,7 +22,7 @@ import { OnboardingDialog } from "@/components/OnboardingDialog";
 import { RenameHammerDialog } from "@/components/extensions/rename-hammer/RenameHammerDialog";
 import { FileTable } from "@/components/FileTable";
 import { SettingsDialog } from "@/components/SettingsDialog";
-import { Sidebar } from "@/components/Sidebar";
+import { IconRail, type RailView } from "@/components/IconRail";
 import { SoundShelf } from "@/components/SoundShelf";
 import { AudioPlayerProvider } from "@/components/ui/audio-player";
 import { Button } from "@/components/ui/button";
@@ -112,16 +112,23 @@ function HomeContent() {
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectionAnchorRef = useRef<string | null>(null);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(clearSelection());
+    selectionAnchorRef.current = null;
+  }, []);
   const transportQueue = useTransportQueue();
   const { playIds, advanceIfEnabled, enqueue, clear: clearQueue } = transportQueue;
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentView, setCurrentView] = useState<
-    "all" | "favorites" | "extensions" | "collection" | "directory"
+    "all" | "favorites" | "extensions" | "collection" | "directory" | "shelf"
   >("all");
   const [selectedCollection, setSelectedCollection] = useState<string | null>(
     null,
   );
+  const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
+  const [favoritesCount, setFavoritesCount] = useState(0);
   const [selectedDirectory, setSelectedDirectory] = useState<string | null>(
     null,
   );
@@ -200,23 +207,38 @@ function HomeContent() {
     setCurrentView("all");
     setSelectedCollection(null);
     setSelectedDirectory(null);
+    setSelectedTagId(null);
     setSearchQuery("");
-  }, []);
+    handleClearSelection();
+  }, [handleClearSelection]);
 
   const showFavorites = useCallback(() => {
     setCurrentView("favorites");
     setSelectedCollection(null);
     setSelectedDirectory(null);
+    setSelectedTagId(null);
     setSearchQuery("");
-  }, []);
+    handleClearSelection();
+  }, [handleClearSelection]);
 
   const showExtensions = useCallback(() => {
     setCurrentView("extensions");
     setSelectedCollection(null);
     setSelectedDirectory(null);
+    setSelectedTagId(null);
     setSelectedFile(null);
     setSearchQuery("");
-  }, []);
+    handleClearSelection();
+  }, [handleClearSelection]);
+
+  const showShelf = useCallback(() => {
+    setCurrentView("shelf");
+    setSelectedCollection(null);
+    setSelectedDirectory(null);
+    setSelectedTagId(null);
+    setSearchQuery("");
+    handleClearSelection();
+  }, [handleClearSelection]);
 
   const showCollection = useCallback((collectionId: string) => {
     const collection = collections.find((c) => c.id === collectionId);
@@ -227,6 +249,7 @@ function HomeContent() {
         setCurrentView("all");
         setSelectedCollection(collectionId);
         setSelectedDirectory(null);
+        handleClearSelection();
         return;
       } catch {
         // Invalid filter JSON, fall through to regular view
@@ -236,13 +259,15 @@ function HomeContent() {
     setSelectedCollection(collectionId);
     setSelectedDirectory(null);
     setSearchQuery("");
-  }, [collections]);
+    handleClearSelection();
+  }, [collections, handleClearSelection]);
 
   const navigateDirectory = useCallback((directory: string | null) => {
     setCurrentView(directory ? "directory" : "all");
     setSelectedCollection(null);
     setSelectedDirectory(directory);
-  }, []);
+    handleClearSelection();
+  }, [handleClearSelection]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -258,7 +283,7 @@ function HomeContent() {
     const requestId = filesRequestIdRef.current + 1;
     filesRequestIdRef.current = requestId;
 
-    if (currentView === "extensions") {
+    if (currentView === "extensions" || currentView === "shelf") {
       setFiles([]);
       setIsLoadingFiles(false);
       return;
@@ -288,6 +313,9 @@ function HomeContent() {
     if (currentView === "collection" && selectedCollection) {
       params.set("collectionId", selectedCollection);
     }
+    if (selectedTagId) {
+      params.set("tagId", selectedTagId);
+    }
 
     try {
       const response = await fetch(`/api/files?${params.toString()}`);
@@ -298,6 +326,9 @@ function HomeContent() {
       const data = await response.json();
       if (filesRequestIdRef.current === requestId) {
         setFiles(data.files ?? []);
+        if (typeof data.favoritesTotal === "number") {
+          setFavoritesCount(data.favoritesTotal);
+        }
       }
     } catch {
       if (filesRequestIdRef.current === requestId) {
@@ -308,7 +339,7 @@ function HomeContent() {
         setIsLoadingFiles(false);
       }
     }
-  }, [currentView, debouncedSearchQuery, selectedCollection, selectedDirectory]);
+  }, [currentView, debouncedSearchQuery, selectedCollection, selectedDirectory, selectedTagId]);
 
   const loadDirectories = useCallback(async () => {
     const requestId = directoriesRequestIdRef.current + 1;
@@ -316,9 +347,11 @@ function HomeContent() {
 
     if (
       debouncedSearchQuery.trim() ||
+      selectedTagId ||
       currentView === "favorites" ||
       currentView === "collection" ||
-      currentView === "extensions"
+      currentView === "extensions" ||
+      currentView === "shelf"
     ) {
       setDirectories([]);
       return;
@@ -340,7 +373,7 @@ function HomeContent() {
         toast.error("Failed to load directories");
       }
     }
-  }, [debouncedSearchQuery, currentView, selectedDirectory]);
+  }, [debouncedSearchQuery, currentView, selectedDirectory, selectedTagId]);
 
   const loadInitialData = useCallback(async () => {
     setIsLoadingExtensions(true);
@@ -445,6 +478,22 @@ function HomeContent() {
     };
   }, [loadFiles, loadDirectories]);
 
+  const loadFavoritesCount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/files?favorites=true&limit=1");
+      if (!res.ok) {
+        return;
+      }
+
+      const data = (await res.json()) as { favoritesTotal?: number };
+      if (typeof data.favoritesTotal === "number") {
+        setFavoritesCount(data.favoritesTotal);
+      }
+    } catch {
+      // Badge keeps its last count.
+    }
+  }, []);
+
   const handleToggleFavorite = useCallback(async (id: string) => {
     try {
       const res = await fetch("/api/files", {
@@ -465,10 +514,12 @@ function HomeContent() {
       setSelectedFile((prev) =>
         prev?.id === id ? { ...prev, isFavorite: !prev.isFavorite } : prev,
       );
+
+      void loadFavoritesCount();
     } catch {
       toast.error("Failed to update favorite status");
     }
-  }, []);
+  }, [loadFavoritesCount]);
 
   const handleToggleFileTag = useCallback(async (fileId: string, tagId: string) => {
     const currentFiles = filesRef.current;
@@ -540,7 +591,8 @@ function HomeContent() {
       (id) => !filesRef.current.find((file) => file.id === id)?.isFavorite,
     );
     await Promise.all(unfavorited.map((id) => handleToggleFavorite(id)));
-  }, [handleToggleFavorite]);
+    void loadFavoritesCount();
+  }, [handleToggleFavorite, loadFavoritesCount]);
 
   const handleBulkAddToQueue = useCallback(() => {
     enqueue(selectedIdsRef.current);
@@ -581,11 +633,6 @@ function HomeContent() {
       missing.map((id) => handleToggleFileTag(id, tagId)),
     );
   }, [handleToggleFileTag]);
-
-  const handleClearSelection = useCallback(() => {
-    setSelectedIds(clearSelection());
-    selectionAnchorRef.current = null;
-  }, []);
 
   const executeBulkRemove = useCallback(async () => {
     const target = confirmBulkRemove;
@@ -633,10 +680,12 @@ function HomeContent() {
       } else {
         toast.success(`Removed ${removedIds.size} file(s) from library`);
       }
+
+      void loadFavoritesCount();
     } catch {
       toast.error("Failed to remove files");
     }
-  }, [confirmBulkRemove, handleClearSelection, clearQueue]);
+  }, [confirmBulkRemove, handleClearSelection, clearQueue, loadFavoritesCount]);
 
   const handleSaveSearch = useCallback(async (name: string) => {
     if (!name.trim() || !debouncedSearchQuery.trim()) return;
@@ -1194,6 +1243,40 @@ function HomeContent() {
   [currentView, collections, selectedCollection]);
 
   const showExtensionsView = currentView === "extensions";
+  const showShelfView = currentView === "shelf";
+  const hideHeaderActions = showExtensionsView || showShelfView;
+
+  const railView: RailView | null =
+    currentView === "all" ||
+    currentView === "collection" ||
+    currentView === "directory"
+      ? "library"
+      : currentView === "favorites"
+        ? "favorites"
+        : currentView === "shelf"
+          ? "shelf"
+          : currentView === "extensions"
+            ? "extensions"
+            : null;
+
+  const viewHeading =
+    currentView === "favorites"
+      ? "Favorites"
+      : currentView === "extensions"
+        ? "Tools"
+        : currentView === "shelf"
+          ? "Shelf"
+          : currentView === "collection"
+            ? (selectedPlaylistName ?? "Library")
+            : currentView === "directory"
+              ? (selectedDirectory?.split(/[\\/]/).pop() ?? "Library")
+              : "Library";
+
+  const showLibraryFilter =
+    currentView === "all" ||
+    currentView === "favorites" ||
+    currentView === "collection" ||
+    currentView === "directory";
 
   const {
     soundShelfEnabled,
@@ -1348,45 +1431,50 @@ function HomeContent() {
     <div className="relative flex h-full overflow-hidden bg-canvas font-sans">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--accent-fill)_13%,transparent),transparent_38%),radial-gradient(circle_at_bottom_right,color-mix(in_oklab,var(--accent-fill)_6%,transparent),transparent_40%)]" />
 
-      <Sidebar
+      <IconRail
         className="hidden md:flex"
-        currentView={currentView}
-        collections={collections}
-        selectedCollection={selectedCollection}
-        tags={tags}
-        scanStatus={scanStatus}
-        onOpenSettings={handleOpenSettings}
+        activeView={railView}
+        favoritesCount={favoritesCount}
+        shelfCount={soundShelfItemCount}
         onSelectLibrary={showLibrary}
         onSelectFavorites={showFavorites}
+        onSelectShelf={showShelf}
         onSelectExtensions={showExtensions}
-        onSelectCollection={showCollection}
-        onRenameCollection={(id, name) => setRenamingCollection({ id, name })}
-        onConvertToRegularCollection={handleConvertToRegularCollection}
-        onDeleteCollection={handleDeleteCollection}
+        onOpenSettings={handleOpenSettings}
+        settingsActive={showSettings}
       />
 
       <Dialog open={showMobileSidebar} onOpenChange={setShowMobileSidebar}>
         <DialogContent
           showCloseButton={false}
-          className="left-0 top-0 h-full w-[calc(100%-3rem)] max-w-80 translate-x-0 translate-y-0 rounded-none border-r border-white/10 bg-shell/95 p-0 shadow-2xl backdrop-blur-2xl duration-300 ease-out data-open:slide-in-from-left-8 data-open:fade-in-0 data-closed:slide-out-to-left-8 data-closed:fade-out-0 sm:max-w-80"
+          className="left-0 top-0 h-full w-auto translate-x-0 translate-y-0 rounded-none border-r border-white/10 bg-shell/95 p-2 shadow-2xl backdrop-blur-2xl duration-300 ease-out data-open:slide-in-from-left-8 data-open:fade-in-0 data-closed:slide-out-to-left-8 data-closed:fade-out-0"
         >
           <DialogTitle className="sr-only">Navigation Menu</DialogTitle>
-          <Sidebar
-            className="w-full border-r-0"
-            currentView={currentView}
-            collections={collections}
-            selectedCollection={selectedCollection}
-            tags={tags}
-            scanStatus={scanStatus}
-            onOpenSettings={handleOpenSettings}
-            onSelectLibrary={showLibrary}
-            onSelectFavorites={showFavorites}
-            onSelectExtensions={showExtensions}
-            onSelectCollection={showCollection}
-            onRenameCollection={(id, name) => setRenamingCollection({ id, name })}
-            onConvertToRegularCollection={handleConvertToRegularCollection}
-            onDeleteCollection={handleDeleteCollection}
-            onAction={handleCloseMobileSidebar}
+          <IconRail
+            activeView={railView}
+            favoritesCount={favoritesCount}
+            shelfCount={soundShelfItemCount}
+            onSelectLibrary={() => {
+              showLibrary();
+              handleCloseMobileSidebar();
+            }}
+            onSelectFavorites={() => {
+              showFavorites();
+              handleCloseMobileSidebar();
+            }}
+            onSelectShelf={() => {
+              showShelf();
+              handleCloseMobileSidebar();
+            }}
+            onSelectExtensions={() => {
+              showExtensions();
+              handleCloseMobileSidebar();
+            }}
+            onOpenSettings={() => {
+              handleOpenSettings();
+              handleCloseMobileSidebar();
+            }}
+            settingsActive={showSettings}
           />
         </DialogContent>
       </Dialog>
@@ -1406,7 +1494,7 @@ function HomeContent() {
               <PanelLeft className="size-4" />
             </Button>
 
-            {!showExtensionsView && (
+            {!hideHeaderActions && (
               <div className="relative flex flex-1 items-center gap-2 duration-300 animate-in fade-in-0 slide-in-from-top-2 md:max-w-xl">
                 <div className="relative flex-1">
                   <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-4 -translate-y-1/2 text-zinc-500" />
@@ -1493,6 +1581,78 @@ function HomeContent() {
           </div>
         </header>
 
+        <div className="px-4 pt-4 md:px-5">
+          <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+            <div className="min-w-0">
+              <h1 className="truncate text-5xl font-extrabold tracking-tighter text-zinc-50">
+                {viewHeading}
+              </h1>
+              <p className="mt-1.5 text-sm font-medium text-zinc-400">
+                {showExtensionsView
+                  ? "Optional workflows. Flip one on and it joins the workspace."
+                  : showShelfView
+                    ? "Sounds under review."
+                    : `${files.length} ${files.length === 1 ? "sound" : "sounds"}`}
+              </p>
+            </div>
+            <span className="flex-1" />
+            {showLibraryFilter ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  aria-label="Filter by collection"
+                  value={selectedCollection ?? ""}
+                  onChange={(event) => {
+                    const id = event.target.value;
+                    if (id) {
+                      showCollection(id);
+                    } else {
+                      showLibrary();
+                    }
+                  }}
+                  className="h-9 rounded-xl border border-white/10 bg-black/30 px-2 text-xs text-zinc-200 outline-none focus-visible:border-accent-fill/50"
+                >
+                  <option value="">All collections</option>
+                  {collections.map((collection) => (
+                    <option key={collection.id} value={collection.id}>
+                      {collection.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Filter by tag"
+                  value={selectedTagId ?? ""}
+                  onChange={(event) =>
+                    setSelectedTagId(event.target.value || null)
+                  }
+                  className="h-9 rounded-xl border border-white/10 bg-black/30 px-2 text-xs text-zinc-200 outline-none focus-visible:border-accent-fill/50"
+                >
+                  <option value="">All tags</option>
+                  {tags.map((tag) => (
+                    <option key={tag.id} value={tag.id}>
+                      {tag.name}
+                    </option>
+                  ))}
+                </select>
+                {selectedCollection || selectedTagId ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-9 rounded-xl"
+                    onClick={() => {
+                      setSelectedTagId(null);
+                      showLibrary();
+                    }}
+                    aria-label="Clear collection and tag filters"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
         {showExtensionsView ? (
           <ExtensionGrid
             extensions={extensions}
@@ -1502,6 +1662,17 @@ function HomeContent() {
             onRunCommand={handleRunCommand}
             pendingExtensionId={pendingExtensionId}
           />
+        ) : showShelfView ? (
+          <div className="flex min-h-0 flex-1">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <SoundShelf
+                makePackEnabled={makePackEnabled}
+                onMakePackShelf={handleMakePackShelf}
+                onItemCountChange={setSoundShelfItemCount}
+                onSelectFile={handleShelfSelectFile}
+              />
+            </div>
+          </div>
         ) : (
           <div className="flex min-h-0 flex-1">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1556,7 +1727,7 @@ function HomeContent() {
               />
             </div>
 
-            {showSoundShelf ? (
+            {showSoundShelf && !showShelfView ? (
               <aside className="hidden w-80 shrink-0 border-l border-white/10 lg:flex lg:flex-col">
                 <SoundShelf
                   makePackEnabled={makePackEnabled}
@@ -1600,6 +1771,7 @@ function HomeContent() {
         onCreateCollection={handleCreateCollection}
         onDeleteCollection={handleDeleteCollection}
         onRenameCollection={(id, name) => setRenamingCollection({ id, name })}
+        onConvertToRegularCollection={handleConvertToRegularCollection}
         onCreateTag={handleCreateTag}
         onDeleteTag={handleDeleteTag}
         extensions={extensions}

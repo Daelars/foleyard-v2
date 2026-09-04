@@ -39,6 +39,7 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
       favorites,
       collectionId,
       directory,
+      tagId,
       showRemoved,
       limit = 500,
       offset = 0,
@@ -46,6 +47,18 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
 
     if (collectionId) {
       const collectionFilters = [eq(schema.fileCollections.collectionId, collectionId)];
+
+      if (tagId) {
+        collectionFilters.push(
+          inArray(
+            schema.files.id,
+            this.db
+              .select({ fileId: schema.fileTags.fileId })
+              .from(schema.fileTags)
+              .where(eq(schema.fileTags.tagId, tagId)),
+          ),
+        );
+      }
 
       if (!showRemoved) {
         collectionFilters.push(isNull(schema.files.removedAt));
@@ -83,6 +96,18 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
 
     if (favorites) {
       filters.push(eq(schema.files.isFavorite, true));
+    }
+
+    if (tagId) {
+      filters.push(
+        inArray(
+          schema.files.id,
+          this.db
+            .select({ fileId: schema.fileTags.fileId })
+            .from(schema.fileTags)
+            .where(eq(schema.fileTags.tagId, tagId)),
+        ),
+      );
     }
 
     if (query) {

@@ -97,6 +97,7 @@ interface SettingsDialogProps {
   onCreateCollection: (name: string) => Promise<void>;
   onDeleteCollection: (id: string) => Promise<void>;
   onRenameCollection?: (id: string, name: string) => void;
+  onConvertToRegularCollection?: (id: string) => void;
   onCreateTag: (name: string) => Promise<void>;
   onDeleteTag: (id: string) => Promise<void>;
   // New props for extensions
@@ -124,6 +125,7 @@ export function SettingsDialog({
   onCreateCollection,
   onDeleteCollection,
   onRenameCollection,
+  onConvertToRegularCollection,
   onCreateTag,
   onDeleteTag,
   extensions = [],
@@ -151,6 +153,7 @@ export function SettingsDialog({
             onCreateCollection={onCreateCollection}
             onDeleteCollection={onDeleteCollection}
             onRenameCollection={onRenameCollection}
+            onConvertToRegularCollection={onConvertToRegularCollection}
             onCreateTag={onCreateTag}
             onDeleteTag={onDeleteTag}
             extensions={extensions}
@@ -177,6 +180,7 @@ type SettingsDialogBodyProps = Pick<
   | "onCreateCollection"
   | "onDeleteCollection"
   | "onRenameCollection"
+  | "onConvertToRegularCollection"
   | "onCreateTag"
   | "onDeleteTag"
   | "extensions"
@@ -197,6 +201,7 @@ function SettingsDialogBody({
   onCreateCollection,
   onDeleteCollection,
   onRenameCollection,
+  onConvertToRegularCollection,
   onCreateTag,
   onDeleteTag,
   extensions,
@@ -792,6 +797,19 @@ function SettingsDialogBody({
                           <span className="font-mono text-xs text-zinc-500">
                             {collection.fileCount ?? 0}
                           </span>
+                          {isSmart && onConvertToRegularCollection && (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-zinc-500 opacity-0 transition-opacity hover:bg-white/5 hover:text-zinc-200 group-hover:opacity-100"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => onConvertToRegularCollection(collection.id)}
+                              aria-label={`Convert ${collection.name} to a regular collection`}
+                              title="Convert to regular collection"
+                            >
+                              <ListMusic className="size-4" />
+                            </Button>
+                          )}
                           {onRenameCollection && (
                             <Button
                               variant="ghost"

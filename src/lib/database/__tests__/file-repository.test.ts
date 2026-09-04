@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { initializeDatabaseSchema } from "../migrations";
 import { SqliteAudioFileRepository } from "../file-repository";
+import { SqliteTagRepository } from "../tag-repository";
 import Database from "better-sqlite3";
 
 function createTestDb() {
@@ -123,6 +124,40 @@ describe("SqliteAudioFileRepository", () => {
 
     expect(repo.getFileCount()).toBe(0);
     expect(repo.getFileCount({ showRemoved: true })).toBe(1);
+  });
+
+  it("getFiles filters by tagId", () => {
+    const record = {
+      path: "/music/a.mp3",
+      filename: "a.mp3",
+      directory: "/music",
+      format: ".mp3",
+      codec: null,
+      duration: null,
+      sampleRate: null,
+      bitDepth: null,
+      channels: null,
+      fileSize: null,
+      mtimeMs: 0,
+      removedAt: null,
+      lastScannedAt: "",
+    };
+
+    repo.upsertFile(record);
+    repo.upsertFile({ ...record, path: "/music/b.mp3", filename: "b.mp3" });
+
+    const tagRepo = new SqliteTagRepository(
+      (repo as unknown as { sqlite: Database }).sqlite,
+    );
+    const tagId = tagRepo.createTag("impact");
+    const taggedId = repo
+      .getFiles()
+      .find((file) => file.filename === "a.mp3")!.id;
+    tagRepo.attachTagToFile(taggedId, tagId);
+
+    const filtered = repo.getFiles({ tagId });
+    expect(filtered.map((file) => file.filename)).toEqual(["a.mp3"]);
+    expect(repo.getFiles()).toHaveLength(2);
   });
 
   it("toggleFavorite toggles the favorite flag", () => {

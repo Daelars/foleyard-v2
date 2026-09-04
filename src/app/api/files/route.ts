@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs';
-import { attachTagToFile, detachTagFromFile, getFileById, getFiles, getTagsForFiles, markFileRemoved, toggleFavorite } from '@/lib/db';
+import { attachTagToFile, detachTagFromFile, getFileById, getFileCount, getFiles, getTagsForFiles, markFileRemoved, toggleFavorite } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   const favorites = searchParams.get('favorites');
   const collectionId = searchParams.get('collectionId');
   const directory = searchParams.get('directory');
+  const tagId = searchParams.get('tagId');
   const showRemoved = searchParams.get('showRemoved') === 'true';
   const limit = parseInt(searchParams.get('limit') ?? '500', 10);
   const offset = parseInt(searchParams.get('offset') ?? '0', 10);
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest) {
     favorites: favorites === 'true',
     collectionId,
     directory,
+    tagId,
     showRemoved,
     limit,
     offset,
@@ -33,7 +35,12 @@ export async function GET(request: NextRequest) {
     tags: tagsByFile.get(file.id) ?? [],
   }));
 
-  return NextResponse.json({ files: filesWithTags, limit, offset });
+  return NextResponse.json({
+    files: filesWithTags,
+    limit,
+    offset,
+    favoritesTotal: getFileCount({ favorites: true }),
+  });
 }
 
 export async function PATCH(request: NextRequest) {

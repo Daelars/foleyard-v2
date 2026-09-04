@@ -3,6 +3,7 @@ export interface FileSearchQuery {
   favorites?: boolean;
   collectionId?: string | null;
   directory?: string | null;
+  tagId?: string | null;
   showRemoved?: boolean;
   limit?: number;
   offset?: number;

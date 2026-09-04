@@ -53,7 +53,7 @@ describe("theme token law", () => {
   it("keeps old-skin tokens out of every inventoried surface", () => {
     const surfaces = [
       "./page.tsx",
-      "../components/Sidebar.tsx",
+      "../components/IconRail.tsx",
       "../components/SoundShelf.tsx",
       "../components/ExtensionGrid.tsx",
       "../components/SettingsDialog.tsx",

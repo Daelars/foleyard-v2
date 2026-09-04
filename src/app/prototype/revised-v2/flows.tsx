@@ -67,7 +67,10 @@ function FlowDetail({
     <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
       <div
         className="flex items-center gap-3 border-b border-white/5 p-4"
-        style={{ background: `linear-gradient(135deg, ${color}30, transparent 70%)` }}
+        style={{
+          backgroundColor: `${color}0a`,
+          backgroundImage: `radial-gradient(circle at 10% 50%, ${color}38, transparent 70%)`,
+        }}
       >
         <span
           className="flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold"
@@ -239,7 +242,13 @@ function FlowB() {
       </div>
       {selectedCollection ? (
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
-          <div className="h-16" style={{ background: `linear-gradient(135deg, ${color}45, transparent 75%)` }} />
+          <div
+            className="h-16"
+            style={{
+              backgroundColor: `${color}0a`,
+              backgroundImage: `radial-gradient(circle at 12% 50%, ${color}40, transparent 70%)`,
+            }}
+          />
           <div className="-mt-8 space-y-1 p-3">
             {DETAIL_FILES.map((name) => (
               <div key={name} className="flex items-center gap-2 rounded-lg bg-black/30 px-2 py-1.5 text-xs text-zinc-300 backdrop-blur">

@@ -215,6 +215,9 @@ function SettingsDialogBody({
   const [newTagName, setNewTagName] = useState("");
   const [expandedExtensionId, setExpandedExtensionId] = useState<string | null>(null);
   const [confirmRemoveRoot, setConfirmRemoveRoot] = useState<string | null>(null);
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<
+    { kind: "collection" | "tag"; id: string; name: string } | null
+  >(null);
   const manualUpdateToastRef = useRef<string | number | null>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const collectionInputRef = useRef<HTMLInputElement>(null);
@@ -424,6 +427,17 @@ function SettingsDialogBody({
     setConfirmRemoveRoot(null);
     if (path) {
       await handleRemoveRoot(path);
+    }
+  };
+
+  const handleConfirmDeleteItem = async () => {
+    const item = confirmDeleteItem;
+    setConfirmDeleteItem(null);
+    if (!item) return;
+    if (item.kind === "collection") {
+      await handleDeleteCollection(item.id, item.name);
+    } else {
+      await handleDeleteTag(item.id, item.name);
     }
   };
 
@@ -709,16 +723,16 @@ function SettingsDialogBody({
           <TabsContent value="metadata" className="m-0 flex-1 p-8 outline-none">
             <div className="mx-auto max-w-3xl space-y-10">
               <div>
-                <h3 className="text-lg font-semibold tracking-tight">Playlists & tags</h3>
-                <p className="text-sm text-muted-foreground">
+                <h3 className="text-lg font-semibold tracking-tight text-zinc-50">Playlists & tags</h3>
+                <p className="text-sm text-zinc-400">
                   Manage library organization without leaving the settings panel.
                 </p>
               </div>
 
               <section className="space-y-3">
                 <div className="flex items-center justify-between gap-4">
-                  <h4 className="flex items-center gap-2 text-sm font-semibold">
-                    <ListMusic className="size-4 text-primary" />
+                  <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
+                    <ListMusic className="size-4 text-accent-text" />
                     Playlists
                   </h4>
                   <Badge variant="secondary" className="rounded-full px-2.5">
@@ -735,7 +749,7 @@ function SettingsDialogBody({
                     onKeyDown={(event) => {
                       if (event.key === "Enter") void handleCreateCollection();
                     }}
-                    className="h-9 border-border/40 bg-background"
+                    className="h-9 rounded-xl border-white/10 bg-black/30"
                   />
                   <Button
                     onClick={handleCreateCollection}
@@ -747,9 +761,9 @@ function SettingsDialogBody({
                   </Button>
                 </div>
 
-                <div className="divide-y divide-border/40 border-y border-border/40">
+                <div className="divide-y divide-white/5 border-y border-white/10">
                   {collections.length === 0 ? (
-                    <div className="py-8 text-center text-sm text-muted-foreground">
+                    <div className="py-8 text-center text-sm text-zinc-500">
                       No playlists yet.
                     </div>
                   ) : (
@@ -758,15 +772,15 @@ function SettingsDialogBody({
                       return (
                         <div
                           key={collection.id}
-                          className="group flex items-center gap-3 py-2.5 transition-colors hover:bg-accent/30"
+                          className="group flex items-center gap-3 py-2.5 transition-colors hover:bg-white/5"
                         >
                           {isSmart ? (
-                            <Filter className="ml-1 size-4 shrink-0 text-muted-foreground" />
+                            <Filter className="ml-1 size-4 shrink-0 text-zinc-500" />
                           ) : (
-                            <ListMusic className="ml-1 size-4 shrink-0 text-muted-foreground" />
+                            <ListMusic className="ml-1 size-4 shrink-0 text-zinc-500" />
                           )}
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">
+                            <p className="truncate text-sm font-medium text-zinc-100">
                               {collection.name}
                               {isSmart && (
                                 <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 leading-tight align-middle">
@@ -775,14 +789,14 @@ function SettingsDialogBody({
                               )}
                             </p>
                           </div>
-                          <span className="font-mono text-xs text-muted-foreground">
+                          <span className="font-mono text-xs text-zinc-500">
                             {collection.fileCount ?? 0}
                           </span>
                           {onRenameCollection && (
                             <Button
                               variant="ghost"
                               size="icon-sm"
-                              className="text-muted-foreground opacity-0 transition-opacity hover:bg-accent/50 hover:text-accent-foreground group-hover:opacity-100"
+                              className="text-zinc-500 opacity-0 transition-opacity hover:bg-white/5 hover:text-zinc-200 group-hover:opacity-100"
                               onMouseDown={(event) => event.preventDefault()}
                               onClick={() => onRenameCollection(collection.id, collection.name)}
                               aria-label={`Rename ${collection.name}`}
@@ -793,9 +807,9 @@ function SettingsDialogBody({
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            className="mr-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                            className="mr-1 text-zinc-500 opacity-0 transition-opacity hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
                             onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => handleDeleteCollection(collection.id, collection.name)}
+                            onClick={() => setConfirmDeleteItem({ kind: "collection", id: collection.id, name: collection.name })}
                                 aria-label={`Delete collection ${collection.name}`}
                           >
                             <Trash2 className="size-4" />
@@ -809,8 +823,8 @@ function SettingsDialogBody({
 
               <section className="space-y-3">
                 <div className="flex items-center justify-between gap-4">
-                  <h4 className="flex items-center gap-2 text-sm font-semibold">
-                    <TagIcon className="size-4 text-primary" />
+                  <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
+                    <TagIcon className="size-4 text-accent-text" />
                     Tags
                   </h4>
                   <Badge variant="secondary" className="rounded-full px-2.5">
@@ -827,7 +841,7 @@ function SettingsDialogBody({
                     onKeyDown={(event) => {
                       if (event.key === "Enter") void handleCreateTag();
                     }}
-                    className="h-9 border-border/40 bg-background"
+                    className="h-9 rounded-xl border-white/10 bg-black/30"
                   />
                   <Button
                     onClick={handleCreateTag}
@@ -839,30 +853,30 @@ function SettingsDialogBody({
                   </Button>
                 </div>
 
-                <div className="divide-y divide-border/40 border-y border-border/40">
+                <div className="divide-y divide-white/5 border-y border-white/10">
                   {tags.length === 0 ? (
-                    <div className="py-8 text-center text-sm text-muted-foreground">
+                    <div className="py-8 text-center text-sm text-zinc-500">
                       No tags yet.
                     </div>
                   ) : (
                     tags.map((tag) => (
                       <div
                         key={tag.id}
-                        className="group flex items-center gap-3 py-2.5 transition-colors hover:bg-accent/30"
+                        className="group flex items-center gap-3 py-2.5 transition-colors hover:bg-white/5"
                       >
                         <span
-                          className="ml-1 size-2.5 shrink-0 rounded-full ring-1 ring-border/50"
+                          className="ml-1 size-2.5 shrink-0 rounded-full ring-1 ring-white/15"
                           style={{ backgroundColor: tag.color }}
                         />
-                        <p className="min-w-0 flex-1 truncate text-sm font-medium">
+                        <p className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-100">
                           {tag.name}
                         </p>
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          className="mr-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                          className="mr-1 text-zinc-500 opacity-0 transition-opacity hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
                           onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => handleDeleteTag(tag.id, tag.name)}
+                          onClick={() => setConfirmDeleteItem({ kind: "tag", id: tag.id, name: tag.name })}
                           aria-label={`Delete tag ${tag.name}`}
                         >
                           <Trash2 className="size-4" />
@@ -885,7 +899,7 @@ function SettingsDialogBody({
                 </p>
               </div>
 
-              <div className="divide-y divide-border/40 border-y border-border/40">
+              <div className="divide-y divide-white/5 border-y border-white/10">
                 {extensions.length === 0 ? (
                   <div className="flex flex-col items-center justify-center p-12 text-center">
                     <Layers className="size-12 opacity-10 mb-4" />
@@ -1143,6 +1157,38 @@ function SettingsDialogBody({
             onClick={() => void handleConfirmRemoveRoot()}
           >
             Remove folder
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog
+      open={confirmDeleteItem !== null}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setConfirmDeleteItem(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            Delete {confirmDeleteItem?.kind === "tag" ? "tag" : "playlist"}?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {confirmDeleteItem ? (
+              <>
+                &ldquo;<span className="text-zinc-200">{confirmDeleteItem.name}</span>&rdquo; will be
+                removed. Your audio files are not deleted. This cannot be undone.
+              </>
+            ) : null}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive/15 text-destructive hover:bg-destructive/25"
+            onClick={() => void handleConfirmDeleteItem()}
+          >
+            Delete {confirmDeleteItem?.kind === "tag" ? "tag" : "playlist"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

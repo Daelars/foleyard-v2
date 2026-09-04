@@ -1,3 +1,4 @@
+import { resolveReadablePath } from "@/lib/filesystem-boundary";
 import { NextRequest, NextResponse } from "next/server";
 import path from "node:path";
 
@@ -28,12 +29,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const absoluteFolder = path.resolve(body.folderPath);
-  const libraryRoot = libraryRoots.find((root) => {
-    const relative = path.relative(path.resolve(root), absoluteFolder);
-    return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
-  });
-  if (!libraryRoot) {
+  const absoluteFolder = await resolveReadablePath(body.folderPath, libraryRoots);
+  let libraryRoot: string | undefined;
+  if (absoluteFolder) {
+    for (const root of libraryRoots) {
+      if (await resolveReadablePath(absoluteFolder, [root])) { libraryRoot = root; break; }
+    }
+  }
+  if (!libraryRoot || !absoluteFolder) {
     return NextResponse.json(
       { error: "Folder is outside the configured Library roots" },
       { status: 400 },
@@ -45,6 +48,7 @@ export async function POST(request: NextRequest) {
     directory,
     atLibraryRoot: directory === null,
     showRemoved: false,
+    limit: -1,
   });
 
   const outcome = await createAppExtensionHost().execute({

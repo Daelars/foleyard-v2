@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
+  FolderPlus,
   Heart,
   Pause,
   Play,
@@ -176,6 +177,100 @@ export function ConsoleDesigns() {
             </div>
           </footer>
         </ConsoleFrame>
+      </VariantFrame>
+
+      <VariantFrame id="T-F" name="Full pill (implement spec)" note="Exact proposal: every control + real scrubber in one floating capsule.">
+        <div className="rounded-xl bg-canvas px-4 pb-6 pt-10">
+          <div className="mx-auto w-full max-w-3xl rounded-[28px] border border-white/10 bg-shell/95 px-4 py-3 shadow-glow-overlay backdrop-blur-2xl">
+            <div className="flex items-center gap-3">
+              <TransportButtons playing />
+              <div className="min-w-0 flex-1">
+                <TitleMeta />
+                <div className="mt-1.5 h-[26px]">
+                  <MiniBars seed={3} active />
+                </div>
+              </div>
+              <Times />
+            </div>
+            <div className="mt-2 flex items-center gap-1.5 border-t border-white/5 pt-2">
+              <span className="flex size-8 items-center justify-center rounded-full text-zinc-400">
+                <Heart className="size-4 fill-accent-fill text-accent-fill" />
+              </span>
+              <span className="flex size-8 items-center justify-center rounded-full text-zinc-400">
+                <FolderPlus className="size-4" />
+              </span>
+              <span className="flex items-center gap-1.5 text-zinc-400">
+                <Volume2 className="size-4" />
+                <span className="h-1 w-16 overflow-hidden rounded-full bg-white/10">
+                  <span className="block h-full w-3/4 rounded-full bg-zinc-400" />
+                </span>
+              </span>
+              <span className="flex size-8 items-center justify-center rounded-full text-accent-text">
+                <Repeat className="size-4" />
+              </span>
+              <span className="flex-1" />
+              <span className="flex size-8 items-center justify-center rounded-full text-zinc-500">
+                <X className="size-3.5" />
+              </span>
+            </div>
+          </div>
+        </div>
+      </VariantFrame>
+
+      <VariantFrame id="T-G" name="Compact pill" note="Transport, title, times only. Everything else hides until hover.">
+        <div className="rounded-xl bg-canvas px-4 pb-6 pt-10">
+          <div className="group mx-auto flex w-full max-w-xl items-center gap-2.5 rounded-full border border-white/10 bg-shell/95 py-1.5 pl-2 pr-4 shadow-glow-accent backdrop-blur-2xl">
+            <span className="flex size-8 items-center justify-center rounded-full bg-accent-fill text-white">
+              <Pause className="size-3.5" />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-100">
+              Metal Door Slam
+            </span>
+            <span className="hidden shrink-0 items-center gap-1.5 text-zinc-500 opacity-0 transition-opacity group-hover:opacity-100 sm:flex">
+              <SkipBack className="size-3.5" />
+              <SkipForward className="size-3.5" />
+              <Heart className="size-3.5" />
+            </span>
+            <Times />
+          </div>
+        </div>
+      </VariantFrame>
+
+      <VariantFrame id="T-H" name="Wide dock" note="Maximal capsule: tall wave, big transport, full meta + counts.">
+        <div className="rounded-xl bg-canvas px-4 pb-6 pt-10">
+          <div className="mx-auto w-full max-w-4xl rounded-3xl border border-white/10 bg-shell/95 p-4 shadow-glow-overlay backdrop-blur-2xl">
+            <div className="flex items-center gap-4">
+              <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-accent-fill text-white shadow-glow-accent-strong">
+                <Pause className="size-6" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-zinc-50">
+                  Metal Door Slam
+                  <span className="ml-2 font-mono text-[11px] font-normal text-zinc-500">
+                    wav · 96k · stereo
+                  </span>
+                </p>
+                <div className="mt-2 h-10">
+                  <MiniBars seed={3} active />
+                </div>
+                <div className="mt-1.5 flex items-center gap-3">
+                  <span className="flex items-center gap-3 text-zinc-400">
+                    <SkipBack className="size-4" />
+                    <SkipForward className="size-4" />
+                  </span>
+                  <Times />
+                  <span className="font-mono text-[10px] text-zinc-600">next: Sword Unsheath</span>
+                  <span className="flex-1" />
+                  <Heart className="size-4 fill-accent-fill text-accent-fill" />
+                  <FolderPlus className="size-4 text-zinc-400" />
+                  <Volume2 className="size-4 text-zinc-400" />
+                  <Repeat className="size-4 text-accent-text" />
+                  <X className="size-4 text-zinc-500" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </VariantFrame>
     </div>
   );

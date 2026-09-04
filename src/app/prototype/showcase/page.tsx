@@ -1,7 +1,9 @@
 import { ConsoleDesigns } from "./console-designs";
 import { SectionShell } from "./data";
 import { FlyoutDesigns } from "./flyout-designs";
+import { OrganizeDesigns } from "./organize-designs";
 import { PaletteDesigns } from "./palette-designs";
+import { PopupDesigns } from "./popup-designs";
 import { RowDesigns } from "./row-designs";
 
 export default function ShowcasePage() {
@@ -15,9 +17,10 @@ export default function ShowcasePage() {
           Design showcase
         </h1>
         <p className="mt-1.5 max-w-2xl text-sm font-medium text-zinc-400">
-          Four new elements, five designs each. Interact where controls invite
-          it, then pick a winner per element: reply like “palette C, flyout E,
-          rows A, console B”.
+          Four new elements, five designs each, plus the popup language,
+          three more console takes, and the organize page. Interact where
+          controls invite it, then pick a winner per element: reply like
+          “palette F, popups B, console T-F, organize O-E”.
         </p>
       </div>
 
@@ -49,9 +52,25 @@ export default function ShowcasePage() {
         <SectionShell
           index="04"
           title="Transport console"
-          question="How much player belongs in the footer: row, pill, split, mini, or queue drawer?"
+          question="How much player belongs in the footer: row, pill, split, mini, drawer — or the three new takes?"
         >
           <ConsoleDesigns />
+        </SectionShell>
+
+        <SectionShell
+          index="05"
+          title="Popup language"
+          question="Menus, context menus, and confirms in the quiet palette language?"
+        >
+          <PopupDesigns />
+        </SectionShell>
+
+        <SectionShell
+          index="06"
+          title="Organize: collections & tags"
+          question="One page for both, color-driven throughout. O-E is the exact color-picker proposal."
+        >
+          <OrganizeDesigns />
         </SectionShell>
       </div>
     </div>

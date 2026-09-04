@@ -12,6 +12,7 @@ export type DemoCollection = {
   id: string;
   name: string;
   fileCount: number;
+  color: string;
 };
 
 export type DemoTag = {
@@ -30,10 +31,10 @@ export const DEMO_SOUNDS: DemoSound[] = [
 ];
 
 export const DEMO_COLLECTIONS: DemoCollection[] = [
-  { id: "c1", name: "Impacts", fileCount: 24 },
-  { id: "c2", name: "Rain beds", fileCount: 11 },
-  { id: "c3", name: "UI clicks", fileCount: 48 },
-  { id: "c4", name: "Trailer hits", fileCount: 7 },
+  { id: "c1", name: "Impacts", fileCount: 24, color: "#f0503c" },
+  { id: "c2", name: "Rain beds", fileCount: 11, color: "#7ab8ff" },
+  { id: "c3", name: "UI clicks", fileCount: 48, color: "#9adc6e" },
+  { id: "c4", name: "Trailer hits", fileCount: 7, color: "#d3a6ff" },
 ];
 
 export const DEMO_TAGS: DemoTag[] = [
@@ -43,6 +44,21 @@ export const DEMO_TAGS: DemoTag[] = [
   { id: "t4", name: "loop", color: "#d3a6ff" },
   { id: "t5", name: "metal", color: "#e8c468" },
 ];
+
+export const COLOR_PRESETS = [
+  "#f0503c",
+  "#e8c468",
+  "#9adc6e",
+  "#5ad1e6",
+  "#7ab8ff",
+  "#d3a6ff",
+  "#ff8ab5",
+  "#a3a3a3",
+];
+
+export function tileStyle(color: string): React.CSSProperties {
+  return { backgroundColor: `${color}1f`, color };
+}
 
 function pseudoRandom(seed: number): number[] {
   let state = seed * 1013 + 77;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { ArrowUpRight, MoreHorizontal } from "lucide-react";
+import { ArrowUpRight, Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -111,6 +111,7 @@ function ExtensionCard({
           checked={extension.enabled}
           onCheckedChange={handleToggle}
           disabled={isPending}
+          aria-label={`Toggle ${extension.name}`}
         />
       </div>
 
@@ -136,10 +137,8 @@ function ExtensionCard({
           <span>v{extension.version}</span>
           <span className="size-1 shrink-0 rounded-full bg-accent-fill/80" />
           <span>
-            {extension.provider === "foleyard" ? "Foleyard" : extension.provider}
+            {extension.settingsCount ? `${extension.settingsCount} settings` : "no settings"}
           </span>
-          <span className="size-1 shrink-0 rounded-full bg-accent-fill/80" />
-          <span>{extension.category}</span>
         </div>
       </div>
 
@@ -168,9 +167,11 @@ function ExtensionCard({
             e.stopPropagation();
             onOpenDetails?.(extension);
           }}
+          aria-label={`View ${extension.name} details`}
+          title="Extension details"
         >
-          <span className="sr-only">Details and settings</span>
-          <MoreHorizontal className="size-3.5" />
+          <span className="sr-only">Extension details</span>
+          <Info className="size-3.5" />
         </Button>
       </div>
     </div>

@@ -11,7 +11,7 @@ import {
   tileStyle,
 } from "../showcase/data";
 import { Swatches, tintStyle } from "./shared";
-import { FeatherFlowsFrame } from "./flows-feather";
+import { AltFlowsFrame } from "./flows-alt";
 
 type Selection = { kind: "collection" | "tag"; id: string };
 
@@ -395,7 +395,7 @@ export function OrganizeFlows() {
         <FeatherAllOver />
       </VariantFrame>
 
-      <FeatherFlowsFrame />
+      <AltFlowsFrame />
     </div>
   );
 }

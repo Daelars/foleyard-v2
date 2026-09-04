@@ -893,8 +893,8 @@ function SettingsDialogBody({
           <TabsContent value="extensions" className="m-0 flex-1 p-6 outline-none">
             <div className="w-full space-y-8">
               <div>
-                <h3 className="text-lg font-semibold tracking-tight">Extension management</h3>
-                <p className="text-sm text-muted-foreground">
+                <h3 className="text-lg font-semibold tracking-tight text-zinc-50">Extension management</h3>
+                <p className="text-sm text-zinc-400">
                   Enable or disable workflow tools and third-party integrations.
                 </p>
               </div>
@@ -903,8 +903,8 @@ function SettingsDialogBody({
                 {extensions.length === 0 ? (
                   <div className="flex flex-col items-center justify-center p-12 text-center">
                     <Layers className="size-12 opacity-10 mb-4" />
-                    <p className="text-sm font-medium">No extensions installed</p>
-                    <p className="text-xs text-muted-foreground mt-1 max-w-[240px]">
+                    <p className="text-sm font-medium text-zinc-200">No extensions installed</p>
+                    <p className="text-xs text-zinc-500 mt-1 max-w-[240px]">
                       Extensions allow you to add custom commands and workflows to Foleyard.
                     </p>
                   </div>
@@ -924,8 +924,8 @@ function SettingsDialogBody({
                       >
                         <div
                           className={cn(
-                            "flex items-center gap-4 px-4 py-4 transition-colors hover:bg-accent/30 sm:px-5",
-                            isExpanded && "bg-accent/30",
+                            "flex items-center gap-4 px-4 py-4 transition-colors hover:bg-white/5 sm:px-5",
+                            isExpanded && "bg-white/5",
                           )}
                         >
                           {hasSettings ? (
@@ -933,16 +933,16 @@ function SettingsDialogBody({
                               render={
                                 <button
                                   type="button"
-                                  className="flex min-w-0 flex-1 items-center justify-between gap-4 rounded-lg text-left outline-none transition-colors hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                                  className="flex min-w-0 flex-1 items-center justify-between gap-4 rounded-lg text-left outline-none transition-colors hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                                   aria-label={`${isExpanded ? "Hide" : "Show"} ${ext.name} settings`}
                                 >
                                   <div className="flex min-w-0 items-center gap-4">
-                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-bold text-primary">
+                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent-fill/12 font-bold text-accent-text">
                                       {ext.name.slice(0, 1).toUpperCase()}
                                     </div>
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-2">
-                                        <p className="truncate text-sm font-semibold">{ext.name}</p>
+                                        <p className="truncate text-sm font-semibold text-zinc-100">{ext.name}</p>
                                         <Badge variant="outline" className="h-4 px-1 text-[10px] opacity-70">
                                           v{ext.version}
                                         </Badge>
@@ -950,7 +950,7 @@ function SettingsDialogBody({
                                           {ext.settings?.length} settings
                                         </Badge>
                                       </div>
-                                      <p className="max-w-[300px] truncate text-xs text-muted-foreground">
+                                      <p className="max-w-[300px] truncate text-xs text-zinc-500">
                                         {ext.description}
                                       </p>
                                     </div>
@@ -970,17 +970,17 @@ function SettingsDialogBody({
                           ) : (
                             <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
                               <div className="flex min-w-0 items-center gap-4">
-                                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-bold text-primary">
+                                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent-fill/12 font-bold text-accent-text">
                                   {ext.name.slice(0, 1).toUpperCase()}
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2">
-                                    <p className="truncate text-sm font-semibold">{ext.name}</p>
+                                    <p className="truncate text-sm font-semibold text-zinc-100">{ext.name}</p>
                                     <Badge variant="outline" className="h-4 px-1 text-[10px] opacity-70">
                                       v{ext.version}
                                     </Badge>
                                   </div>
-                                  <p className="max-w-[300px] truncate text-xs text-muted-foreground">
+                                  <p className="max-w-[300px] truncate text-xs text-zinc-500">
                                     {ext.description}
                                   </p>
                                 </div>
@@ -995,14 +995,14 @@ function SettingsDialogBody({
 
                         {hasSettings ? (
                           <CollapsibleContent keepMounted className="px-4 pb-5 sm:px-5">
-                            <div className="border-t border-border/35 pt-4">
+                            <div className="border-t border-white/5 pt-4">
                               {ext.id === "drop-rules" ? (
                                 <DropRulesSettingsPanel
                                   extension={ext}
                                   onUpdate={onUpdateExtensionSetting}
                                 />
                               ) : (
-                                <div className="flex flex-col divide-y divide-border/35 border-y border-border/35">
+                                <div className="flex flex-col divide-y divide-white/5 border-y border-white/5">
                                   {ext.settings?.map((setting) => (
                                     <ExtensionSettingControl
                                       key={setting.id}
@@ -1029,24 +1029,24 @@ function SettingsDialogBody({
           <TabsContent value="appearance" className="m-0 flex-1 p-8 outline-none">
             <div className="mx-auto w-full max-w-2xl space-y-8">
               <div>
-                <h3 className="text-lg font-semibold tracking-tight">Appearance</h3>
-                <p className="text-sm text-muted-foreground">
+                <h3 className="text-lg font-semibold tracking-tight text-zinc-50">Appearance</h3>
+                <p className="text-sm text-zinc-400">
                   Customize how Foleyard looks on your display.
                 </p>
               </div>
 
-              <section className="space-y-6 rounded-xl border border-border/40 bg-card/60 p-6 shadow-sm backdrop-blur-xl">
+              <section className="space-y-6 rounded-xl border border-white/10 bg-white/[0.02] p-6">
                 <div className="flex items-center justify-between">
                    <div className="space-y-1">
                      <div className="flex items-center gap-2">
-                       <Monitor className="size-4 text-primary" />
-                       <span className="text-sm font-medium">Interface zoom</span>
+                       <Monitor className="size-4 text-accent-text" />
+                       <span className="text-sm font-medium text-zinc-200">Interface zoom</span>
                      </div>
-                     <p className="text-xs text-muted-foreground">
+                     <p className="text-xs text-zinc-500">
                         Scale the entire UI. Useful for high-DPI screens.
                      </p>
                    </div>
-                   <Badge variant="secondary" className="font-mono">{zoom}%</Badge>
+                   <Badge variant="secondary" className="rounded-full bg-white/5 font-mono tabular-nums text-zinc-200">{zoom}%</Badge>
                 </div>
 
                 <div className="space-y-4">
@@ -1057,7 +1057,7 @@ function SettingsDialogBody({
                     step={5}
                     onValueChange={handleSliderChange}
                   />
-                  <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                  <div className="flex justify-between font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-600">
                     <span>50%</span>
                     <span>100%</span>
                     <span>200%</span>
@@ -1070,7 +1070,7 @@ function SettingsDialogBody({
                     size="sm"
                     onClick={handleResetZoom}
                     disabled={zoom === 100}
-                    className="h-8 text-[10px] uppercase tracking-widest"
+                    className="h-8 rounded-lg border-white/15 bg-white/5 font-mono text-[10px] uppercase tracking-widest text-zinc-200 hover:border-accent-fill/50 hover:text-zinc-100 disabled:opacity-40"
                   >
                     Reset to Default
                   </Button>
@@ -1082,26 +1082,32 @@ function SettingsDialogBody({
           {/* ABOUT TAB */}
           <TabsContent value="about" className="m-0 flex-1 p-8 outline-none">
              <div className="mx-auto max-w-3xl space-y-8">
-                <div className="flex items-center gap-3 border-y border-border/40 py-4">
-                   <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <div>
+                  <h3 className="text-lg font-semibold tracking-tight text-zinc-50">About</h3>
+                  <p className="text-sm text-zinc-400">
+                    Version info, updates, and help.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 border-y border-white/10 py-4">
+                   <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent-fill/12 text-accent-text">
                      <Database className="size-5" />
                    </div>
                    <div className="min-w-0 flex-1">
-                     <p className="text-sm font-semibold">Foleyard</p>
-                      <p className="text-xs text-muted-foreground">Local-first sound library</p>
+                     <p className="text-sm font-semibold text-zinc-100">Foleyard</p>
+                      <p className="text-xs text-zinc-500">Local-first sound library</p>
                    </div>
-                   <Badge variant="secondary" className="h-6 px-3">v2.1.0-alpha</Badge>
-                   <Badge variant="outline" className="h-6 px-3">Desktop Core</Badge>
+                   <Badge variant="secondary" className="h-6 rounded-md bg-white/5 px-3 font-mono text-zinc-200">v2.1.0-alpha</Badge>
+                   <Badge variant="outline" className="h-6 rounded-md border-white/15 px-3 font-mono text-zinc-400">Desktop Core</Badge>
                 </div>
 
-                <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                <p className="max-w-2xl text-sm leading-6 text-zinc-400">
                    Foleyard is an open-source sound library. It indexes local audio so you can search and organize it.
                 </p>
 
-                <div className="flex gap-2 border-t border-border/40 pt-4">
+                <div className="flex gap-2 border-t border-white/10 pt-4">
                    <Button
                      variant="outline"
-                     className="h-10 gap-2 rounded-lg px-4"
+                     className="h-10 gap-2 rounded-xl border-white/10 bg-white/5 px-4 text-zinc-200 hover:border-accent-fill/50 hover:text-zinc-100"
                      onClick={handleCheckForUpdates}
                      disabled={isCheckingForUpdates}
                    >
@@ -1112,15 +1118,23 @@ function SettingsDialogBody({
                       )}
                       Check for Updates
                    </Button>
-                   <Button variant="outline" className="h-10 gap-2 rounded-lg px-4">
+                   <Button
+                     variant="outline"
+                     className="h-10 gap-2 rounded-xl border-white/10 bg-white/5 px-4 text-zinc-200 hover:border-accent-fill/50 hover:text-zinc-100"
+                     onClick={() => window.open("https://github.com/Daelars/foleyard-v2#readme", "_blank", "noopener,noreferrer")}
+                   >
                       <ExternalLink className="size-4" /> Documentation
                    </Button>
-                   <Button variant="outline" className="h-10 gap-2 rounded-lg px-4">
+                   <Button
+                     variant="outline"
+                     className="h-10 gap-2 rounded-xl border-white/10 bg-white/5 px-4 text-zinc-200 hover:border-accent-fill/50 hover:text-zinc-100"
+                     onClick={() => window.open("https://github.com/Daelars/foleyard-v2", "_blank", "noopener,noreferrer")}
+                   >
                       <Monitor className="size-4" /> GitHub
                    </Button>
                 </div>
 
-                <div className="space-y-1 border-t border-border/40 pt-4 text-[10px] text-muted-foreground">
+                <div className="space-y-1 border-t border-white/10 pt-4 font-mono text-[10px] text-zinc-600">
                    <p>© 2026 Foleyard Contributors</p>
                    <p>MIT Licensed · Built with Next.js, Electron & SQLite</p>
                 </div>
@@ -1300,10 +1314,10 @@ function DropRulesSettingsPanel({
       >
         <div className="grid gap-2 px-3 py-3 sm:grid-cols-[1fr_300px] sm:items-start">
           <div className="min-w-0">
-            <label htmlFor="drop-rules-rename-pattern" className="text-sm font-medium">
+            <label htmlFor="drop-rules-rename-pattern" className="text-sm font-medium text-zinc-100">
               {renamePatternSetting?.label ?? "Rename pattern"}
             </label>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="mt-0.5 text-xs text-zinc-500">
               Supports {"{name}"}, {"{index}"}, {"{ext}"}, {"{format}"}, {"{date}"}, and {"{time}"}.
             </p>
           </div>
@@ -1316,14 +1330,14 @@ function DropRulesSettingsPanel({
               onChange={(event) => setRenamePatternDraft(event.target.value)}
               onBlur={handleRenamePatternCommit}
             />
-            <div className="rounded-lg border border-border/35 bg-muted/30 px-3 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500">
                 Preview
               </p>
               <p
                 className={cn(
                   "mt-1 truncate font-mono text-sm",
-                  renamePreview.valid ? "text-foreground" : "text-destructive",
+                  renamePreview.valid ? "text-zinc-200" : "text-destructive",
                 )}
               >
                 {renamePreview.output}
@@ -1361,10 +1375,10 @@ function DropRulesSettingsPanel({
       >
         <div className="grid gap-2 px-3 py-3 sm:grid-cols-[1fr_300px] sm:items-center">
           <div className="min-w-0">
-            <label htmlFor="drop-rules-drag-out-folder" className="text-sm font-medium">
+            <label htmlFor="drop-rules-drag-out-folder" className="text-sm font-medium text-zinc-100">
               {dragOutFolderSetting?.label ?? "Prepared drag folder"}
             </label>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="mt-0.5 text-xs text-zinc-500">
               Optional folder for prepared drag-out copies. Leave blank to use the system temp folder.
             </p>
           </div>
@@ -1384,7 +1398,7 @@ function DropRulesSettingsPanel({
         </div>
       </DropRulesSettingGroup>
 
-      <div className="flex justify-end border-t border-border/35 pt-3">
+      <div className="flex justify-end border-t border-white/10 pt-3">
         <Button type="button" variant="outline" size="sm" onClick={handleRestoreDefaults}>
           Restore defaults
         </Button>
@@ -1413,11 +1427,11 @@ function DropRulesCurrentBehaviour({
     : "System temp folder";
 
   return (
-    <section className="rounded-lg border border-border/40 bg-card/45 p-3">
+    <section className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-medium">Current behaviour</p>
-          <p className="truncate text-xs text-muted-foreground">
+          <p className="text-[11px] font-semibold text-zinc-200">Current behaviour</p>
+          <p className="truncate text-xs text-zinc-500">
             When dragging a sound out of Foleyard:
           </p>
         </div>
@@ -1425,7 +1439,7 @@ function DropRulesCurrentBehaviour({
           {hasActiveRule ? "Rules active" : "Original unchanged"}
         </Badge>
       </div>
-      <div className="mt-3 grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-2">
+      <div className="mt-3 grid gap-1.5 text-xs text-zinc-400 sm:grid-cols-2">
         <DropRulesBehaviourLine>
           {copyOnDrop ? "Creates a safe prepared copy" : "Uses the original file"}
         </DropRulesBehaviourLine>
@@ -1446,7 +1460,7 @@ function DropRulesCurrentBehaviour({
 function DropRulesBehaviourLine({ children }: { children: ReactNode }) {
   return (
     <p className="flex min-w-0 items-center gap-2">
-      <span className="size-1.5 shrink-0 rounded-full bg-primary/70" />
+      <span className="size-1.5 shrink-0 rounded-full bg-zinc-500" />
       <span className="min-w-0 truncate">{children}</span>
     </p>
   );
@@ -1467,7 +1481,7 @@ function DropRulesToggleRow({
     <div
       role="button"
       tabIndex={0}
-      className="grid cursor-pointer gap-2 px-3 py-3 text-left transition-colors hover:bg-accent/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:grid-cols-[1fr_auto] sm:items-center"
+      className="grid cursor-pointer gap-2 px-3 py-3 text-left transition-colors hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:grid-cols-[1fr_auto] sm:items-center"
       onClick={() => onCheckedChange(!checked)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -1477,8 +1491,8 @@ function DropRulesToggleRow({
       }}
     >
       <span className="min-w-0 sm:pr-4">
-        <span className="block text-sm font-medium">{label}</span>
-        <span className="mt-0.5 block text-xs text-muted-foreground">{description}</span>
+        <span className="block text-sm font-medium text-zinc-100">{label}</span>
+        <span className="mt-0.5 block text-xs text-zinc-500">{description}</span>
       </span>
       <span className="flex justify-start sm:justify-end">
         <Switch
@@ -1505,12 +1519,12 @@ function DropRulesSettingGroup({
   return (
     <section className={cn("flex flex-col gap-2", muted && "opacity-55")}>
       <div className="flex flex-col gap-0.5">
-        <h4 className="text-sm font-semibold tracking-tight">{title}</h4>
+        <h4 className="text-sm font-semibold tracking-tight text-zinc-100">{title}</h4>
         {description ? (
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <p className="text-xs text-zinc-500">{description}</p>
         ) : null}
       </div>
-      <div className="flex flex-col divide-y divide-border/35 border-y border-border/35">
+      <div className="flex flex-col divide-y divide-white/5 border-y border-white/10">
         {children}
       </div>
     </section>
@@ -1588,13 +1602,13 @@ function ExtensionSettingControl({
   const inputId = `extension-${extensionId}-${setting.id}`;
 
   return (
-    <div className="grid gap-2 py-3 sm:grid-cols-[1fr_220px] sm:items-center">
+    <div className="grid gap-2 px-3 py-3 sm:grid-cols-[1fr_220px] sm:items-center">
       <div className="min-w-0">
-        <label htmlFor={inputId} className="text-sm font-medium">
+        <label htmlFor={inputId} className="text-sm font-medium text-zinc-100">
           {setting.label}
         </label>
         {setting.description ? (
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="mt-0.5 text-xs text-zinc-500">
             {setting.description}
           </p>
         ) : null}
@@ -1619,7 +1633,7 @@ function ExtensionSettingControl({
           onChange={(event) =>
             onUpdate?.(extensionId, setting.id, event.target.value)
           }
-          className="h-8 rounded-lg border border-border/40 bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-8 rounded-lg border border-white/10 bg-black/30 px-2 text-sm text-zinc-100 outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
         >
           {setting.options?.map((option) => (
             <option key={option.value} value={option.value}>

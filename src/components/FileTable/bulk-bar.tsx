@@ -17,6 +17,10 @@ export interface BulkBarTag {
   name: string;
 }
 
+export type BulkRemoveStage =
+  | { stage: "choose" }
+  | { stage: "confirm"; choice: "library" | "disk" };
+
 export function SelectionBulkBar({
   count,
   tags,
@@ -26,6 +30,11 @@ export function SelectionBulkBar({
   onAddToShelf,
   onTag,
   onRemove,
+  bulkRemove,
+  removeDefault,
+  onChooseRemove,
+  onConfirmRemove,
+  onCancelRemove,
   onClear,
 }: {
   count: number;
@@ -36,6 +45,11 @@ export function SelectionBulkBar({
   onAddToShelf: () => void;
   onTag: (tagId: string) => void;
   onRemove: () => void;
+  bulkRemove: BulkRemoveStage | null;
+  removeDefault: "library" | "disk";
+  onChooseRemove: (choice: "library" | "disk") => void;
+  onConfirmRemove: () => void;
+  onCancelRemove: () => void;
   onClear: () => void;
 }) {
   return (
@@ -107,16 +121,87 @@ export function SelectionBulkBar({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button
-        type="button"
-        variant="outline"
-        size="xs"
-        className="gap-1.5 hover:border-destructive/40 hover:text-destructive"
-        onClick={onRemove}
-      >
-        <Trash2 className="size-3.5" />
-        Remove
-      </Button>
+      {!bulkRemove ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          className="gap-1.5 hover:border-destructive/40 hover:text-destructive"
+          onClick={onRemove}
+        >
+          <Trash2 className="size-3.5" />
+          Remove
+        </Button>
+      ) : bulkRemove.stage === "choose" ? (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="gap-1.5 hover:border-destructive/40 hover:text-destructive"
+            onClick={() => onChooseRemove("library")}
+          >
+            <Trash2 className="size-3.5" />
+            From library
+            {removeDefault === "library" ? (
+              <span className="rounded-full bg-white/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-zinc-400">
+                Default
+              </span>
+            ) : null}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="gap-1.5 hover:border-destructive/40 hover:text-destructive"
+            onClick={() => onChooseRemove("disk")}
+          >
+            <Trash2 className="size-3.5" />
+            From disk
+            {removeDefault === "disk" ? (
+              <span className="rounded-full bg-white/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-zinc-400">
+                Default
+              </span>
+            ) : null}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="gap-1.5 text-zinc-400"
+            onClick={onCancelRemove}
+            aria-label="Cancel remove"
+          >
+            <X className="size-3.5" />
+          </Button>
+        </>
+      ) : (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className={`gap-1.5 transition-all active:scale-95 ${
+              bulkRemove.choice === "disk"
+                ? "border-destructive/60 bg-destructive/15 text-destructive hover:bg-destructive/25 hover:text-destructive"
+                : "border-accent-fill/60 bg-accent-fill/10 text-accent-text hover:bg-accent-fill/15 hover:text-accent-text"
+            }`}
+            onClick={onConfirmRemove}
+          >
+            Sure?
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="gap-1.5 text-zinc-400"
+            onClick={onCancelRemove}
+            aria-label="Cancel remove"
+          >
+            <X className="size-3.5" />
+          </Button>
+        </>
+      )}
       <Button
         type="button"
         variant="ghost"

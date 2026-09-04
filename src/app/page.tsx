@@ -688,10 +688,20 @@ function HomeContent() {
     }
   }, []);
 
-  const [confirmBulkRemove, setConfirmBulkRemove] = useState<{
-    choice: RemoveDefault;
-    ids: string[];
-  } | null>(null);
+  const [confirmBulkRemove, setConfirmBulkRemove] = useState<
+    | { stage: "choose" }
+    | { stage: "confirm"; choice: RemoveDefault }
+    | null
+  >(null);
+  const [confirmClearShelf, setConfirmClearShelf] = useState(false);
+
+  useEffect(() => {
+    if (!confirmClearShelf) {
+      return;
+    }
+    const timer = window.setTimeout(() => setConfirmClearShelf(false), 4000);
+    return () => window.clearTimeout(timer);
+  }, [confirmClearShelf]);
 
   const handleRebindShortcut = useCallback(
     (action: ShortcutAction, key: string) => {
@@ -768,10 +778,12 @@ function HomeContent() {
   }, [handleToggleFileTag]);
 
   const executeBulkRemove = useCallback(async () => {
-    const target = confirmBulkRemove;
+    const choice =
+      confirmBulkRemove?.stage === "confirm" ? confirmBulkRemove.choice : null;
+    const ids = selectedIdsRef.current;
     setConfirmBulkRemove(null);
 
-    if (!target || target.ids.length === 0) {
+    if (!choice || ids.length === 0) {
       return;
     }
 
@@ -780,8 +792,8 @@ function HomeContent() {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fileIds: target.ids,
-          permanent: target.choice === "disk",
+          fileIds: ids,
+          permanent: choice === "disk",
         }),
       });
       if (!res.ok) {
@@ -792,7 +804,7 @@ function HomeContent() {
         removed?: string[];
         failed?: Array<{ id: string }>;
       };
-      const removedIds = new Set(data.removed ?? target.ids);
+      const removedIds = new Set(data.removed ?? ids);
 
       setFiles((prev) => prev.filter((file) => !removedIds.has(file.id)));
       handleClearSelection();
@@ -808,7 +820,7 @@ function HomeContent() {
 
       if (data.failed && data.failed.length > 0) {
         toast.error(`Could not remove ${data.failed.length} file(s)`);
-      } else if (target.choice === "disk") {
+      } else if (choice === "disk") {
         toast.success(`Deleted ${removedIds.size} file(s) from disk`);
       } else {
         toast.success(`Removed ${removedIds.size} file(s) from library`);
@@ -2084,16 +2096,43 @@ function HomeContent() {
                   </Button>
                 ) : null}
                 {files.length > 0 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-9 gap-2 rounded-xl px-3 text-xs text-zinc-400 hover:text-red-400"
-                    onClick={() => void handleClearShelf()}
-                  >
-                    <X className="size-4" />
-                    Clear
-                  </Button>
+                  confirmClearShelf ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 gap-2 rounded-xl bg-destructive/15 px-3 text-xs font-semibold text-destructive transition-all hover:bg-destructive/25 active:scale-95"
+                        onClick={() => {
+                          setConfirmClearShelf(false);
+                          void handleClearShelf();
+                        }}
+                      >
+                        Sure?
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 gap-2 rounded-xl px-3 text-xs text-zinc-400"
+                        onClick={() => setConfirmClearShelf(false)}
+                        aria-label="Cancel clear shelf"
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 gap-2 rounded-xl px-3 text-xs text-zinc-400 hover:text-red-400"
+                      onClick={() => setConfirmClearShelf(true)}
+                    >
+                      <X className="size-4" />
+                      Clear
+                    </Button>
+                  )
                 ) : null}
               </div>
             ) : null}
@@ -2127,15 +2166,17 @@ function HomeContent() {
                   onSaveAll={() => void handleBulkSaveAll()}
                   onAddToQueue={handleBulkAddToQueue}
                   onAddToShelf={() => void handleBulkAddToShelf()}
-                  onTag={(tagId) => void handleBulkTag(tagId)}
-                  onRemove={() =>
-                    setConfirmBulkRemove({
-                      choice: removeDefault,
-                      ids: selectedIdsRef.current,
-                    })
-                  }
-                  onClear={handleClearSelection}
-                />
+                    onTag={(tagId) => void handleBulkTag(tagId)}
+                    onRemove={() => setConfirmBulkRemove({ stage: "choose" })}
+                    bulkRemove={confirmBulkRemove}
+                    removeDefault={removeDefault}
+                    onChooseRemove={(choice) =>
+                      setConfirmBulkRemove({ stage: "confirm", choice })
+                    }
+                    onConfirmRemove={() => void executeBulkRemove()}
+                    onCancelRemove={() => setConfirmBulkRemove(null)}
+                    onClear={handleClearSelection}
+                  />
               </div>
             ) : null}
             <div className="flex min-h-0 flex-1">
@@ -2401,70 +2442,6 @@ function HomeContent() {
               </Button>
             </div>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={confirmBulkRemove !== null} onOpenChange={(open) => { if (!open) setConfirmBulkRemove(null); }}>
-        <DialogContent className="max-w-sm rounded-2xl border border-white/10 bg-shell/95 p-6 backdrop-blur-2xl">
-          <DialogTitle className="text-lg font-extrabold tracking-tight text-zinc-50">
-            Remove {confirmBulkRemove?.ids.length ?? 0} sound(s)?
-          </DialogTitle>
-          <div
-            role="radiogroup"
-            aria-label="Remove behavior"
-            className="mt-4 space-y-2"
-          >
-            <button
-              type="button"
-              role="radio"
-              aria-checked={confirmBulkRemove?.choice === "library"}
-              onClick={() =>
-                setConfirmBulkRemove((prev) =>
-                  prev ? { ...prev, choice: "library" } : prev,
-                )
-              }
-              className={`w-full rounded-xl border p-3 text-left transition-colors ${confirmBulkRemove?.choice === "library" ? "border-accent-fill/60 bg-accent-fill/10" : "border-white/10 bg-white/[0.02] hover:border-white/20"}`}
-            >
-              <span className="text-sm font-semibold text-zinc-100">
-                Remove from library
-              </span>
-              <span className="mt-0.5 block text-xs text-zinc-500">
-                Sounds no longer appear in Foleyard. Your files on disk are
-                untouched.
-              </span>
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={confirmBulkRemove?.choice === "disk"}
-              onClick={() =>
-                setConfirmBulkRemove((prev) =>
-                  prev ? { ...prev, choice: "disk" } : prev,
-                )
-              }
-              className={`w-full rounded-xl border p-3 text-left transition-colors ${confirmBulkRemove?.choice === "disk" ? "border-destructive/60 bg-destructive/10" : "border-white/10 bg-white/[0.02] hover:border-white/20"}`}
-            >
-              <span className="text-sm font-semibold text-zinc-100">
-                Delete from disk
-              </span>
-              <span className="mt-0.5 block text-xs text-zinc-500">
-                Permanently delete {confirmBulkRemove?.ids.length ?? 0} sound(s)
-                from disk. This cannot be undone.
-              </span>
-            </button>
-          </div>
-          <div className="mt-6 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setConfirmBulkRemove(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant={confirmBulkRemove?.choice === "disk" ? "destructive" : "default"}
-              onClick={() => void executeBulkRemove()}
-            >
-              <Trash2 className="mr-2 size-4" />
-              {confirmBulkRemove?.choice === "disk" ? "Delete files" : "Remove from library"}
-            </Button>
-          </div>
         </DialogContent>
       </Dialog>
 

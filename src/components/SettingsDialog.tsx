@@ -24,6 +24,7 @@ import {
   ChevronDown,
   SlidersHorizontal,
   Keyboard,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -255,8 +256,8 @@ function SettingsDialogBody({
   const [newTagName, setNewTagName] = useState("");
   const [expandedExtensionId, setExpandedExtensionId] = useState<string | null>(null);
   const [confirmRemoveRoot, setConfirmRemoveRoot] = useState<string | null>(null);
-  const [confirmDeleteItem, setConfirmDeleteItem] = useState<
-    { kind: "collection" | "tag"; id: string; name: string } | null
+  const [confirmingDelete, setConfirmingDelete] = useState<
+    { kind: "collection" | "tag"; id: string } | null
   >(null);
   const [rebindingAction, setRebindingAction] =
     useState<ShortcutAction | null>(null);
@@ -469,17 +470,6 @@ function SettingsDialogBody({
     setConfirmRemoveRoot(null);
     if (path) {
       await handleRemoveRoot(path);
-    }
-  };
-
-  const handleConfirmDeleteItem = async () => {
-    const item = confirmDeleteItem;
-    setConfirmDeleteItem(null);
-    if (!item) return;
-    if (item.kind === "collection") {
-      await handleDeleteCollection(item.id, item.name);
-    } else {
-      await handleDeleteTag(item.id, item.name);
     }
   };
 
@@ -894,41 +884,71 @@ function SettingsDialogBody({
                           <span className="font-mono text-xs text-zinc-500">
                             {collection.fileCount ?? 0}
                           </span>
-                          {isSmart && onConvertToRegularCollection && (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-zinc-500 opacity-0 transition-opacity hover:bg-white/5 hover:text-zinc-200 group-hover:opacity-100"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => onConvertToRegularCollection(collection.id)}
-                              aria-label={`Convert ${collection.name} to a regular collection`}
-                              title="Convert to regular collection"
-                            >
-                              <ListMusic className="size-4" />
-                            </Button>
-                          )}
-                          {onRenameCollection && (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-zinc-500 opacity-0 transition-opacity hover:bg-white/5 hover:text-zinc-200 group-hover:opacity-100"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => onRenameCollection(collection.id, collection.name)}
-                              aria-label={`Rename ${collection.name}`}
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="mr-1 text-zinc-500 opacity-0 transition-opacity hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => setConfirmDeleteItem({ kind: "collection", id: collection.id, name: collection.name })}
+                          {confirmingDelete?.kind === "collection" &&
+                          confirmingDelete.id === collection.id ? (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 shrink-0 rounded-lg bg-destructive/15 px-3 text-xs font-semibold text-destructive transition-all hover:bg-destructive/25 active:scale-95"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => {
+                                  setConfirmingDelete(null);
+                                  void handleDeleteCollection(collection.id, collection.name);
+                                }}
+                              >
+                                Sure?
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="mr-1 shrink-0 text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => setConfirmingDelete(null)}
+                                aria-label="Cancel delete"
+                              >
+                                <X className="size-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              {isSmart && onConvertToRegularCollection && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="text-zinc-500 opacity-0 transition-opacity hover:bg-white/5 hover:text-zinc-200 group-hover:opacity-100"
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  onClick={() => onConvertToRegularCollection(collection.id)}
+                                  aria-label={`Convert ${collection.name} to a regular collection`}
+                                  title="Convert to regular collection"
+                                >
+                                  <ListMusic className="size-4" />
+                                </Button>
+                              )}
+                              {onRenameCollection && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="text-zinc-500 opacity-0 transition-opacity hover:bg-white/5 hover:text-zinc-200 group-hover:opacity-100"
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  onClick={() => onRenameCollection(collection.id, collection.name)}
+                                  aria-label={`Rename ${collection.name}`}
+                                >
+                                  <Pencil className="size-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="mr-1 text-zinc-500 opacity-0 transition-opacity hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => setConfirmingDelete({ kind: "collection", id: collection.id })}
                                 aria-label={`Delete collection ${collection.name}`}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       );
                     })
@@ -986,16 +1006,43 @@ function SettingsDialogBody({
                         <p className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-100">
                           {tag.name}
                         </p>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="mr-1 text-zinc-500 opacity-0 transition-opacity hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => setConfirmDeleteItem({ kind: "tag", id: tag.id, name: tag.name })}
-                          aria-label={`Delete tag ${tag.name}`}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
+                        {confirmingDelete?.kind === "tag" && confirmingDelete.id === tag.id ? (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 shrink-0 rounded-lg bg-destructive/15 px-3 text-xs font-semibold text-destructive transition-all hover:bg-destructive/25 active:scale-95"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                setConfirmingDelete(null);
+                                void handleDeleteTag(tag.id, tag.name);
+                              }}
+                            >
+                              Sure?
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="mr-1 shrink-0 text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => setConfirmingDelete(null)}
+                              aria-label="Cancel delete"
+                            >
+                              <X className="size-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="mr-1 text-zinc-500 opacity-0 transition-opacity hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => setConfirmingDelete({ kind: "tag", id: tag.id })}
+                            aria-label={`Delete tag ${tag.name}`}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        )}
                       </div>
                     ))
                   )}
@@ -1416,38 +1463,6 @@ function SettingsDialogBody({
             onClick={() => void handleConfirmRemoveRoot()}
           >
             Remove folder
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-
-    <AlertDialog
-      open={confirmDeleteItem !== null}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) setConfirmDeleteItem(null);
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            Delete {confirmDeleteItem?.kind === "tag" ? "tag" : "collection"}?
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            {confirmDeleteItem ? (
-              <>
-                &ldquo;<span className="text-zinc-200">{confirmDeleteItem.name}</span>&rdquo; will be
-                removed. Your audio files are not deleted. This cannot be undone.
-              </>
-            ) : null}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive/15 text-destructive hover:bg-destructive/25"
-            onClick={() => void handleConfirmDeleteItem()}
-          >
-            Delete {confirmDeleteItem?.kind === "tag" ? "tag" : "collection"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

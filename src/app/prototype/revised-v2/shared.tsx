@@ -8,6 +8,22 @@ export function tintStyle(color: string): React.CSSProperties {
   return { borderColor: `${color}80`, backgroundColor: `${color}14` };
 }
 
+export function onColorText(hex: string): string {
+  const normalized = hex.replace("#", "");
+  if (normalized.length < 6) {
+    return "#ffffff";
+  }
+  const r = parseInt(normalized.slice(0, 2), 16) / 255;
+  const g = parseInt(normalized.slice(2, 4), 16) / 255;
+  const b = parseInt(normalized.slice(4, 6), 16) / 255;
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.55 ? "#101014" : "#ffffff";
+}
+
+export function themeButtonStyle(color: string): React.CSSProperties {
+  return { backgroundColor: color, color: onColorText(color) };
+}
+
 export function Swatches({
   value,
   onPick,

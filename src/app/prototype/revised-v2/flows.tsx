@@ -10,7 +10,7 @@ import {
   VariantFrame,
   tileStyle,
 } from "../showcase/data";
-import { Swatches, tintStyle } from "./shared";
+import { Swatches, themeButtonStyle, tintStyle } from "./shared";
 import { AltFlowsFrame } from "./flows-alt";
 
 type Selection = { kind: "collection" | "tag"; id: string };
@@ -250,7 +250,7 @@ export function FlowB(external?: Partial<FlowControls>) {
           className="overflow-hidden rounded-2xl border border-white/10"
           style={{
             backgroundColor: `${color}0a`,
-            backgroundImage: `radial-gradient(circle at 12% 0%, ${color}40, transparent 75%)`,
+            backgroundImage: `radial-gradient(circle at 12% 0%, ${color}45, transparent 92%)`,
           }}
         >
           <div className="h-16" />
@@ -267,7 +267,7 @@ export function FlowB(external?: Partial<FlowControls>) {
                 value={color}
                 onPick={(next) => setCollectionColors((prev) => ({ ...prev, [selectedCollection.id]: next }))}
               />
-              <span className="ml-auto shrink-0 rounded-xl bg-accent-fill px-3.5 py-2 text-xs font-semibold text-white">
+              <span className="ml-auto shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold" style={themeButtonStyle(color)}>
                 Open
               </span>
             </div>
@@ -625,7 +625,7 @@ function TextLegibility() {
                 <p className="truncate text-sm font-semibold text-zinc-100">Rain beds</p>
                 <p className="mt-0.5 text-xs text-zinc-400">11 sounds · regular collection</p>
               </div>
-              <span className="shrink-0 rounded-xl bg-accent-fill px-3.5 py-2 text-xs font-semibold text-white">
+              <span className="shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold" style={themeButtonStyle(color)}>
                 Open
               </span>
             </div>
@@ -660,7 +660,7 @@ function TextLegibility() {
                 <p className="truncate text-sm font-semibold text-zinc-100">Rain beds</p>
                 <p className="mt-0.5 text-xs text-zinc-400">11 sounds · regular collection</p>
               </div>
-              <span className="shrink-0 rounded-xl bg-accent-fill px-3.5 py-2 text-xs font-semibold text-white">
+              <span className="shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold" style={themeButtonStyle(color)}>
                 Open
               </span>
             </div>
@@ -702,7 +702,7 @@ function TextLegibility() {
                   11 sounds · regular collection
                 </p>
               </div>
-              <span className="shrink-0 rounded-xl bg-accent-fill px-3.5 py-2 text-xs font-semibold text-white">
+              <span className="shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold" style={themeButtonStyle(color)}>
                 Open
               </span>
             </div>

@@ -12,7 +12,7 @@ import {
   tileStyle,
 } from "../showcase/data";
 import { useFlowState } from "./flows";
-import { Swatches } from "./shared";
+import { Swatches, themeButtonStyle } from "./shared";
 
 const DETAIL_FILES = ["Metal Door Slam", "Glass Break Small", "Gravel Footsteps"];
 
@@ -90,7 +90,7 @@ export function AltRailDetail() {
         className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-white/10"
         style={{
           backgroundColor: `${color}0a`,
-          backgroundImage: `radial-gradient(circle at 88% 0%, ${color}40, transparent 70%)`,
+          backgroundImage: `radial-gradient(circle at 88% 0%, ${color}45, transparent 92%)`,
         }}
       >
         <div className="flex items-center gap-4 p-5">
@@ -125,7 +125,10 @@ export function AltRailDetail() {
               }
             }}
           />
-          <span className="ml-auto shrink-0 rounded-xl bg-accent-fill px-4 py-2 text-xs font-semibold text-white">
+          <span
+            className="ml-auto shrink-0 rounded-xl px-4 py-2 text-xs font-semibold"
+            style={themeButtonStyle(color)}
+          >
             {isCollection ? "Open" : "Filter library"}
           </span>
         </div>

@@ -31,8 +31,7 @@ function registerIpcHandlers() {
     if (result.canceled || !result.filePaths.length) {
       return { ok: false, error: "No folder selected" };
     }
-    grantDirectoryPath(result.filePaths[0]);
-    return { ok: true, path: result.filePaths[0] };
+    return await grantDirectoryPath(result.filePaths[0]);
   });
   ipcMain.handle("desktop:reveal-in-explorer", async (_event, fileId) =>
     revealInExplorer(fileId),

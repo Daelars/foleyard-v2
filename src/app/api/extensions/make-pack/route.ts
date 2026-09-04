@@ -1,8 +1,9 @@
+import { resolveReadablePath, resolveWritablePath } from "@/lib/filesystem-boundary";
 import { NextRequest, NextResponse } from "next/server";
 
 import type { MakePackFile } from "@foleyard/make-pack";
 
-import { getFileById } from "@/lib/db";
+import { getFileById, getLibraryRoots } from "@/lib/db";
 import { createAppExtensionHost } from "@/lib/extensions/host";
 import { getRecentMakePackFileIds } from "@/lib/extensions/make-pack-recent-store";
 import { DbSoundShelfStore } from "@/lib/extensions/sound-shelf-store";
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest) {
     source?: "selection" | "shelf" | "recent";
     fileIds?: string[];
     destinationDirectory?: string;
+    destinationGrant?: string;
     packName?: string;
     outputFormat?: "folder" | "zip";
   };
@@ -53,12 +55,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Valid source is required" }, { status: 400 });
   }
 
-  if (!body.destinationDirectory) {
+  if (typeof body.destinationDirectory !== "string" || !body.destinationDirectory) {
     return NextResponse.json(
       { error: "destinationDirectory is required" },
       { status: 400 },
     );
   }
+
+  const destination = typeof body.destinationGrant === "string" ? await resolveWritablePath(body.destinationDirectory, body.destinationGrant) : null;
+  if (!destination) return NextResponse.json({ error: "Destination is outside a granted directory. Choose it with the folder picker." }, { status: 403 });
+  if (body.fileIds !== undefined && (!Array.isArray(body.fileIds) || !body.fileIds.every((id) => typeof id === "string"))) return NextResponse.json({ error: "fileIds must be an array of strings" }, { status: 400 });
 
   const fileIds =
     body.source === "shelf"
@@ -74,14 +80,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const files = hydrateFiles(fileIds);
+  for (const file of files) {
+    const readable = await resolveReadablePath(file.path, getLibraryRoots());
+    if (!readable) return NextResponse.json({ error: "Source is outside the configured Library roots" }, { status: 403 });
+    file.path = readable;
+  }
+
   const commandId = `make-pack.from-${body.source}`;
-  const outcome = await createAppExtensionHost().execute({
+  const outcome = await createAppExtensionHost(body.destinationGrant).execute({
     extensionId: "make-pack",
     commandId,
     selection: { fileIds },
     input: {
-      files: hydrateFiles(fileIds),
-      destinationDirectory: body.destinationDirectory,
+      files,
+      destinationDirectory: destination,
       packName: body.packName,
       outputFormat: body.outputFormat,
     },

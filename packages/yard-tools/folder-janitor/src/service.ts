@@ -120,38 +120,14 @@ export class FolderJanitorService {
     return { removed: fileIds.length };
   }
 
-  async deleteFolders(paths: string[], libraryRoots: string[]) {
+  async deleteFolders(paths: string[]) {
     this.context.permissions.require("files:delete");
-
-    const canonicalRoots = (
-      await Promise.all(
-        libraryRoots.map(async (root) => {
-          try {
-            return await fs.promises.realpath(root);
-          } catch {
-            return null;
-          }
-        }),
-      )
-    ).filter((root): root is string => root !== null);
 
     return {
       results: await Promise.all(paths.map(async (folderPath) => {
         try {
-          const canonicalFolder = await fs.promises.realpath(folderPath);
-          const contained = canonicalRoots.some((root) => {
-            const relative = path.relative(root, canonicalFolder);
-            return (
-              relative !== "" &&
-              relative !== ".." &&
-              !relative.startsWith(`..${path.sep}`) &&
-              !path.isAbsolute(relative)
-            );
-          });
-
-          if (!contained) {
-            throw new Error("Folder is outside the configured Library roots");
-          }
+          const canonicalFolder = await this.context.services.filesystem?.resolveReadablePath(folderPath, false);
+          if (!canonicalFolder) throw new Error("Folder is outside the configured Library roots");
 
           const entries = await fs.promises.readdir(canonicalFolder);
           if (entries.length > 0) {

@@ -1,3 +1,4 @@
+import { createDragStage } from "./staging";
 import os from "node:os";
 import path from "node:path";
 
@@ -46,9 +47,9 @@ function getRuleOptions(context: YardExtensionContext): DropRuleOptions {
   };
 }
 
-function getPrepareDragOptions(
+async function getPrepareDragOptions(
   context: YardExtensionContext,
-): PrepareDragOptions {
+): Promise<PrepareDragOptions> {
   const input = context.input as Partial<PrepareDragOptions> | undefined;
   if (!input?.file) {
     throw new YardCommandValidationError("file is required");
@@ -57,11 +58,7 @@ function getPrepareDragOptions(
   const configuredDirectory = stringSetting(context, "drag-out-folder", "");
 
   return {
-    stagingDirectory:
-      input.stagingDirectory ||
-      (configuredDirectory.trim()
-        ? configuredDirectory
-        : path.join(os.tmpdir(), "foleyard-drop-rules")),
+    stagingDirectory: await createDragStage(input.stagingDirectory || (configuredDirectory.trim() ? configuredDirectory : path.join(os.tmpdir(), "foleyard-drop-rules"))),
     file: input.file,
     copyOnDrop: booleanSetting(context, "copy-on-drop", true),
     renameOnDrop: booleanSetting(context, "rename-on-drop", true),
@@ -103,7 +100,7 @@ export function registerCommands(context: YardExtensionContext) {
     description: "Prepare one sound for drag-out using the configured rules.",
     scope: "drop",
     requiresSelection: true,
-    handler: () =>
-      createService(context).prepareDrag(getPrepareDragOptions(context)),
+    handler: async () =>
+      createService(context).prepareDrag(await getPrepareDragOptions(context)),
   });
 }

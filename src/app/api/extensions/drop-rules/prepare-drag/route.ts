@@ -1,6 +1,7 @@
+import { resolveReadablePath } from "@/lib/filesystem-boundary";
 import { NextRequest, NextResponse } from "next/server";
 
-import { getFileById } from "@/lib/db";
+import { getFileById, getLibraryRoots } from "@/lib/db";
 import { createAppExtensionHost } from "@/lib/extensions/host";
 
 import { toHostFailureResponse } from "../../host-outcome";
@@ -22,6 +23,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "File is not indexed" }, { status: 404 });
   }
 
+  const readable = await resolveReadablePath(file.path, getLibraryRoots());
+  if (!readable) return NextResponse.json({ error: "Source is outside the configured Library roots" }, { status: 403 });
   const outcome = await createAppExtensionHost().execute({
     extensionId: "drop-rules",
     commandId: "drop-rules.prepare-drag",
@@ -30,7 +33,7 @@ export async function POST(request: NextRequest) {
       file: {
         id: file.id,
         filename: file.filename,
-        path: file.path,
+        path: readable,
         format: file.format,
       },
     },

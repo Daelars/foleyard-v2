@@ -93,7 +93,7 @@ export function registerCommands(context: YardExtensionContext) {
           "paths and libraryRoots arrays are required",
         );
       }
-      return createService(context).deleteFolders(input.paths, input.libraryRoots);
+      return createService(context).deleteFolders(input.paths);
     },
   });
 }

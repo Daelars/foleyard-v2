@@ -1,12 +1,18 @@
 const { clipboard, nativeImage, shell } = require("electron");
 
-const { createGrantedPathRegistry } = require("./granted-paths.cjs");
+const { randomBytes } = require("node:crypto");
 const { getDesktopServerUrl } = require("./server-url.cjs");
 
-const grantedPaths = createGrantedPathRegistry();
+process.env.FOLEYARD_GRANT_SECRET ||= randomBytes(32).toString("hex");
 
-function grantDirectoryPath(directoryPath) {
-  return grantedPaths.grant(directoryPath);
+async function grantDirectoryPath(directoryPath) {
+  const response = await fetch(`${getDesktopServerUrl()}/api/desktop/grants`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-foleyard-grant-secret": process.env.FOLEYARD_GRANT_SECRET },
+    body: JSON.stringify({ path: directoryPath }),
+  });
+  const result = await response.json();
+  return response.ok ? result : { ok: false, error: result.error ?? "Could not grant folder access" };
 }
 
 async function resolveIndexedFile(fileId) {
@@ -133,7 +139,7 @@ async function openFileExternally(fileId) {
 }
 
 async function revealPath(candidatePath) {
-  let resolvedPath = grantedPaths.resolve(candidatePath);
+  let resolvedPath = null;
 
   if (!resolvedPath) {
     try {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'node:fs';
-import { attachTagToFile, detachTagFromFile, getFileById, getFileCount, getFiles, getTagsForFiles, markFileRemoved, toggleFavorite } from '@/lib/db';
+import { deleteFiles } from '@/lib/files/delete-files';
+import { attachTagToFile, detachTagFromFile, getFileCount, getFiles, getTagsForFiles, toggleFavorite } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -108,47 +108,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'fileIds must be string[]' }, { status: 400 });
     }
 
-    const removed: string[] = [];
-    const failed: Array<{ id: string; error: string }> = [];
-    const now = new Date().toISOString();
-
-    const ids = fileIds as string[];
-    const concurrency = 8;
-    for (let start = 0; start < ids.length; start += concurrency) {
-      const batch = ids.slice(start, start + concurrency);
-      const results = await Promise.all(
-        batch.map(async (id) => {
-          const record = getFileById(id);
-          if (!record) {
-            return { id, error: 'Not found' };
-          }
-
-          if (permanent === true) {
-            try {
-              await fs.promises.unlink(record.path);
-            } catch (error) {
-              if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-                return {
-                  id,
-                  error: error instanceof Error ? error.message : 'Delete failed',
-                };
-              }
-            }
-          }
-
-          markFileRemoved(record.path, now);
-          return { id };
-        }),
-      );
-
-      for (const result of results) {
-        if (result.error) {
-          failed.push({ id: result.id, error: result.error });
-        } else {
-          removed.push(result.id);
-        }
-      }
-    }
+    const { removed, failed } = await deleteFiles(fileIds, permanent === true);
 
     return NextResponse.json({ removed, failed });
   } catch {

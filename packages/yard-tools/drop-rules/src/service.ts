@@ -1,3 +1,4 @@
+import { sanitizeFilename } from "yard-core";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -231,7 +232,7 @@ function makeOutputName(
     )
     .replaceAll("{date}", date)
     .replaceAll("{time}", time);
-  const clean = path.basename(base).replace(/[<>:"/\\|?*\x00-\x1f]/g, "-");
+  const clean = sanitizeFilename(path.basename(base));
 
   return makeUniqueFilename(
     clean || `${paddedIndex}-${parsed.name}${parsed.ext}`,

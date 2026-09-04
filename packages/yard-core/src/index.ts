@@ -33,3 +33,5 @@ export * from "./services/organization/tag-service";
 export * from "./services/search/browse-service";
 export * from "./services/search/filter-service";
 export * from "./services/search/search-service";
+
+export { sanitizeFilename } from "./domain/filename";

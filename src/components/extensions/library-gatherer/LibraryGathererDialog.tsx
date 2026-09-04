@@ -54,6 +54,7 @@ export function LibraryGathererDialog({
 }) {
   const [sourceFolders, setSourceFolders] = useState<string[]>([]);
   const [newFolderPath, setNewFolderPath] = useState("");
+  const [destinationGrant, setDestinationGrant] = useState("");
   const [destDir, setDestDir] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [previewResult, setPreviewResult] =
@@ -99,6 +100,7 @@ export function LibraryGathererDialog({
     const result = await getDesktopBridge()?.pickFolder();
     if (result?.ok && result.path) {
       setDestDir(result.path);
+      setDestinationGrant(result.grantToken ?? "");
     }
   }, []);
 
@@ -123,6 +125,7 @@ export function LibraryGathererDialog({
         body: JSON.stringify({
           sourceDirectories: sourceFolders,
           destinationDirectory: destDir.trim(),
+          destinationGrant,
         }),
       });
       const data = await res.json();
@@ -137,7 +140,7 @@ export function LibraryGathererDialog({
     } finally {
       setIsLoading(false);
     }
-  }, [sourceFolders, destDir]);
+  }, [sourceFolders, destDir, destinationGrant]);
 
   const handleGather = useCallback(async () => {
     if (sourceFolders.length === 0 || !destDir.trim()) return;
@@ -151,6 +154,7 @@ export function LibraryGathererDialog({
         body: JSON.stringify({
           sourceDirectories: sourceFolders,
           destinationDirectory: destDir.trim(),
+          destinationGrant,
         }),
       });
       const data = await res.json();
@@ -167,7 +171,7 @@ export function LibraryGathererDialog({
     } finally {
       setIsLoading(false);
     }
-  }, [sourceFolders, destDir]);
+  }, [sourceFolders, destDir, destinationGrant]);
 
   return (
     <Dialog
@@ -176,6 +180,7 @@ export function LibraryGathererDialog({
         if (!nextOpen) {
           setSourceFolders([]);
           setNewFolderPath("");
+          setDestinationGrant("");
           setDestDir("");
           setIsLoading(false);
           setPreviewResult(null);

@@ -5,7 +5,7 @@ require("./verify-workspace-root.cjs");
 const { main: ensureNativeModules } = require("./postinstall.cjs");
 
 const isWindows = process.platform === "win32";
-const env = { ...process.env, FOLEYARD_DESKTOP: "1" };
+const env = { ...process.env, FOLEYARD_DESKTOP: "1", FOLEYARD_GRANT_SECRET: require("node:crypto").randomBytes(32).toString("hex") };
 let nextProcess = null;
 let electronProcess = null;
 

@@ -1,0 +1,35 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { NextRequest } from "next/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const mocks = vi.hoisted(() => ({ roots: [] as string[], files: new Map<string, { id: string; filename: string; path: string; removedAt: null }>(), execute: vi.fn() }));
+vi.mock("@/lib/db", () => ({ getLibraryRoots: () => mocks.roots, getFileById: (id: string) => mocks.files.get(id) }));
+vi.mock("@/lib/extensions/host", () => ({ createAppExtensionHost: () => ({ execute: mocks.execute }) }));
+vi.mock("@/lib/extensions/make-pack-recent-store", () => ({ getRecentMakePackFileIds: () => [] }));
+vi.mock("@/lib/extensions/sound-shelf-store", () => ({ DbSoundShelfStore: class { getFileIds() { return []; } } }));
+import { registerGrant } from "@/lib/filesystem-boundary";
+import { POST as gather } from "./library-gatherer/gather/route";
+import { POST as preview } from "./library-gatherer/preview/route";
+import { POST as pack } from "./make-pack/route";
+let temp: string, root: string, destination: string, outside: string, grantToken: string;
+beforeEach(async () => {
+  temp=await fs.mkdtemp(path.join(os.tmpdir(), "foleyard-route-access-"));
+  root=path.join(temp,"library"); destination=path.join(temp,"output"); outside=path.join(temp,"private");
+  await Promise.all([root,destination,outside].map(p=>fs.mkdir(p)));
+  for (const dir of [root,outside]) await fs.writeFile(path.join(dir,"hit.wav"),"audio");
+  mocks.roots=[root]; mocks.files.clear(); mocks.files.set("inside",{id:"inside",filename:"hit.wav",path:path.join(root,"hit.wav"),removedAt:null}); mocks.files.set("outside",{id:"outside",filename:"hit.wav",path:path.join(outside,"hit.wav"),removedAt:null});
+  grantToken=(await registerGrant(destination)).grantToken;
+  mocks.execute.mockReset().mockResolvedValue({ok:true,type:"value",value:{ok:true}});
+});
+afterEach(async()=>{await fs.rm(temp,{recursive:true,force:true});});
+const request=(body:unknown)=>new NextRequest("http://localhost/api/extensions/test",{method:"POST",body:JSON.stringify(body)});
+describe.each([["gather",gather],["preview",preview],["pack",pack]] as const)("%s filesystem access",(_name,handler)=>{
+  const body=(source:string,dest:string,token?:string)=>({sourceDirectories:[source],source:"selection",fileIds:[source===root?"inside":"outside"],destinationDirectory:dest,destinationGrant:token});
+  it("accepts Library sources and a granted destination",async()=>{expect((await handler(request(body(root,destination,grantToken)))).status).toBe(200);expect(mocks.execute).toHaveBeenCalledOnce();});
+  it("rejects sources outside Library roots",async()=>{expect((await handler(request(body(outside,destination,grantToken)))).status).toBe(403);expect(mocks.execute).not.toHaveBeenCalled();});
+  it("rejects destinations without a picker grant",async()=>{expect((await handler(request(body(root,destination)))).status).toBe(403);expect(mocks.execute).not.toHaveBeenCalled();});
+  it("rejects destinations outside the token's directory",async()=>{expect((await handler(request(body(root,outside,grantToken)))).status).toBe(403);expect(mocks.execute).not.toHaveBeenCalled();});
+  it("accepts new descendants inside the granted directory",async()=>{expect((await handler(request(body(root,path.join(destination,"new","pack"),grantToken)))).status).toBe(200);});
+  it("rejects a junction escaping the grant",async()=>{const link=path.join(destination,"linked");await fs.symlink(outside,link,process.platform==="win32"?"junction":"dir");expect((await handler(request(body(root,path.join(link,"new"),grantToken)))).status).toBe(403);expect(mocks.execute).not.toHaveBeenCalled();});
+});

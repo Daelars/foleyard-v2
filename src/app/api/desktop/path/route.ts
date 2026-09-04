@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getLibraryRoots } from "@/lib/db";
-import { resolveExistingPathWithinRoots } from "@/lib/filesystem-boundary";
+import { resolveGrantedExistingPath, resolveExistingPathWithinRoots } from "@/lib/filesystem-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Path is required" }, { status: 400 });
   }
 
-  const resolvedPath = await resolveExistingPathWithinRoots(
+  const resolvedPath = await resolveGrantedExistingPath(body.path) ?? await resolveExistingPathWithinRoots(
     body.path,
     getLibraryRoots(),
   );

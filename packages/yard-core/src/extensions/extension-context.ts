@@ -21,6 +21,10 @@ export type YardExtensionFileService = {
 
 export type YardExtensionContext = {
   services: {
+    filesystem?: {
+      resolveReadablePath(path: string, allowRoot?: boolean): Promise<string | null>;
+      resolveWritablePath(path: string): Promise<string | null>;
+    };
     library?: LibraryService;
     files?: YardExtensionFileService;
     collections?: CollectionService;

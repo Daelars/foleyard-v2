@@ -1,3 +1,4 @@
+import { resolveReadablePath } from "@/lib/filesystem-boundary";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -29,7 +30,7 @@ function createContext(): YardExtensionContext {
 
 function createDeleteContext(): YardExtensionContext {
   return {
-    services: { commands: { register: () => {} } } as unknown as YardExtensionContext["services"],
+    services: { commands: { register: () => {} }, filesystem: { resolveReadablePath: (candidate: string, allowRoot: boolean) => resolveReadablePath(candidate, [path.join(tempDir, "library")], { allowRoot }) } } as unknown as YardExtensionContext["services"],
     selection: { fileIds: [] },
     permissions: {
       has: (permission) => permission === "files:delete",
@@ -108,7 +109,6 @@ describe("FolderJanitorService", () => {
 
     const result = await new FolderJanitorService(createDeleteContext()).deleteFolders(
       [emptyFolder],
-      [root],
     );
 
     expect(result.results).toEqual([{ path: emptyFolder, ok: true }]);
@@ -123,7 +123,6 @@ describe("FolderJanitorService", () => {
 
     const result = await new FolderJanitorService(createDeleteContext()).deleteFolders(
       [outside],
-      [root],
     );
 
     expect(result.results[0]).toMatchObject({ path: outside, ok: false });
@@ -140,7 +139,6 @@ describe("FolderJanitorService", () => {
 
     const result = await new FolderJanitorService(createDeleteContext()).deleteFolders(
       [link],
-      [root],
     );
 
     expect(result.results[0]).toMatchObject({ path: link, ok: false });
@@ -155,7 +153,6 @@ describe("FolderJanitorService", () => {
 
     const result = await new FolderJanitorService(createDeleteContext()).deleteFolders(
       [folder],
-      [root],
     );
 
     expect(result.results[0]).toMatchObject({ path: folder, ok: false });

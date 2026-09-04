@@ -1,3 +1,4 @@
+import { registerGrant, resolveWritablePath, resolveReadablePath } from "@/lib/filesystem-boundary";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -81,6 +82,7 @@ function createHost() {
     isEnabled: () => true,
     getSettingValue: (_extensionId, _settingId, defaultValue) => defaultValue,
     services: {
+      filesystem: { resolveReadablePath: (candidate, allowRoot = true) => resolveReadablePath(candidate, tempDirectories, { allowRoot }), resolveWritablePath: async (candidate) => { for (const directory of tempDirectories) { const grant = await registerGrant(directory); const resolved = await resolveWritablePath(candidate, grant.grantToken); if (resolved) return resolved; } return null; } },
       files: { markRemoved: vi.fn() },
       collections: {
         getAllCollections: () => [],

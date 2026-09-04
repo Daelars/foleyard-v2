@@ -2,6 +2,7 @@ export type DesktopActionResult = {
   ok: boolean;
   error?: string;
   path?: string;
+  grantToken?: string;
 };
 
 export type DesktopWindowState = {

@@ -42,6 +42,7 @@ export function MakePackDialog({
     initialSource
   )
   const [packName, setPackName] = useState("")
+  const [destinationGrant, setDestinationGrant] = useState("");
   const [destDir, setDestDir] = useState("")
   const [outputFormat, setOutputFormat] = useState<"folder" | "zip">(
     initialOutputFormat
@@ -64,7 +65,8 @@ export function MakePackDialog({
             ? "Shelf Pack"
             : "Recent Sounds Pack"
       )
-      setDestDir("")
+      setDestinationGrant("");
+          setDestDir("")
       setOutputFormat(initialOutputFormat)
       setIsLoading(false)
       setResult(null)
@@ -79,7 +81,8 @@ export function MakePackDialog({
 
     const result = await getDesktopBridge()?.pickFolder()
     if (result?.ok && result.path) {
-      setDestDir(result.path)
+      setDestDir(result.path);
+      setDestinationGrant(result.grantToken ?? "")
     }
   }, [])
 
@@ -100,6 +103,7 @@ export function MakePackDialog({
         source,
         fileIds: initialFileIds,
         destinationDirectory: destDir.trim(),
+          destinationGrant,
         packName: packName.trim(),
         outputFormat,
       }
@@ -128,6 +132,7 @@ export function MakePackDialog({
     source,
     initialFileIds,
     destDir,
+    destinationGrant,
     packName,
     outputFormat,
   ])

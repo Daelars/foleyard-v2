@@ -2,6 +2,7 @@ import path from "path";
 
 import type {
   AudioFileRepository,
+  AudioFileTouchEntry,
   PathValidation,
   ScanFileRecord,
   ScanStatus,
@@ -338,7 +339,7 @@ export class ScanRunner implements ScannerService {
     const existingByPath = new Map(
       this.fileRepo.getFilesByPaths(filePaths).map((file) => [file.path, file]),
     );
-    const touchEntries: { path: string; lastScannedAt: string }[] = [];
+    const touchEntries: AudioFileTouchEntry[] = [];
     const upsertRecords: ScanFileRecord[] = [];
 
     const statResults = await Promise.all(

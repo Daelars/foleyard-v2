@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import type { IndexedAudioFile } from "@yard-core";
+
 import { getFileById, getTagsForFiles } from "@/lib/db";
 import { createAppExtensionHost } from "@/lib/extensions/host";
 import { DbSoundShelfStore } from "@/lib/extensions/sound-shelf-store";
@@ -28,7 +30,7 @@ export async function GET() {
 
   const files = outcome.value
     .map((fileId) => getFileById(fileId))
-    .filter((file) => file !== null && file.removedAt === null);
+    .filter((file): file is IndexedAudioFile => file !== null && file.removedAt === null);
   const ids = files.map((file) => file.id);
   if (ids.length !== outcome.value.length) {
     new DbSoundShelfStore().setFileIds(ids);

@@ -52,7 +52,7 @@ function parseByteRange(value: string, size: number): ByteRange | null {
 function streamResponse(
   request: NextRequest,
   filePath: string,
-  headers: Record<string, string | number>,
+  headers: Record<string, string>,
   range?: ByteRange,
 ) {
   const file = fs.createReadStream(filePath, range);
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
 
       return streamResponse(request, filePath, {
         "Accept-Ranges": "bytes",
-        "Content-Length": range.end - range.start + 1,
+        "Content-Length": String(range.end - range.start + 1),
         "Content-Range": `bytes ${range.start}-${range.end}/${stat.size}`,
         "Content-Type": contentType,
       }, range);
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
 
     return streamResponse(request, filePath, {
       "Accept-Ranges": "bytes",
-      "Content-Length": stat.size,
+      "Content-Length": String(stat.size),
       "Content-Type": contentType,
     });
   } catch (error) {

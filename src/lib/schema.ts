@@ -30,6 +30,7 @@ export const files = sqliteTable('files', {
 export const tags = sqliteTable('tags', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),
+  color: text('color'),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -45,6 +46,7 @@ export const fileTags = sqliteTable(
 export const collections = sqliteTable('collections', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
+  color: text('color'),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   isSmart: integer('is_smart').notNull().default(0),
   filter: text('filter'),

@@ -8,6 +8,7 @@ import {
   getAllCollections,
   getFiles,
   renameCollection,
+  updateCollectionColor,
   updateCollectionFilter,
 } from '@/lib/db';
 
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, collectionId, name, filter } = body;
+    const { action, collectionId, name, filter, color } = body;
 
     if (!collectionId) {
       return NextResponse.json({ error: 'collectionId is required' }, { status: 400 });
@@ -59,6 +60,11 @@ export async function PATCH(request: NextRequest) {
 
     if (action === 'rename' && typeof name === 'string' && name.trim()) {
       renameCollection(collectionId, name.trim());
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === 'update-color' && (color === null || (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)))) {
+      updateCollectionColor(collectionId, color);
       return NextResponse.json({ success: true });
     }
 

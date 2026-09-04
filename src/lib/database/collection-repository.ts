@@ -24,6 +24,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
       .select({
         id: schema.collections.id,
         name: schema.collections.name,
+        color: schema.collections.color,
         createdAt: schema.collections.createdAt,
         isSmart: schema.collections.isSmart,
         filter: schema.collections.filter,
@@ -74,6 +75,10 @@ export class SqliteCollectionRepository implements CollectionRepository {
 
   renameCollection(id: string, name: string): void {
     this.db.update(schema.collections).set({ name }).where(eq(schema.collections.id, id)).run();
+  }
+
+  updateCollectionColor(id: string, color: string | null): void {
+    this.db.update(schema.collections).set({ color }).where(eq(schema.collections.id, id)).run();
   }
 
   updateCollectionFilter(id: string, filter: string): void {
@@ -161,6 +166,7 @@ export const getAllCollections = () => getCollectionRepo().getAllCollections();
 export const createCollection = (name: string, isSmart?: boolean, filter?: string) => getCollectionRepo().createCollection(name, isSmart, filter);
 export const createSmartCollection = (name: string, filter: string) => getCollectionRepo().createSmartCollection(name, filter);
 export const renameCollection = (id: string, name: string) => getCollectionRepo().renameCollection(id, name);
+export const updateCollectionColor = (id: string, color: string | null) => getCollectionRepo().updateCollectionColor(id, color);
 export const updateCollectionFilter = (id: string, filter: string) => getCollectionRepo().updateCollectionFilter(id, filter);
 export const deleteCollection = (collectionId: string) => getCollectionRepo().deleteCollection(collectionId);
 export const attachFileToCollection = (fileId: string, collectionId: string) => getCollectionRepo().attachFileToCollection(fileId, collectionId);

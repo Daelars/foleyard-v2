@@ -11,6 +11,7 @@ export {
   detachFileFromCollection,
   getAllCollections,
   renameCollection,
+  updateCollectionColor,
   updateCollectionFilter,
 } from "@/lib/database/collection-repository";
 export {
@@ -52,6 +53,7 @@ export {
   getAllTags,
   getTagsForFile,
   getTagsForFiles,
+  updateTagColor,
 } from "@/lib/database/tag-repository";
 
 export type FileRecord = typeof import("@/lib/schema").files.$inferSelect;

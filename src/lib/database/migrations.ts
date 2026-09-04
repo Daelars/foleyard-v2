@@ -46,6 +46,7 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
     CREATE TABLE IF NOT EXISTS tags (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
+      color TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -60,6 +61,7 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
     CREATE TABLE IF NOT EXISTS collections (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      color TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -80,6 +82,8 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
 
   ensureColumn(sqlite, "collections", "is_smart", "is_smart INTEGER DEFAULT 0");
   ensureColumn(sqlite, "collections", "filter", "filter TEXT");
+  ensureColumn(sqlite, "collections", "color", "color TEXT");
+  ensureColumn(sqlite, "tags", "color", "color TEXT");
 
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_filename ON files(filename)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_removed_at ON files(removed_at)`);

@@ -5,6 +5,7 @@ export interface CollectionRepository {
   createCollection(name: string, isSmart?: boolean, filter?: string): string;
   createSmartCollection(name: string, filter: string): string;
   renameCollection(id: string, name: string): void;
+  updateCollectionColor(id: string, color: string | null): void;
   updateCollectionFilter(id: string, filter: string): void;
   deleteCollection(collectionId: string): void;
   attachFileToCollection(fileId: string, collectionId: string): void;

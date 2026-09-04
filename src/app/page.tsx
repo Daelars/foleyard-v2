@@ -48,6 +48,7 @@ import { Input } from "@/components/ui/input";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
 import { interpretExtensionUiIntent } from "@/lib/extensions/ui-intent";
 import { isDesktopApp } from "@/lib/desktop";
+import { resolveItemColor } from "@/lib/item-colors";
 import { useZoom } from "@/hooks/use-zoom";
 import { useScanPolling } from "@/hooks/use-scan-polling";
 import type { YardExtensionHostOutcome } from "@yard-core";
@@ -67,6 +68,7 @@ interface FileRecord {
 interface CollectionRecord {
   id: string;
   name: string;
+  color?: string | null;
   fileCount?: number;
   isSmart?: boolean;
   filter?: string | null;
@@ -525,7 +527,12 @@ function HomeContent() {
         nextLibraryRoots.length === 0,
       );
       setCollections(collectionsData.collections ?? []);
-      setTags(tagsData.tags ?? []);
+      setTags(
+        ((tagsData.tags ?? []) as TagRecord[]).map((tag) => ({
+          ...tag,
+          color: resolveItemColor(tag.name, tag.color),
+        })),
+      );
       setScanStatus(scanData);
 
       const nextExtensions = (extensionsData.extensions ?? []) as ExtensionGridItem[];

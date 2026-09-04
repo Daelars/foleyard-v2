@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { attachTagToFile, createTag, deleteTag, detachTagFromFile, getAllTags, getTagsForFile } from '@/lib/db';
+import { attachTagToFile, createTag, deleteTag, detachTagFromFile, getAllTags, getTagsForFile, updateTagColor } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -52,6 +52,26 @@ export async function DELETE(request: NextRequest) {
     }
 
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+  } catch {
+    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { tagId, color } = body;
+
+    if (typeof tagId !== 'string' || !tagId) {
+      return NextResponse.json({ error: 'tagId is required' }, { status: 400 });
+    }
+
+    if (color !== null && (typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color))) {
+      return NextResponse.json({ error: 'color must be a #rrggbb hex string or null' }, { status: 400 });
+    }
+
+    updateTagColor(tagId, color);
+    return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: 'Request failed' }, { status: 500 });
   }

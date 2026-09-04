@@ -22,6 +22,7 @@ export function AudioPlayerShell({
   autoplay,
   nextTitle,
   onAddToCollection,
+  onCreateCollection,
   onClose,
   onNext,
   onPrev,
@@ -44,6 +45,7 @@ export function AudioPlayerShell({
   autoplay: boolean;
   nextTitle?: string | null;
   onAddToCollection: (collectionId: string) => Promise<void>;
+  onCreateCollection?: () => void;
   onClose: () => void;
   onNext: () => void;
   onPrev: () => void;
@@ -145,6 +147,7 @@ export function AudioPlayerShell({
           <AudioPlayerCollectionMenu
             collections={collections}
             onAddToCollection={onAddToCollection}
+            onCreateCollection={onCreateCollection}
           />
           <AudioPlayerVolumeControl
             isMuted={isMuted}

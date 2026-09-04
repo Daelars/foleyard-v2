@@ -2222,6 +2222,7 @@ function HomeContent() {
         onToggleFavorite={handleToggleFavorite}
         collections={collections}
         onAddToCollection={handleAddToCollection}
+        onCreateCollection={() => setShowSettings(true)}
       />
 
       <CommandPalette

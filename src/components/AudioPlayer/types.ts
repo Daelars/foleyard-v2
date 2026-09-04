@@ -22,6 +22,7 @@ export interface AudioPlayerProps {
   nextTitle?: string | null;
   collections: { id: string; name: string; fileCount?: number; isSmart?: boolean }[];
   onAddToCollection: (collectionId: string) => Promise<void>;
+  onCreateCollection?: () => void;
 }
 
 export interface AudioPlayerRef {

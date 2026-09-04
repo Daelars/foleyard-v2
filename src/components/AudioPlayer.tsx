@@ -26,6 +26,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       onToggleFavorite,
       collections,
       onAddToCollection,
+      onCreateCollection,
     },
     ref,
   ) {
@@ -49,6 +50,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         onToggleFavorite={onToggleFavorite}
         collections={collections}
         onAddToCollection={onAddToCollection}
+        onCreateCollection={onCreateCollection}
       />
     );
   },
@@ -74,6 +76,7 @@ const AudioPlayerContent = forwardRef<
       onToggleFavorite,
       collections,
       onAddToCollection,
+      onCreateCollection,
     },
     ref,
   ) {
@@ -94,6 +97,7 @@ const AudioPlayerContent = forwardRef<
         autoplay={autoplay}
         nextTitle={nextTitle}
         onAddToCollection={onAddToCollection}
+        onCreateCollection={onCreateCollection}
         onClose={onClose}
         onNext={onNext}
         onPrev={onPrev}

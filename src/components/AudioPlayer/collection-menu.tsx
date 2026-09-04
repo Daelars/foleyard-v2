@@ -1,6 +1,6 @@
 "use client";
 
-import { Filter, FolderPlus } from "lucide-react";
+import { Filter, FolderPlus, ListPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,9 +16,11 @@ import {
 export function AudioPlayerCollectionMenu({
   collections,
   onAddToCollection,
+  onCreateCollection,
 }: {
   collections: { id: string; name: string; fileCount?: number; isSmart?: boolean }[];
   onAddToCollection: (collectionId: string) => Promise<void>;
+  onCreateCollection?: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -45,9 +47,9 @@ export function AudioPlayerCollectionMenu({
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {collections.length === 0 ? (
-            <DropdownMenuItem disabled className="text-zinc-500">
-              No collections found
-            </DropdownMenuItem>
+            <p className="px-2.5 py-4 text-center text-xs text-zinc-500">
+              No collections yet.
+            </p>
           ) : (
             collections.map((collection) => (
               <DropdownMenuItem
@@ -70,6 +72,18 @@ export function AudioPlayerCollectionMenu({
               </DropdownMenuItem>
             ))
           )}
+          {onCreateCollection ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={onCreateCollection}
+                className="text-popover-foreground"
+              >
+                <ListPlus className="mr-2 size-3.5 shrink-0 text-zinc-500" />
+                New collection…
+              </DropdownMenuItem>
+            </>
+          ) : null}
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>

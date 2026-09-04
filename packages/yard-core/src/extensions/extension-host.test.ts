@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { YardExtensionHost } from "./extension-host";
 import { YardExtensionRegistry } from "./extension-registry";
-import { createYardUiIntent } from "./extension-ui-intent";
+import { createYardUiIntent } from "./vocabulary";
 
 function createRegistry(
   handler: Parameters<YardExtensionRegistry["register"]>[0]["registerCommands"] =

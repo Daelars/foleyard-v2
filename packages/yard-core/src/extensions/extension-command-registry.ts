@@ -1,6 +1,6 @@
 import { YardCoreError } from "../errors/yard-core-error";
 
-import type { RegisteredYardCommand } from "./extension-command";
+import type { RegisteredYardCommand } from "./vocabulary";
 
 function assertNonEmptyCommandId(commandId: string) {
   if (!commandId.trim()) {

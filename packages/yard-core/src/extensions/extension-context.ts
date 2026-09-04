@@ -8,7 +8,7 @@ import {
   createPermissionChecker,
   type PermissionChecker,
   type YardPermission,
-} from "./extension-permissions";
+} from "./vocabulary";
 import type { YardCommandRegistry } from "./extension-command-registry";
 
 export type YardExtensionSettings = {

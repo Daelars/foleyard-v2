@@ -249,7 +249,6 @@ function HomeContent() {
 
   const [renameHammerOpen, setRenameHammerOpen] = useState(false);
   const [showSaveSearch, setShowSaveSearch] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
   const [renamingCollection, setRenamingCollection] = useState<{ id: string; name: string } | null>(null);
 
   const loadSoundShelfCount = useCallback(async () => {
@@ -1057,13 +1056,8 @@ function HomeContent() {
   }, [collections, selectedCollection]);
 
   const handleDeleteCollection = useCallback(async (collectionId: string) => {
-    const collection = collections.find((c) => c.id === collectionId);
-    if (collection?.isSmart) {
-      setConfirmDelete({ id: collectionId, name: collection.name });
-      return;
-    }
     await executeDeleteCollection(collectionId);
-  }, [collections, executeDeleteCollection]);
+  }, [executeDeleteCollection]);
 
   const handleRemoveRoot = useCallback(async (path: string) => {
     const previousSettings = settings;
@@ -2442,30 +2436,6 @@ function HomeContent() {
               </Button>
             </div>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={confirmDelete !== null} onOpenChange={(open) => { if (!open) setConfirmDelete(null); }}>
-        <DialogContent className="max-w-sm rounded-2xl border border-white/10 bg-shell/95 p-6 backdrop-blur-2xl">
-          <DialogTitle className="text-lg font-extrabold tracking-tight text-zinc-50">Delete Smart Collection</DialogTitle>
-          <p className="mt-2 text-sm text-zinc-400">
-            Delete smart collection &ldquo;{confirmDelete?.name}&rdquo;? This cannot be undone.
-          </p>
-          <div className="mt-6 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setConfirmDelete(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (confirmDelete) executeDeleteCollection(confirmDelete.id);
-                setConfirmDelete(null);
-              }}
-            >
-              <Trash2 className="mr-2 size-4" />
-              Delete
-            </Button>
-          </div>
         </DialogContent>
       </Dialog>
 

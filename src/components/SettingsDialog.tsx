@@ -39,16 +39,6 @@ import {
   Dialog,
   DialogContent as BaseDialogContent,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -719,15 +709,37 @@ function SettingsDialogBody({
                           <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-200">
                             {root}
                           </span>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-zinc-500 hover:bg-destructive/15 hover:text-destructive"
-                            onClick={() => setConfirmRemoveRoot(root)}
-                            aria-label={`Remove library folder ${root}`}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
+                          {confirmRemoveRoot === root ? (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 shrink-0 rounded-lg bg-destructive/15 px-3 text-xs font-semibold text-destructive transition-all hover:bg-destructive/25 active:scale-95"
+                                onClick={() => void handleConfirmRemoveRoot()}
+                              >
+                                Sure?
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="shrink-0 text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+                                onClick={() => setConfirmRemoveRoot(null)}
+                                aria-label="Cancel remove folder"
+                              >
+                                <X className="size-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-zinc-500 hover:bg-destructive/15 hover:text-destructive"
+                              onClick={() => setConfirmRemoveRoot(root)}
+                              aria-label={`Remove library folder ${root}`}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          )}
                         </div>
                       ))
                     )}
@@ -1435,38 +1447,6 @@ function SettingsDialogBody({
         </ScrollArea>
       </main>
     </Tabs>
-
-    <AlertDialog
-      open={confirmRemoveRoot !== null}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) setConfirmRemoveRoot(null);
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Remove library folder?</AlertDialogTitle>
-          <AlertDialogDescription>
-            {confirmRemoveRoot ? (
-              <>
-                <span className="font-mono text-xs text-zinc-300">{confirmRemoveRoot}</span>
-                <br />
-                This folder will no longer be scanned or indexed. Your files on
-                disk are not deleted.
-              </>
-            ) : null}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive/15 text-destructive hover:bg-destructive/25"
-            onClick={() => void handleConfirmRemoveRoot()}
-          >
-            Remove folder
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
     </>
   );
 }

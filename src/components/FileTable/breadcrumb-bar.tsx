@@ -7,13 +7,13 @@ import { cn } from "@/lib/utils";
 
 export function FileTableBreadcrumbBar({
   currentDirectory,
-  currentPlaylistName,
+  currentCollectionName,
   onBack,
   onNavigate,
   onNavigateLibrary,
 }: {
   currentDirectory: string | null;
-  currentPlaylistName?: string | null;
+  currentCollectionName?: string | null;
   onBack: () => void;
   onNavigate: (dir: string | null) => void;
   onNavigateLibrary: () => void;
@@ -51,12 +51,12 @@ export function FileTableBreadcrumbBar({
               </span>
             ))
           : null}
-        {currentPlaylistName ? (
+        {currentCollectionName ? (
           <>
             <span className="opacity-40">/</span>
             <span className="flex max-w-[220px] items-center gap-1 truncate font-bold text-zinc-100">
               <ListMusic className="size-3" />
-              {currentPlaylistName}
+              {currentCollectionName}
             </span>
           </>
         ) : null}

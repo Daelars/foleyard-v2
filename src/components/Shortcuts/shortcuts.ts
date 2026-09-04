@@ -17,6 +17,80 @@ export const DEFAULT_SHORTCUTS: ShortcutBindings = {
   "open-settings": ",",
 };
 
+export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
+  "toggle-playback": "Play / pause",
+  "focus-search": "Focus search",
+  "toggle-favorite": "Save / unsave current",
+  "move-next": "Next sound",
+  "move-prev": "Previous sound",
+  "open-settings": "Open settings",
+};
+
+export type RemoveDefault = "library" | "disk";
+
+export const SHORTCUTS_STORAGE_KEY = "foleyard-shortcuts";
+export const REMOVE_DEFAULT_STORAGE_KEY = "foleyard-remove-default";
+
+export function normalizeRemoveDefault(value: unknown): RemoveDefault {
+  return value === "disk" ? "disk" : "library";
+}
+
+export function loadShortcutBindings(): ShortcutBindings {
+  if (typeof window === "undefined") {
+    return { ...DEFAULT_SHORTCUTS };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(SHORTCUTS_STORAGE_KEY);
+    if (!raw) {
+      return { ...DEFAULT_SHORTCUTS };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<ShortcutBindings>;
+    return mergeShortcutBindings(parsed);
+  } catch {
+    return { ...DEFAULT_SHORTCUTS };
+  }
+}
+
+export function persistShortcutBindings(bindings: ShortcutBindings): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(SHORTCUTS_STORAGE_KEY, JSON.stringify(bindings));
+  } catch {
+    // Client prefs are best-effort; the live map keeps working.
+  }
+}
+
+export function loadRemoveDefault(): RemoveDefault {
+  if (typeof window === "undefined") {
+    return "library";
+  }
+
+  try {
+    return normalizeRemoveDefault(
+      window.localStorage.getItem(REMOVE_DEFAULT_STORAGE_KEY),
+    );
+  } catch {
+    return "library";
+  }
+}
+
+export function persistRemoveDefault(value: RemoveDefault): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(REMOVE_DEFAULT_STORAGE_KEY, value);
+  } catch {
+    // Client prefs are best-effort; the session default keeps working.
+  }
+}
+
 export function mergeShortcutBindings(
   overrides: Partial<ShortcutBindings>,
 ): ShortcutBindings {

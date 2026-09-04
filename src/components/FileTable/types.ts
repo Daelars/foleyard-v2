@@ -25,7 +25,7 @@ export interface FileTableProps {
   files: FileTableFileRecord[];
   directories: string[];
   currentDirectory: string | null;
-  currentPlaylistName?: string | null;
+  currentCollectionName?: string | null;
   onNavigate: (dir: string | null) => void;
   onNavigateLibrary?: () => void;
   selectedFileId: string | null;

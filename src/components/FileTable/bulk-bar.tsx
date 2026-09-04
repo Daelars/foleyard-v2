@@ -25,8 +25,7 @@ export function SelectionBulkBar({
   onAddToQueue,
   onAddToShelf,
   onTag,
-  onRemoveFromLibrary,
-  onDeleteFromDisk,
+  onRemove,
   onClear,
 }: {
   count: number;
@@ -36,8 +35,7 @@ export function SelectionBulkBar({
   onAddToQueue: () => void;
   onAddToShelf: () => void;
   onTag: (tagId: string) => void;
-  onRemoveFromLibrary: () => void;
-  onDeleteFromDisk: () => void;
+  onRemove: () => void;
   onClear: () => void;
 }) {
   return (
@@ -114,20 +112,10 @@ export function SelectionBulkBar({
         variant="outline"
         size="xs"
         className="gap-1.5 hover:border-destructive/40 hover:text-destructive"
-        onClick={onRemoveFromLibrary}
+        onClick={onRemove}
       >
         <Trash2 className="size-3.5" />
-        Remove from library
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="xs"
-        className="gap-1.5 hover:border-destructive/40 hover:text-destructive"
-        onClick={onDeleteFromDisk}
-      >
-        <Trash2 className="size-3.5" />
-        Delete from disk
+        Remove
       </Button>
       <Button
         type="button"

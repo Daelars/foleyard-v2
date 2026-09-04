@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 
 export function FileTableEmptyState({
   currentDirectory,
-  currentPlaylistName,
+  currentCollectionName,
   onBack,
 }: {
   currentDirectory: string | null;
-  currentPlaylistName?: string | null;
+  currentCollectionName?: string | null;
   onBack: () => void;
 }) {
   return (
@@ -19,7 +19,7 @@ export function FileTableEmptyState({
         <Play className="size-8 opacity-20" />
       </div>
       <h3 className="text-lg font-semibold text-zinc-300">No sounds found</h3>
-      {(currentDirectory || currentPlaylistName) && (
+      {(currentDirectory || currentCollectionName) && (
         <Button
           variant="outline"
           size="sm"

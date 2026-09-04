@@ -16,7 +16,7 @@ export const FileTable = memo(function FileTable({
   files,
   directories,
   currentDirectory,
-  currentPlaylistName,
+  currentCollectionName,
   onNavigate,
   onNavigateLibrary,
   selectedFileId,
@@ -111,7 +111,7 @@ export const FileTable = memo(function FileTable({
     return (
       <FileTableEmptyState
         currentDirectory={currentDirectory}
-        currentPlaylistName={currentPlaylistName}
+        currentCollectionName={currentCollectionName}
         onBack={handleBack}
       />
     );
@@ -119,10 +119,10 @@ export const FileTable = memo(function FileTable({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      {(currentDirectory || currentPlaylistName) && !searchQuery && (
+      {(currentDirectory || currentCollectionName) && !searchQuery && (
         <FileTableBreadcrumbBar
           currentDirectory={currentDirectory}
-          currentPlaylistName={currentPlaylistName}
+          currentCollectionName={currentCollectionName}
           onBack={handleBack}
           onNavigate={onNavigate}
           onNavigateLibrary={handleNavigateLibrary}

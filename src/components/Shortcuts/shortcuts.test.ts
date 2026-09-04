@@ -4,8 +4,11 @@ import {
   DEFAULT_SHORTCUTS,
   findBindingConflicts,
   isTypingTarget,
+  loadRemoveDefault,
+  loadShortcutBindings,
   matchShortcutKey,
   mergeShortcutBindings,
+  normalizeRemoveDefault,
   shouldSkipSpace,
 } from "./shortcuts";
 
@@ -63,5 +66,14 @@ describe("shortcut map", () => {
     expect(matchShortcutKey({ code: "Space", key: " " }, "Space")).toBe(true);
     expect(matchShortcutKey({ code: "KeyF", key: "F" }, "f")).toBe(true);
     expect(matchShortcutKey({ code: "KeyF", key: "F" }, "j")).toBe(false);
+  });
+
+  it("falls back to safe client defaults without stored prefs", () => {
+    expect(normalizeRemoveDefault("disk")).toBe("disk");
+    expect(normalizeRemoveDefault("library")).toBe("library");
+    expect(normalizeRemoveDefault("nope")).toBe("library");
+    expect(normalizeRemoveDefault(null)).toBe("library");
+    expect(loadRemoveDefault()).toBe("library");
+    expect(loadShortcutBindings()).toEqual(DEFAULT_SHORTCUTS);
   });
 });

@@ -14,8 +14,15 @@ import { CommandPalette } from "@/components/CommandPalette/CommandPalette";
 import {
   DEFAULT_SHORTCUTS,
   isTypingTarget,
+  loadRemoveDefault,
+  loadShortcutBindings,
   matchShortcutKey,
+  persistRemoveDefault,
+  persistShortcutBindings,
   shouldSkipSpace,
+  type RemoveDefault,
+  type ShortcutAction,
+  type ShortcutBindings,
 } from "@/components/Shortcuts/shortcuts";
 import { SelectionBulkBar } from "@/components/FileTable/bulk-bar";
 import {
@@ -145,6 +152,10 @@ function HomeContent() {
   const [paletteIndex, setPaletteIndex] = useState(0);
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [shortcutBindings, setShortcutBindings] =
+    useState<ShortcutBindings>(loadShortcutBindings);
+  const [removeDefault, setRemoveDefault] =
+    useState<RemoveDefault>(loadRemoveDefault);
   const [currentView, setCurrentView] = useState<
     "all" | "favorites" | "extensions" | "collection" | "directory" | "shelf"
   >("all");
@@ -635,9 +646,30 @@ function HomeContent() {
   }, []);
 
   const [confirmBulkRemove, setConfirmBulkRemove] = useState<{
-    permanent: boolean;
+    choice: RemoveDefault;
     ids: string[];
   } | null>(null);
+
+  const handleRebindShortcut = useCallback(
+    (action: ShortcutAction, key: string) => {
+      setShortcutBindings((prev) => {
+        const next = { ...prev, [action]: key };
+        persistShortcutBindings(next);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleResetShortcuts = useCallback(() => {
+    setShortcutBindings({ ...DEFAULT_SHORTCUTS });
+    persistShortcutBindings({ ...DEFAULT_SHORTCUTS });
+  }, []);
+
+  const handleRemoveDefaultChange = useCallback((value: RemoveDefault) => {
+    setRemoveDefault(value);
+    persistRemoveDefault(value);
+  }, []);
 
   const selectedIdsRef = useRef(selectedIds);
   useEffect(() => {
@@ -706,7 +738,7 @@ function HomeContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileIds: target.ids,
-          permanent: target.permanent,
+          permanent: target.choice === "disk",
         }),
       });
       if (!res.ok) {
@@ -733,7 +765,7 @@ function HomeContent() {
 
       if (data.failed && data.failed.length > 0) {
         toast.error(`Could not remove ${data.failed.length} file(s)`);
-      } else if (target.permanent) {
+      } else if (target.choice === "disk") {
         toast.success(`Deleted ${removedIds.size} file(s) from disk`);
       } else {
         toast.success(`Removed ${removedIds.size} file(s) from library`);
@@ -809,7 +841,7 @@ function HomeContent() {
       });
       if (!res.ok) throw new Error();
       void loadInitialData();
-      toast.success("Converted to playlist");
+      toast.success("Converted to collection");
     } catch {
       toast.error("Failed to convert collection");
     }
@@ -920,9 +952,9 @@ function HomeContent() {
       }
 
       void loadInitialData();
-      toast.success("Playlist created");
+      toast.success("Collection created");
     } catch {
-      toast.error("Failed to create playlist");
+      toast.error("Failed to create collection");
     }
   }, [loadInitialData]);
 
@@ -950,7 +982,7 @@ function HomeContent() {
         throw new Error();
       }
 
-      toast.success("Playlist deleted");
+      toast.success("Collection deleted");
     } catch {
       if (deletedCollection) {
         setCollections((current) =>
@@ -965,7 +997,7 @@ function HomeContent() {
         setSelectedCollection(collectionId);
         setCurrentView("collection");
       }
-      toast.error("Failed to delete playlist");
+      toast.error("Failed to delete collection");
     }
   }, [collections, selectedCollection]);
 
@@ -1171,7 +1203,7 @@ function HomeContent() {
       return;
     }
 
-    const playlist = collections.find(
+    const collection = collections.find(
       (collection) => collection.id === collectionId,
     );
 
@@ -1189,9 +1221,9 @@ function HomeContent() {
       }
 
       await loadInitialData();
-      toast.success(`Added to ${playlist?.name ?? "playlist"}`);
+      toast.success(`Added to ${collection?.name ?? "collection"}`);
     } catch {
-      toast.error("Failed to add to playlist");
+      toast.error("Failed to add to collection");
     }
   }, [selectedFile, collections, loadInitialData]);
 
@@ -1294,7 +1326,7 @@ function HomeContent() {
     }, [loadFiles, loadInitialData]),
   );
 
-  const selectedPlaylistName = useMemo(() =>
+  const selectedCollectionName = useMemo(() =>
     currentView === "collection"
       ? (collections.find((c) => c.id === selectedCollection)?.name ?? null)
       : null,
@@ -1325,7 +1357,7 @@ function HomeContent() {
         : currentView === "shelf"
           ? "Shelf"
           : currentView === "collection"
-            ? (selectedPlaylistName ?? "Library")
+            ? (selectedCollectionName ?? "Library")
             : currentView === "directory"
               ? (selectedDirectory?.split(/[\\/]/).pop() ?? "Library")
               : "Library";
@@ -1812,7 +1844,7 @@ function HomeContent() {
         return;
       }
 
-      if (matchShortcutKey(event, DEFAULT_SHORTCUTS["toggle-playback"])) {
+      if (matchShortcutKey(event, shortcutBindings["toggle-playback"])) {
         if (shouldSkipSpace(event.target)) {
           return;
         }
@@ -1826,23 +1858,23 @@ function HomeContent() {
         return;
       }
 
-      if (matchShortcutKey(event, DEFAULT_SHORTCUTS["focus-search"])) {
+      if (matchShortcutKey(event, shortcutBindings["focus-search"])) {
         event.preventDefault();
         searchInputRef.current?.focus();
       } else if (
-        matchShortcutKey(event, DEFAULT_SHORTCUTS["toggle-favorite"])
+        matchShortcutKey(event, shortcutBindings["toggle-favorite"])
       ) {
         const current = selectedFileRef.current;
         if (current) {
           void handleToggleFavorite(current.id);
         }
-      } else if (matchShortcutKey(event, DEFAULT_SHORTCUTS["move-next"])) {
+      } else if (matchShortcutKey(event, shortcutBindings["move-next"])) {
         event.preventDefault();
         handleMoveSelection(1);
-      } else if (matchShortcutKey(event, DEFAULT_SHORTCUTS["move-prev"])) {
+      } else if (matchShortcutKey(event, shortcutBindings["move-prev"])) {
         event.preventDefault();
         handleMoveSelection(-1);
-      } else if (matchShortcutKey(event, DEFAULT_SHORTCUTS["open-settings"])) {
+      } else if (matchShortcutKey(event, shortcutBindings["open-settings"])) {
         event.preventDefault();
         setShowSettings(true);
       }
@@ -1850,7 +1882,7 @@ function HomeContent() {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [paletteOpen, handleMoveSelection, handleToggleFavorite]);
+  }, [paletteOpen, shortcutBindings, handleMoveSelection, handleToggleFavorite]);
 
   const handleCloseExtensionDetails = useCallback((open: boolean) => {
     if (!open) setSelectedExtension(null);
@@ -2154,15 +2186,9 @@ function HomeContent() {
                     onAddToQueue={handleBulkAddToQueue}
                     onAddToShelf={() => void handleBulkAddToShelf()}
                     onTag={(tagId) => void handleBulkTag(tagId)}
-                    onRemoveFromLibrary={() =>
+                    onRemove={() =>
                       setConfirmBulkRemove({
-                        permanent: false,
-                        ids: selectedIdsRef.current,
-                      })
-                    }
-                    onDeleteFromDisk={() =>
-                      setConfirmBulkRemove({
-                        permanent: true,
+                        choice: removeDefault,
                         ids: selectedIdsRef.current,
                       })
                     }
@@ -2174,7 +2200,7 @@ function HomeContent() {
                 files={files}
                 directories={directories}
                 currentDirectory={selectedDirectory}
-                currentPlaylistName={selectedPlaylistName}
+                currentCollectionName={selectedCollectionName}
                 onNavigate={navigateDirectory}
                 onNavigateLibrary={showLibrary}
                 selectedFileId={selectedFile?.id ?? null}
@@ -2251,6 +2277,11 @@ function HomeContent() {
         onUpdateExtensionSetting={handleUpdateExtensionSetting}
         zoom={zoom}
         onUpdateZoom={handleUpdateZoom}
+        shortcutBindings={shortcutBindings}
+        onRebindShortcut={handleRebindShortcut}
+        onResetShortcuts={handleResetShortcuts}
+        removeDefault={removeDefault}
+        onRemoveDefaultChange={handleRemoveDefaultChange}
       />
 
       <OnboardingDialog
@@ -2431,23 +2462,62 @@ function HomeContent() {
       <Dialog open={confirmBulkRemove !== null} onOpenChange={(open) => { if (!open) setConfirmBulkRemove(null); }}>
         <DialogContent className="max-w-sm rounded-2xl border border-white/10 bg-shell/95 p-6 backdrop-blur-2xl">
           <DialogTitle className="text-lg font-extrabold tracking-tight text-zinc-50">
-            {confirmBulkRemove?.permanent ? "Delete from disk?" : "Remove from library?"}
+            Remove {confirmBulkRemove?.ids.length ?? 0} sound(s)?
           </DialogTitle>
-          <p className="mt-2 text-sm text-zinc-400">
-            {confirmBulkRemove?.permanent
-              ? `${confirmBulkRemove?.ids.length ?? 0} sound(s) will be permanently deleted from disk. This cannot be undone.`
-              : `${confirmBulkRemove?.ids.length ?? 0} sound(s) will no longer appear in Foleyard. Your files on disk are untouched.`}
-          </p>
+          <div
+            role="radiogroup"
+            aria-label="Remove behavior"
+            className="mt-4 space-y-2"
+          >
+            <button
+              type="button"
+              role="radio"
+              aria-checked={confirmBulkRemove?.choice === "library"}
+              onClick={() =>
+                setConfirmBulkRemove((prev) =>
+                  prev ? { ...prev, choice: "library" } : prev,
+                )
+              }
+              className={`w-full rounded-xl border p-3 text-left transition-colors ${confirmBulkRemove?.choice === "library" ? "border-accent-fill/60 bg-accent-fill/10" : "border-white/10 bg-white/[0.02] hover:border-white/20"}`}
+            >
+              <span className="text-sm font-semibold text-zinc-100">
+                Remove from library
+              </span>
+              <span className="mt-0.5 block text-xs text-zinc-500">
+                Sounds no longer appear in Foleyard. Your files on disk are
+                untouched.
+              </span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={confirmBulkRemove?.choice === "disk"}
+              onClick={() =>
+                setConfirmBulkRemove((prev) =>
+                  prev ? { ...prev, choice: "disk" } : prev,
+                )
+              }
+              className={`w-full rounded-xl border p-3 text-left transition-colors ${confirmBulkRemove?.choice === "disk" ? "border-destructive/60 bg-destructive/10" : "border-white/10 bg-white/[0.02] hover:border-white/20"}`}
+            >
+              <span className="text-sm font-semibold text-zinc-100">
+                Delete from disk
+              </span>
+              <span className="mt-0.5 block text-xs text-zinc-500">
+                Permanently delete {confirmBulkRemove?.ids.length ?? 0} sound(s)
+                from disk. This cannot be undone.
+              </span>
+            </button>
+          </div>
           <div className="mt-6 flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setConfirmBulkRemove(null)}>
               Cancel
             </Button>
             <Button
-              variant={confirmBulkRemove?.permanent ? "destructive" : "default"}
+              variant={confirmBulkRemove?.choice === "disk" ? "destructive" : "default"}
               onClick={() => void executeBulkRemove()}
             >
               <Trash2 className="mr-2 size-4" />
-              {confirmBulkRemove?.permanent ? "Delete files" : "Remove from library"}
+              {confirmBulkRemove?.choice === "disk" ? "Delete files" : "Remove from library"}
             </Button>
           </div>
         </DialogContent>

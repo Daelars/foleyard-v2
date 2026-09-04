@@ -29,7 +29,7 @@ export function AudioPlayerCollectionMenu({
             className="h-9 rounded-full border border-white/10 bg-white/5 px-3.5 text-sm font-medium text-zinc-200 hover:bg-white/[0.08] hover:text-zinc-100"
           >
             <FolderPlus className="mr-2.5 size-4" />
-            Add to Playlist
+            Add to Collection
           </Button>
         }
       />
@@ -39,12 +39,12 @@ export function AudioPlayerCollectionMenu({
       >
         <DropdownMenuGroup>
           <DropdownMenuLabel className="text-zinc-500">
-            Playlists
+            Collections
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {collections.length === 0 ? (
             <DropdownMenuItem disabled className="text-zinc-500">
-              No playlists found
+              No collections found
             </DropdownMenuItem>
           ) : (
             collections.map((collection) => (

@@ -425,8 +425,8 @@ function FeatherAllOver() {
   return (
     <div className="space-y-4">
       <style>{`.scrim-feather-all {
-        -webkit-mask-image: radial-gradient(120% 105% at 50% 45%, black 55%, transparent 100%);
-        mask-image: radial-gradient(120% 105% at 50% 45%, black 55%, transparent 100%);
+        -webkit-mask-image: radial-gradient(100% 100% at 50% 50%, black 38%, transparent 98%);
+        mask-image: radial-gradient(100% 100% at 50% 50%, black 38%, transparent 98%);
       }`}</style>
       <div className="flex items-center gap-3">
         <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-600">
@@ -441,7 +441,7 @@ function FeatherAllOver() {
             G1 · Full feather
           </p>
           <div className="overflow-hidden rounded-2xl border border-white/10" style={wash}>
-            <div className="scrim-feather-all m-3 rounded-2xl bg-black/40 p-2 backdrop-blur-sm">
+            <div className="scrim-feather-all m-3 rounded-2xl bg-black/60 p-2 backdrop-blur-md">
               {header}
               {files}
             </div>

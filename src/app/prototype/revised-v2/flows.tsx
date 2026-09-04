@@ -372,6 +372,113 @@ export function OrganizeFlows() {
       >
         <TextLegibility />
       </VariantFrame>
+
+      <VariantFrame
+        id="W-E"
+        name="Scrim body ×3"
+        note="D1 pushed further: feathered, chips, atmosphere. One picker drives all three."
+      >
+        <ScrimVariants />
+      </VariantFrame>
+    </div>
+  );
+}
+
+function ScrimHeader({ color }: { color: string }) {
+  return (
+    <div className="flex items-center gap-3 p-4">
+      <span
+        className="flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold"
+        style={tileStyle(color)}
+      >
+        Ra
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-zinc-100">Rain beds</p>
+        <p className="mt-0.5 text-xs text-zinc-400">11 sounds · regular collection</p>
+      </div>
+      <span className="shrink-0 rounded-xl bg-accent-fill px-3.5 py-2 text-xs font-semibold text-white">
+        Open
+      </span>
+    </div>
+  );
+}
+
+function ScrimVariants() {
+  const [color, setColor] = useState("#7ab8ff");
+  const wash: React.CSSProperties = {
+    backgroundColor: `${color}0a`,
+    backgroundImage: `radial-gradient(circle at 12% 0%, ${color}38, transparent 75%)`,
+  };
+  const files = (textClass: string, iconClass: string) =>
+    DETAIL_FILES.map((name) => (
+      <div key={name} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs ${textClass}`}>
+        <ListMusic className={`size-3.5 shrink-0 ${iconClass}`} />
+        <span className="truncate">{name}</span>
+      </div>
+    ));
+
+  return (
+    <div className="space-y-4">
+      <style>{`.scrim-feather {
+        -webkit-mask-image: linear-gradient(to bottom, transparent, black 16px, black calc(100% - 16px), transparent);
+        mask-image: linear-gradient(to bottom, transparent, black 16px, black calc(100% - 16px), transparent);
+      }`}</style>
+      <div className="flex items-center gap-3">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-600">
+          Preview color
+        </span>
+        <Swatches value={color} onPick={setColor} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div>
+          <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            E1 · Feathered
+          </p>
+          <div className="overflow-hidden rounded-2xl border border-white/10" style={wash}>
+            <ScrimHeader color={color} />
+            <div className="scrim-feather mx-3 mb-3 rounded-xl bg-black/40 px-2 py-2 backdrop-blur-sm">
+              {files("text-zinc-100", "text-zinc-500")}
+            </div>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">Mask melts the scrim edges; frosted blur beneath.</p>
+        </div>
+
+        <div>
+          <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            E2 · Chips
+          </p>
+          <div className="overflow-hidden rounded-2xl border border-white/10" style={wash}>
+            <ScrimHeader color={color} />
+            <div className="mx-3 mb-3 space-y-1">
+              {DETAIL_FILES.map((name) => (
+                <div
+                  key={name}
+                  className="flex items-center gap-2 rounded-lg bg-black/35 px-2 py-1.5 text-xs text-zinc-100 backdrop-blur-sm"
+                >
+                  <ListMusic className="size-3.5 shrink-0 text-zinc-500" />
+                  <span className="truncate">{name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">Scrim broken into pills; wash breathes between rows.</p>
+        </div>
+
+        <div>
+          <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            E3 · Atmosphere
+          </p>
+          <div className="overflow-hidden rounded-2xl border border-white/10" style={wash}>
+            <ScrimHeader color={color} />
+            <div className="bg-gradient-to-b from-transparent via-black/50 to-transparent px-5 pb-3 pt-1">
+              {files("text-zinc-100", "text-zinc-500")}
+            </div>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">No box at all — a band of darkness behind the list.</p>
+        </div>
+      </div>
     </div>
   );
 }

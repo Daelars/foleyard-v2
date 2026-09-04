@@ -19,8 +19,8 @@ export function AudioPlayerFavoriteButton({
       variant="ghost"
       size="icon"
       className={cn(
-        "size-8 rounded-full border border-border/40 bg-card/60 text-muted-foreground backdrop-blur-xl hover:bg-accent/50 hover:text-accent-foreground",
-        isFavorite && "text-primary",
+        "size-8 rounded-full border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/[0.08] hover:text-zinc-100",
+        isFavorite && "text-accent-fill hover:text-accent-fill",
       )}
       onClick={() => onToggleFavorite(fileId)}
       aria-label={isFavorite ? "Unlike file" : "Like file"}

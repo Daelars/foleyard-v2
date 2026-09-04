@@ -26,7 +26,7 @@ export function AudioPlayerCollectionMenu({
         render={
           <Button
             variant="ghost"
-            className="h-9 rounded-full border border-border/40 bg-card/60 px-3.5 text-sm font-medium text-card-foreground backdrop-blur-xl hover:bg-accent/50 hover:text-accent-foreground"
+            className="h-9 rounded-full border border-white/10 bg-white/5 px-3.5 text-sm font-medium text-zinc-200 hover:bg-white/[0.08] hover:text-zinc-100"
           >
             <FolderPlus className="mr-2.5 size-4" />
             Add to Playlist

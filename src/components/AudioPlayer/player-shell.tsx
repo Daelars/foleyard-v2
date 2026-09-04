@@ -54,14 +54,15 @@ export function AudioPlayerShell({
 }) {
   return (
     <div className="fixed inset-x-4 bottom-4 z-50 md:left-[17rem] md:right-6">
-      <div className="relative overflow-hidden rounded-2xl border border-border/40 bg-card/80 shadow-2xl backdrop-blur-2xl md:h-[108px]">
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-shell shadow-2xl md:h-[108px]">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent-fill/60 to-transparent" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_10%,transparent),transparent_34%)]" />
-        <div className="relative flex flex-col gap-3 px-4 py-3 text-card-foreground md:h-full md:flex-row md:items-center md:gap-4 md:px-5 md:py-3">
+        <div className="relative flex flex-col gap-3 px-4 py-3 text-zinc-100 md:h-full md:flex-row md:items-center md:gap-4 md:px-5 md:py-3">
           <div className="flex items-center gap-3 md:gap-4">
             <Button
               size="icon"
               onClick={onTogglePlayback}
-              className="h-16 w-16 shrink-0 rounded-full border border-border/40 bg-primary text-primary-foreground shadow-lg backdrop-blur-md hover:bg-primary/90 md:h-14 md:w-14"
+              className="h-16 w-16 shrink-0 rounded-full bg-accent-fill text-white shadow-glow-accent-strong hover:bg-accent-fill-hover md:h-14 md:w-14"
               aria-label={isPlaying ? "Pause audio" : "Play audio"}
             >
               {isPlaying ? (
@@ -72,7 +73,7 @@ export function AudioPlayerShell({
             </Button>
 
             <div className="min-w-0 md:hidden">
-              <div className="truncate text-base font-semibold text-card-foreground">
+              <div className="truncate text-base font-semibold text-zinc-50">
                 {title || file.filename}
               </div>
             </div>
@@ -81,7 +82,7 @@ export function AudioPlayerShell({
           <div className="min-w-0 flex-1 md:flex md:h-full md:flex-col md:justify-center">
             <div className="mb-2 hidden items-center justify-between gap-3 md:flex">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="min-w-0 truncate text-base font-semibold leading-none text-card-foreground">
+                <div className="min-w-0 truncate text-base font-semibold leading-none text-zinc-50">
                   {title || file.filename}
                 </div>
                 {file.tags.length > 0 ? (
@@ -89,7 +90,7 @@ export function AudioPlayerShell({
                     {file.tags.map((tag) => (
                       <span
                         key={tag.id}
-                        className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-normal text-primary ring-1 ring-primary/20"
+                        className="inline-flex items-center gap-1 rounded-full bg-accent-fill/15 px-1.5 py-0.5 font-mono text-[10px] font-normal text-accent-text ring-1 ring-accent-fill/20"
                       >
                         {tag.name}
                         <button
@@ -115,7 +116,7 @@ export function AudioPlayerShell({
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="size-8 shrink-0 rounded-full text-muted-foreground"
+                className="size-8 shrink-0 rounded-full text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
                 aria-label="Close player"
               >
                 <X className="size-3.5" />
@@ -124,7 +125,7 @@ export function AudioPlayerShell({
 
             <div className="rounded-2xl md:hidden">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="text-xs font-mono text-muted-foreground">
+                <div className="text-xs font-mono text-zinc-400">
                   {formatTime(currentTime)}
                 </div>
                 <Button
@@ -136,13 +137,13 @@ export function AudioPlayerShell({
                 >
                   <X className="size-4" />
                 </Button>
-                <div className="text-xs font-mono text-muted-foreground">
+                <div className="text-xs font-mono text-zinc-400">
                   {formatTime(effectiveDuration)}
                 </div>
               </div>
             </div>
 
-            <div className="rounded-xl border border-border/40 bg-muted/50 px-1 py-1 md:border-none md:bg-transparent md:px-0 md:py-0">
+            <div className="rounded-xl border border-white/10 bg-white/5 px-1 py-1 md:border-none md:bg-transparent md:px-0 md:py-0">
               <AudioScrubber
                 data={waveformData}
                 currentTime={currentTime}
@@ -154,12 +155,12 @@ export function AudioPlayerShell({
                 barRadius={999}
                 barHeight={3}
                 showHandle={false}
-                barColor="var(--primary)"
+                barColor="var(--accent-fill)"
                 className="w-full overflow-hidden"
               />
             </div>
 
-            <div className="mt-0.5 flex items-center justify-between text-[10px] font-mono text-muted-foreground md:hidden">
+            <div className="mt-0.5 flex items-center justify-between text-[10px] font-mono text-zinc-400 md:hidden">
               <span>{formatTime(currentTime)}</span>
               <span>{formatTime(effectiveDuration)}</span>
             </div>

@@ -1551,8 +1551,8 @@ function HomeContent() {
       />
 
       <Dialog open={showSaveSearch} onOpenChange={setShowSaveSearch}>
-        <DialogContent className="max-w-sm rounded-2xl border border-border/40 bg-card/95 p-6 backdrop-blur-2xl">
-          <DialogTitle className="text-lg font-semibold">Save Search</DialogTitle>
+        <DialogContent className="max-w-sm rounded-2xl border border-white/10 bg-shell/95 p-6 backdrop-blur-2xl">
+          <DialogTitle className="text-lg font-extrabold tracking-tight text-zinc-50">Save Search</DialogTitle>
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -1566,7 +1566,7 @@ function HomeContent() {
               name="name"
               placeholder="Collection name..."
               autoFocus
-              className="rounded-xl border-border/40 bg-muted/50"
+              className="rounded-xl border-white/10 bg-black/30"
             />
             <div className="flex justify-end gap-2">
               <Button
@@ -1586,9 +1586,9 @@ function HomeContent() {
       </Dialog>
 
       <Dialog open={confirmDelete !== null} onOpenChange={(open) => { if (!open) setConfirmDelete(null); }}>
-        <DialogContent className="max-w-sm rounded-2xl border border-border/40 bg-card/95 p-6 backdrop-blur-2xl">
-          <DialogTitle className="text-lg font-semibold">Delete Smart Collection</DialogTitle>
-          <p className="mt-2 text-sm text-muted-foreground">
+        <DialogContent className="max-w-sm rounded-2xl border border-white/10 bg-shell/95 p-6 backdrop-blur-2xl">
+          <DialogTitle className="text-lg font-extrabold tracking-tight text-zinc-50">Delete Smart Collection</DialogTitle>
+          <p className="mt-2 text-sm text-zinc-400">
             Delete smart collection &ldquo;{confirmDelete?.name}&rdquo;? This cannot be undone.
           </p>
           <div className="mt-6 flex justify-end gap-2">
@@ -1610,8 +1610,8 @@ function HomeContent() {
       </Dialog>
 
       <Dialog open={renamingCollection !== null} onOpenChange={(open) => { if (!open) setRenamingCollection(null); }}>
-        <DialogContent className="max-w-sm rounded-2xl border border-border/40 bg-card/95 p-6 backdrop-blur-2xl">
-          <DialogTitle className="text-lg font-semibold">Rename Collection</DialogTitle>
+        <DialogContent className="max-w-sm rounded-2xl border border-white/10 bg-shell/95 p-6 backdrop-blur-2xl">
+          <DialogTitle className="text-lg font-extrabold tracking-tight text-zinc-50">Rename Collection</DialogTitle>
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -1630,7 +1630,7 @@ function HomeContent() {
               defaultValue={renamingCollection?.name ?? ""}
               placeholder="Collection name..."
               autoFocus
-              className="rounded-xl border-border/40 bg-muted/50"
+              className="rounded-xl border-white/10 bg-black/30"
             />
             <div className="flex justify-end gap-2">
               <Button

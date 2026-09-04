@@ -372,7 +372,7 @@ const FIELD_TAGS: Record<string, string[]> = {
 
 const FIELD_FILES = ["Metal Door Slam", "Glass Break Small", "Gravel Footsteps"];
 
-function AltColorFields() {
+export function AltColorFields() {
   const [expanded, setExpanded] = useState<string | null>("c2");
   const [colors, setColors] = useState<Record<string, string>>({});
   const [activeTag, setActiveTag] = useState<string | null>(null);

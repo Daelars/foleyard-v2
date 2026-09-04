@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Heart, Pause, Play } from "lucide-react";
 
 import { DEMO_SOUNDS, MiniBars } from "../showcase/data";
-import { AltRailDetail } from "../revised-v2/flows-alt";
+import { AltColorFields } from "../revised-v2/flows-alt";
 
 export type MockFile = {
   id: string;
@@ -187,10 +187,10 @@ export function OrganizeView() {
     <div>
       <h1 className="text-5xl font-extrabold tracking-tighter text-zinc-50">Organize</h1>
       <p className="mt-1.5 text-sm font-medium text-zinc-400">
-        Collections and tags in one place. Pick anything to inspect it.
+        Collections and tags in one place. Open a field to inspect it.
       </p>
       <div className="mt-5">
-        <AltRailDetail />
+        <AltColorFields />
       </div>
     </div>
   );

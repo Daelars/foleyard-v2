@@ -391,6 +391,7 @@ export function AltColorFields() {
   const [tagColor, setTagColor] = useState("#7ab8ff");
   const [tagDraft, setTagDraft] = useState("");
   const [confirmTagDelete, setConfirmTagDelete] = useState(false);
+  const [editingTag, setEditingTag] = useState<string | null>(null);
 
   const colorFor = (id: string, fallback: string) => colors[id] ?? fallback;
   const tagColorFor = (id: string, fallback: string) => tagColors[id] ?? fallback;
@@ -436,6 +437,7 @@ export function AltColorFields() {
     setTagColor("#7ab8ff");
     setShowTagComposer(false);
     setActiveTag(id);
+    setEditingTag(id);
     setTagDraft(name);
     setConfirmTagDelete(false);
   };
@@ -443,29 +445,36 @@ export function AltColorFields() {
   const pickTag = (id: string | null) => {
     setActiveTag(id);
     setConfirmTagDelete(false);
-    if (id) {
-      const tag = tags.find((t) => t.id === id);
-      setTagDraft(tag?.name ?? "");
-    }
+  };
+
+  const openTagEditor = (id: string) => {
+    const tag = tags.find((t) => t.id === id);
+    setEditingTag(id);
+    setTagDraft(tag?.name ?? "");
+    setConfirmTagDelete(false);
   };
 
   const commitTagRename = () => {
     const name = tagDraft.trim().toLowerCase();
-    if (activeTag && name) {
-      setTags((prev) => prev.map((t) => (t.id === activeTag ? { ...t, name } : t)));
+    if (editingTag && name) {
+      setTags((prev) => prev.map((t) => (t.id === editingTag ? { ...t, name } : t)));
     }
   };
 
   const deleteTag = () => {
-    if (!activeTag) {
+    if (!editingTag) {
       return;
     }
-    setTags((prev) => prev.filter((t) => t.id !== activeTag));
-    setActiveTag(null);
+    const id = editingTag;
+    setTags((prev) => prev.filter((t) => t.id !== id));
+    if (activeTag === id) {
+      setActiveTag(null);
+    }
+    setEditingTag(null);
     setConfirmTagDelete(false);
   };
 
-  const activeTagRecord = activeTag ? (tags.find((t) => t.id === activeTag) ?? null) : null;
+  const editingTagRecord = editingTag ? (tags.find((t) => t.id === editingTag) ?? null) : null;
 
   return (
     <div>
@@ -487,6 +496,16 @@ export function AltColorFields() {
         >
           <Plus className="size-3" />
         </button>
+        {activeTag ? (
+          <button
+            type="button"
+            onClick={() => openTagEditor(activeTag)}
+            aria-label="Edit active tag"
+            className="flex h-5 items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2 font-mono text-[10px] uppercase tracking-widest text-zinc-400 transition-all hover:border-accent-fill/50 hover:text-accent-text active:scale-95"
+          >
+            <Pencil className="size-3" /> Edit
+          </button>
+        ) : null}
       </div>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {tags.map((tag) => {
@@ -551,12 +570,12 @@ export function AltColorFields() {
         </div>
       ) : null}
 
-      {activeTagRecord ? (
+      {editingTagRecord ? (
         <div className="field-rise mt-2 w-full max-w-2xl rounded-2xl border border-white/10 bg-white/[0.03] p-3">
           <div className="flex flex-wrap items-center gap-2">
             <span
               className="size-3 shrink-0 rounded-full"
-              style={{ backgroundColor: tagColorFor(activeTagRecord.id, activeTagRecord.color) }}
+              style={{ backgroundColor: tagColorFor(editingTagRecord.id, editingTagRecord.color) }}
             />
             <input
               value={tagDraft}
@@ -567,7 +586,7 @@ export function AltColorFields() {
                   (event.target as HTMLInputElement).blur();
                 }
                 if (event.key === "Escape") {
-                  setTagDraft(activeTagRecord.name);
+                  setTagDraft(editingTagRecord.name);
                   (event.target as HTMLInputElement).blur();
                 }
               }}
@@ -577,9 +596,9 @@ export function AltColorFields() {
               className="min-w-32 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 placeholder:font-normal placeholder:text-zinc-600 focus:border-accent-fill/60 focus:outline-none"
             />
             <Swatches
-              value={tagColorFor(activeTagRecord.id, activeTagRecord.color)}
+              value={tagColorFor(editingTagRecord.id, editingTagRecord.color)}
               onPick={(next) =>
-                setTagColors((prev) => ({ ...prev, [activeTagRecord.id]: next }))
+                setTagColors((prev) => ({ ...prev, [editingTagRecord.id]: next }))
               }
             />
             {confirmTagDelete ? (
@@ -601,18 +620,28 @@ export function AltColorFields() {
                 </button>
               </>
             ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmTagDelete(true)}
-                aria-label={`Delete tag ${activeTagRecord.name}`}
-                className="flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-600 transition-all hover:bg-destructive/10 hover:text-destructive active:scale-90"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setConfirmTagDelete(true)}
+                  aria-label={`Delete tag ${editingTagRecord.name}`}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-600 transition-all hover:bg-destructive/10 hover:text-destructive active:scale-90"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingTag(null)}
+                  aria-label="Close tag editor"
+                  className="flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-100"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </>
             )}
           </div>
           <p className="mt-2 text-[11px] text-zinc-600">
-            Editing “{activeTagRecord.name}” — rename, recolor, or delete it. Click its chip again to dismiss.
+            Editing “{editingTagRecord.name}” — the filter pill stays put either way.
           </p>
         </div>
       ) : null}

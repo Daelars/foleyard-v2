@@ -72,73 +72,75 @@ export function AudioPlayerShell({
   }, [file.format, nextTitle]);
 
   return (
-    <footer className="relative shrink-0 border-t border-white/10">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent-fill/60 to-transparent" />
-      <div className="flex w-full flex-col gap-2 px-4 py-2.5 md:flex-row md:items-center md:gap-3 md:px-5">
-        <div className="flex items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onPrev}
-            className="size-8 shrink-0 rounded-full text-zinc-400 hover:bg-white/10 hover:text-zinc-100"
-            aria-label="Previous in queue"
-          >
-            <SkipBack className="size-4" />
-          </Button>
-          <Button
-            size="icon"
-            onClick={onTogglePlayback}
-            className="size-10 shrink-0 rounded-full bg-accent-fill text-white shadow-glow-accent-strong hover:bg-accent-fill-hover"
-            aria-label={isPlaying ? "Pause audio" : "Play audio"}
-          >
-            {isPlaying ? (
-              <Pause className="size-4" />
-            ) : (
-              <Play className="size-4 pl-0.5" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onNext}
-            className="size-8 shrink-0 rounded-full text-zinc-400 hover:bg-white/10 hover:text-zinc-100"
-            aria-label="Next in queue"
-          >
-            <SkipForward className="size-4" />
-          </Button>
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold leading-tight text-zinc-100">
-            {title || file.filename}
-            {meta ? (
-              <span className="ml-2 font-mono text-[11px] font-normal text-zinc-500">
-                {meta}
-              </span>
-            ) : null}
-          </p>
-          <div className="mt-1 max-w-2xl">
-            <AudioScrubber
-              data={waveformData}
-              currentTime={currentTime}
-              duration={Math.max(effectiveDuration, 1)}
-              onSeek={onSeek}
-              height={26}
-              barWidth={3}
-              barGap={1}
-              barRadius={999}
-              barHeight={3}
-              showHandle={false}
-              barColor="var(--accent-fill)"
-              className="w-full overflow-hidden"
-            />
+    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex justify-center px-4">
+      <div className="pointer-events-auto w-full max-w-3xl rounded-[32px] border border-white/10 bg-shell/90 px-5 py-4 shadow-glow-overlay backdrop-blur-2xl">
+        <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onPrev}
+              className="size-8 shrink-0 rounded-full text-zinc-400 hover:bg-white/10 hover:text-zinc-100"
+              aria-label="Previous in queue"
+            >
+              <SkipBack className="size-4" />
+            </Button>
+            <Button
+              size="icon"
+              onClick={onTogglePlayback}
+              className="size-10 shrink-0 rounded-full bg-accent-fill text-white shadow-glow-accent-strong hover:bg-accent-fill-hover"
+              aria-label={isPlaying ? "Pause audio" : "Play audio"}
+            >
+              {isPlaying ? (
+                <Pause className="size-4" />
+              ) : (
+                <Play className="size-4 pl-0.5" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onNext}
+              className="size-8 shrink-0 rounded-full text-zinc-400 hover:bg-white/10 hover:text-zinc-100"
+              aria-label="Next in queue"
+            >
+              <SkipForward className="size-4" />
+            </Button>
           </div>
-        </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-semibold leading-tight text-zinc-100">
+              {title || file.filename}
+              {meta ? (
+                <span className="ml-2 font-mono text-[11px] font-normal text-zinc-500">
+                  {meta}
+                </span>
+              ) : null}
+            </p>
+            <div className="mt-1.5">
+              <AudioScrubber
+                data={waveformData}
+                currentTime={currentTime}
+                duration={Math.max(effectiveDuration, 1)}
+                onSeek={onSeek}
+                height={26}
+                barWidth={3}
+                barGap={1}
+                barRadius={999}
+                barHeight={3}
+                showHandle={false}
+                barColor="var(--accent-fill)"
+                className="w-full overflow-hidden"
+              />
+            </div>
+          </div>
+
           <span className="hidden shrink-0 font-mono text-[11px] tabular-nums text-zinc-400 sm:block">
             {formatTime(currentTime)} / {formatTime(effectiveDuration)}
           </span>
+        </div>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-white/5 pt-2.5">
           <AudioPlayerFavoriteButton
             fileId={file.id}
             isFavorite={file.isFavorite}
@@ -166,6 +168,7 @@ export function AudioPlayerShell({
           >
             <Repeat className="size-4" />
           </Button>
+          <span className="flex-1" />
           <Button
             variant="ghost"
             size="icon"
@@ -177,6 +180,6 @@ export function AudioPlayerShell({
           </Button>
         </div>
       </div>
-    </footer>
+    </div>
   );
 }

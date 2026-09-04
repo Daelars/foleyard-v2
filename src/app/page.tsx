@@ -2205,6 +2205,10 @@ function HomeContent() {
           </>
         )}
 
+        <div
+          aria-hidden="true"
+          className={`shrink-0 transition-all duration-300 ${selectedFile ? "h-44" : "h-0"}`}
+        />
       </main>
       </div>
 

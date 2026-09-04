@@ -61,6 +61,8 @@ describe("theme token law", () => {
       "../components/UpdateNotifier.tsx",
       "../components/TagPicker.tsx",
       "../components/FileTable/file-row.tsx",
+      "../components/FileTable/bulk-bar.tsx",
+      "../components/CommandPalette/CommandPalette.tsx",
       "../components/AudioPlayer/collection-menu.tsx",
       "../components/AudioPlayer/player-shell.tsx",
       "../components/extensions/folder-janitor/FolderJanitorDialog.tsx",

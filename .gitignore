@@ -11,17 +11,14 @@ node_modules/
 !.yarn/releases
 !.yarn/versions
 
-# agent stuff
+# agent scratch (intentionally untracked)
 
 /.agents
 /.skills
 /benchmarks
-/docs
 /plan
 CLAUDE.md
-AGENTS.md
 redesign-plan.md
-RELEASE.md
 
 
 # testing

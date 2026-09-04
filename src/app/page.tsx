@@ -6,6 +6,13 @@ import { toast } from "sonner";
 
 import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";
 import { useTransportQueue } from "@/components/AudioPlayer/use-transport-queue";
+import { SelectionBulkBar } from "@/components/FileTable/bulk-bar";
+import {
+  clearSelection,
+  rangeSelect,
+  toggleInSelection,
+} from "@/components/FileTable/selection";
+import type { SelectModifiers } from "@/components/FileTable/types";
 import { DesktopTitleBar } from "@/components/DesktopTitleBar";
 import { ExtensionGrid, type ExtensionGridItem } from "@/components/ExtensionGrid";
 import { FolderJanitorDialog } from "@/components/extensions/folder-janitor/FolderJanitorDialog";
@@ -103,8 +110,10 @@ function HomeContent() {
   const [directories, setDirectories] = useState<string[]>([]);
   const [tags, setTags] = useState<TagRecord[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const selectionAnchorRef = useRef<string | null>(null);
   const transportQueue = useTransportQueue();
-  const { playIds, advanceIfEnabled, clear: clearQueue } = transportQueue;
+  const { playIds, advanceIfEnabled, enqueue, clear: clearQueue } = transportQueue;
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentView, setCurrentView] = useState<
@@ -515,6 +524,119 @@ function HomeContent() {
       toast.error("Failed to update tag");
     }
   }, []);
+
+  const [confirmBulkRemove, setConfirmBulkRemove] = useState<{
+    permanent: boolean;
+    ids: string[];
+  } | null>(null);
+
+  const selectedIdsRef = useRef(selectedIds);
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds;
+  }, [selectedIds]);
+
+  const handleBulkSaveAll = useCallback(async () => {
+    const unfavorited = selectedIdsRef.current.filter(
+      (id) => !filesRef.current.find((file) => file.id === id)?.isFavorite,
+    );
+    await Promise.all(unfavorited.map((id) => handleToggleFavorite(id)));
+  }, [handleToggleFavorite]);
+
+  const handleBulkAddToQueue = useCallback(() => {
+    enqueue(selectedIdsRef.current);
+  }, [enqueue]);
+
+  const handleBulkAddToShelf = useCallback(async () => {
+    const ids = selectedIdsRef.current;
+    if (ids.length === 0) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/extensions/sound-shelf/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileIds: ids }),
+      });
+      if (!res.ok) {
+        throw new Error();
+      }
+
+      window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
+      void loadSoundShelfCount();
+      toast.success(`Added ${ids.length} sound(s) to Shelf`);
+    } catch {
+      toast.error("Failed to add sounds to Shelf");
+    }
+  }, [loadSoundShelfCount]);
+
+  const handleBulkTag = useCallback(async (tagId: string) => {
+    const missing = selectedIdsRef.current.filter(
+      (id) =>
+        !filesRef.current
+          .find((file) => file.id === id)
+          ?.tags.some((tag) => tag.id === tagId),
+    );
+    await Promise.all(
+      missing.map((id) => handleToggleFileTag(id, tagId)),
+    );
+  }, [handleToggleFileTag]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(clearSelection());
+    selectionAnchorRef.current = null;
+  }, []);
+
+  const executeBulkRemove = useCallback(async () => {
+    const target = confirmBulkRemove;
+    setConfirmBulkRemove(null);
+
+    if (!target || target.ids.length === 0) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/files", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileIds: target.ids,
+          permanent: target.permanent,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error();
+      }
+
+      const data = (await res.json()) as {
+        removed?: string[];
+        failed?: Array<{ id: string }>;
+      };
+      const removedIds = new Set(data.removed ?? target.ids);
+
+      setFiles((prev) => prev.filter((file) => !removedIds.has(file.id)));
+      handleClearSelection();
+
+      if (
+        selectedFileRef.current &&
+        removedIds.has(selectedFileRef.current.id)
+      ) {
+        clearQueue();
+        setSelectedFile(null);
+        setIsPlayerPlaying(false);
+      }
+
+      if (data.failed && data.failed.length > 0) {
+        toast.error(`Could not remove ${data.failed.length} file(s)`);
+      } else if (target.permanent) {
+        toast.success(`Deleted ${removedIds.size} file(s) from disk`);
+      } else {
+        toast.success(`Removed ${removedIds.size} file(s) from library`);
+      }
+    } catch {
+      toast.error("Failed to remove files");
+    }
+  }, [confirmBulkRemove, handleClearSelection, clearQueue]);
 
   const handleSaveSearch = useCallback(async (name: string) => {
     if (!name.trim() || !debouncedSearchQuery.trim()) return;
@@ -1132,7 +1254,19 @@ function HomeContent() {
     );
   }, [executeHostedCommand]);
 
-  const handleSelectFile = useCallback((file: FileRecord) => {
+  const handleSelectFile = useCallback((file: FileRecord, _index: number, modifiers: SelectModifiers = {}) => {
+    if (modifiers.shiftKey) {
+      const orderedIds = filesRef.current.map((listed) => listed.id);
+      setSelectedIds(rangeSelect(orderedIds, selectionAnchorRef.current, file.id));
+      return;
+    }
+
+    if (modifiers.ctrlKey || modifiers.metaKey) {
+      setSelectedIds((prev) => toggleInSelection(prev, file.id));
+      selectionAnchorRef.current = file.id;
+      return;
+    }
+
     if (selectedFileRef.current?.id === file.id) {
       audioPlayerRef.current?.togglePlayback();
     } else {
@@ -1142,7 +1276,15 @@ function HomeContent() {
       );
       setSelectedFile(file);
     }
+
+    setSelectedIds([file.id]);
+    selectionAnchorRef.current = file.id;
   }, [playIds]);
+
+  const handleToggleSelect = useCallback((file: FileRecord) => {
+    setSelectedIds((prev) => toggleInSelection(prev, file.id));
+    selectionAnchorRef.current = file.id;
+  }, []);
 
   const handleTrackEnded = useCallback(() => {
     const nextId = advanceIfEnabled();
@@ -1173,8 +1315,16 @@ function HomeContent() {
 
   const handleShelfSelectFile = useCallback((fileId: string) => {
     const match = filesRef.current.find((f) => f.id === fileId);
-    if (match) setSelectedFile(match);
-  }, []);
+    if (match) {
+      playIds(
+        filesRef.current.map((listed) => listed.id),
+        match.id,
+      );
+      setSelectedFile(match);
+      setSelectedIds([match.id]);
+      selectionAnchorRef.current = match.id;
+    }
+  }, [playIds]);
 
   const handleClosePlayer = useCallback(() => {
     clearQueue();
@@ -1355,6 +1505,32 @@ function HomeContent() {
         ) : (
           <div className="flex min-h-0 flex-1">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              {selectedIds.length > 1 ? (
+                <div className="px-4 pt-3 md:px-5">
+                  <SelectionBulkBar
+                    count={selectedIds.length}
+                    tags={tags}
+                    soundShelfEnabled={soundShelfEnabled}
+                    onSaveAll={() => void handleBulkSaveAll()}
+                    onAddToQueue={handleBulkAddToQueue}
+                    onAddToShelf={() => void handleBulkAddToShelf()}
+                    onTag={(tagId) => void handleBulkTag(tagId)}
+                    onRemoveFromLibrary={() =>
+                      setConfirmBulkRemove({
+                        permanent: false,
+                        ids: selectedIdsRef.current,
+                      })
+                    }
+                    onDeleteFromDisk={() =>
+                      setConfirmBulkRemove({
+                        permanent: true,
+                        ids: selectedIdsRef.current,
+                      })
+                    }
+                    onClear={handleClearSelection}
+                  />
+                </div>
+              ) : null}
               <FileTable
                 files={files}
                 directories={directories}
@@ -1363,8 +1539,10 @@ function HomeContent() {
                 onNavigate={navigateDirectory}
                 onNavigateLibrary={showLibrary}
                 selectedFileId={selectedFile?.id ?? null}
+                selectedIds={selectedIds}
                 isSelectedFilePlaying={isPlayerPlaying}
                 onSelect={handleSelectFile}
+                onToggleSelect={handleToggleSelect}
                 onToggleFavorite={handleToggleFavorite}
                 searchQuery={debouncedSearchQuery}
                 isLoading={isLoadingFiles}
@@ -1603,6 +1781,31 @@ function HomeContent() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmBulkRemove !== null} onOpenChange={(open) => { if (!open) setConfirmBulkRemove(null); }}>
+        <DialogContent className="max-w-sm rounded-2xl border border-white/10 bg-shell/95 p-6 backdrop-blur-2xl">
+          <DialogTitle className="text-lg font-extrabold tracking-tight text-zinc-50">
+            {confirmBulkRemove?.permanent ? "Delete from disk?" : "Remove from library?"}
+          </DialogTitle>
+          <p className="mt-2 text-sm text-zinc-400">
+            {confirmBulkRemove?.permanent
+              ? `${confirmBulkRemove?.ids.length ?? 0} sound(s) will be permanently deleted from disk. This cannot be undone.`
+              : `${confirmBulkRemove?.ids.length ?? 0} sound(s) will no longer appear in Foleyard. Your files on disk are untouched.`}
+          </p>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setConfirmBulkRemove(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant={confirmBulkRemove?.permanent ? "destructive" : "default"}
+              onClick={() => void executeBulkRemove()}
+            >
+              <Trash2 className="mr-2 size-4" />
+              {confirmBulkRemove?.permanent ? "Delete files" : "Remove from library"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

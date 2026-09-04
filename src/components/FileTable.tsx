@@ -1,7 +1,7 @@
 "use client";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { memo, useMemo, useRef } from "react";
+import { memo, useMemo, useRef, type KeyboardEvent } from "react";
 
 import { FileTableBreadcrumbBar } from "@/components/FileTable/breadcrumb-bar";
 import { useFileTableDesktopActions } from "@/components/FileTable/desktop-actions";
@@ -20,8 +20,10 @@ export const FileTable = memo(function FileTable({
   onNavigate,
   onNavigateLibrary,
   selectedFileId,
+  selectedIds = [],
   isSelectedFilePlaying = false,
   onSelect,
+  onToggleSelect,
   onToggleFavorite,
   searchQuery,
   isLoading,
@@ -70,6 +72,41 @@ export const FileTable = memo(function FileTable({
     onNavigate(null);
   };
 
+  const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const row = (event.target as HTMLElement).closest<HTMLElement>(
+      "[data-file-id]",
+    );
+
+    if (!row?.dataset.fileId || files.length === 0) {
+      return;
+    }
+
+    const index = files.findIndex((file) => file.id === row.dataset.fileId);
+
+    if (index === -1) {
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelect(files[index], index);
+      return;
+    }
+
+    if (event.key !== "j" && event.key !== "k") {
+      return;
+    }
+
+    event.preventDefault();
+    const neighbor =
+      files[(index + (event.key === "j" ? 1 : -1) + files.length) % files.length];
+    const neighborRow = parentRef.current?.querySelector<HTMLElement>(
+      `[data-file-id="${neighbor.id}"]`,
+    );
+    onSelect(neighbor, index);
+    neighborRow?.focus();
+  };
+
   if (items.length === 0 && !isLoading) {
     return (
       <FileTableEmptyState
@@ -95,6 +132,7 @@ export const FileTable = memo(function FileTable({
       <div
         ref={parentRef}
         className="foleyard-library-scroll flex-1 overflow-y-auto"
+        onKeyDown={handleRowKeyDown}
       >
         <div
           style={{
@@ -136,8 +174,10 @@ export const FileTable = memo(function FileTable({
                 handleRevealInExplorer={desktopActions.handleRevealInExplorer}
                 isDragging={isDragging}
                 isSelected={isSelected}
+                isMultiSelected={selectedIds.includes(file.id)}
                 isSelectedFilePlaying={isSelectedFilePlaying}
                 onSelect={onSelect}
+                onToggleSelect={onToggleSelect}
                 onToggleFavorite={onToggleFavorite}
                 onMakePackFile={onMakePackFile}
                 searchQuery={searchQuery}

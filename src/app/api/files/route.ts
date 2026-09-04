@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { attachTagToFile, detachTagFromFile, getFiles, getTagsForFiles, toggleFavorite } from '@/lib/db';
+import fs from 'node:fs';
+import { attachTagToFile, detachTagFromFile, getFileById, getFiles, getTagsForFiles, markFileRemoved, toggleFavorite } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -58,6 +59,54 @@ export async function PATCH(request: NextRequest) {
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+  } catch {
+    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { fileIds, permanent } = body;
+
+    if (
+      !Array.isArray(fileIds) ||
+      fileIds.some((id) => typeof id !== 'string')
+    ) {
+      return NextResponse.json({ error: 'fileIds must be string[]' }, { status: 400 });
+    }
+
+    const removed: string[] = [];
+    const failed: Array<{ id: string; error: string }> = [];
+    const now = new Date().toISOString();
+
+    for (const id of fileIds as string[]) {
+      const record = getFileById(id);
+
+      if (!record) {
+        failed.push({ id, error: 'Not found' });
+        continue;
+      }
+
+      if (permanent === true) {
+        try {
+          fs.unlinkSync(record.path);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+            failed.push({
+              id,
+              error: error instanceof Error ? error.message : 'Delete failed',
+            });
+            continue;
+          }
+        }
+      }
+
+      markFileRemoved(record.path, now);
+      removed.push(id);
+    }
+
+    return NextResponse.json({ removed, failed });
   } catch {
     return NextResponse.json({ error: 'Request failed' }, { status: 500 });
   }

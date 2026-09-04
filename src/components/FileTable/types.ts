@@ -15,6 +15,12 @@ export interface FileTableFileTag {
   name: string;
 }
 
+export interface SelectModifiers {
+  shiftKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+}
+
 export interface FileTableProps {
   files: FileTableFileRecord[];
   directories: string[];
@@ -23,8 +29,14 @@ export interface FileTableProps {
   onNavigate: (dir: string | null) => void;
   onNavigateLibrary?: () => void;
   selectedFileId: string | null;
+  selectedIds?: string[];
   isSelectedFilePlaying?: boolean;
-  onSelect: (file: FileTableFileRecord, index: number) => void;
+  onSelect: (
+    file: FileTableFileRecord,
+    index: number,
+    modifiers?: SelectModifiers,
+  ) => void;
+  onToggleSelect?: (file: FileTableFileRecord) => void;
   onToggleFavorite: (id: string) => Promise<void>;
   searchQuery: string;
   isLoading: boolean;

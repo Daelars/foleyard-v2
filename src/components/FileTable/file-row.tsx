@@ -59,8 +59,10 @@ export const FileTableFileRow = memo(function FileTableFileRow({
   handleRevealInExplorer,
   isDragging,
   isSelected,
+  isMultiSelected = false,
   isSelectedFilePlaying,
   onSelect,
+  onToggleSelect,
   onToggleFavorite,
   onMakePackFile,
   searchQuery,
@@ -85,8 +87,14 @@ export const FileTableFileRow = memo(function FileTableFileRow({
   handleRevealInExplorer: (file: FileTableFileRecord) => Promise<void>;
   isDragging: boolean;
   isSelected: boolean;
+  isMultiSelected?: boolean;
   isSelectedFilePlaying: boolean;
-  onSelect: (file: FileTableFileRecord, index: number) => void;
+  onSelect: (
+    file: FileTableFileRecord,
+    index: number,
+    modifiers?: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean },
+  ) => void;
+  onToggleSelect?: (file: FileTableFileRecord) => void;
   onToggleFavorite: (id: string) => Promise<void>;
   onMakePackFile?: (file: FileTableFileRecord) => Promise<void>;
   searchQuery: string;
@@ -111,17 +119,35 @@ export const FileTableFileRow = memo(function FileTableFileRow({
           className={cn(
             "group absolute left-0 top-0 flex w-full cursor-pointer items-center gap-4 border-b border-white/5 px-4 py-2 transition-[background-color,color,box-shadow] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             isSelected ? "bg-accent-fill/10" : "hover:bg-white/[0.04]",
+            isMultiSelected && !isSelected && "bg-accent-fill/5",
             isDragging && "opacity-60",
           )}
           style={{
             height: "64px",
             transform: `translateY(${start}px)`,
           }}
-          onClick={() => onSelect(file, virtualIndex)}
+          tabIndex={0}
+          data-file-id={file.id}
+          onClick={(event) =>
+            onSelect(file, virtualIndex, {
+              shiftKey: event.shiftKey,
+              ctrlKey: event.ctrlKey,
+              metaKey: event.metaKey,
+            })
+          }
         >
           {isSelected && (
             <span className="pointer-events-none absolute inset-y-2 left-0 w-[3px] rounded-full bg-accent-fill shadow-glow-accent" />
           )}
+          <input
+            type="checkbox"
+            checked={isMultiSelected}
+            onChange={() => onToggleSelect?.(file)}
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            aria-label={`Select ${file.filename}`}
+            className="size-4 shrink-0 cursor-pointer accent-accent-fill opacity-60 transition-opacity outline-none hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 checked:opacity-100"
+          />
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10">
             {isSelected && isSelectedFilePlaying ? (
               <Pause className="size-4 fill-current text-accent-text transition-all" />

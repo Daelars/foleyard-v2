@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -68,12 +69,12 @@ function streamResponse(
 export async function GET(request: NextRequest) {
   const id = new URL(request.url).searchParams.get("id");
   if (!id) {
-    return NextResponse.json({ error: "No file identified" }, { status: 400 });
+    return errorResponse("No file identified", 400);
   }
 
   const indexedFile = getFileById(id);
   if (!indexedFile || indexedFile.removedAt) {
-    return NextResponse.json({ error: "File not found" }, { status: 404 });
+    return errorResponse("File not found", 404);
   }
 
   try {
@@ -82,12 +83,12 @@ export async function GET(request: NextRequest) {
       getLibraryRoots(),
     );
     if (!filePath) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 });
+      return errorResponse("File not found", 404);
     }
 
     const stat = await fs.promises.stat(filePath);
     if (!stat.isFile()) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 });
+      return errorResponse("File not found", 404);
     }
 
     const contentType = MIME_TYPES[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
@@ -121,6 +122,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Audio stream error:", error);
-    return NextResponse.json({ error: "Failed to read file" }, { status: 500 });
+    return errorResponse("Failed to read file", 500);
   }
 }

@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { resolveReadablePath } from "@/lib/filesystem-boundary";
 import { NextRequest, NextResponse } from "next/server";
 import path from "node:path";
@@ -14,19 +15,13 @@ export async function POST(request: NextRequest) {
   const body = (await request.json()) as { folderPath?: string };
 
   if (!body.folderPath) {
-    return NextResponse.json(
-      { error: "folderPath is required" },
-      { status: 400 },
-    );
+    return errorResponse("folderPath is required", 400);
   }
 
   const libraryRoots = getLibraryRoots();
 
   if (libraryRoots.length === 0) {
-    return NextResponse.json(
-      { error: "No library roots configured" },
-      { status: 400 },
-    );
+    return errorResponse("No library roots configured", 400);
   }
 
   const absoluteFolder = await resolveReadablePath(body.folderPath, libraryRoots);
@@ -37,10 +32,7 @@ export async function POST(request: NextRequest) {
     }
   }
   if (!libraryRoot || !absoluteFolder) {
-    return NextResponse.json(
-      { error: "Folder is outside the configured Library roots" },
-      { status: 400 },
-    );
+    return errorResponse("Folder is outside the configured Library roots", 400);
   }
   const directory = path.relative(path.resolve(libraryRoot), absoluteFolder) || null;
   const files = getFiles({

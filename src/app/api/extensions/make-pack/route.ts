@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { resolveReadablePath, resolveWritablePath } from "@/lib/filesystem-boundary";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -52,19 +53,16 @@ export async function POST(request: NextRequest) {
   };
 
   if (!body.source || !["selection", "shelf", "recent"].includes(body.source)) {
-    return NextResponse.json({ error: "Valid source is required" }, { status: 400 });
+    return errorResponse("Valid source is required", 400);
   }
 
   if (typeof body.destinationDirectory !== "string" || !body.destinationDirectory) {
-    return NextResponse.json(
-      { error: "destinationDirectory is required" },
-      { status: 400 },
-    );
+    return errorResponse("destinationDirectory is required", 400);
   }
 
   const destination = typeof body.destinationGrant === "string" ? await resolveWritablePath(body.destinationDirectory, body.destinationGrant) : null;
-  if (!destination) return NextResponse.json({ error: "Destination is outside a granted directory. Choose it with the folder picker." }, { status: 403 });
-  if (body.fileIds !== undefined && (!Array.isArray(body.fileIds) || !body.fileIds.every((id) => typeof id === "string"))) return NextResponse.json({ error: "fileIds must be an array of strings" }, { status: 400 });
+  if (!destination) return errorResponse("Destination is outside a granted directory. Choose it with the folder picker.", 403);
+  if (body.fileIds !== undefined && (!Array.isArray(body.fileIds) || !body.fileIds.every((id) => typeof id === "string"))) return errorResponse("fileIds must be an array of strings", 400);
 
   const fileIds =
     body.source === "shelf"
@@ -74,16 +72,13 @@ export async function POST(request: NextRequest) {
         : (body.fileIds ?? []);
 
   if (fileIds.length === 0) {
-    return NextResponse.json(
-      { error: "No sounds found for that pack source" },
-      { status: 400 },
-    );
+    return errorResponse("No sounds found for that pack source", 400);
   }
 
   const files = hydrateFiles(fileIds);
   for (const file of files) {
     const readable = await resolveReadablePath(file.path, getLibraryRoots());
-    if (!readable) return NextResponse.json({ error: "Source is outside the configured Library roots" }, { status: 403 });
+    if (!readable) return errorResponse("Source is outside the configured Library roots", 403);
     file.path = readable;
   }
 

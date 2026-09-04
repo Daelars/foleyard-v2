@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAppExtensionHost } from "@/lib/extensions/host";
@@ -11,10 +12,7 @@ export async function POST(request: NextRequest) {
   const fileIds = body.fileIds;
 
   if (!fileIds || !Array.isArray(fileIds)) {
-    return NextResponse.json(
-      { error: "fileIds array required" },
-      { status: 400 },
-    );
+    return errorResponse("fileIds array required", 400);
   }
 
   const outcome = await createAppExtensionHost().execute({

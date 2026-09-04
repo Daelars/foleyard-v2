@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getLibraryRoots } from "@/lib/db";
@@ -12,18 +13,12 @@ export async function POST(request: NextRequest) {
   const body = (await request.json()) as { paths?: string[] };
 
   if (!body.paths?.length) {
-    return NextResponse.json(
-      { error: "paths array is required" },
-      { status: 400 },
-    );
+    return errorResponse("paths array is required", 400);
   }
 
   const libraryRoots = getLibraryRoots();
   if (libraryRoots.length === 0) {
-    return NextResponse.json(
-      { error: "No library roots configured" },
-      { status: 400 },
-    );
+    return errorResponse("No library roots configured", 400);
   }
 
   const outcome = await createAppExtensionHost().execute({

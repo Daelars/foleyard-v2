@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAppExtensionHost } from "@/lib/extensions/host";
@@ -19,17 +20,11 @@ export async function POST(request: NextRequest) {
   };
 
   if (!body.extensionId || !body.commandId) {
-    return NextResponse.json(
-      { error: "extensionId and commandId are required" },
-      { status: 400 },
-    );
+    return errorResponse("extensionId and commandId are required", 400);
   }
 
   if (body.input !== undefined) {
-    return NextResponse.json(
-      { error: "Command input must use its dedicated endpoint" },
-      { status: 400 },
-    );
+    return errorResponse("Command input must use its dedicated endpoint", 400);
   }
 
   const outcome = await createAppExtensionHost().execute({

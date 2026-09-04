@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 
 import type { IndexedAudioFile } from "@yard-core";
@@ -25,7 +26,7 @@ export async function GET() {
   }
 
   if (outcome.type === "ui-intent") {
-    return NextResponse.json({ error: "Unexpected UI intent" }, { status: 500 });
+    return errorResponse("Unexpected UI intent", 500);
   }
 
   const files = outcome.value

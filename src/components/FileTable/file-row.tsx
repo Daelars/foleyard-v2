@@ -26,7 +26,8 @@ import {
 } from "@/components/ui/context-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
-import { cn, formatDuration } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { formatDuration } from "@/lib/format";
 
 import { highlightMatch } from "./highlight-match";
 import { RowWaveform } from "./row-waveform";

@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -24,16 +25,13 @@ export async function PATCH(request: NextRequest) {
   };
 
   if (!body.extensionId) {
-    return NextResponse.json(
-      { error: "extensionId is required" },
-      { status: 400 },
-    );
+    return errorResponse("extensionId is required", 400);
   }
 
   if (typeof body.enabled === "boolean") {
     const extension = updateExtensionEnabled(body.extensionId, body.enabled);
     if (!extension) {
-      return NextResponse.json({ error: "Extension not found" }, { status: 404 });
+      return errorResponse("Extension not found", 404);
     }
 
     return NextResponse.json({ extension });
@@ -46,10 +44,7 @@ export async function PATCH(request: NextRequest) {
     );
 
     if (!extension || !setting) {
-      return NextResponse.json(
-        { error: "Extension setting not found" },
-        { status: 404 },
-      );
+      return errorResponse("Extension setting not found", 404);
     }
 
     setExtensionSettingValue(
@@ -63,10 +58,7 @@ export async function PATCH(request: NextRequest) {
     });
   }
 
-  return NextResponse.json(
-    { error: "enabled or settingId is required" },
-    { status: 400 },
-  );
+  return errorResponse("enabled or settingId is required", 400);
 }
 
 function coerceSettingValue(

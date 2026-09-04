@@ -1,22 +1,13 @@
+import { errorResponse } from "@/lib/api/errors";
+import { readMutationBody } from "@/lib/api/body";
+import { mutationError } from "@/lib/api/errors";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, parsePageInteger } from "@/lib/api/pagination";
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteFiles } from '@/lib/files/delete-files';
 import { attachTagToFile, detachTagFromFile, getFileCount, getFiles, getTagsForFiles, toggleFavorite } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const DEFAULT_PAGE_SIZE = 500;
-const MAX_PAGE_SIZE = 500;
-
-function parsePageInteger(value: string | null, fallback: number, minimum: number, maximum?: number) {
-  if (value === null) return fallback;
-  if (!/^\d+$/.test(value)) return null;
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < minimum || (maximum !== undefined && parsed > maximum)) {
-    return null;
-  }
-  return parsed;
-}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -32,10 +23,7 @@ export async function GET(request: NextRequest) {
   const offset = parsePageInteger(searchParams.get('offset'), 0, 0);
 
   if (limit === null || offset === null) {
-    return NextResponse.json(
-      { error: `limit must be an integer from 1 to ${MAX_PAGE_SIZE}; offset must be a non-negative integer` },
-      { status: 400 },
-    );
+    return errorResponse(`limit must be an integer from 1 to ${MAX_PAGE_SIZE}; offset must be a non-negative integer`, 400);
   }
 
   const files = getFiles({
@@ -70,7 +58,7 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readMutationBody(request);
     const { id, action } = body;
 
     if (action === 'toggleFavorite') {
@@ -90,28 +78,28 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    return errorResponse('Unknown action', 400);
+  } catch (error) {
+    return mutationError(error);
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readMutationBody(request, false);
     const { fileIds, permanent } = body;
 
     if (
       !Array.isArray(fileIds) ||
       fileIds.some((id) => typeof id !== 'string')
     ) {
-      return NextResponse.json({ error: 'fileIds must be string[]' }, { status: 400 });
+      return errorResponse('fileIds must be string[]', 400);
     }
 
     const { removed, failed } = await deleteFiles(fileIds, permanent === true);
 
     return NextResponse.json({ removed, failed });
-  } catch {
-    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+  } catch (error) {
+    return mutationError(error);
   }
 }

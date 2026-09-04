@@ -6,7 +6,7 @@ import { Pause, Play, Repeat, SkipBack, SkipForward, X } from "lucide-react";
 import { AudioScrubber } from "@/components/ui/waveform";
 import { Button } from "@/components/ui/button";
 
-import { formatTime } from "./format-time";
+import { formatTime } from "@/lib/format";
 import { AudioPlayerCollectionMenu } from "./collection-menu";
 import { AudioPlayerFavoriteButton } from "./favorite-button";
 import type { AudioPlayerFileRecord } from "./types";

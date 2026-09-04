@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 
 import type {
@@ -30,18 +31,12 @@ export function toHostFailureResponse(
   outcome: YardExtensionHostOutcome,
 ): NextResponse {
   if (!outcome.ok && outcome.reason === "extension-disabled") {
-    return NextResponse.json(
-      { error: "Extension is disabled" },
-      { status: 403 },
-    );
+    return errorResponse("Extension is disabled", 403);
   }
 
   if (!outcome.ok) {
-    return NextResponse.json(
-      { error: outcome.message },
-      { status: hostFailureStatus(outcome.reason) },
-    );
+    return errorResponse(outcome.message, hostFailureStatus(outcome.reason));
   }
 
-  return NextResponse.json({ error: "Unexpected UI intent" }, { status: 500 });
+  return errorResponse("Unexpected UI intent", 500);
 }

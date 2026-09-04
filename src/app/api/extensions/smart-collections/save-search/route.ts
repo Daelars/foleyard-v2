@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAppExtensionHost } from "@/lib/extensions/host";
@@ -12,10 +13,7 @@ export async function POST(request: NextRequest) {
   const query = body.query?.trim();
 
   if (!name || !query) {
-    return NextResponse.json(
-      { error: "name and query are required" },
-      { status: 400 },
-    );
+    return errorResponse("name and query are required", 400);
   }
 
   const outcome = await createAppExtensionHost().execute<string>({

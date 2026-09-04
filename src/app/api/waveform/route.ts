@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 
@@ -15,12 +16,12 @@ export async function GET(request: NextRequest) {
   const fileId = searchParams.get("id");
 
   if (!fileId) {
-    return NextResponse.json({ error: "No file id provided" }, { status: 400 });
+    return errorResponse("No file id provided", 400);
   }
 
   const file = getFileById(fileId);
   if (!file || file.removedAt) {
-    return NextResponse.json({ error: "File not found" }, { status: 404 });
+    return errorResponse("File not found", 404);
   }
 
   try {
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
       getLibraryRoots(),
     );
     if (!filePath) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 });
+      return errorResponse("File not found", 404);
     }
 
     const peakCount = Number(searchParams.get("peaks") ?? DEFAULT_PEAK_COUNT);
@@ -39,10 +40,7 @@ export async function GET(request: NextRequest) {
     if (extension === "wav") {
       const stats = await fs.promises.stat(filePath);
       if (stats.size > MAX_WAVEFORM_FILE_SIZE) {
-        return NextResponse.json(
-          { error: "Audio file is too large for waveform generation" },
-          { status: 413 },
-        );
+        return errorResponse("Audio file is too large for waveform generation", 413);
       }
       peaks = extractPeaks(await fs.promises.readFile(filePath), filePath, peakCount);
     } else {
@@ -55,7 +53,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ peaks });
   } catch (error) {
     console.error("Waveform generation error:", error);
-    return NextResponse.json({ error: "Failed to generate waveform" }, { status: 500 });
+    return errorResponse("Failed to generate waveform", 500);
   }
 }
 

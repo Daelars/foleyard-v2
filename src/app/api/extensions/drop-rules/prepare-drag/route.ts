@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { resolveReadablePath } from "@/lib/filesystem-boundary";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -15,16 +16,16 @@ export async function POST(request: NextRequest) {
   };
 
   if (!body.fileId) {
-    return NextResponse.json({ error: "fileId is required" }, { status: 400 });
+    return errorResponse("fileId is required", 400);
   }
 
   const file = getFileById(body.fileId);
   if (!file || file.removedAt) {
-    return NextResponse.json({ error: "File is not indexed" }, { status: 404 });
+    return errorResponse("File is not indexed", 404);
   }
 
   const readable = await resolveReadablePath(file.path, getLibraryRoots());
-  if (!readable) return NextResponse.json({ error: "Source is outside the configured Library roots" }, { status: 403 });
+  if (!readable) return errorResponse("Source is outside the configured Library roots", 403);
   const outcome = await createAppExtensionHost().execute({
     extensionId: "drop-rules",
     commandId: "drop-rules.prepare-drag",
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (outcome.type !== "value") {
-    return NextResponse.json({ error: "Unexpected UI intent" }, { status: 500 });
+    return errorResponse("Unexpected UI intent", 500);
   }
 
   const result = outcome.value as {

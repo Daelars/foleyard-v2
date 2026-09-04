@@ -380,6 +380,106 @@ export function OrganizeFlows() {
       >
         <ScrimVariants />
       </VariantFrame>
+
+      <VariantFrame
+        id="W-F"
+        name="Feathered all over ×3"
+        note="Feather on all four sides, header scrimmed too. One picker drives all three."
+      >
+        <FeatherAllOver />
+      </VariantFrame>
+    </div>
+  );
+}
+
+function FeatherAllOver() {
+  const [color, setColor] = useState("#7ab8ff");
+  const wash: React.CSSProperties = {
+    backgroundColor: `${color}0a`,
+    backgroundImage: `radial-gradient(circle at 12% 0%, ${color}38, transparent 75%)`,
+  };
+  const header = (
+    <div className="flex items-center gap-3 p-4">
+      <span
+        className="flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold"
+        style={tileStyle(color)}
+      >
+        Ra
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-zinc-100">Rain beds</p>
+        <p className="mt-0.5 text-xs text-zinc-400">11 sounds · regular collection</p>
+      </div>
+      <span className="shrink-0 rounded-xl bg-accent-fill px-3.5 py-2 text-xs font-semibold text-white">
+        Open
+      </span>
+    </div>
+  );
+  const files = DETAIL_FILES.map((name) => (
+    <div key={name} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-100">
+      <ListMusic className="size-3.5 shrink-0 text-zinc-500" />
+      <span className="truncate">{name}</span>
+    </div>
+  ));
+
+  return (
+    <div className="space-y-4">
+      <style>{`.scrim-feather-all {
+        -webkit-mask-image: radial-gradient(120% 105% at 50% 45%, black 55%, transparent 100%);
+        mask-image: radial-gradient(120% 105% at 50% 45%, black 55%, transparent 100%);
+      }`}</style>
+      <div className="flex items-center gap-3">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-600">
+          Preview color
+        </span>
+        <Swatches value={color} onPick={setColor} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div>
+          <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            G1 · Full feather
+          </p>
+          <div className="overflow-hidden rounded-2xl border border-white/10" style={wash}>
+            <div className="scrim-feather-all m-3 rounded-2xl bg-black/40 p-2 backdrop-blur-sm">
+              {header}
+              {files}
+            </div>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">One frosted panel, melted on every side.</p>
+        </div>
+
+        <div>
+          <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            G2 · Twin scrims
+          </p>
+          <div className="overflow-hidden rounded-2xl border border-white/10" style={wash}>
+            <div className="scrim-feather-all mx-3 mt-3 rounded-2xl bg-black/40 backdrop-blur-sm">
+              {header}
+            </div>
+            <div className="scrim-feather-all mx-3 mb-3 mt-2 rounded-2xl bg-black/40 px-2 py-1 backdrop-blur-sm">
+              {files}
+            </div>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">Header and list frosted separately, floating.</p>
+        </div>
+
+        <div>
+          <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            G3 · Tinted glass
+          </p>
+          <div className="overflow-hidden rounded-2xl border border-white/10" style={wash}>
+            <div
+              className="scrim-feather-all m-3 rounded-2xl p-2 backdrop-blur-md"
+              style={{ backgroundColor: `${color}30` }}
+            >
+              {header}
+              {files}
+            </div>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">The frost itself carries the chosen hue.</p>
+        </div>
+      </div>
     </div>
   );
 }

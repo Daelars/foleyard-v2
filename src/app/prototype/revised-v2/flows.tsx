@@ -364,6 +364,148 @@ export function OrganizeFlows() {
       <VariantFrame id="W-C" name="Split browser, color-led" note="Full flow: browser list plus detail, active item wears its color.">
         <FlowC />
       </VariantFrame>
+
+      <VariantFrame
+        id="W-D"
+        name="Text legibility ×3"
+        note="Same card, three contrast fixes. Pick a preview color once, compare all three."
+      >
+        <TextLegibility />
+      </VariantFrame>
+    </div>
+  );
+}
+
+function TextLegibility() {
+  const [color, setColor] = useState("#7ab8ff");
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-600">
+          Preview color
+        </span>
+        <Swatches value={color} onPick={setColor} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div>
+          <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            D1 · Scrim body
+          </p>
+          <div
+            className="overflow-hidden rounded-2xl border border-white/10"
+            style={{
+              backgroundColor: `${color}0a`,
+              backgroundImage: `radial-gradient(circle at 12% 0%, ${color}38, transparent 75%)`,
+            }}
+          >
+            <div className="flex items-center gap-3 p-4">
+              <span
+                className="flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold"
+                style={tileStyle(color)}
+              >
+                Ra
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-zinc-100">Rain beds</p>
+                <p className="mt-0.5 text-xs text-zinc-400">11 sounds · regular collection</p>
+              </div>
+              <span className="shrink-0 rounded-xl bg-accent-fill px-3.5 py-2 text-xs font-semibold text-white">
+                Open
+              </span>
+            </div>
+            <div className="mx-3 mb-3 rounded-xl bg-black/40 px-2 py-1">
+              {DETAIL_FILES.map((name) => (
+                <div key={name} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-100">
+                  <ListMusic className="size-3.5 shrink-0 text-zinc-500" />
+                  <span className="truncate">{name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">Wash stays; text sits on a dark scrim.</p>
+        </div>
+
+        <div>
+          <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            D2 · Fading header
+          </p>
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
+            <div
+              className="flex items-center gap-3 p-4"
+              style={{ backgroundImage: `linear-gradient(to bottom, ${color}40, transparent)` }}
+            >
+              <span
+                className="flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold"
+                style={tileStyle(color)}
+              >
+                Ra
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-zinc-100">Rain beds</p>
+                <p className="mt-0.5 text-xs text-zinc-400">11 sounds · regular collection</p>
+              </div>
+              <span className="shrink-0 rounded-xl bg-accent-fill px-3.5 py-2 text-xs font-semibold text-white">
+                Open
+              </span>
+            </div>
+            <div className="space-y-1 p-2">
+              {DETAIL_FILES.map((name) => (
+                <div key={name} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-300">
+                  <ListMusic className="size-3.5 shrink-0 text-zinc-600" />
+                  <span className="truncate">{name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">Color owns the header, melts out before the files.</p>
+        </div>
+
+        <div>
+          <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            D3 · Bright type
+          </p>
+          <div
+            className="overflow-hidden rounded-2xl border border-white/10"
+            style={{
+              backgroundColor: `${color}0a`,
+              backgroundImage: `radial-gradient(circle at 12% 0%, ${color}38, transparent 75%)`,
+            }}
+          >
+            <div className="flex items-center gap-3 p-4">
+              <span
+                className="flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold"
+                style={tileStyle(color)}
+              >
+                Ra
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-zinc-50 [text-shadow:0_1px_10px_rgba(0,0,0,0.9)]">
+                  Rain beds
+                </p>
+                <p className="mt-0.5 text-xs text-zinc-300 [text-shadow:0_1px_8px_rgba(0,0,0,0.9)]">
+                  11 sounds · regular collection
+                </p>
+              </div>
+              <span className="shrink-0 rounded-xl bg-accent-fill px-3.5 py-2 text-xs font-semibold text-white">
+                Open
+              </span>
+            </div>
+            <div className="space-y-1 p-2">
+              {DETAIL_FILES.map((name) => (
+                <div
+                  key={name}
+                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-semibold text-zinc-50 [text-shadow:0_1px_8px_rgba(0,0,0,0.9)]"
+                >
+                  <ListMusic className="size-3.5 shrink-0 text-zinc-400" />
+                  <span className="truncate">{name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">Full wash kept; type goes brighter with shadow.</p>
+        </div>
+      </div>
     </div>
   );
 }

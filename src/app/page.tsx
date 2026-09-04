@@ -1,11 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bug, FileInput, Loader2, PackagePlus, PanelLeft, Save, Search, Trash2, X } from "lucide-react";
+import { Bug, Command, FileInput, Loader2, PackagePlus, PanelLeft, Save, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";
 import { useTransportQueue } from "@/components/AudioPlayer/use-transport-queue";
+import {
+  buildPaletteEntries,
+  type PaletteEntry,
+} from "@/components/CommandPalette/command-palette";
+import { CommandPalette } from "@/components/CommandPalette/CommandPalette";
 import { SelectionBulkBar } from "@/components/FileTable/bulk-bar";
 import {
   clearSelection,
@@ -129,6 +134,10 @@ function HomeContent() {
   } = transportQueue;
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const [paletteIndex, setPaletteIndex] = useState(0);
+  const paletteInputRef = useRef<HTMLInputElement | null>(null);
   const [currentView, setCurrentView] = useState<
     "all" | "favorites" | "extensions" | "collection" | "directory" | "shelf"
   >("all");
@@ -1518,6 +1527,240 @@ function HomeContent() {
     setIsPlayerPlaying(false);
   }, [clearQueue]);
 
+  const openPalette = useCallback(() => {
+    setPaletteQuery("");
+    setPaletteIndex(0);
+    setPaletteOpen(true);
+  }, []);
+
+  const closePalette = useCallback(() => {
+    setPaletteOpen(false);
+  }, []);
+
+  const handlePaletteQueryChange = useCallback((query: string) => {
+    setPaletteQuery(query);
+    setPaletteIndex(0);
+  }, []);
+
+  const handleAddCurrentToShelf = useCallback(async () => {
+    const current = selectedFileRef.current;
+    if (!current) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/extensions/sound-shelf/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileIds: [current.id] }),
+      });
+      if (!res.ok) {
+        throw new Error();
+      }
+
+      window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
+      void loadSoundShelfCount();
+      toast.success("Added to Shelf");
+    } catch {
+      toast.error("Failed to add to Shelf");
+    }
+  }, [loadSoundShelfCount]);
+
+  const paletteToolCommands = useMemo(
+    () =>
+      extensions.flatMap((extension) =>
+        extension.enabled
+          ? ((extension.commands ?? []).map((command) => ({
+              extensionId: extension.id,
+              extensionName: extension.name,
+              commandId: command.id,
+              title: command.title,
+            })) as Array<{
+              extensionId: string;
+              extensionName: string;
+              commandId: string;
+              title: string;
+            }>)
+          : [],
+      ),
+    [extensions],
+  );
+
+  const paletteSounds = useMemo(
+    () =>
+      files.map((file) => ({
+        id: file.id,
+        filename: file.filename,
+        format: file.format,
+        duration: file.duration,
+        tags: file.tags.map((tag) => tag.name),
+      })),
+    [files],
+  );
+
+  const paletteEntries = useMemo(
+    () =>
+      buildPaletteEntries({
+        query: paletteQuery,
+        isPlaying: isPlayerPlaying,
+        autoplay,
+        hasCurrentFile: selectedFile !== null,
+        canStepQueue: queueState.queue.length > 1,
+        isFavorite: selectedFile?.isFavorite ?? false,
+        shelfEnabled: soundShelfEnabled,
+        toolCommands: paletteToolCommands,
+        sounds: paletteSounds,
+      }),
+    [
+      paletteQuery,
+      isPlayerPlaying,
+      autoplay,
+      selectedFile,
+      queueState,
+      soundShelfEnabled,
+      paletteToolCommands,
+      paletteSounds,
+    ],
+  );
+
+  const activePaletteIndex =
+    paletteEntries.length === 0
+      ? 0
+      : Math.min(paletteIndex, paletteEntries.length - 1);
+
+  const handlePaletteSelect = useCallback(
+    (entry: PaletteEntry) => {
+      const separator = entry.id.indexOf(":");
+      const kind = separator === -1 ? entry.id : entry.id.slice(0, separator);
+      const rest = separator === -1 ? "" : entry.id.slice(separator + 1);
+
+      switch (kind) {
+        case "view": {
+          if (rest === "library") showLibrary();
+          else if (rest === "favorites") showFavorites();
+          else if (rest === "shelf") showShelf();
+          else if (rest === "tools") showExtensions();
+          else if (rest === "settings") setShowSettings(true);
+          break;
+        }
+        case "transport": {
+          if (rest === "toggle-play") audioPlayerRef.current?.togglePlayback();
+          else if (rest === "next") handleStepNext();
+          else if (rest === "prev") handleStepPrev();
+          else if (rest === "autoplay") setAutoplay(!autoplay);
+          break;
+        }
+        case "file": {
+          if (rest === "toggle-favorite" && selectedFileRef.current) {
+            void handleToggleFavorite(selectedFileRef.current.id);
+          } else if (rest === "add-to-shelf") {
+            void handleAddCurrentToShelf();
+          }
+          break;
+        }
+        case "tool": {
+          const split = rest.indexOf(":");
+          if (split !== -1) {
+            handleRunCommand(rest.slice(0, split), rest.slice(split + 1));
+          }
+          break;
+        }
+        case "sound": {
+          const match = filesRef.current.find((file) => file.id === rest);
+          if (match) {
+            playIds(
+              filesRef.current.map((listed) => listed.id),
+              match.id,
+            );
+            setSelectedFile(match);
+          }
+          break;
+        }
+      }
+
+      setPaletteOpen(false);
+    },
+    [
+      showLibrary,
+      showFavorites,
+      showShelf,
+      showExtensions,
+      handleStepNext,
+      handleStepPrev,
+      autoplay,
+      setAutoplay,
+      playIds,
+      handleToggleFavorite,
+      handleAddCurrentToShelf,
+      handleRunCommand,
+    ],
+  );
+
+  useEffect(() => {
+    if (paletteOpen) {
+      paletteInputRef.current?.focus();
+    }
+  }, [paletteOpen]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        if (paletteOpen) {
+          setPaletteOpen(false);
+        } else {
+          setPaletteQuery("");
+          setPaletteIndex(0);
+          setPaletteOpen(true);
+        }
+        return;
+      }
+
+      if (!paletteOpen) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setPaletteOpen(false);
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        event.stopPropagation();
+        setPaletteIndex((index) => (index + 1) % Math.max(1, paletteEntries.length));
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        event.stopPropagation();
+        setPaletteIndex(
+          (index) =>
+            (index - 1 + Math.max(1, paletteEntries.length)) %
+            Math.max(1, paletteEntries.length),
+        );
+        return;
+      }
+
+      if (event.key === "Enter") {
+        const target = event.target as HTMLElement | null;
+        const inPaletteInput = target === paletteInputRef.current;
+        const entry = paletteEntries[activePaletteIndex];
+        if (entry && (inPaletteInput || target === document.body)) {
+          event.preventDefault();
+          event.stopPropagation();
+          handlePaletteSelect(entry);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [paletteOpen, paletteEntries, activePaletteIndex, handlePaletteSelect]);
+
   const handleCloseExtensionDetails = useCallback((open: boolean) => {
     if (!open) setSelectedExtension(null);
   }, []);
@@ -1642,6 +1885,18 @@ function HomeContent() {
                 )}
               </div>
             )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden h-10 shrink-0 gap-2 rounded-xl border-white/10 bg-white/5 px-3 font-mono text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
+              onClick={openPalette}
+              aria-label="Open command palette"
+              title="Command palette (Ctrl+K)"
+            >
+              <Command className="size-4" />
+              <span className="text-zinc-600">{files.length}</span>
+            </Button>
 
             {isLoadingFiles && (
               <Loader2 className="size-4 animate-spin text-accent-text" />
@@ -1869,6 +2124,18 @@ function HomeContent() {
         onAddToCollection={handleAddToCollection}
         allTags={tags}
         onToggleFileTag={handleToggleFileTag}
+      />
+
+      <CommandPalette
+        open={paletteOpen}
+        query={paletteQuery}
+        entries={paletteEntries}
+        activeIndex={activePaletteIndex}
+        inputRef={paletteInputRef}
+        onQueryChange={handlePaletteQueryChange}
+        onHoverEntry={setPaletteIndex}
+        onSelectEntry={handlePaletteSelect}
+        onClose={closePalette}
       />
 
       <SettingsDialog

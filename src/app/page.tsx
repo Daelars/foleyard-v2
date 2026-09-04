@@ -5,6 +5,7 @@ import { Bug, FileInput, Loader2, PackagePlus, PanelLeft, Save, Search, Trash2 }
 import { toast } from "sonner";
 
 import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";
+import { useTransportQueue } from "@/components/AudioPlayer/use-transport-queue";
 import { DesktopTitleBar } from "@/components/DesktopTitleBar";
 import { ExtensionGrid, type ExtensionGridItem } from "@/components/ExtensionGrid";
 import { FolderJanitorDialog } from "@/components/extensions/folder-janitor/FolderJanitorDialog";
@@ -102,6 +103,8 @@ function HomeContent() {
   const [directories, setDirectories] = useState<string[]>([]);
   const [tags, setTags] = useState<TagRecord[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
+  const transportQueue = useTransportQueue();
+  const { playIds, advanceIfEnabled, clear: clearQueue } = transportQueue;
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentView, setCurrentView] = useState<
@@ -1133,9 +1136,25 @@ function HomeContent() {
     if (selectedFileRef.current?.id === file.id) {
       audioPlayerRef.current?.togglePlayback();
     } else {
+      playIds(
+        filesRef.current.map((listed) => listed.id),
+        file.id,
+      );
       setSelectedFile(file);
     }
-  }, []);
+  }, [playIds]);
+
+  const handleTrackEnded = useCallback(() => {
+    const nextId = advanceIfEnabled();
+    if (!nextId) {
+      return;
+    }
+
+    const match = filesRef.current.find((file) => file.id === nextId);
+    if (match) {
+      setSelectedFile(match);
+    }
+  }, [advanceIfEnabled]);
 
   const handleMakePackFile = useCallback(
     (file: FileRecord) =>
@@ -1158,9 +1177,10 @@ function HomeContent() {
   }, []);
 
   const handleClosePlayer = useCallback(() => {
+    clearQueue();
     setSelectedFile(null);
     setIsPlayerPlaying(false);
-  }, []);
+  }, [clearQueue]);
 
   const handleCloseExtensionDetails = useCallback((open: boolean) => {
     if (!open) setSelectedExtension(null);
@@ -1381,6 +1401,7 @@ function HomeContent() {
         selectedFile={selectedFile}
         onClose={handleClosePlayer}
         onPlaybackChange={setIsPlayerPlaying}
+        onEnded={handleTrackEnded}
         onToggleFavorite={handleToggleFavorite}
         collections={collections}
         onAddToCollection={handleAddToCollection}

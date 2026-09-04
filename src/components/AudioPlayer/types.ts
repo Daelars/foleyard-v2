@@ -14,6 +14,7 @@ export interface AudioPlayerProps {
   onClose: () => void;
   onPlaybackChange?: (isPlaying: boolean) => void;
   onToggleFavorite: (id: string) => Promise<void>;
+  onEnded?: () => void;
   collections: { id: string; name: string; fileCount?: number; isSmart?: boolean }[];
   onAddToCollection: (collectionId: string) => Promise<void>;
   allTags?: { id: string; name: string }[];

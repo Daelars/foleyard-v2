@@ -17,6 +17,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       selectedFile,
       onClose,
       onPlaybackChange,
+      onEnded,
       onToggleFavorite,
       collections,
       onAddToCollection,
@@ -36,6 +37,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         selectedFile={selectedFile}
         onClose={onClose}
         onPlaybackChange={onPlaybackChange}
+        onEnded={onEnded}
         onToggleFavorite={onToggleFavorite}
         collections={collections}
         onAddToCollection={onAddToCollection}
@@ -57,6 +59,7 @@ const AudioPlayerContent = forwardRef<
       selectedFile,
       onClose,
       onPlaybackChange,
+      onEnded,
       onToggleFavorite,
       collections,
       onAddToCollection,
@@ -65,7 +68,7 @@ const AudioPlayerContent = forwardRef<
     },
     ref,
   ) {
-    const playback = useAudioPlayback(selectedFile, onPlaybackChange);
+    const playback = useAudioPlayback(selectedFile, onPlaybackChange, onEnded);
 
     useImperativeHandle(ref, () => ({
       togglePlayback: playback.togglePlayback,

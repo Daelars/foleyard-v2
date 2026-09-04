@@ -12,10 +12,16 @@ const LEGACY_VOLUME_STORAGE_KEYS = ["soundslop-volume"];
 export function useAudioPlayback(
   selectedFile: AudioPlayerFileRecord,
   onPlaybackChange?: (isPlaying: boolean) => void,
+  onEnded?: () => void,
 ) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const volumeRef = useRef(0.72);
   const isMutedRef = useRef(false);
+  const onEndedRef = useRef(onEnded);
+
+  useEffect(() => {
+    onEndedRef.current = onEnded;
+  });
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -59,6 +65,7 @@ export function useAudioPlayback(
     const handleEnded = () => {
       setIsPlaying(false);
       setCurrentTime(audio.duration || 0);
+      onEndedRef.current?.();
     };
 
     audio.addEventListener("timeupdate", handleTimeUpdate);

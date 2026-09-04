@@ -23,7 +23,6 @@ export const FileTable = memo(function FileTable({
   selectedIds = [],
   isSelectedFilePlaying = false,
   onSelect,
-  onToggleSelect,
   onToggleFavorite,
   searchQuery,
   isLoading,
@@ -137,11 +136,10 @@ export const FileTable = memo(function FileTable({
         <div
           className={`grid items-center gap-3 border-b border-white/10 px-3 pb-2 font-mono text-[11px] font-semibold uppercase tracking-widest text-zinc-400 ${
             desktopActions.desktop
-              ? "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px_28px] sm:grid-cols-[28px_28px_minmax(0,1fr)_140px_64px_28px_28px]"
-              : "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px] sm:grid-cols-[28px_28px_minmax(0,1fr)_140px_64px_28px]"
+              ? "grid-cols-[32px_minmax(0,1fr)_140px_64px_28px_28px]"
+              : "grid-cols-[32px_minmax(0,1fr)_140px_64px_28px]"
           }`}
         >
-          <span />
           <span />
           <button
             type="button"
@@ -215,7 +213,6 @@ export const FileTable = memo(function FileTable({
                 isMultiSelected={selectedIds.includes(file.id)}
                 isSelectedFilePlaying={isSelectedFilePlaying}
                 onSelect={onSelect}
-                onToggleSelect={onToggleSelect}
                 onToggleFavorite={onToggleFavorite}
                 onMakePackFile={onMakePackFile}
                 searchQuery={searchQuery}

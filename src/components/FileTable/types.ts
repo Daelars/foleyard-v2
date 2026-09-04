@@ -38,7 +38,6 @@ export interface FileTableProps {
     index: number,
     modifiers?: SelectModifiers,
   ) => void;
-  onToggleSelect?: (file: FileTableFileRecord) => void;
   onToggleFavorite: (id: string) => Promise<void>;
   searchQuery: string;
   isLoading: boolean;

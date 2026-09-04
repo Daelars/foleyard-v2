@@ -31,8 +31,8 @@ export const FileTableDirectoryRow = memo(function FileTableDirectoryRow({
     <div
       className={`group absolute left-0 top-0 grid w-full cursor-pointer items-center gap-3 border-b border-white/5 px-3 outline-none transition-[background-color,color] last:border-0 hover:bg-white/[0.04] ${
         desktop
-          ? "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px_28px] sm:grid-cols-[28px_28px_minmax(0,1fr)_140px_64px_28px_28px]"
-          : "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px] sm:grid-cols-[28px_28px_minmax(0,1fr)_140px_64px_28px]"
+          ? "grid-cols-[32px_minmax(0,1fr)_140px_64px_28px_28px]"
+          : "grid-cols-[32px_minmax(0,1fr)_140px_64px_28px]"
       }`}
       style={{
         height: "64px",
@@ -40,7 +40,6 @@ export const FileTableDirectoryRow = memo(function FileTableDirectoryRow({
       }}
       onClick={() => onNavigate(dir)}
     >
-      <span />
       <span className="flex justify-center text-zinc-500">
         <Folder className="size-4" />
       </span>

@@ -48,7 +48,6 @@ export const FileTableFileRow = memo(function FileTableFileRow({
   isMultiSelected = false,
   isSelectedFilePlaying,
   onSelect,
-  onToggleSelect,
   onToggleFavorite,
   onMakePackFile,
   searchQuery,
@@ -80,7 +79,6 @@ export const FileTableFileRow = memo(function FileTableFileRow({
     index: number,
     modifiers?: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean },
   ) => void;
-  onToggleSelect?: (file: FileTableFileRecord) => void;
   onToggleFavorite: (id: string) => Promise<void>;
   onMakePackFile?: (file: FileTableFileRecord) => Promise<void>;
   searchQuery: string;
@@ -107,8 +105,8 @@ export const FileTableFileRow = memo(function FileTableFileRow({
           className={cn(
             "group absolute left-0 top-0 grid w-full cursor-pointer items-center gap-3 border-b border-white/5 px-3 outline-none transition-[background-color,color] last:border-0",
             desktop
-              ? "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px_28px] sm:grid-cols-[28px_28px_minmax(0,1fr)_140px_64px_28px_28px]"
-              : "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px] sm:grid-cols-[28px_28px_minmax(0,1fr)_140px_64px_28px]",
+              ? "grid-cols-[32px_minmax(0,1fr)_140px_64px_28px_28px]"
+              : "grid-cols-[32px_minmax(0,1fr)_140px_64px_28px]",
             isSelected
               ? "bg-accent-fill/10"
               : isMultiSelected
@@ -133,17 +131,6 @@ export const FileTableFileRow = memo(function FileTableFileRow({
           {isSelected && (
             <span className="pointer-events-none absolute inset-y-2 left-0 w-[3px] rounded-full bg-accent-fill shadow-glow-accent" />
           )}
-          <span className="flex justify-center">
-            <input
-              type="checkbox"
-              checked={isMultiSelected}
-              onChange={() => onToggleSelect?.(file)}
-              onClick={(event) => event.stopPropagation()}
-              onMouseDown={(event) => event.stopPropagation()}
-              aria-label={`Select ${file.filename}`}
-              className="size-4 cursor-pointer accent-accent-fill opacity-60 transition-opacity outline-none hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 checked:opacity-100"
-            />
-          </span>
           <span
             className={cn(
               "flex justify-center",

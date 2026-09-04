@@ -580,11 +580,11 @@ function SettingsDialogBody({
       {/* Sidebar Navigation */}
       <aside className="flex w-64 shrink-0 flex-col border-r border-white/10">
         <div className="p-6">
-          <h2 className="flex items-center gap-2 text-xl font-extrabold tracking-tighter text-zinc-50">
+          <h2 className="flex items-center gap-2 text-xl font-extrabold tracking-tight text-zinc-50">
             <Database className="size-5 text-accent-text" />
             Settings
           </h2>
-          <p className="mt-1 font-mono text-xs text-zinc-500">
+          <p className="mt-1.5 font-mono text-[11px] tracking-wide text-zinc-500">
             v2.1.0-alpha · Foleyard Core
           </p>
         </div>

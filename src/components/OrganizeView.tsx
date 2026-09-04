@@ -142,6 +142,12 @@ export function OrganizeView({
 
   return (
     <div className="px-4 pb-4 md:px-5">
+      <style>{`@keyframes field-rise {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .field-rise { animation: field-rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }`}</style>
+
       <div className="flex items-center gap-2">
         <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
           Tags
@@ -162,7 +168,7 @@ export function OrganizeView({
             return (
               <span
                 key={tag.id}
-                className="w-full max-w-md animate-in rounded-2xl border border-accent-fill/50 bg-accent-fill/[0.07] p-2 fade-in-0 zoom-in-95 duration-200"
+                className="field-rise w-full max-w-md rounded-2xl border border-accent-fill/50 bg-accent-fill/[0.07] p-2"
               >
                 <span className="flex items-center gap-2">
                   <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: tag.color }} />
@@ -256,7 +262,7 @@ export function OrganizeView({
       </div>
 
       {showTagComposer ? (
-        <div className="mt-2 max-w-md animate-in rounded-2xl border border-dashed border-white/20 p-3 fade-in-0 zoom-in-95 duration-200">
+        <div className="field-rise mt-2 max-w-md rounded-2xl border border-dashed border-white/20 p-3">
           <div className="flex items-center gap-2">
             <input
               autoFocus
@@ -311,7 +317,7 @@ export function OrganizeView({
                 backgroundImage: `linear-gradient(100deg, ${color}30, transparent 65%)`,
                 animationDelay: `${Math.min(i, 8) * 45}ms`,
               }}
-              className="relative animate-in overflow-hidden rounded-2xl border border-white/10 fade-in-0 slide-in-from-bottom-2 duration-300"
+              className="field-rise relative overflow-hidden rounded-2xl border border-white/10 transition-all duration-300"
             >
               <span
                 aria-hidden="true"
@@ -380,67 +386,67 @@ export function OrganizeView({
               >
                 <div className="overflow-hidden">
                   <div className="px-4 pb-3">
-                    {confirming ? (
-                      <div className="flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2.5">
-                        <span className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-200">
-                          Delete “{collection.name}”? Files stay on disk.
-                        </span>
+                    <div
+                      className="rounded-xl bg-black/60 px-2 py-1 backdrop-blur-md"
+                      style={FEATHER_MASK}
+                    >
+                      <div className="flex items-center gap-1.5 px-2 pb-2 pt-1">
+                        <Swatches
+                          value={color}
+                          onPick={(next) => onUpdateCollectionColor(collection.id, next)}
+                        />
+                        <span className="flex-1" />
+                        {confirming ? (
+                          <span className="field-rise flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => onDeleteCollection(collection.id)}
+                              className="shrink-0 rounded-lg bg-destructive/15 px-2.5 py-1 text-xs font-semibold text-destructive transition-all hover:bg-destructive/25 active:scale-95"
+                            >
+                              Sure?
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                              aria-label="Cancel delete"
+                              className="flex size-6 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-100"
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRenamingId(collection.id);
+                                setRenameDraft(collection.name);
+                              }}
+                              aria-label={`Rename ${collection.name}`}
+                              className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition-all hover:bg-white/5 hover:text-zinc-100 active:scale-90"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(collection.id)}
+                              aria-label={`Delete ${collection.name}`}
+                              className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition-all hover:bg-destructive/10 hover:text-destructive active:scale-90"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </>
+                        )}
                         <button
                           type="button"
-                          onClick={() => onDeleteCollection(collection.id)}
-                          className="shrink-0 rounded-lg bg-destructive/20 px-3 py-1.5 text-xs font-semibold text-destructive transition-all hover:bg-destructive/30 active:scale-95"
+                          onClick={() => onOpenCollection(collection.id)}
+                          className="shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold transition-transform active:scale-95"
+                          style={{ backgroundColor: color, color: onColorText(color) }}
                         >
-                          Sure?
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteId(null)}
-                          className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-100"
-                        >
-                          Keep
+                          Open
                         </button>
                       </div>
-                    ) : (
-                      <div
-                        className="rounded-xl bg-black/60 px-2 py-1 backdrop-blur-md"
-                        style={FEATHER_MASK}
-                      >
-                        <div className="flex items-center gap-1.5 px-2 pb-2 pt-1">
-                          <Swatches
-                            value={color}
-                            onPick={(next) => onUpdateCollectionColor(collection.id, next)}
-                          />
-                          <span className="flex-1" />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRenamingId(collection.id);
-                              setRenameDraft(collection.name);
-                            }}
-                            aria-label={`Rename ${collection.name}`}
-                            className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition-all hover:bg-white/5 hover:text-zinc-100 active:scale-90"
-                          >
-                            <Pencil className="size-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDeleteId(collection.id)}
-                            aria-label={`Delete ${collection.name}`}
-                            className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition-all hover:bg-destructive/10 hover:text-destructive active:scale-90"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onOpenCollection(collection.id)}
-                            className="shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold transition-transform active:scale-95"
-                            style={{ backgroundColor: color, color: onColorText(color) }}
-                          >
-                            Open
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -450,7 +456,7 @@ export function OrganizeView({
       </div>
 
       {showComposer ? (
-        <div className="mt-2 animate-in rounded-2xl border border-dashed border-white/20 p-4 fade-in-0 zoom-in-95 duration-200">
+        <div className="field-rise mt-2 rounded-2xl border border-dashed border-white/20 p-4">
           <div className="flex items-center gap-3">
             <input
               autoFocus

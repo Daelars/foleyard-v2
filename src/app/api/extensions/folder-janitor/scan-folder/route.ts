@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import path from "node:path";
 
 import { getFiles, getLibraryRoots } from "@/lib/db";
 import { createAppExtensionHost } from "@/lib/extensions/host";
@@ -18,7 +19,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const files = getFiles({ directory: body.folderPath, showRemoved: false });
   const libraryRoots = getLibraryRoots();
 
   if (libraryRoots.length === 0) {
@@ -27,6 +27,25 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+
+  const absoluteFolder = path.resolve(body.folderPath);
+  const libraryRoot = libraryRoots.find((root) => {
+    const relative = path.relative(path.resolve(root), absoluteFolder);
+    return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+  });
+  if (!libraryRoot) {
+    return NextResponse.json(
+      { error: "Folder is outside the configured Library roots" },
+      { status: 400 },
+    );
+  }
+  const directory = path.relative(path.resolve(libraryRoot), absoluteFolder) || null;
+  const files = getFiles({
+    libraryRoot,
+    directory,
+    atLibraryRoot: directory === null,
+    showRemoved: false,
+  });
 
   const outcome = await createAppExtensionHost().execute({
     extensionId: "folder-janitor",

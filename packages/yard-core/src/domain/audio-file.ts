@@ -2,6 +2,7 @@ export interface AudioFile {
   id: string;
   path: string;
   filename: string;
+  libraryRoot: string | null;
   directory: string | null;
   format: string | null;
   duration: number | null;
@@ -25,4 +26,5 @@ export interface AudioFileIdentity {
   id: string;
   path: string;
   filename: string;
+  libraryRoot: string | null;
 }

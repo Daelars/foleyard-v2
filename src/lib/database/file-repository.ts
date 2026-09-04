@@ -39,6 +39,8 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
       favorites,
       collectionId,
       directory,
+      libraryRoot,
+      atLibraryRoot,
       tagId,
       showRemoved,
       limit = 500,
@@ -69,6 +71,7 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
           id: schema.files.id,
           path: schema.files.path,
           filename: schema.files.filename,
+          libraryRoot: schema.files.libraryRoot,
           directory: schema.files.directory,
           format: schema.files.format,
           duration: schema.files.duration,
@@ -76,13 +79,16 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
           bitDepth: schema.files.bitDepth,
           channels: schema.files.channels,
           fileSize: schema.files.fileSize,
+          mtimeMs: schema.files.mtimeMs,
           isFavorite: schema.files.isFavorite,
           removedAt: schema.files.removedAt,
         })
         .from(schema.fileCollections)
         .innerJoin(schema.files, eq(schema.fileCollections.fileId, schema.files.id))
         .where(and(...collectionFilters))
-        .orderBy(asc(schema.files.filename))
+        .orderBy(asc(schema.files.filename), asc(schema.files.id))
+        .limit(limit)
+        .offset(offset)
         .all();
 
       return rows as AudioFile[];
@@ -96,6 +102,13 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
 
     if (favorites) {
       filters.push(eq(schema.files.isFavorite, true));
+    }
+
+    if (libraryRoot) {
+      filters.push(eq(schema.files.libraryRoot, libraryRoot));
+      if (atLibraryRoot) {
+        filters.push(isNull(schema.files.directory));
+      }
     }
 
     if (tagId) {
@@ -130,6 +143,7 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
         id: schema.files.id,
         path: schema.files.path,
         filename: schema.files.filename,
+        libraryRoot: schema.files.libraryRoot,
         directory: schema.files.directory,
         format: schema.files.format,
         duration: schema.files.duration,
@@ -137,12 +151,13 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
         bitDepth: schema.files.bitDepth,
         channels: schema.files.channels,
         fileSize: schema.files.fileSize,
+        mtimeMs: schema.files.mtimeMs,
         isFavorite: schema.files.isFavorite,
         removedAt: schema.files.removedAt,
       })
       .from(schema.files)
       .where(filters.length ? and(...filters) : undefined)
-      .orderBy(asc(schema.files.filename))
+      .orderBy(asc(schema.files.filename), asc(schema.files.id))
       .limit(limit)
       .offset(offset)
       .all() as AudioFile[];
@@ -186,6 +201,7 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
         id: schema.files.id,
         path: schema.files.path,
         filename: schema.files.filename,
+        libraryRoot: schema.files.libraryRoot,
         directory: schema.files.directory,
         format: schema.files.format,
         codec: schema.files.codec,
@@ -238,6 +254,7 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
         id: uuid(),
         path: record.path,
         filename: record.filename,
+        libraryRoot: record.libraryRoot ?? null,
         directory: record.directory,
         format: record.format,
         codec: record.codec,
@@ -255,6 +272,7 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
         target: schema.files.path,
         set: {
           filename: record.filename,
+          libraryRoot: record.libraryRoot ?? null,
           directory: record.directory,
           format: record.format,
           codec: record.codec,
@@ -282,11 +300,11 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
   batchTouchFiles(entries: AudioFileTouchEntry[], now: string): void {
     if (entries.length === 0) return;
     const stmt = this.sqlite.prepare(
-      "UPDATE files SET removed_at = NULL, last_scanned_at = ?, updated_at = ? WHERE path = ?",
+      "UPDATE files SET removed_at = NULL, last_scanned_at = ?, library_root = COALESCE(?, library_root), updated_at = ? WHERE path = ?",
     );
     const txn = this.sqlite.transaction((batchEntries: AudioFileTouchEntry[]) => {
       for (const entry of batchEntries) {
-        stmt.run(now, now, entry.path);
+        stmt.run(now, entry.libraryRoot ?? null, now, entry.path);
       }
     });
 
@@ -297,10 +315,10 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
     if (records.length === 0) return;
 
     const stmt = this.sqlite.prepare(
-      `INSERT INTO files (id, path, filename, directory, format, codec, duration, sample_rate, bit_depth, channels, file_size, mtime_ms, removed_at, last_scanned_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO files (id, path, filename, library_root, directory, format, codec, duration, sample_rate, bit_depth, channels, file_size, mtime_ms, removed_at, last_scanned_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(path) DO UPDATE SET
-         filename=excluded.filename, directory=excluded.directory, format=excluded.format, codec=excluded.codec,
+         filename=excluded.filename, library_root=excluded.library_root, directory=excluded.directory, format=excluded.format, codec=excluded.codec,
          duration=excluded.duration, sample_rate=excluded.sample_rate, bit_depth=excluded.bit_depth,
          channels=excluded.channels, file_size=excluded.file_size, mtime_ms=excluded.mtime_ms,
          removed_at=excluded.removed_at, last_scanned_at=excluded.last_scanned_at, updated_at=excluded.updated_at`,
@@ -311,6 +329,7 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
           uuid(),
           record.path,
           record.filename,
+          record.libraryRoot ?? null,
           record.directory,
           record.format,
           record.codec,
@@ -395,15 +414,22 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
   reconcileMovedFiles(): number {
     const removedFiles = this.sqlite
       .prepare(
-        `SELECT id, filename, file_size as fileSize, duration, is_favorite as isFavorite
+        `SELECT id, filename, library_root as libraryRoot, file_size as fileSize,
+                duration, codec, sample_rate as sampleRate, bit_depth as bitDepth,
+                channels, is_favorite as isFavorite
          FROM files
          WHERE removed_at IS NOT NULL`,
       )
       .all() as Array<{
         id: string;
         filename: string;
+        libraryRoot: string | null;
         fileSize: number | null;
         duration: number | null;
+        codec: string | null;
+        sampleRate: number | null;
+        bitDepth: number | null;
+        channels: number | null;
         isFavorite: number | boolean | null;
       }>;
 
@@ -412,8 +438,13 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
        FROM files
        WHERE removed_at IS NULL
          AND filename = ?
+         AND COALESCE(library_root, '') = COALESCE(?, '')
          AND COALESCE(file_size, -1) = COALESCE(?, -1)
-         AND ABS(COALESCE(duration, -1) - COALESCE(?, -1)) < 0.01`,
+         AND ABS(COALESCE(duration, -1) - COALESCE(?, -1)) < 0.01
+         AND COALESCE(codec, '') = COALESCE(?, '')
+         AND COALESCE(sample_rate, -1) = COALESCE(?, -1)
+         AND COALESCE(bit_depth, -1) = COALESCE(?, -1)
+         AND COALESCE(channels, -1) = COALESCE(?, -1)`,
     );
     const copyCollections = this.sqlite.prepare(
       `INSERT OR IGNORE INTO file_collections (file_id, collection_id)
@@ -434,8 +465,13 @@ export class SqliteAudioFileRepository implements AudioFileRepository {
       for (const removedFile of removedFiles) {
         const matches = findActiveMatch.all(
           removedFile.filename,
+          removedFile.libraryRoot,
           removedFile.fileSize,
           removedFile.duration,
+          removedFile.codec,
+          removedFile.sampleRate,
+          removedFile.bitDepth,
+          removedFile.channels,
         ) as Array<{ id: string }>;
 
         if (matches.length !== 1) {

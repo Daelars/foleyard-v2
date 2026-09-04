@@ -33,7 +33,7 @@ export function IconRail({
 }) {
   const railButtonClass = (active: boolean) =>
     cn(
-      "relative flex w-16 flex-col items-center gap-1 rounded-xl border px-1 py-2.5 text-[10px] font-semibold uppercase tracking-widest transition-all",
+      "relative flex w-fit min-w-16 flex-col items-center gap-1 rounded-xl border px-2 py-2.5 text-[10px] font-semibold uppercase tracking-widest transition-all",
       active
         ? "border-accent-fill/50 bg-accent-fill/15 text-accent-text shadow-glow-accent"
         : "border-transparent text-zinc-500 hover:border-white/10 hover:bg-white/5 hover:text-zinc-200",
@@ -97,7 +97,7 @@ export function IconRail({
     <nav
       aria-label="Primary"
       className={cn(
-        "relative flex w-20 shrink-0 flex-col items-center gap-1 border-r border-white/10 py-4",
+        "relative flex w-fit min-w-20 shrink-0 flex-col items-center gap-1 px-3 py-4",
         className,
       )}
     >
@@ -123,7 +123,7 @@ export function IconRail({
         onClick={onOpenSettings}
         aria-label="Settings"
         className={cn(
-          "mt-auto flex w-16 flex-col items-center gap-1 rounded-xl border px-1 py-2.5 text-[10px] font-semibold uppercase tracking-widest transition-all",
+          "mt-auto flex w-fit min-w-16 flex-col items-center gap-1 rounded-xl border px-2 py-2.5 text-[10px] font-semibold uppercase tracking-widest transition-all",
           settingsActive
             ? "border-accent-fill/50 bg-accent-fill/15 text-accent-text"
             : "border-transparent text-zinc-500 hover:border-white/10 hover:bg-white/5 hover:text-zinc-200",

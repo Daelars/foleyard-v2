@@ -9,6 +9,10 @@ import type { AudioPlayerFileRecord } from "./types";
 const VOLUME_STORAGE_KEY = "foleyard-volume";
 const LEGACY_VOLUME_STORAGE_KEYS = ["soundslop-volume"];
 
+function clampVolume(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
+
 export function useAudioPlayback(
   selectedFile: AudioPlayerFileRecord,
   onPlaybackChange?: (isPlaying: boolean) => void,
@@ -40,7 +44,7 @@ export function useAudioPlayback(
         (value) => value !== null,
       );
     const parsedVolume = savedVolume ? Number(savedVolume) : 0.72;
-    return Number.isFinite(parsedVolume) ? parsedVolume : 0.72;
+    return Number.isFinite(parsedVolume) ? clampVolume(parsedVolume) : 0.72;
   });
   const [isMuted, setIsMuted] = useState(false);
 
@@ -50,6 +54,7 @@ export function useAudioPlayback(
   }, [isMuted, volume]);
 
   useEffect(() => {
+    let active = true;
     const audio = new Audio(`/api/audio?id=${encodeURIComponent(selectedFile.id)}`);
     audio.preload = "metadata";
     audio.volume = isMutedRef.current ? 0 : volumeRef.current;
@@ -75,17 +80,19 @@ export function useAudioPlayback(
     audio.addEventListener("ended", handleEnded);
 
     audio.play().catch(() => {
-      setIsPlaying(false);
+      if (active) setIsPlaying(false);
     });
 
     return () => {
+      active = false;
       audio.pause();
       audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
       audio.removeEventListener("play", handlePlay);
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
-      audio.src = "";
+      audio.removeAttribute("src");
+      audio.load();
 
       if (audioRef.current === audio) {
         audioRef.current = null;
@@ -96,7 +103,8 @@ export function useAudioPlayback(
   useEffect(() => {
     const controller = new AbortController();
 
-    computeAndCachePeaks(selectedFile.id, controller.signal)
+    const sourceVersion = `${selectedFile.mtimeMs ?? "unknown"}:${selectedFile.fileSize ?? "unknown"}`;
+    computeAndCachePeaks(selectedFile.id, sourceVersion, controller.signal)
       .then((peaks) => {
         if (!controller.signal.aborted) {
           setWaveform({ fileId: selectedFile.id, data: peaks });
@@ -107,7 +115,7 @@ export function useAudioPlayback(
     return () => {
       controller.abort();
     };
-  }, [selectedFile.id]);
+  }, [selectedFile.id, selectedFile.fileSize, selectedFile.mtimeMs]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -157,7 +165,7 @@ export function useAudioPlayback(
   };
 
   const handleVolumeChange = (value: number | readonly number[]) => {
-    const nextVolume = Array.isArray(value) ? value[0] : value;
+    const nextVolume = clampVolume(Array.isArray(value) ? value[0] : value);
 
     setVolume(nextVolume);
     if (nextVolume > 0 && isMuted) {

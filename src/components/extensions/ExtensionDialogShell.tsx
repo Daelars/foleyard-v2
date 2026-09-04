@@ -23,7 +23,6 @@ type ExtensionDialogShellProps = {
   footer?: ReactNode;
   maxWidth?: "lg" | "xl" | "2xl";
   showCloseButton?: boolean;
-  onOpenChangeWrapper?: (open: boolean) => void;
 };
 
 const widthClass = {
@@ -42,15 +41,9 @@ export function ExtensionDialogShell({
   footer,
   maxWidth = "lg",
   showCloseButton = true,
-  onOpenChangeWrapper,
 }: ExtensionDialogShellProps) {
-  const handleOpenChange = (nextOpen: boolean) => {
-    onOpenChangeWrapper?.(nextOpen);
-    onOpenChange(nextOpen);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
           "flex max-h-[min(86vh,780px)] flex-col overflow-hidden p-0",

@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, useRef, useState } from "react";
+import { useState } from "react";
 import {
   Activity,
   CheckCircle2,
@@ -56,7 +56,7 @@ export function OnboardingDialog({
   const [isValidating, setIsValidating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isStartingScan, setIsStartingScan] = useState(false);
-  const folderInputRef = useRef<HTMLInputElement>(null);
+  const desktop = getDesktopBridge() !== null;
 
   const reset = () => {
     setStep("welcome");
@@ -133,26 +133,6 @@ export function OnboardingDialog({
       return;
     }
 
-    folderInputRef.current?.click();
-  };
-
-  const handleWebFolderPicked = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    const audioFiles = Array.from(files).filter((file) =>
-      /\.(wav|mp3|flac|ogg|aiff|aac|m4a|wma)$/i.test(file.name),
-    );
-
-    setValidationResult({
-      valid: audioFiles.length > 0,
-      normalizedPath: null,
-      readable: true,
-      audioFileCount: audioFiles.length,
-      samples: audioFiles.slice(0, 6).map((file) => file.name),
-      error: audioFiles.length === 0 ? "No supported audio files found in the selected folder." : null,
-    });
-    event.target.value = "";
   };
 
   const handleAddFolder = async () => {
@@ -261,24 +241,24 @@ export function OnboardingDialog({
                   placeholder="e.g. C:\\Samples or /Volumes/Audio"
                   className="h-10 flex-1 border-white/10 bg-black/30 font-mono text-sm"
                 />
-                <Button
-                  variant="outline"
-                  onClick={handleBrowse}
-                  disabled={isValidating || isSaving}
-                  className="h-10 rounded-xl"
-                >
-                  {isValidating ? <Loader2 className="size-4 animate-spin" /> : <FolderOpen className="size-4" />}
-                  Browse
-                </Button>
-                <input
-                  ref={folderInputRef}
-                  type="file"
-                  className="hidden"
-                  /* @ts-expect-error - webkitdirectory is a non-standard attribute */
-                  webkitdirectory=""
-                  onChange={handleWebFolderPicked}
-                />
+                {desktop ? (
+                  <Button
+                    variant="outline"
+                    onClick={handleBrowse}
+                    disabled={isValidating || isSaving}
+                    className="h-10 rounded-xl"
+                  >
+                    {isValidating ? <Loader2 className="size-4 animate-spin" /> : <FolderOpen className="size-4" />}
+                    Browse
+                  </Button>
+                ) : null}
               </div>
+
+              {!desktop ? (
+                <p className="text-xs leading-5 text-zinc-500">
+                  Enter an absolute folder path that the Foleyard server can read, then choose Add Folder.
+                </p>
+              ) : null}
 
               {validationResult ? <ValidationMessage result={validationResult} /> : null}
 

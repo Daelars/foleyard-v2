@@ -16,9 +16,6 @@ const badgeVariants = cva(
           "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
         outline:
           "border-white/10 bg-transparent text-zinc-300 ring-1 ring-white/10 [a]:hover:bg-white/5 [a]:hover:text-zinc-100",
-        ghost:
-          "text-zinc-400 hover:bg-white/5 hover:text-zinc-100",
-        link: "text-accent-text underline-offset-4 hover:underline",
       },
     },
     defaultVariants: {
@@ -49,4 +46,4 @@ function Badge({
   })
 }
 
-export { Badge, badgeVariants }
+export { Badge }

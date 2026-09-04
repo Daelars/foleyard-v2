@@ -9,6 +9,7 @@ import type { FileTableFileRecord } from "./types";
 
 export function useFileTableDesktopActions(
   onSelect: (file: FileTableFileRecord, index: number) => void,
+  selectedIds: string[],
 ) {
   const [draggingFile, setDraggingFile] = useState<string | null>(null);
   const desktop = isDesktopApp();
@@ -77,9 +78,10 @@ export function useFileTableDesktopActions(
     event.stopPropagation();
     event.dataTransfer.effectAllowed = "copy";
     event.dataTransfer.setData("text/plain", file.filename);
-    onSelect(file, index);
+    const dragIds = selectedIds.includes(file.id) ? selectedIds : [file.id];
+    if (!selectedIds.includes(file.id)) onSelect(file, index);
     setDraggingFile(file.id);
-    getDesktopBridge()?.startDragFile(file.id, file.path);
+    getDesktopBridge()?.startDragFiles(dragIds);
   };
 
   return {

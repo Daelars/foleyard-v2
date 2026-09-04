@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { getLibraryRoots } from "@/lib/db";
 import { createAppExtensionHost } from "@/lib/extensions/host";
 
 import { toHostFailureResponse } from "../../host-outcome";
@@ -17,10 +18,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const libraryRoots = getLibraryRoots();
+  if (libraryRoots.length === 0) {
+    return NextResponse.json(
+      { error: "No library roots configured" },
+      { status: 400 },
+    );
+  }
+
   const outcome = await createAppExtensionHost().execute({
     extensionId: "folder-janitor",
     commandId: "folder-janitor.delete-folders",
-    input: { paths: body.paths },
+    input: { paths: body.paths, libraryRoots },
   });
 
   if (outcome.ok && outcome.type === "value") {

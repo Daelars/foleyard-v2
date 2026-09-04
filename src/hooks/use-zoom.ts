@@ -7,6 +7,11 @@ const ZOOM_MIN = 50;
 const ZOOM_MAX = 200;
 const ZOOM_STEP = 10;
 
+function normalizeZoom(level: number) {
+  if (!Number.isFinite(level)) return 100;
+  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(level)));
+}
+
 export function useZoom() {
   const [zoom, setZoom] = useState(() => {
     if (typeof window === "undefined") {
@@ -19,12 +24,13 @@ export function useZoom() {
     }
 
     const level = Number.parseInt(savedZoom, 10);
-    return Number.isNaN(level) ? 100 : level;
+    return normalizeZoom(level);
   });
 
   const handleUpdateZoom = useCallback((level: number) => {
-    setZoom(level);
-    localStorage.setItem(ZOOM_STORAGE_KEY, String(level));
+    const normalized = normalizeZoom(level);
+    setZoom(normalized);
+    localStorage.setItem(ZOOM_STORAGE_KEY, String(normalized));
   }, []);
 
   const hardResetZoom = useCallback(() => {

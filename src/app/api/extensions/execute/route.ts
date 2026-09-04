@@ -25,6 +25,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (body.input !== undefined) {
+    return NextResponse.json(
+      { error: "Command input must use its dedicated endpoint" },
+      { status: 400 },
+    );
+  }
+
   const outcome = await createAppExtensionHost().execute({
     extensionId: body.extensionId,
     commandId: body.commandId,

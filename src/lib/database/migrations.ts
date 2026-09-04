@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import path from "node:path";
 
 function ensureColumn(
   sqlite: Database.Database,
@@ -15,6 +16,52 @@ function ensureColumn(
   }
 }
 
+function readConfiguredRoots(sqlite: Database.Database) {
+  const rows = sqlite
+    .prepare("SELECT key, value FROM settings WHERE key IN ('libraryRoots', 'libraryRoot')")
+    .all() as Array<{ key: string; value: string | null }>;
+  const roots = new Set<string>();
+
+  for (const row of rows) {
+    if (!row.value) continue;
+    if (row.key === "libraryRoots") {
+      try {
+        const parsed = JSON.parse(row.value);
+        if (Array.isArray(parsed)) {
+          for (const value of parsed) {
+            if (typeof value === "string" && value) roots.add(path.resolve(value));
+          }
+        }
+      } catch {}
+    } else {
+      roots.add(path.resolve(row.value));
+    }
+  }
+
+  return Array.from(roots).sort((left, right) => right.length - left.length);
+}
+
+function backfillLibraryRoots(sqlite: Database.Database) {
+  const roots = readConfiguredRoots(sqlite);
+  if (roots.length === 0) return;
+
+  const files = sqlite
+    .prepare("SELECT id, path FROM files WHERE library_root IS NULL")
+    .all() as Array<{ id: string; path: string }>;
+  const update = sqlite.prepare("UPDATE files SET library_root = ? WHERE id = ?");
+  const apply = sqlite.transaction(() => {
+    for (const file of files) {
+      const filePath = path.resolve(file.path);
+      const owner = roots.find((root) => {
+        const relative = path.relative(root, filePath);
+        return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+      });
+      if (owner) update.run(owner, file.id);
+    }
+  });
+  apply();
+}
+
 export function initializeDatabaseSchema(sqlite: Database.Database) {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS settings (
@@ -27,6 +74,7 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
       id TEXT PRIMARY KEY,
       path TEXT NOT NULL UNIQUE,
       filename TEXT NOT NULL,
+      library_root TEXT,
       directory TEXT,
       format TEXT,
       codec TEXT,
@@ -78,6 +126,7 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   ensureColumn(sqlite, "files", "removed_at", "removed_at TEXT");
   ensureColumn(sqlite, "files", "last_scanned_at", "last_scanned_at TEXT");
   ensureColumn(sqlite, "files", "directory", "directory TEXT");
+  ensureColumn(sqlite, "files", "library_root", "library_root TEXT");
   ensureColumn(sqlite, "files", "codec", "codec TEXT");
 
   ensureColumn(sqlite, "collections", "is_smart", "is_smart INTEGER DEFAULT 0");
@@ -89,6 +138,9 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_removed_at ON files(removed_at)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_is_favorite ON files(is_favorite)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_directory ON files(directory)`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_library_root ON files(library_root)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_last_scanned_at ON files(last_scanned_at)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_tags_tag_id ON file_tags(tag_id)`);
+
+  backfillLibraryRoots(sqlite);
 }

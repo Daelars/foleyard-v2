@@ -5,6 +5,7 @@ const { ensureDesktopDatabaseInitialized, resetDesktopDatabaseForBuild } = requi
 const { appendDesktopLog, reportMainProcessError, setMainWindow } = require("./main/errors.cjs");
 const { registerIpcHandlers } = require("./main/ipc.cjs");
 const { startNextProductionServer } = require("./main/next-server.cjs");
+const { setDesktopServerUrl } = require("./main/server-url.cjs");
 const { createMainWindow } = require("./main/window.cjs");
 const { initAutoUpdater, setUpdateWindow } = require("./main/auto-updater.cjs");
 
@@ -16,6 +17,7 @@ async function openMainWindow() {
   const startUrl =
     process.env.ELECTRON_START_URL ?? (await startNextProductionServer());
 
+  setDesktopServerUrl(startUrl);
   appendDesktopLog(`Opening main window: ${startUrl}`);
   mainWindow = createMainWindow(startUrl, () => {
     appendDesktopLog("Main window closed");

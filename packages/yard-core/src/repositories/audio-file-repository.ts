@@ -5,6 +5,7 @@ import type { ScanFileRecord } from "../services/library/scan-types";
 export interface AudioFileTouchEntry {
   path: string;
   lastScannedAt: string;
+  libraryRoot?: string | null;
 }
 
 export interface AudioFileRepository {

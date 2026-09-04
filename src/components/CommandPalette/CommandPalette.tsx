@@ -1,6 +1,6 @@
 "use client";
 
-import type { RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { Search } from "lucide-react";
 
 import type { PaletteEntry } from "./command-palette";
@@ -28,6 +28,14 @@ export function CommandPalette({
   onSelectEntry,
   onClose,
 }: CommandPaletteProps) {
+  const entryRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  useEffect(() => {
+    if (open && activeIndex >= 0) {
+      entryRefs.current[activeIndex]?.scrollIntoView({ block: "nearest" });
+    }
+  }, [activeIndex, open]);
+
   if (!open) {
     return null;
   }
@@ -52,13 +60,22 @@ export function CommandPalette({
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder="Type a command or sound..."
             aria-label="Type a command or sound"
+            aria-controls="command-palette-results"
+            aria-activedescendant={
+              activeIndex >= 0 ? `command-palette-entry-${activeIndex}` : undefined
+            }
             className="w-full bg-transparent py-4 text-[15px] text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
           />
           <kbd className="shrink-0 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
             esc
           </kbd>
         </div>
-        <div className="max-h-80 overflow-y-auto p-2">
+        <div
+          id="command-palette-results"
+          role="listbox"
+          aria-label="Command results"
+          className="max-h-80 overflow-y-auto p-2"
+        >
           {entries.length === 0 ? (
             <p className="px-3 py-6 text-center text-sm text-zinc-500">
               No matches.
@@ -67,6 +84,12 @@ export function CommandPalette({
             entries.map((entry, index) => (
               <button
                 key={entry.id}
+                ref={(node) => {
+                  entryRefs.current[index] = node;
+                }}
+                id={`command-palette-entry-${index}`}
+                role="option"
+                aria-selected={index === activeIndex}
                 type="button"
                 onClick={() => onSelectEntry(entry)}
                 onMouseEnter={() => onHoverEntry(index)}

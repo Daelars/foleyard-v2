@@ -14,14 +14,26 @@ function openCacheDb(): Promise<IDBDatabase> {
   });
 }
 
-async function getCachedPeaks(fileId: string): Promise<number[] | null> {
+type CachedPeaks = { sourceVersion: string; peaks: number[] };
+
+async function getCachedPeaks(
+  fileId: string,
+  sourceVersion: string,
+): Promise<number[] | null> {
   try {
     const db = await openCacheDb();
     return await new Promise<number[] | null>((resolve) => {
       const tx = db.transaction(WAVEFORM_CACHE_STORE, "readonly");
       const req = tx.objectStore(WAVEFORM_CACHE_STORE).get(fileId);
       req.onsuccess = () => {
-        resolve(req.result ?? null);
+        const cached = req.result as CachedPeaks | number[] | undefined;
+        resolve(
+          !Array.isArray(cached) &&
+          cached?.sourceVersion === sourceVersion &&
+          Array.isArray(cached.peaks)
+            ? cached.peaks
+            : null,
+        );
         db.close();
       };
       req.onerror = () => {
@@ -34,12 +46,16 @@ async function getCachedPeaks(fileId: string): Promise<number[] | null> {
   }
 }
 
-async function setCachedPeaks(fileId: string, peaks: number[]): Promise<void> {
+async function setCachedPeaks(
+  fileId: string,
+  sourceVersion: string,
+  peaks: number[],
+): Promise<void> {
   try {
     const db = await openCacheDb();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(WAVEFORM_CACHE_STORE, "readwrite");
-      tx.objectStore(WAVEFORM_CACHE_STORE).put(peaks, fileId);
+      tx.objectStore(WAVEFORM_CACHE_STORE).put({ sourceVersion, peaks }, fileId);
       tx.oncomplete = () => {
         resolve();
         db.close();
@@ -52,15 +68,6 @@ async function setCachedPeaks(fileId: string, peaks: number[]): Promise<void> {
   } catch {
     // Non-critical
   }
-}
-
-let audioContext: AudioContext | null = null;
-
-function getAudioContext(): AudioContext {
-  if (!audioContext) {
-    audioContext = new AudioContext();
-  }
-  return audioContext;
 }
 
 function computePeaksFromChannel(
@@ -86,21 +93,30 @@ function computePeaksFromChannel(
 
 export async function computeAndCachePeaks(
   fileId: string,
+  sourceVersion: string,
   signal?: AbortSignal,
 ): Promise<number[]> {
-  const cached = await getCachedPeaks(fileId);
+  const cached = await getCachedPeaks(fileId, sourceVersion);
   if (cached) return cached;
 
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
   const url = `/api/audio?id=${encodeURIComponent(fileId)}`;
   const response = await fetch(url, { signal });
+  if (!response.ok) {
+    throw new Error(`Audio request failed with ${response.status}`);
+  }
   const arrayBuffer = await response.arrayBuffer();
 
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
-  const ctx = getAudioContext();
-  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+  const ctx = new AudioContext();
+  let audioBuffer: AudioBuffer;
+  try {
+    audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+  } finally {
+    await ctx.close();
+  }
 
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
@@ -108,7 +124,7 @@ export async function computeAndCachePeaks(
   const peaks = computePeaksFromChannel(channelData, PEAK_COUNT);
 
   if (!signal?.aborted) {
-    setCachedPeaks(fileId, peaks);
+    await setCachedPeaks(fileId, sourceVersion, peaks);
   }
 
   return peaks;

@@ -27,6 +27,22 @@ function createContext(): YardExtensionContext {
   };
 }
 
+function createDeleteContext(): YardExtensionContext {
+  return {
+    services: { commands: { register: () => {} } } as unknown as YardExtensionContext["services"],
+    selection: { fileIds: [] },
+    permissions: {
+      has: (permission) => permission === "files:delete",
+      require: (permission) => {
+        if (permission !== "files:delete") {
+          throw new Error(`Missing permission: ${permission}`);
+        }
+      },
+      list: () => ["files:delete"],
+    },
+  };
+}
+
 describe("FolderJanitorService", () => {
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "folder-janitor-test-"));
@@ -83,5 +99,66 @@ describe("FolderJanitorService", () => {
     expect(report.issues.some((issue) => issue.kind === "tiny-file")).toBe(true);
     expect(report.issues.some((issue) => issue.kind === "weird-format")).toBe(true);
     expect(report.issues.some((issue) => issue.kind === "empty-folder")).toBe(true);
+  });
+
+  it("deletes an empty folder below a configured Library root", async () => {
+    const root = path.join(tempDir, "library");
+    const emptyFolder = path.join(root, "empty");
+    fs.mkdirSync(emptyFolder, { recursive: true });
+
+    const result = await new FolderJanitorService(createDeleteContext()).deleteFolders(
+      [emptyFolder],
+      [root],
+    );
+
+    expect(result.results).toEqual([{ path: emptyFolder, ok: true }]);
+    expect(fs.existsSync(emptyFolder)).toBe(false);
+  });
+
+  it("rejects folders outside configured Library roots", async () => {
+    const root = path.join(tempDir, "library");
+    const outside = path.join(tempDir, "outside");
+    fs.mkdirSync(root);
+    fs.mkdirSync(outside);
+
+    const result = await new FolderJanitorService(createDeleteContext()).deleteFolders(
+      [outside],
+      [root],
+    );
+
+    expect(result.results[0]).toMatchObject({ path: outside, ok: false });
+    expect(fs.existsSync(outside)).toBe(true);
+  });
+
+  it("rejects folders that escape a root through a directory link", async () => {
+    const root = path.join(tempDir, "library");
+    const outside = path.join(tempDir, "outside");
+    const link = path.join(root, "linked");
+    fs.mkdirSync(root);
+    fs.mkdirSync(outside);
+    fs.symlinkSync(outside, link, process.platform === "win32" ? "junction" : "dir");
+
+    const result = await new FolderJanitorService(createDeleteContext()).deleteFolders(
+      [link],
+      [root],
+    );
+
+    expect(result.results[0]).toMatchObject({ path: link, ok: false });
+    expect(fs.existsSync(outside)).toBe(true);
+  });
+
+  it("rechecks that a folder is empty before deletion", async () => {
+    const root = path.join(tempDir, "library");
+    const folder = path.join(root, "changed");
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, "new.txt"), "content");
+
+    const result = await new FolderJanitorService(createDeleteContext()).deleteFolders(
+      [folder],
+      [root],
+    );
+
+    expect(result.results[0]).toMatchObject({ path: folder, ok: false });
+    expect(fs.existsSync(folder)).toBe(true);
   });
 });

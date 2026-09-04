@@ -4,16 +4,18 @@ import { useEffect, useState } from "react";
 
 import { Waveform } from "@/components/ui/waveform";
 
+const MAX_PEAK_TASKS = 256;
 const peakTasks = new Map<string, Promise<number[]>>();
 
-function loadPeaks(fileId: string, filePath: string): Promise<number[]> {
-  const hit = peakTasks.get(fileId);
+function loadPeaks(fileId: string, sourceVersion: string): Promise<number[]> {
+  const cacheKey = `${fileId}:${sourceVersion}`;
+  const hit = peakTasks.get(cacheKey);
   if (hit) {
     return hit;
   }
 
   const task = fetch(
-    `/api/waveform?path=${encodeURIComponent(filePath)}&peaks=64`,
+    `/api/waveform?id=${encodeURIComponent(fileId)}&peaks=64`,
   )
     .then((response) => (response.ok ? response.json() : null))
     .then((data: unknown) => {
@@ -22,25 +24,37 @@ function loadPeaks(fileId: string, filePath: string): Promise<number[]> {
         ? peaks.filter((peak): peak is number => typeof peak === "number")
         : [];
     })
-    .catch(() => [] as number[]);
-  peakTasks.set(fileId, task);
+    .then((peaks) => {
+      if (peaks.length === 0) peakTasks.delete(cacheKey);
+      return peaks;
+    })
+    .catch(() => {
+      peakTasks.delete(cacheKey);
+      return [] as number[];
+    });
+  peakTasks.set(cacheKey, task);
+  while (peakTasks.size > MAX_PEAK_TASKS) {
+    const oldest = peakTasks.keys().next().value as string | undefined;
+    if (!oldest) break;
+    peakTasks.delete(oldest);
+  }
   return task;
 }
 
 export function RowWaveform({
   fileId,
-  filePath,
+  sourceVersion,
   active,
 }: {
   fileId: string;
-  filePath: string;
+  sourceVersion: string;
   active: boolean;
 }) {
   const [peaks, setPeaks] = useState<number[]>([]);
 
   useEffect(() => {
     let live = true;
-    loadPeaks(fileId, filePath).then((next) => {
+    loadPeaks(fileId, sourceVersion).then((next) => {
       if (live) {
         setPeaks(next);
       }
@@ -48,7 +62,7 @@ export function RowWaveform({
     return () => {
       live = false;
     };
-  }, [fileId, filePath]);
+  }, [fileId, sourceVersion]);
 
   return (
     <Waveform

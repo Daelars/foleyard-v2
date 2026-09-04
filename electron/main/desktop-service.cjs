@@ -1,13 +1,18 @@
-const fs = require("fs");
-
 const { clipboard, nativeImage, shell } = require("electron");
 
-const { DEV_SERVER_URL } = require("./constants.cjs");
+const { createGrantedPathRegistry } = require("./granted-paths.cjs");
+const { getDesktopServerUrl } = require("./server-url.cjs");
+
+const grantedPaths = createGrantedPathRegistry();
+
+function grantDirectoryPath(directoryPath) {
+  return grantedPaths.grant(directoryPath);
+}
 
 async function resolveIndexedFile(fileId) {
   try {
     const response = await fetch(
-      `${DEV_SERVER_URL}/api/desktop/file?id=${encodeURIComponent(fileId)}`,
+      `${getDesktopServerUrl()}/api/desktop/file?id=${encodeURIComponent(fileId)}`,
     );
     const data = await response.json();
 
@@ -27,7 +32,7 @@ async function resolveIndexedFile(fileId) {
 async function prepareDropRulesFile(fileId) {
   try {
     const response = await fetch(
-      `${DEV_SERVER_URL}/api/extensions/drop-rules/prepare-drag`,
+      `${getDesktopServerUrl()}/api/extensions/drop-rules/prepare-drag`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -67,28 +72,28 @@ function createDragIcon() {
 }
 
 async function startDragFile(event, payload) {
-  let filePath = payload?.filePath;
-  const fileId = payload?.fileId;
+  const fileIds = Array.isArray(payload?.fileIds)
+    ? [...new Set(payload.fileIds.filter((id) => typeof id === "string" && id))]
+    : [];
 
-  if (typeof fileId === "string" && fileId) {
+  if (fileIds.length === 0) {
+    event.sender.send("desktop:action-error", "Missing file ids");
+    return;
+  }
+
+  const files = [];
+  for (const fileId of fileIds) {
     const prepared = await prepareDropRulesFile(fileId);
-    if (prepared.ok) {
-      filePath = prepared.file.path;
+    const resolved = prepared.ok ? prepared : await resolveIndexedFile(fileId);
+    if (!resolved.ok) {
+      event.sender.send("desktop:action-error", resolved.error);
+      return;
     }
-  }
-
-  if (typeof filePath !== "string" || !filePath) {
-    event.sender.send("desktop:action-error", "Missing file path");
-    return;
-  }
-
-  if (!fs.existsSync(filePath)) {
-    event.sender.send("desktop:action-error", "File no longer exists on disk");
-    return;
+    files.push(resolved.file.path);
   }
 
   event.sender.startDrag({
-    files: [filePath],
+    files,
     icon: createDragIcon(),
   });
 }
@@ -127,9 +132,36 @@ async function openFileExternally(fileId) {
   return { ok: true, path: resolved.file.path };
 }
 
+async function revealPath(candidatePath) {
+  let resolvedPath = grantedPaths.resolve(candidatePath);
+
+  if (!resolvedPath) {
+    try {
+      const response = await fetch(`${getDesktopServerUrl()}/api/desktop/path`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: candidatePath }),
+      });
+      const data = await response.json();
+      if (response.ok && typeof data.path === "string") {
+        resolvedPath = data.path;
+      }
+    } catch {}
+  }
+
+  if (!resolvedPath) {
+    return { ok: false, error: "Path is outside the Library or chosen folders" };
+  }
+
+  shell.showItemInFolder(resolvedPath);
+  return { ok: true, path: resolvedPath };
+}
+
 module.exports = {
   copyFilePath,
+  grantDirectoryPath,
   openFileExternally,
+  revealPath,
   revealInExplorer,
   startDragFile,
 };

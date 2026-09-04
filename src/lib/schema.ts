@@ -11,6 +11,7 @@ export const files = sqliteTable('files', {
   id: text('id').primaryKey(),
   path: text('path').notNull().unique(),
   filename: text('filename').notNull(),
+  libraryRoot: text('library_root'),
   directory: text('directory'),
   format: text('format'),
   codec: text('codec'),

@@ -4,6 +4,7 @@ import { ChevronLeft, ListMusic } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { FileTableDirectory } from "./types";
 
 export function FileTableBreadcrumbBar({
   currentDirectory,
@@ -12,10 +13,10 @@ export function FileTableBreadcrumbBar({
   onNavigate,
   onNavigateLibrary,
 }: {
-  currentDirectory: string | null;
+  currentDirectory: FileTableDirectory | null;
   currentCollectionName?: string | null;
   onBack: () => void;
-  onNavigate: (dir: string | null) => void;
+  onNavigate: (dir: FileTableDirectory | null) => void;
   onNavigateLibrary: () => void;
 }) {
   return (
@@ -35,8 +36,29 @@ export function FileTableBreadcrumbBar({
         >
           Library
         </span>
-        {currentDirectory
-          ? currentDirectory.split(/[\\/]/).map((part, index, allParts) => (
+        {currentDirectory?.showRoot ? (
+          <span className="flex items-center gap-1">
+            <span className="opacity-40">/</span>
+            <span
+              className={cn(
+                "max-w-[150px] cursor-pointer truncate transition-colors hover:text-accent-text",
+                currentDirectory.directory === null && "font-bold text-zinc-100",
+              )}
+              onClick={() => onNavigate({
+                ...currentDirectory,
+                key: JSON.stringify([currentDirectory.libraryRoot, null]),
+                label: currentDirectory.libraryRoot.split(/[\\/]/).pop() || currentDirectory.libraryRoot,
+                directory: null,
+                absolutePath: currentDirectory.libraryRoot,
+                isRoot: true,
+              })}
+            >
+              {currentDirectory.libraryRoot.split(/[\\/]/).pop() || currentDirectory.libraryRoot}
+            </span>
+          </span>
+        ) : null}
+        {currentDirectory?.directory
+          ? currentDirectory.directory.split(/[\\/]/).map((part, index, allParts) => (
               <span key={index} className="flex items-center gap-1">
                 <span className="opacity-40">/</span>
                 <span
@@ -44,7 +66,17 @@ export function FileTableBreadcrumbBar({
                     "max-w-[150px] cursor-pointer truncate transition-colors hover:text-accent-text",
                     index === allParts.length - 1 && "font-bold text-zinc-100",
                   )}
-                  onClick={() => onNavigate(allParts.slice(0, index + 1).join("/"))}
+                  onClick={() => {
+                    const directory = allParts.slice(0, index + 1).join("/");
+                    onNavigate({
+                      ...currentDirectory,
+                      key: JSON.stringify([currentDirectory.libraryRoot, directory]),
+                      label: part,
+                      directory,
+                      absolutePath: `${currentDirectory.libraryRoot}/${directory}`,
+                      isRoot: false,
+                    });
+                  }}
                 >
                   {part}
                 </span>

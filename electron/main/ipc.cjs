@@ -3,7 +3,9 @@ const { ipcMain } = require("electron");
 const { checkForUpdates, quitAndInstall, simulateUpdate } = require("./auto-updater.cjs");
 const {
   copyFilePath,
+  grantDirectoryPath,
   openFileExternally,
+  revealPath,
   revealInExplorer,
   startDragFile,
 } = require("./desktop-service.cjs");
@@ -29,16 +31,15 @@ function registerIpcHandlers() {
     if (result.canceled || !result.filePaths.length) {
       return { ok: false, error: "No folder selected" };
     }
+    grantDirectoryPath(result.filePaths[0]);
     return { ok: true, path: result.filePaths[0] };
   });
   ipcMain.handle("desktop:reveal-in-explorer", async (_event, fileId) =>
     revealInExplorer(fileId),
   );
-  ipcMain.handle("desktop:reveal-path", async (_event, path) => {
-    const { shell } = require("electron");
-    shell.showItemInFolder(path);
-    return { ok: true, path };
-  });
+  ipcMain.handle("desktop:reveal-path", async (_event, path) =>
+    revealPath(path),
+  );
   ipcMain.handle("desktop:open-file-externally", async (_event, fileId) =>
     openFileExternally(fileId),
   );

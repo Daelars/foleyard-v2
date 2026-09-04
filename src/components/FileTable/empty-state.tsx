@@ -3,6 +3,7 @@
 import { ChevronLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import type { FileTableDirectory } from "./types";
 
 export function FileTableEmptyState({
   currentDirectory,
@@ -10,7 +11,7 @@ export function FileTableEmptyState({
   searchQuery,
   onBack,
 }: {
-  currentDirectory: string | null;
+  currentDirectory: FileTableDirectory | null;
   currentCollectionName?: string | null;
   searchQuery?: string;
   onBack: () => void;

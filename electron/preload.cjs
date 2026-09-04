@@ -46,8 +46,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   simulateUpdate() {
     return ipcRenderer.invoke("desktop:simulate-update");
   },
-  startDragFile(fileId, filePath) {
-    ipcRenderer.send("desktop:start-drag-file", { fileId, filePath });
+  startDragFiles(fileIds) {
+    ipcRenderer.send("desktop:start-drag-file", { fileIds });
   },
   revealInExplorer(fileId) {
     return ipcRenderer.invoke("desktop:reveal-in-explorer", fileId);

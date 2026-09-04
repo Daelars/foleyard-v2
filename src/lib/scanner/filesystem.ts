@@ -19,7 +19,12 @@ export async function findFirstAudioFile(rootPath: string) {
 
   while (dirsToProcess.length > 0) {
     const currentPath = dirsToProcess.pop()!;
-    const entries = await fs.readdir(currentPath, { withFileTypes: true });
+    let entries;
+    try {
+      entries = await fs.readdir(currentPath, { withFileTypes: true });
+    } catch {
+      continue;
+    }
 
     for (const entry of entries) {
       const fullPath = path.join(currentPath, entry.name);
@@ -43,22 +48,38 @@ export async function* streamAudioFileBatches(
   options?: {
     batchSize?: number;
     onDiscover?: (filePath: string) => void;
+    onError?: (directory: string, error: unknown) => void;
+    maxDepth?: number;
   },
 ) {
   const batchSize = options?.batchSize ?? DEFAULT_DISCOVERY_BATCH_SIZE;
   const onDiscover = options?.onDiscover;
-  const dirsToProcess: string[] = [rootPath];
+  const onError = options?.onError;
+  const maxDepth = options?.maxDepth ?? 128;
+  const dirsToProcess: Array<{ directory: string; depth: number }> = [
+    { directory: rootPath, depth: 0 },
+  ];
   let currentBatch: string[] = [];
 
   while (dirsToProcess.length > 0) {
-    const currentPath = dirsToProcess.pop()!;
-    const entries = await fs.readdir(currentPath, { withFileTypes: true });
+    const { directory: currentPath, depth } = dirsToProcess.pop()!;
+    let entries;
+    try {
+      entries = await fs.readdir(currentPath, { withFileTypes: true });
+    } catch (error) {
+      onError?.(currentPath, error);
+      continue;
+    }
 
     for (const entry of entries) {
       const fullPath = path.join(currentPath, entry.name);
 
       if (entry.isDirectory()) {
-        dirsToProcess.push(fullPath);
+        if (depth < maxDepth) {
+          dirsToProcess.push({ directory: fullPath, depth: depth + 1 });
+        } else {
+          onError?.(fullPath, new Error("Maximum scan depth exceeded"));
+        }
         continue;
       }
 
@@ -102,6 +123,8 @@ export class RealFileSystemSeam implements FileSystemSeam {
     options?: {
       batchSize?: number;
       onDiscover?: (filePath: string) => void;
+      onError?: (directory: string, error: unknown) => void;
+      maxDepth?: number;
     },
   ) {
     return streamAudioFileBatches(rootPath, options);

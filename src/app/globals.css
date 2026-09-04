@@ -9,7 +9,6 @@
   --sidebar: oklch(0.96 0.0025 228.78);
   --border: oklch(0.9113 0.0052 247.8814);
   --accent: oklch(0.9599 0.0025 228.7845);
-  --accent-hover: #2563eb;
   --muted: oklch(0.9512 0.0034 247.8591);
   --background: oklch(0.9787 0.0017 247.8391);
   --foreground: oklch(0.2213 0.0066 258.3651);
@@ -94,7 +93,6 @@
   --color-sidebar: var(--sidebar);
   --color-border: var(--border);
   --color-accent: var(--accent);
-  --color-accent-hover: var(--accent-hover);
   --color-muted: var(--muted);
   --font-heading: var(--font-sans);
   --font-sans: DM Sans, ui-sans-serif, sans-serif, system-ui;

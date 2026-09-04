@@ -3,8 +3,7 @@
 import { memo } from "react";
 import {
   Copy,
-  ExternalLink,
-  FolderOpen,
+  FolderPlus,
   GripVertical,
   Heart,
   PackagePlus,
@@ -12,6 +11,7 @@ import {
   Play,
   Puzzle,
   Tags,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -22,9 +22,6 @@ import {
   ContextMenuItem,
   ContextMenuLabel,
   ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -41,8 +38,6 @@ export const FileTableFileRow = memo(function FileTableFileRow({
   handleCopyPath,
   handleDragEnd,
   handleNativeDragStart,
-  handleOpenFile,
-  handleRevealInExplorer,
   isDragging,
   isSelected,
   isMultiSelected = false,
@@ -54,8 +49,10 @@ export const FileTableFileRow = memo(function FileTableFileRow({
   showDesktopActions,
   makePackEnabled,
   soundShelfEnabled,
+  inShelf,
   allTags,
   onToggleFileTag,
+  onRemoveFile,
   start,
   virtualIndex,
 }: {
@@ -68,8 +65,6 @@ export const FileTableFileRow = memo(function FileTableFileRow({
     file: FileTableFileRecord,
     index: number,
   ) => void;
-  handleOpenFile: (file: FileTableFileRecord) => Promise<void>;
-  handleRevealInExplorer: (file: FileTableFileRecord) => Promise<void>;
   isDragging: boolean;
   isSelected: boolean;
   isMultiSelected?: boolean;
@@ -85,8 +80,10 @@ export const FileTableFileRow = memo(function FileTableFileRow({
   showDesktopActions: boolean;
   makePackEnabled: boolean;
   soundShelfEnabled: boolean;
-  allTags?: { id: string; name: string }[];
+  inShelf: boolean;
+  allTags?: { id: string; name: string; color?: string }[];
   onToggleFileTag?: (fileId: string, tagId: string) => void;
+  onRemoveFile?: (file: FileTableFileRecord) => Promise<void>;
   start: number;
   virtualIndex: number;
 }) {
@@ -94,9 +91,32 @@ export const FileTableFileRow = memo(function FileTableFileRow({
     window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
   };
 
+  const toggleShelf = async () => {
+    const response = await fetch(
+      `/api/extensions/sound-shelf/${inShelf ? "remove" : "add"}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileIds: [file.id] }),
+      },
+    );
+    if (response.ok) {
+      dispatchSoundShelfChanged();
+    }
+  };
+
   const meta = [file.format, ...file.tags.map((tag) => tag.name)]
     .filter((part): part is string => Boolean(part))
     .join(" · ");
+  const extensionIndex = file.filename.lastIndexOf(".");
+  const filenameWithoutExtension =
+    extensionIndex > 0 && extensionIndex < file.filename.length - 1
+      ? file.filename.slice(0, extensionIndex)
+      : file.filename;
+  const menuFilename = filenameWithoutExtension
+    .replaceAll("_", " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
   return (
     <ContextMenu>
@@ -119,6 +139,8 @@ export const FileTableFileRow = memo(function FileTableFileRow({
             transform: `translateY(${start}px)`,
           }}
           tabIndex={0}
+          role="row"
+          aria-selected={isSelected || isMultiSelected}
           data-file-id={file.id}
           onClick={(event) =>
             onSelect(file, virtualIndex, {
@@ -163,7 +185,7 @@ export const FileTableFileRow = memo(function FileTableFileRow({
           <span className="hidden min-w-0 sm:block">
             <RowWaveform
               fileId={file.id}
-              filePath={file.path}
+              sourceVersion={`${file.mtimeMs ?? "unknown"}:${file.fileSize ?? "unknown"}`}
               active={isSelected}
             />
           </span>
@@ -182,6 +204,7 @@ export const FileTableFileRow = memo(function FileTableFileRow({
                 event.stopPropagation();
                 void onToggleFavorite(file.id);
               }}
+              aria-pressed={file.isFavorite}
               className="flex justify-center outline-none"
             >
               <Heart
@@ -215,7 +238,7 @@ export const FileTableFileRow = memo(function FileTableFileRow({
                       onClick={(event) => event.stopPropagation()}
                       onMouseDown={(event) => {
                         event.stopPropagation();
-                        if (event.button === 0) {
+                        if (event.button === 0 && !isMultiSelected) {
                           onSelect(file, virtualIndex);
                         }
                       }}
@@ -223,7 +246,7 @@ export const FileTableFileRow = memo(function FileTableFileRow({
                         handleNativeDragStart(event, file, virtualIndex)
                       }
                       onDragEnd={handleDragEnd}
-                      aria-label="Drag file into another app"
+                      aria-label={`Drag ${file.filename} into another app`}
                     >
                       <GripVertical className="size-4" />
                     </div>
@@ -236,96 +259,75 @@ export const FileTableFileRow = memo(function FileTableFileRow({
         </div>
       </ContextMenuTrigger>
 
-      <ContextMenuContent className="w-44">
-        <ContextMenuLabel>{file.filename}</ContextMenuLabel>
-        <ContextMenuSeparator />
-        {desktop ? (
-          <>
-            <ContextMenuItem onClick={() => void handleRevealInExplorer(file)}>
-              <FolderOpen />
-              Reveal in Explorer
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => void handleOpenFile(file)}>
-              <ExternalLink />
-              Open file
-            </ContextMenuItem>
-            <ContextMenuSeparator />
-          </>
-        ) : null}
+      <ContextMenuContent className="w-60">
+        <ContextMenuLabel
+          className="line-clamp-2 break-words leading-relaxed"
+          title={file.filename}
+        >
+          {menuFilename}
+        </ContextMenuLabel>
         <ContextMenuItem onClick={() => void handleCopyPath(file)}>
-          <Copy />
+          <Copy className="text-zinc-500" />
           Copy path
         </ContextMenuItem>
-        <>
-          <ContextMenuSeparator />
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <Tags className="size-4" />
-              Tags
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent className="w-48 max-h-64 overflow-y-auto">
-              {allTags && allTags.length > 0 ? (
-                allTags.map((tag) => (
-                  <ContextMenuCheckboxItem
-                    key={tag.id}
-                    checked={file.tags.some((t) => t.id === tag.id)}
-                    onCheckedChange={() => onToggleFileTag?.(file.id, tag.id)}
-                    className="text-popover-foreground"
-                  >
-                    {tag.name}
-                  </ContextMenuCheckboxItem>
-                ))
-              ) : (
-                <ContextMenuItem disabled className="text-zinc-500">
-                  No tags yet
-                </ContextMenuItem>
-              )}
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-        </>
+        <ContextMenuItem onClick={() => void onToggleFavorite(file.id)}>
+          <FolderPlus className="text-zinc-500" />
+          {file.isFavorite ? "Unsave" : "Save to favorites"}
+        </ContextMenuItem>
         {makePackEnabled ? (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem onClick={() => void onMakePackFile?.(file)}>
-              <PackagePlus />
-              Make Pack
-            </ContextMenuItem>
-          </>
+          <ContextMenuItem onClick={() => void onMakePackFile?.(file)}>
+            <PackagePlus className="text-zinc-500" />
+            Make Pack
+          </ContextMenuItem>
         ) : null}
         {soundShelfEnabled ? (
           <>
             <ContextMenuSeparator />
-            <ContextMenuItem
-              onClick={() => {
-                void fetch("/api/extensions/sound-shelf/add", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ fileIds: [file.id] }),
-                }).then((response) => {
-                  if (response.ok) {
-                    dispatchSoundShelfChanged();
-                  }
-                });
-              }}
-            >
-              <Puzzle className="size-4" />
-              Add to Shelf
+            <ContextMenuItem onClick={() => void toggleShelf()}>
+              {inShelf ? (
+                <X className="text-zinc-500" />
+              ) : (
+                <Puzzle className="text-zinc-500" />
+              )}
+              {inShelf ? "Remove from Shelf" : "Add to Shelf"}
             </ContextMenuItem>
-            <ContextMenuItem
-              onClick={() => {
-                void fetch("/api/extensions/sound-shelf/remove", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ fileIds: [file.id] }),
-                }).then((response) => {
-                  if (response.ok) {
-                    dispatchSoundShelfChanged();
-                  }
-                });
-              }}
+          </>
+        ) : null}
+        <ContextMenuSeparator />
+        <ContextMenuLabel className="text-zinc-600">
+          <span className="inline-flex items-center gap-1.5">
+            <Tags className="size-3" /> Tags
+          </span>
+        </ContextMenuLabel>
+        {allTags && allTags.length > 0 ? (
+          allTags.map((tag) => (
+            <ContextMenuCheckboxItem
+              key={tag.id}
+              checked={file.tags.some((item) => item.id === tag.id)}
+              closeOnClick={false}
+              onCheckedChange={() => onToggleFileTag?.(file.id, tag.id)}
             >
-              <X className="size-4" />
-              Remove from Shelf
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: tag.color ?? "var(--accent-fill)" }}
+              />
+              <span className="min-w-0 flex-1 truncate">{tag.name}</span>
+            </ContextMenuCheckboxItem>
+          ))
+        ) : (
+          <ContextMenuItem disabled className="text-zinc-500">
+            No tags yet
+          </ContextMenuItem>
+        )}
+        {onRemoveFile ? (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              onClick={() => void onRemoveFile(file)}
+              className="text-zinc-400 hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive"
+            >
+              <Trash2 />
+              Remove from library
             </ContextMenuItem>
           </>
         ) : null}

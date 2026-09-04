@@ -26,7 +26,7 @@ export type UpdateError = {
 
 export interface DesktopBridge {
   isDesktop: true;
-  startDragFile: (fileId: string, filePath: string) => void;
+  startDragFiles: (fileIds: string[]) => void;
   revealInExplorer: (fileId: string) => Promise<DesktopActionResult>;
   revealPath: (path: string) => Promise<DesktopActionResult>;
   openFileExternally: (fileId: string) => Promise<DesktopActionResult>;

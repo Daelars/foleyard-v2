@@ -9,6 +9,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import type { FileTableDirectory } from "./types";
 
 export const FileTableDirectoryRow = memo(function FileTableDirectoryRow({
   dir,
@@ -18,15 +19,13 @@ export const FileTableDirectoryRow = memo(function FileTableDirectoryRow({
   onScanFolder,
   desktop = false,
 }: {
-  dir: string;
+  dir: FileTableDirectory;
   start: number;
-  onNavigate: (dir: string) => void;
+  onNavigate: (dir: FileTableDirectory) => void;
   folderJanitorEnabled?: boolean;
   onScanFolder?: (folderPath: string) => void;
   desktop?: boolean;
 }) {
-  const label = dir.split(/[\\/]/).pop() || dir;
-
   const row = (
     <div
       className={`group absolute left-0 top-0 grid w-full cursor-pointer items-center gap-3 border-b border-white/5 px-3 outline-none transition-[background-color,color] last:border-0 hover:bg-white/[0.04] ${
@@ -39,16 +38,24 @@ export const FileTableDirectoryRow = memo(function FileTableDirectoryRow({
         transform: `translateY(${start}px)`,
       }}
       onClick={() => onNavigate(dir)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onNavigate(dir);
+        }
+      }}
+      role="button"
+      tabIndex={0}
     >
       <span className="flex justify-center text-zinc-500">
         <Folder className="size-4" />
       </span>
       <span className="min-w-0">
         <span className="block truncate text-[15px] font-medium text-zinc-100">
-          {label}
+          {dir.label}
         </span>
         <span className="mt-0.5 block truncate font-mono text-[11px] text-zinc-400">
-          Folder
+          {dir.isRoot ? dir.libraryRoot : "Folder"}
         </span>
       </span>
       <span className="hidden min-w-0 sm:block" />
@@ -68,7 +75,7 @@ export const FileTableDirectoryRow = memo(function FileTableDirectoryRow({
     <ContextMenu>
       <ContextMenuTrigger>{row}</ContextMenuTrigger>
       <ContextMenuContent className="w-44">
-        <ContextMenuItem onClick={() => onScanFolder(dir)}>
+        <ContextMenuItem onClick={() => onScanFolder(dir.absolutePath)}>
           <Scan className="size-4" />
           Scan Folder for Issues
         </ContextMenuItem>

@@ -120,13 +120,45 @@ export class FolderJanitorService {
     return { removed: fileIds.length };
   }
 
-  deleteFolders(paths: string[]) {
+  async deleteFolders(paths: string[], libraryRoots: string[]) {
     this.context.permissions.require("files:delete");
 
+    const canonicalRoots = (
+      await Promise.all(
+        libraryRoots.map(async (root) => {
+          try {
+            return await fs.promises.realpath(root);
+          } catch {
+            return null;
+          }
+        }),
+      )
+    ).filter((root): root is string => root !== null);
+
     return {
-      results: paths.map((folderPath) => {
+      results: await Promise.all(paths.map(async (folderPath) => {
         try {
-          fs.rmdirSync(folderPath);
+          const canonicalFolder = await fs.promises.realpath(folderPath);
+          const contained = canonicalRoots.some((root) => {
+            const relative = path.relative(root, canonicalFolder);
+            return (
+              relative !== "" &&
+              relative !== ".." &&
+              !relative.startsWith(`..${path.sep}`) &&
+              !path.isAbsolute(relative)
+            );
+          });
+
+          if (!contained) {
+            throw new Error("Folder is outside the configured Library roots");
+          }
+
+          const entries = await fs.promises.readdir(canonicalFolder);
+          if (entries.length > 0) {
+            throw new Error("Folder is no longer empty");
+          }
+
+          await fs.promises.rmdir(canonicalFolder);
           return { path: folderPath, ok: true };
         } catch (error) {
           return {
@@ -135,7 +167,7 @@ export class FolderJanitorService {
             error: error instanceof Error ? error.message : "Unknown error",
           };
         }
-      }),
+      })),
     };
   }
 }

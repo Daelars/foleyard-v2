@@ -1,7 +1,7 @@
 "use client";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { memo, useMemo, useRef, type KeyboardEvent } from "react";
+import { memo, useEffect, useMemo, useRef, type KeyboardEvent } from "react";
 
 import { FileTableBreadcrumbBar } from "@/components/FileTable/breadcrumb-bar";
 import { useFileTableDesktopActions } from "@/components/FileTable/desktop-actions";
@@ -9,6 +9,7 @@ import { FileTableDirectoryRow } from "@/components/FileTable/directory-row";
 import { FileTableEmptyState } from "@/components/FileTable/empty-state";
 import { FileTableFileRow } from "@/components/FileTable/file-row";
 import type { FileTableProps } from "@/components/FileTable/types";
+import { cn } from "@/lib/utils";
 
 export type { FileTableProps } from "@/components/FileTable/types";
 
@@ -26,9 +27,14 @@ export const FileTable = memo(function FileTable({
   onToggleFavorite,
   searchQuery,
   isLoading,
+  hasMore = false,
+  onLoadMore,
+  showContainerBorder = true,
   soundShelfEnabled = false,
+  shelfFileIds = [],
   makePackEnabled = false,
   onMakePackFile,
+  onRemoveFile,
   folderJanitorEnabled = false,
   onScanFolder,
   allTags,
@@ -38,7 +44,7 @@ export const FileTable = memo(function FileTable({
   onFlipSort,
 }: FileTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const desktopActions = useFileTableDesktopActions(onSelect);
+  const desktopActions = useFileTableDesktopActions(onSelect, selectedIds);
   const items = useMemo(
     () => [
       ...directories.map((directory) => ({ type: "directory" as const, data: directory })),
@@ -46,6 +52,7 @@ export const FileTable = memo(function FileTable({
     ],
     [directories, files],
   );
+  const shelfFileIdSet = useMemo(() => new Set(shelfFileIds), [shelfFileIds]);
 
   const virtualizer = useVirtualizer({
     count: items.length,
@@ -60,9 +67,28 @@ export const FileTable = memo(function FileTable({
       return;
     }
 
-    const parts = currentDirectory.split(/[\\/]/);
+    if (currentDirectory.directory === null) {
+      onNavigateLibrary?.();
+      return;
+    }
+
+    const parts = currentDirectory.directory.split(/[\\/]/);
     parts.pop();
-    onNavigate(parts.length > 0 ? parts.join("/") : null);
+    const parent = parts.length > 0 ? parts.join("/") : null;
+    onNavigate(
+      parent || currentDirectory.showRoot
+        ? {
+            ...currentDirectory,
+            key: JSON.stringify([currentDirectory.libraryRoot, parent]),
+            label: parent?.split("/").pop() || currentDirectory.libraryRoot.split(/[\\/]/).pop() || currentDirectory.libraryRoot,
+            directory: parent,
+            absolutePath: parent
+              ? `${currentDirectory.libraryRoot}/${parent}`
+              : currentDirectory.libraryRoot,
+            isRoot: parent === null,
+          }
+        : null,
+    );
   };
 
   const handleNavigateLibrary = () => {
@@ -100,14 +126,23 @@ export const FileTable = memo(function FileTable({
     }
 
     event.preventDefault();
-    const neighbor =
-      files[(index + (event.key === "j" ? 1 : -1) + files.length) % files.length];
+    const nextIndex = (index + (event.key === "j" ? 1 : -1) + files.length) % files.length;
+    const neighbor = files[nextIndex];
+    virtualizer.scrollToIndex(directories.length + nextIndex, { align: "auto" });
+    onSelect(neighbor, nextIndex);
+    requestAnimationFrame(() => {
     const neighborRow = parentRef.current?.querySelector<HTMLElement>(
       `[data-file-id="${neighbor.id}"]`,
     );
-    onSelect(neighbor, index);
     neighborRow?.focus();
+    });
   };
+
+  useEffect(() => {
+    if (!selectedFileId) return;
+    const index = files.findIndex((file) => file.id === selectedFileId);
+    if (index >= 0) virtualizer.scrollToIndex(directories.length + index, { align: "auto" });
+  }, [directories.length, files, selectedFileId, virtualizer]);
 
   if (items.length === 0 && !isLoading) {
     return (
@@ -134,7 +169,7 @@ export const FileTable = memo(function FileTable({
 
       {items.length > 0 && (
         <div
-          className={`grid items-center gap-3 border-b border-white/10 px-3 pb-2 font-mono text-[11px] font-semibold uppercase tracking-widest text-zinc-400 ${
+          className={`mt-4 mb-4 grid items-center gap-3 border-b border-white/10 px-3 pb-2 font-mono text-[11px] font-semibold uppercase tracking-widest text-zinc-400 ${
             desktopActions.desktop
               ? "grid-cols-[32px_minmax(0,1fr)_140px_64px_28px_28px]"
               : "grid-cols-[32px_minmax(0,1fr)_140px_64px_28px]"
@@ -167,9 +202,22 @@ export const FileTable = memo(function FileTable({
         ref={parentRef}
         className="foleyard-library-scroll min-h-0 flex-1 overflow-y-auto"
         onKeyDown={handleRowKeyDown}
+        onScroll={() => {
+          const viewport = parentRef.current;
+          if (
+            hasMore &&
+            viewport &&
+            viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 640
+          ) {
+            onLoadMore?.();
+          }
+        }}
       >
         <div
-          className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"
+          className={cn(
+            "overflow-hidden rounded-2xl bg-white/[0.03]",
+            showContainerBorder && "border border-white/10",
+          )}
           style={{
             height: `${virtualizer.getTotalSize()}px`,
             width: "100%",
@@ -182,7 +230,7 @@ export const FileTable = memo(function FileTable({
             if (item.type === "directory") {
               return (
                 <FileTableDirectoryRow
-                  key={`dir-${item.data}`}
+                  key={`dir-${item.data.key}`}
                   dir={item.data}
                   start={virtualRow.start}
                   onNavigate={onNavigate}
@@ -206,8 +254,6 @@ export const FileTable = memo(function FileTable({
                 handleCopyPath={desktopActions.handleCopyPath}
                 handleDragEnd={desktopActions.handleDragEnd}
                 handleNativeDragStart={desktopActions.handleNativeDragStart}
-                handleOpenFile={desktopActions.handleOpenFile}
-                handleRevealInExplorer={desktopActions.handleRevealInExplorer}
                 isDragging={isDragging}
                 isSelected={isSelected}
                 isMultiSelected={selectedIds.includes(file.id)}
@@ -219,10 +265,12 @@ export const FileTable = memo(function FileTable({
                 showDesktopActions={showDesktopActions}
                 makePackEnabled={makePackEnabled}
                 soundShelfEnabled={soundShelfEnabled}
+                inShelf={shelfFileIdSet.has(file.id)}
                 start={virtualRow.start}
                 virtualIndex={virtualRow.index}
                 allTags={allTags}
                 onToggleFileTag={onToggleFileTag}
+                onRemoveFile={onRemoveFile}
               />
             );
           })}

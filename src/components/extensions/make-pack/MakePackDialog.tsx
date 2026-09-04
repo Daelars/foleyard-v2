@@ -66,6 +66,7 @@ export function MakePackDialog({
       )
       setDestDir("")
       setOutputFormat(initialOutputFormat)
+      setIsLoading(false)
       setResult(null)
     }
   }, [open, initialSource, initialOutputFormat])

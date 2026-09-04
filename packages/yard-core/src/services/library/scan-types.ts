@@ -65,6 +65,7 @@ export interface PathValidation {
 export interface ScanFileRecord {
   path: string;
   filename: string;
+  libraryRoot?: string | null;
   directory: string | null;
   format: string | null;
   codec: string | null;

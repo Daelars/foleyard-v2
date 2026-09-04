@@ -26,7 +26,6 @@ export type WaveformProps = HTMLAttributes<HTMLDivElement> & {
   fadeEdges?: boolean;
   fadeWidth?: number;
   height?: string | number;
-  active?: boolean;
   onBarClick?: (index: number, value: number) => void;
 };
 
@@ -236,32 +235,24 @@ export const AudioScrubber = ({
     [duration, onSeek],
   );
 
-  const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
     setIsDragging(true);
     handleScrub(event.clientX);
   };
 
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMouseMove = (event: MouseEvent) => {
-      handleScrub(event.clientX);
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-      setDragProgress(null);
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [handleScrub, isDragging]);
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = Math.max(1, duration / 100);
+    let nextTime: number | null = null;
+    if (event.key === "ArrowLeft" || event.key === "ArrowDown") nextTime = currentTime - step;
+    if (event.key === "ArrowRight" || event.key === "ArrowUp") nextTime = currentTime + step;
+    if (event.key === "Home") nextTime = 0;
+    if (event.key === "End") nextTime = duration;
+    if (nextTime === null) return;
+    event.preventDefault();
+    onSeek?.(Math.max(0, Math.min(duration, nextTime)));
+  };
 
   const heightStyle = typeof height === "number" ? `${height}px` : height;
 
@@ -271,8 +262,24 @@ export const AudioScrubber = ({
       aria-valuemax={duration}
       aria-valuemin={0}
       aria-valuenow={currentTime}
+      aria-valuetext={`${Math.round(currentTime)} seconds of ${Math.round(duration)} seconds`}
       className={cn("relative cursor-pointer select-none", className)}
-      onMouseDown={handleMouseDown}
+      onKeyDown={handleKeyDown}
+      onPointerDown={handlePointerDown}
+      onPointerMove={(event) => {
+        if (isDragging) handleScrub(event.clientX);
+      }}
+      onPointerUp={(event) => {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        setIsDragging(false);
+        setDragProgress(null);
+      }}
+      onPointerCancel={() => {
+        setIsDragging(false);
+        setDragProgress(null);
+      }}
       ref={containerRef}
       role="slider"
       style={{ height: heightStyle }}

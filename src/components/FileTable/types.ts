@@ -6,13 +6,25 @@ export interface FileTableFileRecord {
   format: string | null;
   duration: number | null;
   fileSize: number | null;
+  mtimeMs?: number | null;
   isFavorite: boolean;
   tags: { id: string; name: string }[];
+}
+
+export interface FileTableDirectory {
+  key: string;
+  label: string;
+  libraryRoot: string;
+  directory: string | null;
+  absolutePath: string;
+  isRoot: boolean;
+  showRoot: boolean;
 }
 
 export interface FileTableFileTag {
   id: string;
   name: string;
+  color?: string;
 }
 
 export interface SelectModifiers {
@@ -25,10 +37,10 @@ export type FileTableSortKey = "filename" | "duration";
 
 export interface FileTableProps {
   files: FileTableFileRecord[];
-  directories: string[];
-  currentDirectory: string | null;
+  directories: FileTableDirectory[];
+  currentDirectory: FileTableDirectory | null;
   currentCollectionName?: string | null;
-  onNavigate: (dir: string | null) => void;
+  onNavigate: (dir: FileTableDirectory | null) => void;
   onNavigateLibrary?: () => void;
   selectedFileId: string | null;
   selectedIds?: string[];
@@ -41,9 +53,14 @@ export interface FileTableProps {
   onToggleFavorite: (id: string) => Promise<void>;
   searchQuery: string;
   isLoading: boolean;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
+  showContainerBorder?: boolean;
   soundShelfEnabled?: boolean;
+  shelfFileIds?: string[];
   makePackEnabled?: boolean;
   onMakePackFile?: (file: FileTableFileRecord) => Promise<void>;
+  onRemoveFile?: (file: FileTableFileRecord) => Promise<void>;
   folderJanitorEnabled?: boolean;
   onScanFolder?: (folderPath: string) => void;
   allTags?: FileTableFileTag[];

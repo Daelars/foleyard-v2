@@ -35,8 +35,12 @@ export function useTransportQueue() {
     setQueueState((state) => enqueueIds(state, ids));
   }, []);
 
-  const dequeue = useCallback((id: string) => {
-    setQueueState((state) => removeQueueId(state, id));
+  const remove = useCallback((ids: Iterable<string>) => {
+    setQueueState((state) => {
+      let next = state;
+      for (const id of ids) next = removeQueueId(next, id);
+      return next;
+    });
   }, []);
 
   const clear = useCallback(() => {
@@ -69,14 +73,12 @@ export function useTransportQueue() {
     advanceIfEnabled,
     autoplay,
     clear,
-    dequeue,
     enqueue,
     playIds,
     queueState,
+    remove,
     setAutoplay,
     stepNext,
     stepPrev,
   };
 }
-
-export type TransportQueueApi = ReturnType<typeof useTransportQueue>;

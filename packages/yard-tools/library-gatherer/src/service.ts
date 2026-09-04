@@ -27,7 +27,7 @@ export class LibraryGathererService {
     this.context.permissions.require("library:read");
     this.context.permissions.require("files:read");
 
-    return this.buildResult(options, false);
+    return this.buildResult(options);
   }
 
   async gather(options: GatherOptions): Promise<GatherResult> {
@@ -37,7 +37,7 @@ export class LibraryGathererService {
     this.context.permissions.require("files:copy");
     this.context.permissions.require("files:write");
 
-    const result = await this.buildResult(options, true);
+    const result = await this.buildResult(options);
     await fs.promises.mkdir(result.destinationDirectory, { recursive: true });
 
     for (const file of result.files) {
@@ -64,10 +64,7 @@ export class LibraryGathererService {
     return result;
   }
 
-  private async buildResult(
-    options: GatherOptions,
-    applying: boolean,
-  ): Promise<GatherResult> {
+  private async buildResult(options: GatherOptions): Promise<GatherResult> {
     const destinationDirectory = path.resolve(options.destinationDirectory);
     const preserveFolderNames = options.preserveFolderNames ?? true;
     const skipDuplicates = options.skipDuplicates ?? true;
@@ -76,7 +73,7 @@ export class LibraryGathererService {
         extension.startsWith(".") ? extension.toLowerCase() : `.${extension.toLowerCase()}`,
       ),
     );
-    const existingKeys = applying && skipDuplicates
+    const existingKeys = skipDuplicates
       ? await collectExistingKeys(destinationDirectory, audioExtensions)
       : new Set<string>();
     const plannedNames = new Set<string>();

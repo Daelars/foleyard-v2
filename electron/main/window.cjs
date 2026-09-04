@@ -22,6 +22,7 @@ function shouldOpenDevTools() {
 }
 
 function createMainWindow(startUrl, onClosed) {
+  const enableDevTools = !app.isPackaged || shouldOpenDevTools();
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -35,9 +36,9 @@ function createMainWindow(startUrl, onClosed) {
     webPreferences: {
       preload: path.join(__dirname, "../preload.cjs"),
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
       nodeIntegration: false,
-      devTools: true,
+      devTools: enableDevTools,
     },
   });
 
@@ -53,7 +54,7 @@ function createMainWindow(startUrl, onClosed) {
       input.key === "F12" ||
       (input.key.toLowerCase() === "i" && input.control && input.shift);
 
-    if (isToggleDevTools) {
+    if (enableDevTools && isToggleDevTools) {
       event.preventDefault();
       mainWindow.webContents.toggleDevTools();
     }
@@ -79,7 +80,7 @@ function createMainWindow(startUrl, onClosed) {
     },
   );
   mainWindow.webContents.once("did-finish-load", () => {
-    if (shouldOpenDevTools()) {
+    if (enableDevTools && shouldOpenDevTools()) {
       mainWindow.webContents.openDevTools({ mode: "detach" });
     }
   });

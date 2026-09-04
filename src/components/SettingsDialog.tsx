@@ -57,6 +57,9 @@ import {
   type ShortcutAction,
   type ShortcutBindings,
 } from "@/components/Shortcuts/shortcuts";
+import packageJson from "../../package.json";
+
+const APP_VERSION = packageJson.version;
 
 type ValidationResult = {
   valid: boolean;
@@ -252,9 +255,9 @@ function SettingsDialogBody({
   const [rebindingAction, setRebindingAction] =
     useState<ShortcutAction | null>(null);
   const manualUpdateToastRef = useRef<string | number | null>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const tagInputRef = useRef<HTMLInputElement>(null);
+  const desktop = getDesktopBridge() !== null;
 
   useEffect(() => {
     const bridge = getDesktopBridge();
@@ -359,31 +362,7 @@ function SettingsDialogBody({
       if (validation?.valid && validation.normalizedPath) {
         setRootDraft(validation.normalizedPath);
       }
-    } else {
-      folderInputRef.current?.click();
     }
-  };
-
-  const handleWebFolderPicked = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    const audioFiles = Array.from(files).filter((f) =>
-      /\.(wav|mp3|flac|ogg|aiff|aac|m4a|wma)$/i.test(f.name),
-    );
-
-    const sampleNames = audioFiles.slice(0, 10).map((f) => f.name);
-    const result: ValidationResult = {
-      valid: audioFiles.length > 0,
-      normalizedPath: null,
-      readable: true,
-      audioFileCount: audioFiles.length,
-      samples: sampleNames,
-      error: audioFiles.length === 0 ? "No supported audio files found in the selected folder." : null,
-    };
-
-    setValidationResult(result);
-    event.target.value = "";
   };
 
   const validatePathWith = async (path: string) => {
@@ -479,6 +458,10 @@ function SettingsDialogBody({
     }
 
     const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Tab") {
+        return;
+      }
+
       event.preventDefault();
       event.stopPropagation();
 
@@ -488,7 +471,7 @@ function SettingsDialogBody({
       }
 
       if (
-        ["Shift", "Control", "Alt", "Meta", "Tab", "CapsLock"].includes(
+        ["Shift", "Control", "Alt", "Meta", "CapsLock"].includes(
           event.key,
         )
       ) {
@@ -534,8 +517,7 @@ function SettingsDialogBody({
     setNewCollectionName("");
   };
 
-  const handleDeleteCollection = async (id: string, name: string) => {
-    void name;
+  const handleDeleteCollection = async (id: string) => {
     await onDeleteCollection(id);
     collectionInputRef.current?.focus();
   };
@@ -548,8 +530,7 @@ function SettingsDialogBody({
     setNewTagName("");
   };
 
-  const handleDeleteTag = async (id: string, name: string) => {
-    void name;
+  const handleDeleteTag = async (id: string) => {
     await onDeleteTag(id);
     tagInputRef.current?.focus();
   };
@@ -565,7 +546,7 @@ function SettingsDialogBody({
             Settings
           </h2>
           <p className="mt-1.5 font-mono text-[11px] tracking-wide text-zinc-500">
-            v2.1.0-alpha · Foleyard Core
+            v{APP_VERSION} · Foleyard Core
           </p>
         </div>
 
@@ -674,28 +655,28 @@ function SettingsDialogBody({
                       placeholder="e.g. C:\Samples or /Volumes/Audio"
                       className="h-10 flex-1 rounded-xl border-white/10 bg-black/30 font-mono text-sm shadow-none"
                     />
-                    <Button
-                      variant="outline"
-                      onClick={handleBrowse}
-                      disabled={isValidating}
-                      className="h-10 rounded-xl border-white/10 bg-white/5 px-4 text-zinc-200 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.08] hover:text-zinc-100"
-                    >
-                      {isValidating ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <FolderOpen className="size-4" />
-                      )}
-                      Browse
-                    </Button>
-                    <input
-                      ref={folderInputRef}
-                      type="file"
-                      className="hidden"
-                      /* @ts-expect-error - webkitdirectory is a non-standard attribute */
-                      webkitdirectory=""
-                      onChange={handleWebFolderPicked}
-                    />
+                    {desktop ? (
+                      <Button
+                        variant="outline"
+                        onClick={handleBrowse}
+                        disabled={isValidating}
+                        className="h-10 rounded-xl border-white/10 bg-white/5 px-4 text-zinc-200 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.08] hover:text-zinc-100"
+                      >
+                        {isValidating ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <FolderOpen className="size-4" />
+                        )}
+                        Browse
+                      </Button>
+                    ) : null}
                   </div>
+
+                  {!desktop ? (
+                    <p className="text-xs leading-5 text-zinc-500">
+                      Enter an absolute folder path that the Foleyard server can read.
+                    </p>
+                  ) : null}
 
                   <div className="divide-y divide-white/5 border-y border-white/10">
                     {settings.libraryRoots.length === 0 ? (
@@ -906,7 +887,7 @@ function SettingsDialogBody({
                                 onMouseDown={(event) => event.preventDefault()}
                                 onClick={() => {
                                   setConfirmingDelete(null);
-                                  void handleDeleteCollection(collection.id, collection.name);
+                                  void handleDeleteCollection(collection.id);
                                 }}
                               >
                                 Sure?
@@ -1027,7 +1008,7 @@ function SettingsDialogBody({
                               onMouseDown={(event) => event.preventDefault()}
                               onClick={() => {
                                 setConfirmingDelete(null);
-                                void handleDeleteTag(tag.id, tag.name);
+                                void handleDeleteTag(tag.id);
                               }}
                             >
                               Sure?
@@ -1400,7 +1381,7 @@ function SettingsDialogBody({
                      <p className="text-sm font-semibold text-zinc-100">Foleyard</p>
                       <p className="text-xs text-zinc-500">Local-first sound library</p>
                    </div>
-                   <Badge variant="secondary" className="h-6 rounded-md bg-white/5 px-3 font-mono text-zinc-200">v2.1.0-alpha</Badge>
+                   <Badge variant="secondary" className="h-6 rounded-md bg-white/5 px-3 font-mono text-zinc-200">v{APP_VERSION}</Badge>
                    <Badge variant="outline" className="h-6 rounded-md border-white/15 px-3 font-mono text-zinc-400">Desktop Core</Badge>
                 </div>
 
@@ -1474,6 +1455,7 @@ function DropRulesSettingsPanel({
   const renamePatternSetting = getSetting(settings, "rename-pattern");
   const dragOutFolderSetting = getSetting(settings, "drag-out-folder");
   const [renamePatternDraft, setRenamePatternDraft] = useState(renamePattern);
+  const [dragOutFolderDraft, setDragOutFolderDraft] = useState(dragOutFolder);
   const renamePreview = buildDropRulesRenamePreview(renamePatternDraft);
   const stagingMuted = !copyOnDrop && !renameOnDrop;
 
@@ -1510,6 +1492,7 @@ function DropRulesSettingsPanel({
     setRenamePatternDraft(
       String(renamePatternSetting?.defaultValue ?? "{index}-{name}{ext}"),
     );
+    setDragOutFolderDraft(String(dragOutFolderSetting?.defaultValue ?? ""));
   };
 
   return (
@@ -1626,13 +1609,14 @@ function DropRulesSettingsPanel({
             <Input
               id="drop-rules-drag-out-folder"
               disabled={stagingMuted}
-              defaultValue={dragOutFolder}
+              value={dragOutFolderDraft}
+              onChange={(event) => setDragOutFolderDraft(event.target.value)}
               onBlur={(event) =>
                 updateSetting("drag-out-folder", event.target.value)
               }
             />
             <Badge variant="outline" className="w-fit">
-              {dragOutFolder.trim() ? "Custom staging folder" : "System temp folder"}
+              {dragOutFolderDraft.trim() ? "Custom staging folder" : "System temp folder"}
             </Badge>
           </div>
         </div>

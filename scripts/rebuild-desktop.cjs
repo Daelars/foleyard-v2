@@ -2,23 +2,6 @@ const { execSync } = require("child_process");
 const { existsSync } = require("fs");
 const { join } = require("path");
 
-function hasLockingProcesses() {
-  try {
-    const result = execSync(
-      `powershell -NoProfile -Command "
-        Get-Process | Where-Object { 
-          (\$_.ProcessName -eq 'node' -or \$_.ProcessName -eq 'electron') 
-          -and \$_.Id -ne \$PID 
-        } | Select-Object -First 1 | Format-Table -AutoSize
-      "`,
-      { encoding: "utf-8", timeout: 5000 },
-    );
-    return result.includes("node") || result.includes("electron");
-  } catch {
-    return false;
-  }
-}
-
 function killLockingProcesses() {
   console.log("[prebuild] Killing stale Node.js and Electron processes...");
   execSync("taskkill /f /im node.exe 2>nul", { stdio: "ignore" });

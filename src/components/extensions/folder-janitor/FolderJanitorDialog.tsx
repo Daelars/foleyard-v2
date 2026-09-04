@@ -84,6 +84,8 @@ export function FolderJanitorDialog({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setResult(null);
       setAllowCleanup(false);
+      setIsScanning(false);
+      setIsRemoving(false);
       setConfirmingCleanup(false);
     }
   }, [open]);
@@ -155,6 +157,7 @@ export function FolderJanitorDialog({
       toast.success(
         `Removed ${data.removed} file${data.removed !== 1 ? "s" : ""}`,
       );
+      await handleScan();
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to remove files",
@@ -162,7 +165,7 @@ export function FolderJanitorDialog({
     } finally {
       setIsRemoving(false);
     }
-  }, []);
+  }, [handleScan]);
 
   const handleDeleteFolders = useCallback(async (paths: string[]) => {
     setIsRemoving(true);
@@ -182,6 +185,7 @@ export function FolderJanitorDialog({
       toast.success(
         `Deleted ${deleted} empty folder${deleted !== 1 ? "s" : ""}`,
       );
+      await handleScan();
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to delete folders",
@@ -189,7 +193,7 @@ export function FolderJanitorDialog({
     } finally {
       setIsRemoving(false);
     }
-  }, []);
+  }, [handleScan]);
 
   const handleAllowCleanupChange = useCallback((checked: boolean) => {
     if (checked) {

@@ -1,6 +1,7 @@
 export { db, sqlite } from "@/lib/database/connection";
 export {
   getSubdirectories,
+  getSubdirectoriesForRoot,
   getUniqueDirectories,
 } from "@/lib/database/browse-repository";
 export {

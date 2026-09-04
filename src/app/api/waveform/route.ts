@@ -1,29 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 
+import { getFileById, getLibraryRoots } from "@/lib/db";
+import { resolveExistingPathWithinRoots } from "@/lib/filesystem-boundary";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_PEAK_COUNT = 180;
+const MAX_WAVEFORM_FILE_SIZE = 256 * 1024 * 1024;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const pathParam = searchParams.get("path");
+  const fileId = searchParams.get("id");
 
-  if (!pathParam) {
-    return NextResponse.json({ error: "No file path provided" }, { status: 400 });
+  if (!fileId) {
+    return NextResponse.json({ error: "No file id provided" }, { status: 400 });
   }
 
-  const filePath = decodeURIComponent(pathParam);
+  const file = getFileById(fileId);
+  if (!file || file.removedAt) {
+    return NextResponse.json({ error: "File not found" }, { status: 404 });
+  }
 
   try {
-    if (!fs.existsSync(filePath)) {
+    const filePath = await resolveExistingPathWithinRoots(
+      file.path,
+      getLibraryRoots(),
+    );
+    if (!filePath) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    const fileBuffer = fs.readFileSync(filePath);
     const peakCount = Number(searchParams.get("peaks") ?? DEFAULT_PEAK_COUNT);
-    const peaks = extractPeaks(fileBuffer, filePath, peakCount);
+    const extension = filePath.split(".").pop()?.toLowerCase();
+    let peaks: number[];
+
+    if (extension === "wav") {
+      const stats = await fs.promises.stat(filePath);
+      if (stats.size > MAX_WAVEFORM_FILE_SIZE) {
+        return NextResponse.json(
+          { error: "Audio file is too large for waveform generation" },
+          { status: 413 },
+        );
+      }
+      peaks = extractPeaks(await fs.promises.readFile(filePath), filePath, peakCount);
+    } else {
+      peaks = createSeededPeaks(
+        filePath,
+        Math.max(32, Math.min(512, peakCount)),
+      );
+    }
 
     return NextResponse.json({ peaks });
   } catch (error) {

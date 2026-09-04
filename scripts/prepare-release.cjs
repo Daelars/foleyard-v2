@@ -54,25 +54,6 @@ function incrementVersion(version, bump) {
   throw new Error(`Expected bump to be patch, minor, major, or x.y.z. Received: ${bump}`);
 }
 
-function getWorkingTreeStatus() {
-  return run("git", ["status", "--porcelain"]);
-}
-
-function assertCleanWorkingTree() {
-  const status = getWorkingTreeStatus();
-
-  if (status) {
-    throw new Error(
-      [
-        "Working tree is not clean.",
-        "Commit or stash your changes before preparing a release.",
-        "Current changes:",
-        status,
-      ].join("\n"),
-    );
-  }
-}
-
 function isResumableVersionBumpStatus(status) {
   const lines = status.split("\n").filter(Boolean);
   const allowed = new Set(["package.json", "package-lock.json"]);

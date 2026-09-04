@@ -18,6 +18,8 @@ export interface FileSystemSeam {
     options?: {
       batchSize?: number;
       onDiscover?: (filePath: string) => void;
+      onError?: (directory: string, error: unknown) => void;
+      maxDepth?: number;
     },
   ): AsyncGenerator<string[], void, void>;
 }
@@ -47,6 +49,7 @@ type ExistingFileRecord = {
   id: string;
   path: string;
   filename: string;
+  libraryRoot: string | null;
   directory: string | null;
   format: string | null;
   duration: number | null;
@@ -99,9 +102,10 @@ function createMetadataQueue(
   const pending: MetadataTask[] = [];
   let activeCount = 0;
   let fatalError: Error | null = null;
+  let cancelled = false;
 
   const runNext = () => {
-    while (activeCount < concurrency && pending.length > 0 && !fatalError) {
+    while (activeCount < concurrency && pending.length > 0 && !fatalError && !cancelled) {
       const task = pending.shift()!;
       activeCount += 1;
 
@@ -120,15 +124,17 @@ function createMetadataQueue(
             return;
           }
 
-          onResult({
-            path: task.filePath,
-            codec: metadata.codec,
-            duration: metadata.duration,
-            sampleRate: metadata.sampleRate,
-            bitDepth: metadata.bitDepth,
-            channels: metadata.channels,
-            fileSize: metadata.fileSize,
-          });
+          if (!cancelled) {
+            onResult({
+              path: task.filePath,
+              codec: metadata.codec,
+              duration: metadata.duration,
+              sampleRate: metadata.sampleRate,
+              bitDepth: metadata.bitDepth,
+              channels: metadata.channels,
+              fileSize: metadata.fileSize,
+            });
+          }
         } catch (error) {
           fatalError = error instanceof Error ? error : new Error(String(error));
         } finally {
@@ -141,6 +147,7 @@ function createMetadataQueue(
 
   return {
     enqueue(task: MetadataTask) {
+      if (cancelled) return;
       if (fatalError) {
         throw fatalError;
       }
@@ -172,6 +179,10 @@ function createMetadataQueue(
           throw new Error("Metadata queue timed out");
         }
       }
+    },
+    cancel() {
+      cancelled = true;
+      pending.length = 0;
     },
   };
 }
@@ -359,12 +370,13 @@ export class ScanRunner implements ScannerService {
         existing.mtimeMs !== mtimeMs ||
         existing.removedAt !== null ||
         normalizeStoredDirectory(existing.directory) !== normalizeStoredDirectory(directory);
+      const ownershipChanged = existing?.libraryRoot !== normalizedRoot;
 
       seenPaths.add(filePath);
       this.status.indexed += 1;
 
-      if (!changed && existing) {
-        touchEntries.push({ path: filePath, lastScannedAt });
+      if (!changed && !ownershipChanged && existing) {
+        touchEntries.push({ path: filePath, lastScannedAt, libraryRoot: normalizedRoot });
         this.status.skippedUnchanged += 1;
         continue;
       }
@@ -372,6 +384,7 @@ export class ScanRunner implements ScannerService {
       upsertRecords.push({
         path: filePath,
         filename,
+        libraryRoot: normalizedRoot,
         directory,
         format,
         codec: null,
@@ -441,13 +454,14 @@ export class ScanRunner implements ScannerService {
 
   private async runScan(libraryRoots: string[]) {
     this.resetScanStatus(libraryRoots.join(path.delimiter));
+    let metadataQueue: ReturnType<typeof createMetadataQueue> | null = null;
+    const metadataUpdates: MetadataUpdateRecord[] = [];
 
     try {
       const seenPaths = new Set<string>();
       const allExistingFiles = this.fileRepo.getAllFilesIncludingRemoved();
       const lastScannedAt = new Date().toISOString();
-      const metadataUpdates: MetadataUpdateRecord[] = [];
-      const metadataQueue = createMetadataQueue(
+      metadataQueue = createMetadataQueue(
         METADATA_CONCURRENCY,
         (record) => {
           this.status.metadataProcessed += 1;
@@ -479,6 +493,7 @@ export class ScanRunner implements ScannerService {
             this.status.discovered += 1;
             this.status.total = this.status.discovered;
           },
+          onError: () => this.incrementScanErrors(),
         })) {
           this.status.phase = "indexing";
           this.emitProgress();
@@ -515,9 +530,25 @@ export class ScanRunner implements ScannerService {
       };
       this.emitProgress();
     } catch (error) {
+      metadataQueue?.cancel();
+      metadataUpdates.length = 0;
       this.status.phase = "error";
       this.status.finishedAt = new Date().toISOString();
       this.status.error = error instanceof Error ? error.message : "Scan failed";
+      this.status.lastScanSummary = {
+        discovered: this.status.discovered,
+        indexed: this.status.indexed,
+        skippedUnchanged: this.status.skippedUnchanged,
+        metadataProcessed: this.status.metadataProcessed,
+        added: this.status.added,
+        updated: this.status.updated,
+        removed: this.status.removed,
+        failed: Math.max(1, this.status.failed),
+        errors: Math.max(1, this.status.errors),
+        finishedAt: this.status.finishedAt,
+      };
+      this.status.failed = Math.max(1, this.status.failed);
+      this.status.errors = Math.max(1, this.status.errors);
       this.emitProgress();
     } finally {
       this.status.running = false;

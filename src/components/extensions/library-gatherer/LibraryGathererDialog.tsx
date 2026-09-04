@@ -174,6 +174,10 @@ export function LibraryGathererDialog({
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
+          setSourceFolders([]);
+          setNewFolderPath("");
+          setDestDir("");
+          setIsLoading(false);
           setPreviewResult(null);
           setCompletedResult(null);
         }

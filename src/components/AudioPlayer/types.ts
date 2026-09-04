@@ -5,6 +5,7 @@ export interface AudioPlayerFileRecord {
   format: string | null;
   duration: number | null;
   fileSize: number | null;
+  mtimeMs?: number | null;
   isFavorite: boolean;
   tags: { id: string; name: string }[];
 }

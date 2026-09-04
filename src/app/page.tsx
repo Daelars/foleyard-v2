@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, PackagePlus, PanelLeft, Save, Search, X } from "lucide-react";
+import { PackagePlus, PanelLeft, Save, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";
@@ -31,18 +31,17 @@ import {
   toggleInSelection,
 } from "@/components/FileTable/selection";
 import type { SelectModifiers } from "@/components/FileTable/types";
+import type { FileTableDirectory } from "@/components/FileTable/types";
 import { DesktopTitleBar } from "@/components/DesktopTitleBar";
 import { ExtensionGrid, type ExtensionGridItem } from "@/components/ExtensionGrid";
 import { FolderJanitorDialog } from "@/components/extensions/folder-janitor/FolderJanitorDialog";
 import { LibraryGathererDialog } from "@/components/extensions/library-gatherer/LibraryGathererDialog";
 import { MakePackDialog } from "@/components/extensions/make-pack/MakePackDialog";
 import { OnboardingDialog } from "@/components/OnboardingDialog";
-import { RenameHammerDialog } from "@/components/extensions/rename-hammer/RenameHammerDialog";
 import { FileTable } from "@/components/FileTable";
 import { OrganizeView } from "@/components/OrganizeView";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { IconRail, type RailView } from "@/components/IconRail";
-import { AudioPlayerProvider } from "@/components/ui/audio-player";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -62,6 +61,7 @@ interface FileRecord {
   format: string | null;
   duration: number | null;
   fileSize: number | null;
+  mtimeMs?: number | null;
   isFavorite: boolean;
   tags: { id: string; name: string }[];
 }
@@ -116,17 +116,13 @@ const emptyScanStatus: ScanStatus = {
 const CURRENT_ONBOARDING_VERSION = 1;
 
 export default function Home() {
-  return (
-    <AudioPlayerProvider>
-      <HomeContent />
-    </AudioPlayerProvider>
-  );
+  return <HomeContent />;
 }
 
 function HomeContent() {
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
-  const [directories, setDirectories] = useState<string[]>([]);
+  const [directories, setDirectories] = useState<FileTableDirectory[]>([]);
   const [tags, setTags] = useState<TagRecord[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -142,6 +138,7 @@ function HomeContent() {
     advanceIfEnabled,
     enqueue,
     clear: clearQueue,
+    remove: removeFromQueue,
     stepNext,
     stepPrev,
     autoplay,
@@ -167,10 +164,11 @@ function HomeContent() {
   );
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
   const [favoritesCount, setFavoritesCount] = useState(0);
-  const [selectedDirectory, setSelectedDirectory] = useState<string | null>(
+  const [selectedDirectory, setSelectedDirectory] = useState<FileTableDirectory | null>(
     null,
   );
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [hasMoreFiles, setHasMoreFiles] = useState(false);
   const [isPlayerPlaying, setIsPlayerPlaying] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -193,10 +191,14 @@ function HomeContent() {
     null,
   );
   const [soundShelfItemCount, setSoundShelfItemCount] = useState(0);
+  const [soundShelfFileIds, setSoundShelfFileIds] = useState<string[]>([]);
   const [selectedExtension, setSelectedExtension] =
     useState<ExtensionGridItem | null>(null);
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
   const filesRequestIdRef = useRef(0);
+  const filesQueryRef = useRef<string | null>(null);
+  const filesNextOffsetRef = useRef(0);
+  const isLoadingMoreFilesRef = useRef(false);
   const directoriesRequestIdRef = useRef(0);
   const selectedFileRef = useRef(selectedFile);
   const filesRef = useRef(files);
@@ -234,6 +236,17 @@ function HomeContent() {
   }, [files, sortKey, sortDir]);
 
   useEffect(() => { filesRef.current = orderedFiles; }, [orderedFiles]);
+  useEffect(() => {
+    const visibleIds = new Set(orderedFiles.map((file) => file.id));
+    setSelectedIds((current) => current.filter((id) => visibleIds.has(id)));
+    setSelectedFile((current) => {
+      if (!current) return null;
+      return orderedFiles.find((file) => file.id === current.id) ?? current;
+    });
+    if (selectionAnchorRef.current && !visibleIds.has(selectionAnchorRef.current)) {
+      selectionAnchorRef.current = null;
+    }
+  }, [orderedFiles]);
 
   const { zoom, setZoom: handleUpdateZoom } = useZoom();
 
@@ -250,7 +263,6 @@ function HomeContent() {
   >(null);
   const [packFileIds, setPackFileIds] = useState<string[]>([]);
 
-  const [renameHammerOpen, setRenameHammerOpen] = useState(false);
   const [showSaveSearch, setShowSaveSearch] = useState(false);
   const [renamingCollection, setRenamingCollection] = useState<{ id: string; name: string } | null>(null);
 
@@ -259,13 +271,17 @@ function HomeContent() {
       const res = await fetch("/api/extensions/sound-shelf");
       if (!res.ok) {
         setSoundShelfItemCount(0);
+        setSoundShelfFileIds([]);
         return;
       }
 
-      const data = (await res.json()) as { items?: Array<unknown> };
-      setSoundShelfItemCount(data.items?.length ?? 0);
+      const data = (await res.json()) as { items?: Array<{ id: string }> };
+      const items = data.items ?? [];
+      setSoundShelfItemCount(items.length);
+      setSoundShelfFileIds(items.map((item) => item.id));
     } catch {
       setSoundShelfItemCount(0);
+      setSoundShelfFileIds([]);
     }
   }, []);
 
@@ -340,7 +356,7 @@ function HomeContent() {
     handleClearSelection();
   }, [collections, handleClearSelection]);
 
-  const navigateDirectory = useCallback((directory: string | null) => {
+  const navigateDirectory = useCallback((directory: FileTableDirectory | null) => {
     setCurrentView(directory ? "directory" : "all");
     setSelectedCollection(null);
     setSelectedDirectory(directory);
@@ -360,6 +376,10 @@ function HomeContent() {
   const loadFiles = useCallback(async () => {
     const requestId = filesRequestIdRef.current + 1;
     filesRequestIdRef.current = requestId;
+    filesQueryRef.current = null;
+    filesNextOffsetRef.current = 0;
+    isLoadingMoreFilesRef.current = false;
+    setHasMoreFiles(false);
 
     if (currentView === "shelf") {
       setIsLoadingFiles(true);
@@ -374,6 +394,7 @@ function HomeContent() {
           const items = (data.items ?? []) as FileRecord[];
           setFiles(items);
           setSoundShelfItemCount(items.length);
+          setSoundShelfFileIds(items.map((item) => item.id));
         }
       } catch {
         if (filesRequestIdRef.current === requestId) {
@@ -399,15 +420,20 @@ function HomeContent() {
       params.set("q", debouncedSearchQuery.trim());
     } else {
       if (currentView === "directory" && selectedDirectory) {
-        params.set("directory", selectedDirectory);
-      } else if (currentView === "all") {
-        if (selectedDirectory) {
-          params.set("directory", selectedDirectory);
+        params.set("libraryRoot", selectedDirectory.libraryRoot);
+        if (selectedDirectory.directory) {
+          params.set("directory", selectedDirectory.directory);
         } else {
+          params.set("atLibraryRoot", "true");
+        }
+      } else if (currentView === "all") {
+        if (settings.libraryRoots.length !== 1) {
           setFiles([]);
           setIsLoadingFiles(false);
           return;
         }
+        params.set("libraryRoot", settings.libraryRoots[0]);
+        params.set("atLibraryRoot", "true");
       }
     }
 
@@ -422,17 +448,31 @@ function HomeContent() {
     }
 
     try {
+      const query = params.toString();
+      params.set("limit", "500");
+      params.set("offset", "0");
       const response = await fetch(`/api/files?${params.toString()}`);
       if (!response.ok) {
         throw new Error("Failed to fetch files");
       }
 
-      const data = await response.json();
-      if (filesRequestIdRef.current === requestId) {
-        setFiles(data.files ?? []);
-        if (typeof data.favoritesTotal === "number") {
-          setFavoritesCount(data.favoritesTotal);
-        }
+      const data = (await response.json()) as {
+        files?: FileRecord[];
+        favoritesTotal?: number;
+        hasMore?: boolean;
+      };
+      const pageFiles = data.files ?? [];
+
+      if (filesRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      filesQueryRef.current = query;
+      filesNextOffsetRef.current = pageFiles.length;
+      setFiles(pageFiles);
+      setHasMoreFiles(data.hasMore === true && pageFiles.length > 0);
+      if (typeof data.favoritesTotal === "number") {
+        setFavoritesCount(data.favoritesTotal);
       }
     } catch {
       if (filesRequestIdRef.current === requestId) {
@@ -443,7 +483,52 @@ function HomeContent() {
         setIsLoadingFiles(false);
       }
     }
-  }, [currentView, debouncedSearchQuery, selectedCollection, selectedDirectory, selectedTagId]);
+  }, [currentView, debouncedSearchQuery, selectedCollection, selectedDirectory, selectedTagId, settings.libraryRoots]);
+
+  const loadMoreFiles = useCallback(async () => {
+    const query = filesQueryRef.current;
+    if (
+      query === null ||
+      !hasMoreFiles ||
+      isLoadingFiles ||
+      isLoadingMoreFilesRef.current
+    ) {
+      return;
+    }
+
+    isLoadingMoreFilesRef.current = true;
+    const requestId = filesRequestIdRef.current;
+    const params = new URLSearchParams(query);
+    params.set("limit", "500");
+    params.set("offset", String(filesNextOffsetRef.current));
+
+    try {
+      const response = await fetch(`/api/files?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch more files");
+      }
+
+      const data = (await response.json()) as {
+        files?: FileRecord[];
+        hasMore?: boolean;
+      };
+      const pageFiles = data.files ?? [];
+
+      if (filesRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      filesNextOffsetRef.current += pageFiles.length;
+      setFiles((current) => [...current, ...pageFiles]);
+      setHasMoreFiles(data.hasMore === true && pageFiles.length > 0);
+    } catch {
+      if (filesRequestIdRef.current === requestId) {
+        toast.error("Failed to load more files");
+      }
+    } finally {
+      isLoadingMoreFilesRef.current = false;
+    }
+  }, [hasMoreFiles, isLoadingFiles]);
 
   const loadDirectories = useCallback(async () => {
     const requestId = directoriesRequestIdRef.current + 1;
@@ -464,7 +549,10 @@ function HomeContent() {
     try {
       const params = new URLSearchParams();
       if (selectedDirectory) {
-        params.set("parent", selectedDirectory);
+        params.set("root", selectedDirectory.libraryRoot);
+        if (selectedDirectory.directory) {
+          params.set("parent", selectedDirectory.directory);
+        }
       }
       const res = await fetch(`/api/directories?${params.toString()}`);
       const data = await res.json();
@@ -496,6 +584,20 @@ function HomeContent() {
         fetch("/api/scan"),
         fetch("/api/extensions"),
       ]);
+
+      const initialResponses = [
+        ["settings", settingsRes],
+        ["collections", collectionsRes],
+        ["tags", tagsRes],
+        ["scan", scanRes],
+        ["extensions", extensionsRes],
+      ] as const;
+      const failedResponse = initialResponses.find(([, response]) => !response.ok);
+      if (failedResponse) {
+        throw new Error(
+          `Failed to load ${failedResponse[0]} (${failedResponse[1].status})`,
+        );
+      }
 
       const [
         settingsData,
@@ -545,9 +647,12 @@ function HomeContent() {
         void loadSoundShelfCount();
       } else {
         setSoundShelfItemCount(0);
+        setSoundShelfFileIds([]);
       }
-    } catch {
-      toast.error("Failed to sync with server");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to sync with server",
+      );
     } finally {
       setIsLoadingExtensions(false);
     }
@@ -675,21 +780,25 @@ function HomeContent() {
     }
 
     try {
-      await fetch("/api/files", {
+      const response = await fetch("/api/files", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: fileId, action, tagId }),
       });
-    } catch {
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? "Failed to update tag");
+      }
+    } catch (error) {
       setFiles((prev) =>
         prev.map((f) =>
           f.id === fileId ? file : f,
         ),
       );
       if (currentSelectedFile?.id === fileId) {
-        setSelectedFile(file);
+        setSelectedFile(currentSelectedFile);
       }
-      toast.error("Failed to update tag");
+      toast.error(error instanceof Error ? error.message : "Failed to update tag");
     }
   }, []);
 
@@ -812,13 +921,13 @@ function HomeContent() {
       const removedIds = new Set(data.removed ?? ids);
 
       setFiles((prev) => prev.filter((file) => !removedIds.has(file.id)));
+      removeFromQueue(removedIds);
       handleClearSelection();
 
       if (
         selectedFileRef.current &&
         removedIds.has(selectedFileRef.current.id)
       ) {
-        clearQueue();
         setSelectedFile(null);
         setIsPlayerPlaying(false);
       }
@@ -835,7 +944,42 @@ function HomeContent() {
     } catch {
       toast.error("Failed to remove files");
     }
-  }, [confirmBulkRemove, handleClearSelection, clearQueue, loadFavoritesCount]);
+  }, [confirmBulkRemove, handleClearSelection, loadFavoritesCount, removeFromQueue]);
+
+  const handleRemoveFileFromLibrary = useCallback(async (file: FileRecord) => {
+    try {
+      const response = await fetch("/api/files", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileIds: [file.id], permanent: false }),
+      });
+      if (!response.ok) {
+        throw new Error();
+      }
+
+      const data = (await response.json()) as {
+        removed?: string[];
+        failed?: Array<{ id: string }>;
+      };
+      if (data.failed?.some((item) => item.id === file.id)) {
+        throw new Error();
+      }
+
+      const removedIds = new Set(data.removed ?? [file.id]);
+      setFiles((current) => current.filter((item) => !removedIds.has(item.id)));
+      removeFromQueue(removedIds);
+      setSelectedIds((current) => current.filter((id) => !removedIds.has(id)));
+      if (selectedFileRef.current && removedIds.has(selectedFileRef.current.id)) {
+        setSelectedFile(null);
+        setIsPlayerPlaying(false);
+      }
+      void loadFavoritesCount();
+      void loadSoundShelfCount();
+      toast.success(`Removed ${file.filename} from library`);
+    } catch {
+      toast.error("Failed to remove file from library");
+    }
+  }, [loadFavoritesCount, loadSoundShelfCount, removeFromQueue]);
 
   const handleSaveSearch = useCallback(async (name: string) => {
     if (!name.trim() || !debouncedSearchQuery.trim()) return;
@@ -926,11 +1070,6 @@ function HomeContent() {
         onboardingVersion: data.onboardingVersion ?? settings.onboardingVersion,
         stats: data.stats,
       });
-      setScanStatus((current) => ({
-        ...current,
-        libraryRoot: data.libraryRoot,
-        stats: data.stats,
-      }));
       return true;
     } catch (error) {
       toast.error(
@@ -1283,6 +1422,7 @@ function HomeContent() {
             void loadSoundShelfCount();
           } else {
             setSoundShelfItemCount(0);
+            setSoundShelfFileIds([]);
           }
         }
 
@@ -1455,23 +1595,30 @@ function HomeContent() {
 
   const handleRunCommand = useCallback(
     (extensionId: string, commandId: string) => {
-      if (commandId === "rename-hammer.open") {
-        setRenameHammerOpen(true);
+      if (extensionId === "sound-shelf" && commandId === "sound-shelf.clear") {
+        showShelf();
+        setConfirmClearShelf(true);
         return;
       }
 
       void executeHostedCommand(extensionId, commandId);
     },
-    [executeHostedCommand],
+    [executeHostedCommand, showShelf],
   );
 
   useScanPolling(
     scanStatus,
     useCallback((data) => setScanStatus(data), []),
-    useCallback(() => {
+    useCallback((status: ScanStatus) => {
       void loadFiles();
       void loadInitialData();
-      toast.success("Scan complete");
+      if (status.phase === "error" || status.error) {
+        toast.error(status.error ?? "Scan failed");
+      } else if (status.errors > 0) {
+        toast.warning(`Scan complete with ${status.errors} skipped item${status.errors === 1 ? "" : "s"}`);
+      } else {
+        toast.success("Scan complete");
+      }
     }, [loadFiles, loadInitialData]),
   );
 
@@ -1513,7 +1660,7 @@ function HomeContent() {
             : currentView === "collection"
               ? (selectedCollectionName ?? "Library")
               : currentView === "directory"
-                ? (selectedDirectory?.split(/[\\/]/).pop() ?? "Library")
+                ? (selectedDirectory?.label ?? "Library")
                 : "Library";
 
   const {
@@ -1622,6 +1769,8 @@ function HomeContent() {
     const match = filesRef.current.find((file) => file.id === nextId);
     if (match) {
       setSelectedFile(match);
+      setSelectedIds([match.id]);
+      selectionAnchorRef.current = match.id;
     }
   }, [advanceIfEnabled]);
 
@@ -1634,6 +1783,8 @@ function HomeContent() {
     const match = filesRef.current.find((file) => file.id === nextId);
     if (match) {
       setSelectedFile(match);
+      setSelectedIds([match.id]);
+      selectionAnchorRef.current = match.id;
     }
   }, [stepNext]);
 
@@ -1646,6 +1797,8 @@ function HomeContent() {
     const match = filesRef.current.find((file) => file.id === prevId);
     if (match) {
       setSelectedFile(match);
+      setSelectedIds([match.id]);
+      selectionAnchorRef.current = match.id;
     }
   }, [stepPrev]);
 
@@ -1869,6 +2022,8 @@ function HomeContent() {
               match.id,
             );
             setSelectedFile(match);
+            setSelectedIds([match.id]);
+            selectionAnchorRef.current = match.id;
           }
           break;
         }
@@ -2157,13 +2312,10 @@ function HomeContent() {
               </>
             )}
 
-            {isLoadingFiles && (
-              <Loader2 className="size-4 shrink-0 animate-spin text-accent-text" />
-            )}
           </div>
         </header>
 
-        <div className="px-4 pt-4 md:px-5">
+        <div className="mt-4 mb-4 px-4 pt-4 md:px-5">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-2">
             <h1 className="text-5xl font-extrabold tracking-tighter text-zinc-50">
               {viewHeading}
@@ -2303,9 +2455,14 @@ function HomeContent() {
                 onToggleFavorite={handleToggleFavorite}
                 searchQuery={debouncedSearchQuery}
                 isLoading={isLoadingFiles}
+                hasMore={hasMoreFiles}
+                onLoadMore={() => void loadMoreFiles()}
+                showContainerBorder={currentView !== "favorites"}
                 soundShelfEnabled={soundShelfEnabled}
+                shelfFileIds={soundShelfFileIds}
                 makePackEnabled={makePackEnabled}
                 onMakePackFile={handleMakePackFile}
+                onRemoveFile={handleRemoveFileFromLibrary}
                 folderJanitorEnabled={folderJanitorEnabled}
                 onScanFolder={handleScanFolder}
                 allTags={tags}
@@ -2319,10 +2476,6 @@ function HomeContent() {
           </>
         )}
 
-        <div
-          aria-hidden="true"
-          className={`shrink-0 transition-all duration-300 ${selectedFile ? "h-44" : "h-0"}`}
-        />
       </main>
       </div>
 
@@ -2516,11 +2669,6 @@ function HomeContent() {
         initialSource={packSource ?? "selection"}
         initialFileIds={packFileIds}
         initialOutputFormat={makePackDefaultFormat}
-      />
-
-      <RenameHammerDialog
-        open={renameHammerOpen}
-        onOpenChange={setRenameHammerOpen}
       />
 
       <Dialog open={showSaveSearch} onOpenChange={setShowSaveSearch}>

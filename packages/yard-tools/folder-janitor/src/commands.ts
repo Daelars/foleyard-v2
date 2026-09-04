@@ -85,11 +85,15 @@ export function registerCommands(context: YardExtensionContext) {
     scope: "global",
     destructive: true,
     handler: () => {
-      const input = context.input as { paths?: string[] } | undefined;
-      if (!input?.paths?.length) {
-        throw new YardCommandValidationError("paths array is required");
+      const input = context.input as
+        | { paths?: string[]; libraryRoots?: string[] }
+        | undefined;
+      if (!input?.paths?.length || !input.libraryRoots?.length) {
+        throw new YardCommandValidationError(
+          "paths and libraryRoots arrays are required",
+        );
       }
-      return createService(context).deleteFolders(input.paths);
+      return createService(context).deleteFolders(input.paths, input.libraryRoots);
     },
   });
 }

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
-import { getDesktopBridge, isDesktopApp } from "@/lib/desktop";
+import { getDesktopBridge } from "@/lib/desktop";
 
 export function UpdateNotifier() {
   const progressToastRef = useRef<string | number | null>(null);
@@ -54,14 +54,11 @@ export function UpdateNotifier() {
       toast.error(`Update failed: ${info.message}`);
     });
 
-    const unsubNotAvailable = bridge.onUpdateNotAvailable(() => {});
-
     return () => {
       unsubAvailable();
       unsubProgress();
       unsubReady();
       unsubError();
-      unsubNotAvailable();
     };
   }, []);
 

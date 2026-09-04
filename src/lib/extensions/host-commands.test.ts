@@ -239,7 +239,7 @@ describe("registered Extension command set", () => {
     ).resolves.toMatchObject({ ok: true, type: "value" });
     await expect(
       check("folder-janitor", "folder-janitor.delete-folders", {
-        input: { paths: [emptyFolder] },
+        input: { paths: [emptyFolder], libraryRoots: [root] },
       }),
     ).resolves.toMatchObject({ ok: true, type: "value" });
 

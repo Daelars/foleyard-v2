@@ -21,7 +21,7 @@ type ScanStatusResponse = {
 export function useScanPolling(
   scanStatus: { running: boolean },
   onProgress: (status: ScanStatusResponse) => void,
-  onComplete: () => void,
+  onSettled: (status: ScanStatusResponse) => void,
 ) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
@@ -33,11 +33,14 @@ export function useScanPolling(
     intervalRef.current = setInterval(async () => {
       try {
         const res = await fetch("/api/scan");
+        if (!res.ok) {
+          return;
+        }
         const data = (await res.json()) as ScanStatusResponse;
         onProgress(data);
 
         if (!data.running) {
-          onComplete();
+          onSettled(data);
         }
       } catch {
         // polling errors are transient; ignore
@@ -47,5 +50,5 @@ export function useScanPolling(
     return () => {
       clearInterval(intervalRef.current);
     };
-  }, [scanStatus.running, onProgress, onComplete]);
+  }, [scanStatus.running, onProgress, onSettled]);
 }

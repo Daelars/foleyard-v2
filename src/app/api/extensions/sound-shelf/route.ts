@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getFileById, getTagsForFiles } from "@/lib/db";
 import { createAppExtensionHost } from "@/lib/extensions/host";
+import { DbSoundShelfStore } from "@/lib/extensions/sound-shelf-store";
 
 import { toHostFailureResponse } from "../host-outcome";
 
@@ -25,13 +26,16 @@ export async function GET() {
     return NextResponse.json({ error: "Unexpected UI intent" }, { status: 500 });
   }
 
-  const ids = outcome.value.filter((fileId) => getFileById(fileId) !== null);
+  const files = outcome.value
+    .map((fileId) => getFileById(fileId))
+    .filter((file) => file !== null && file.removedAt === null);
+  const ids = files.map((file) => file.id);
+  if (ids.length !== outcome.value.length) {
+    new DbSoundShelfStore().setFileIds(ids);
+  }
   const tagsByFile = getTagsForFiles(ids);
 
-  const items = ids.map((fileId) => {
-    const file = getFileById(fileId)!;
-
-    return {
+  const items = files.map((file) => ({
       id: file.id,
       filename: file.filename,
       path: file.path,
@@ -39,10 +43,10 @@ export async function GET() {
       format: file.format,
       duration: file.duration,
       fileSize: file.fileSize,
+      mtimeMs: file.mtimeMs,
       isFavorite: file.isFavorite,
       tags: tagsByFile.get(file.id) ?? [],
-    };
-  });
+    }));
 
   return NextResponse.json({ items });
 }

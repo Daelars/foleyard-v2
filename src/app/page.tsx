@@ -30,7 +30,6 @@ import { Input } from "@/components/ui/input";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
 import { interpretExtensionUiIntent } from "@/lib/extensions/ui-intent";
 import { isDesktopApp } from "@/lib/desktop";
-import { cn } from "@/lib/utils";
 import { useZoom } from "@/hooks/use-zoom";
 import { useScanPolling } from "@/hooks/use-scan-polling";
 import type { YardExtensionHostOutcome } from "@yard-core";
@@ -117,7 +116,17 @@ function HomeContent() {
     selectionAnchorRef.current = null;
   }, []);
   const transportQueue = useTransportQueue();
-  const { playIds, advanceIfEnabled, enqueue, clear: clearQueue } = transportQueue;
+  const {
+    playIds,
+    advanceIfEnabled,
+    enqueue,
+    clear: clearQueue,
+    stepNext,
+    stepPrev,
+    autoplay,
+    setAutoplay,
+    queueState,
+  } = transportQueue;
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentView, setCurrentView] = useState<
@@ -1412,6 +1421,67 @@ function HomeContent() {
     }
   }, [advanceIfEnabled]);
 
+  const handleStepNext = useCallback(() => {
+    const nextId = stepNext();
+    if (!nextId) {
+      return;
+    }
+
+    const match = filesRef.current.find((file) => file.id === nextId);
+    if (match) {
+      setSelectedFile(match);
+    }
+  }, [stepNext]);
+
+  const handleStepPrev = useCallback(() => {
+    const prevId = stepPrev();
+    if (!prevId) {
+      return;
+    }
+
+    const match = filesRef.current.find((file) => file.id === prevId);
+    if (match) {
+      setSelectedFile(match);
+    }
+  }, [stepPrev]);
+
+  const handleToggleAutoplay = useCallback(
+    (checked: boolean) => {
+      setAutoplay(checked);
+    },
+    [setAutoplay],
+  );
+
+  const nextTitle = useMemo(() => {
+    if (queueState.queue.length <= 1) {
+      return null;
+    }
+
+    const nextIndex =
+      (queueState.cursor + 1) % queueState.queue.length;
+    const nextId = queueState.queue[nextIndex];
+    if (!nextId || nextId === selectedFile?.id) {
+      const following = queueState.queue.find((id) => id !== selectedFile?.id);
+      if (!following) {
+        return null;
+      }
+
+      const followingMatch = files.find(
+        (file) => file.id === following,
+      );
+      return (
+        followingMatch?.filename.replace(/\.[^.]+$/, "") ??
+        followingMatch?.filename ??
+        null
+      );
+    }
+
+    const match = files.find((file) => file.id === nextId);
+    return (
+      match?.filename.replace(/\.[^.]+$/, "") ?? match?.filename ?? null
+    );
+  }, [queueState, selectedFile?.id, files]);
+
   const handleMakePackFile = useCallback(
     (file: FileRecord) =>
       executeHostedCommand(
@@ -1461,8 +1531,9 @@ function HomeContent() {
   }, []);
 
   return (
-    <div className="relative flex h-full overflow-hidden bg-canvas font-sans">
+    <div className="relative flex h-full flex-col overflow-hidden bg-canvas font-sans">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--accent-fill)_13%,transparent),transparent_38%),radial-gradient(circle_at_bottom_right,color-mix(in_oklab,var(--accent-fill)_6%,transparent),transparent_40%)]" />
+      <div className="relative flex min-h-0 flex-1">
 
       <IconRail
         className="hidden md:flex"
@@ -1512,7 +1583,7 @@ function HomeContent() {
         </DialogContent>
       </Dialog>
 
-      <main className="relative flex min-w-0 flex-1 flex-col bg-transparent">
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-transparent">
         <DesktopTitleBar />
 
         <header className="shrink-0 border-b border-white/5 px-4 py-3 md:px-5">
@@ -1779,10 +1850,8 @@ function HomeContent() {
           </div>
         )}
 
-        <div
-          className={cn("h-0 transition-all duration-300", selectedFile && "h-28")}
-        />
       </main>
+      </div>
 
       <AudioPlayer
         ref={audioPlayerRef}
@@ -1790,6 +1859,11 @@ function HomeContent() {
         onClose={handleClosePlayer}
         onPlaybackChange={setIsPlayerPlaying}
         onEnded={handleTrackEnded}
+        onNext={handleStepNext}
+        onPrev={handleStepPrev}
+        autoplay={autoplay}
+        onToggleAutoplay={handleToggleAutoplay}
+        nextTitle={nextTitle}
         onToggleFavorite={handleToggleFavorite}
         collections={collections}
         onAddToCollection={handleAddToCollection}

@@ -129,7 +129,7 @@ describe("registered Extension command set", () => {
     async function check(
       extensionId: string,
       commandId: string,
-      options?: Parameters<typeof host.execute>[0],
+      options?: Omit<Parameters<typeof host.execute>[0], "extensionId" | "commandId">,
     ) {
       const outcome = await host.execute({
         extensionId,

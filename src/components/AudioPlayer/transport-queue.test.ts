@@ -71,6 +71,6 @@ describe("transport queue transitions", () => {
   });
 
   it("clear empties the queue", () => {
-    expect(clearQueue(seedQueue(["a", "b"], "a"))).toEqual(EMPTY);
+    expect(clearQueue()).toEqual(EMPTY);
   });
 });

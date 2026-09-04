@@ -18,6 +18,11 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       onClose,
       onPlaybackChange,
       onEnded,
+      onNext,
+      onPrev,
+      autoplay,
+      onToggleAutoplay,
+      nextTitle,
       onToggleFavorite,
       collections,
       onAddToCollection,
@@ -38,6 +43,11 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         onClose={onClose}
         onPlaybackChange={onPlaybackChange}
         onEnded={onEnded}
+        onNext={onNext}
+        onPrev={onPrev}
+        autoplay={autoplay}
+        onToggleAutoplay={onToggleAutoplay}
+        nextTitle={nextTitle}
         onToggleFavorite={onToggleFavorite}
         collections={collections}
         onAddToCollection={onAddToCollection}
@@ -60,6 +70,11 @@ const AudioPlayerContent = forwardRef<
       onClose,
       onPlaybackChange,
       onEnded,
+      onNext,
+      onPrev,
+      autoplay,
+      onToggleAutoplay,
+      nextTitle,
       onToggleFavorite,
       collections,
       onAddToCollection,
@@ -82,9 +97,14 @@ const AudioPlayerContent = forwardRef<
         file={selectedFile}
         isMuted={playback.isMuted}
         isPlaying={playback.isPlaying}
+        autoplay={autoplay}
+        nextTitle={nextTitle}
         onAddToCollection={onAddToCollection}
         onClose={onClose}
+        onNext={onNext}
+        onPrev={onPrev}
         onSeek={playback.handleSeek}
+        onToggleAutoplay={onToggleAutoplay}
         onToggleFavorite={onToggleFavorite}
         onToggleMuted={() => playback.setIsMuted((current) => !current)}
         onTogglePlayback={playback.togglePlayback}

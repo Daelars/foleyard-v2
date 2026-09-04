@@ -351,6 +351,133 @@ export function AltFlowsFrame() {
       >
         <AltCommandBar />
       </VariantFrame>
+
+      <VariantFrame
+        id="W-K"
+        name="Color fields"
+        note="No browser, no inspector: collections are full-bleed color fields that open in place. Tags dim the rest."
+      >
+        <AltColorFields />
+      </VariantFrame>
     </>
+  );
+}
+
+const FIELD_TAGS: Record<string, string[]> = {
+  c1: ["t1", "t5"],
+  c2: ["t2", "t4"],
+  c3: ["t3", "t4"],
+  c4: ["t1", "t5"],
+};
+
+const FIELD_FILES = ["Metal Door Slam", "Glass Break Small", "Gravel Footsteps"];
+
+function AltColorFields() {
+  const [expanded, setExpanded] = useState<string | null>("c2");
+  const [colors, setColors] = useState<Record<string, string>>({});
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const colorFor = (id: string, fallback: string) => colors[id] ?? fallback;
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5">
+        {DEMO_TAGS.map((tag) => {
+          const active = activeTag === tag.id;
+          return (
+            <button
+              key={tag.id}
+              type="button"
+              onClick={() => setActiveTag(active ? null : tag.id)}
+              style={active ? { borderColor: `${tag.color}80`, backgroundColor: `${tag.color}14` } : undefined}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                active ? "border" : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.06]"
+              }`}
+            >
+              <span className="size-2 rounded-full" style={{ backgroundColor: tag.color }} />
+              {tag.name}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {DEMO_COLLECTIONS.map((collection) => {
+          const color = colorFor(collection.id, collection.color);
+          const open = expanded === collection.id;
+          const dimmed = activeTag !== null && !(FIELD_TAGS[collection.id] ?? []).includes(activeTag);
+          return (
+            <div
+              key={collection.id}
+              className="relative overflow-hidden rounded-2xl border border-white/10 transition-all"
+              style={{
+                backgroundColor: `${color}0d`,
+                backgroundImage: `linear-gradient(100deg, ${color}30, transparent 65%)`,
+                opacity: dimmed ? 0.35 : 1,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute -right-2 -top-6 select-none text-[92px] font-black leading-none tracking-tighter"
+                style={{ color: `${color}26` }}
+              >
+                {collection.name.slice(0, 2).toUpperCase()}
+              </span>
+              <button
+                type="button"
+                onClick={() => setExpanded(open ? null : collection.id)}
+                className="relative flex w-full items-center gap-3 p-4 text-left"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-base font-bold tracking-tight text-zinc-50">
+                    {collection.name}
+                  </span>
+                  <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-widest text-zinc-400">
+                    {collection.fileCount} sounds
+                  </span>
+                </span>
+                <ChevronDown
+                  className={`size-4 shrink-0 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`}
+                />
+              </button>
+              {open ? (
+                <div className="relative px-4 pb-3">
+                  <div
+                    className="rounded-xl bg-black/60 px-2 py-1 backdrop-blur-md"
+                    style={{
+                      WebkitMaskImage:
+                        "radial-gradient(100% 100% at 50% 50%, black 38%, transparent 98%)",
+                      maskImage:
+                        "radial-gradient(100% 100% at 50% 50%, black 38%, transparent 98%)",
+                    }}
+                  >
+                    {FIELD_FILES.map((file) => (
+                      <div
+                        key={file}
+                        className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-100"
+                      >
+                        <ListMusic className="size-3.5 shrink-0 text-zinc-500" />
+                        <span className="truncate">{file}</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-2 px-2 pb-2 pt-1">
+                      <Swatches
+                        value={color}
+                        onPick={(next) => setColors((prev) => ({ ...prev, [collection.id]: next }))}
+                      />
+                      <span
+                        className="ml-auto shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold"
+                        style={themeButtonStyle(color)}
+                      >
+                        Open
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

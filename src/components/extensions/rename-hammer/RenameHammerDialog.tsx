@@ -199,9 +199,9 @@ export function RenameHammerDialog({
       maxWidth="xl"
       footer={footer}
     >
-          <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
+          <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
             <div className="flex items-center gap-2">
-              <CaseSensitive className="size-4 text-primary" />
+              <CaseSensitive className="size-4 text-accent-text" />
               <span className="text-sm font-medium">Rename configuration</span>
             </div>
 
@@ -288,9 +288,9 @@ export function RenameHammerDialog({
             </div>
           </section>
 
-          <section className="space-y-3 rounded-xl border border-border/40 bg-muted/30 p-4">
+          <section className="space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
             <div className="flex items-center gap-2">
-              <Hash className="size-4 text-primary" />
+              <Hash className="size-4 text-accent-text" />
               <span className="text-sm font-medium">Options</span>
             </div>
 
@@ -337,10 +337,10 @@ export function RenameHammerDialog({
             </div>
           </section>
 
-          <section className="space-y-3 rounded-xl border border-border/40 bg-muted/30 p-4">
+          <section className="space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ArrowUpDown className="size-4 text-primary" />
+                <ArrowUpDown className="size-4 text-accent-text" />
                 <span className="text-sm font-medium">Live preview</span>
               </div>
               {changedCount > 0 && (
@@ -350,7 +350,7 @@ export function RenameHammerDialog({
               )}
             </div>
 
-            <div className="max-h-48 overflow-y-auto rounded-lg border border-border/40">
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-white/10">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -364,7 +364,7 @@ export function RenameHammerDialog({
                 <TableBody>
                   {rows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={3} className="h-24 text-center text-zinc-500">
                         No files found for this target.
                       </TableCell>
                     </TableRow>
@@ -376,11 +376,11 @@ export function RenameHammerDialog({
                         </TableCell>
                         <TableCell className="text-xs font-mono max-w-[160px] truncate">
                           {row.renamed !== row.original ? (
-                            <span className="text-foreground">
+                            <span className="text-accent-text">
                               {row.renamed}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground">
+                            <span className="text-zinc-500">
                               {row.renamed}
                             </span>
                           )}

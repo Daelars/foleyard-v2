@@ -157,9 +157,9 @@ export function MakePackDialog({
       footer={footer}
       showCloseButton={!result}
     >
-          <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
+          <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
             <div className="flex items-center gap-2">
-              <PackagePlus className="size-4 text-primary" />
+              <PackagePlus className="size-4 text-accent-text" />
               <span className="text-sm font-medium">Pack source</span>
               {initialFileIds.length > 0 && source === "selection" && (
                 <Badge variant="secondary">{initialFileIds.length}</Badge>
@@ -175,7 +175,7 @@ export function MakePackDialog({
               <RadioGroupItem value="selection">
                 Current selection
                 {initialFileIds.length > 0 && (
-                  <span className="ml-1 text-xs text-muted-foreground">
+                  <span className="ml-1 text-xs text-zinc-400">
                     · {initialFileIds.length} sounds
                   </span>
                 )}
@@ -185,9 +185,9 @@ export function MakePackDialog({
             </RadioGroup>
           </section>
 
-          <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
+          <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
             <div className="flex items-center gap-2">
-              <FileText className="size-4 text-primary" />
+              <FileText className="size-4 text-accent-text" />
               <span className="text-sm font-medium">Pack details</span>
             </div>
 
@@ -225,9 +225,9 @@ export function MakePackDialog({
             </div>
           </section>
 
-          <section className="space-y-4 rounded-xl border border-border/40 bg-muted/30 p-4">
+          <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
             <div className="flex items-center gap-2">
-              <FileAudio className="size-4 text-primary" />
+              <FileAudio className="size-4 text-accent-text" />
               <span className="text-sm font-medium">Output format</span>
             </div>
 
@@ -263,9 +263,9 @@ export function MakePackDialog({
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2 rounded-xl border border-dashed border-border/40 bg-muted/30 p-3">
-              <FolderUp className="size-4 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-3">
+              <FolderUp className="size-4 text-zinc-400" />
+              <p className="text-xs text-zinc-400">
                 Set a destination and pack name above, then click &quot;Make Pack&quot;
               </p>
             </div>

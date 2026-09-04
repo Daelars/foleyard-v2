@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ListMusic, Search } from "lucide-react";
+import { ChevronDown, ListMusic, Play, Search } from "lucide-react";
 
 import {
   DEMO_COLLECTIONS,
@@ -29,118 +29,141 @@ export function AltRailDetail() {
   const sub = isCollection
     ? `${collection?.fileCount ?? 0} sounds · regular collection`
     : "Tag · filters the library";
+  const fileDetails = DETAIL_FILES.map((file) => ({
+    name: file,
+    duration: DEMO_SOUNDS.find((sound) => sound.filename === file)?.duration ?? "0:03",
+  }));
 
   return (
-    <div className="flex min-h-96 flex-col gap-3 sm:flex-row">
-      <div className="w-full shrink-0 space-y-4 sm:w-52">
-        <div>
-          <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-            Collections
-          </p>
-          <div className="mt-1.5 space-y-0.5">
-            {DEMO_COLLECTIONS.map((item) => {
-              const active = isCollection && selection.id === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setSelection({ kind: "collection", id: item.id })}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
-                    active
-                      ? "bg-accent-fill/15 font-semibold text-accent-text"
-                      : "font-medium text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
-                  }`}
+    <div className="flex flex-col gap-3 lg:flex-row">
+      <div className="min-w-0 flex-1">
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+          Collections
+        </p>
+        <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+          {DEMO_COLLECTIONS.map((item) => {
+            const itemColor = collectionColors[item.id] ?? item.color;
+            const active = isCollection && selection.id === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelection({ kind: "collection", id: item.id })}
+                style={active ? { borderColor: `${itemColor}80`, backgroundColor: `${itemColor}12` } : undefined}
+                className={`group flex items-center gap-3 rounded-2xl border p-3 text-left transition-colors ${
+                  active ? "border" : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05]"
+                }`}
+              >
+                <span
+                  className="flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold"
+                  style={tileStyle(itemColor)}
                 >
-                  <span
-                    className="size-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: collectionColors[item.id] ?? item.color }}
-                  />
-                  <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                </button>
-              );
-            })}
-          </div>
+                  {item.name.slice(0, 2)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-zinc-100">
+                    {item.name}
+                  </span>
+                  <span className="mt-0.5 block font-mono text-[10px] tabular-nums text-zinc-500">
+                    {item.fileCount} sounds
+                  </span>
+                </span>
+              </button>
+            );
+          })}
         </div>
-        <div>
-          <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-            Tags
-          </p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {DEMO_TAGS.map((item) => {
-              const active = !isCollection && selection.id === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setSelection({ kind: "tag", id: item.id })}
-                  style={active ? { borderColor: `${item.color}80`, backgroundColor: `${item.color}14` } : undefined}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                    active ? "border" : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.06]"
-                  }`}
-                >
-                  <span className="size-2 rounded-full" style={{ backgroundColor: tagColors[item.id] ?? item.color }} />
-                  {item.name}
-                </button>
-              );
-            })}
-          </div>
+        <p className="mt-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+          Tags
+        </p>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {DEMO_TAGS.map((item) => {
+            const itemColor = tagColors[item.id] ?? item.color;
+            const active = !isCollection && selection.id === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelection({ kind: "tag", id: item.id })}
+                style={active ? { borderColor: `${itemColor}80`, backgroundColor: `${itemColor}14` } : undefined}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  active ? "border" : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.06]"
+                }`}
+              >
+                <span className="size-2 rounded-full" style={{ backgroundColor: itemColor }} />
+                {item.name}
+              </button>
+            );
+          })}
         </div>
       </div>
-      <div
-        className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-white/10"
-        style={{
-          backgroundColor: `${color}0a`,
-          backgroundImage: `radial-gradient(circle at 88% 0%, ${color}45, transparent 92%)`,
-        }}
-      >
+
+      <div className="w-full shrink-0 lg:sticky lg:top-0 lg:w-[380px] lg:self-start">
         <div
-          className="m-3 rounded-2xl bg-black/60 p-2 backdrop-blur-md"
+          className="overflow-hidden rounded-2xl border border-white/10"
           style={{
-            WebkitMaskImage:
-              "radial-gradient(100% 100% at 50% 50%, black 38%, transparent 98%)",
-            maskImage:
-              "radial-gradient(100% 100% at 50% 50%, black 38%, transparent 98%)",
+            backgroundColor: `${color}0a`,
+            backgroundImage: `radial-gradient(circle at 88% 0%, ${color}45, transparent 92%)`,
           }}
         >
-        <div className="flex items-center gap-4 p-5">
-          <span
-            className="flex size-16 shrink-0 items-center justify-center rounded-2xl text-xl font-bold"
-            style={tileStyle(color)}
-          >
-            {name.slice(0, 2)}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-lg font-bold tracking-tight text-zinc-50">{name}</p>
-            <p className="mt-0.5 text-xs text-zinc-400">{sub}</p>
-          </div>
-        </div>
-        <div className="space-y-0.5 px-3 pb-2">
-          {DETAIL_FILES.map((file) => (
-            <div key={file} className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] text-zinc-200 hover:bg-white/[0.04]">
-              <ListMusic className="size-4 shrink-0 text-zinc-600" />
-              <span className="truncate">{file}</span>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-3 border-t border-white/5 p-4">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-600">Color</span>
-          <Swatches
-            value={color}
-            onPick={(next) => {
-              if (isCollection) {
-                setCollectionColors((prev) => ({ ...prev, [selection.id]: next }));
-              } else {
-                setTagColors((prev) => ({ ...prev, [selection.id]: next }));
-              }
+          <div
+            className="m-3 rounded-2xl bg-black/60 p-2 backdrop-blur-md"
+            style={{
+              WebkitMaskImage:
+                "radial-gradient(100% 100% at 50% 50%, black 38%, transparent 98%)",
+              maskImage:
+                "radial-gradient(100% 100% at 50% 50%, black 38%, transparent 98%)",
             }}
-          />
-          <span
-            className="ml-auto shrink-0 rounded-xl px-4 py-2 text-xs font-semibold"
-            style={themeButtonStyle(color)}
           >
-            {isCollection ? "Open" : "Filter library"}
-          </span>
-        </div>
+            <div className="flex items-center gap-3 p-3">
+              <span
+                className="flex size-14 shrink-0 items-center justify-center rounded-2xl text-lg font-bold"
+                style={tileStyle(color)}
+              >
+                {name.slice(0, 2)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-base font-bold tracking-tight text-zinc-50">{name}</p>
+                <p className="mt-0.5 text-xs text-zinc-400">{sub}</p>
+              </div>
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-white/10 hover:text-zinc-100">
+                <Play className="ml-0.5 size-4" />
+              </span>
+            </div>
+            <div className="px-3 pb-1">
+              <div className="h-9 opacity-90">
+                <MiniBars seed={selection.id.length * 7 + 3} />
+              </div>
+            </div>
+            <div className="space-y-0.5 px-1 pb-1">
+              {fileDetails.map((file) => (
+                <div key={file.name} className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] text-zinc-200 hover:bg-white/[0.04]">
+                  <ListMusic className="size-4 shrink-0 text-zinc-600" />
+                  <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                  <span className="shrink-0 font-mono text-[11px] tabular-nums text-zinc-500">
+                    {file.duration}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 border-t border-white/5 p-3">
+              <Swatches
+                value={color}
+                onPick={(next) => {
+                  if (isCollection) {
+                    setCollectionColors((prev) => ({ ...prev, [selection.id]: next }));
+                  } else {
+                    setTagColors((prev) => ({ ...prev, [selection.id]: next }));
+                  }
+                }}
+              />
+              <span
+                className="ml-auto shrink-0 rounded-xl px-4 py-2 text-xs font-semibold"
+                style={themeButtonStyle(color)}
+              >
+                {isCollection ? "Open" : "Filter library"}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

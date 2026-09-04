@@ -41,7 +41,7 @@ export function CommandPalette({
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="w-full max-w-lg overflow-hidden rounded-2xl border border-accent-fill/30 bg-shell/95 shadow-glow-accent-strong backdrop-blur-2xl"
+        className="w-full max-w-lg overflow-hidden rounded-2xl border border-accent-fill/30 bg-shell/95 shadow-glow-overlay backdrop-blur-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-white/10 px-4">

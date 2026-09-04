@@ -64,6 +64,9 @@
      the accent rgba from the theme layer instead of hard-coding it. */
   --shadow-glow-accent: 0 0 18px rgba(240, 80, 60, 0.25);
   --shadow-glow-accent-strong: 0 0 24px rgba(240, 80, 60, 0.45);
+  /* Wide overlay glow, taken verbatim from the prototype command palette.
+     Used only there, so the dialog matches the prototype exactly. */
+  --shadow-glow-overlay: 0 0 60px rgba(240, 80, 60, 0.25);
   --shadow-2xs: 0rem 0.25rem 0.5rem 0rem hsl(240 9.8039% 10% / 0.05);
   --shadow-xs: 0rem 0.25rem 0.5rem 0rem hsl(240 9.8039% 10% / 0.05);
   --shadow-sm:
@@ -160,6 +163,7 @@
   --color-accent-text: var(--accent-text);
   --shadow-glow-accent: var(--shadow-glow-accent);
   --shadow-glow-accent-strong: var(--shadow-glow-accent-strong);
+  --shadow-glow-overlay: var(--shadow-glow-overlay);
 }
 
 body {

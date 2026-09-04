@@ -146,14 +146,12 @@ export function AudioPlayerShell({
             collections={collections}
             onAddToCollection={onAddToCollection}
           />
-          <div className="hidden lg:block">
-            <AudioPlayerVolumeControl
-              isMuted={isMuted}
-              onToggleMuted={onToggleMuted}
-              onVolumeChange={onVolumeChange}
-              volume={volume}
-            />
-          </div>
+          <AudioPlayerVolumeControl
+            isMuted={isMuted}
+            onToggleMuted={onToggleMuted}
+            onVolumeChange={onVolumeChange}
+            volume={volume}
+          />
           <Button
             variant="ghost"
             size="icon"

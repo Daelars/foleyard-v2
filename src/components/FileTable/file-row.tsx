@@ -32,6 +32,7 @@ import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
 import { cn, formatDuration } from "@/lib/utils";
 
 import { highlightMatch } from "./highlight-match";
+import { RowWaveform } from "./row-waveform";
 import type { FileTableFileRecord } from "./types";
 
 export const FileTableFileRow = memo(function FileTableFileRow({
@@ -106,8 +107,8 @@ export const FileTableFileRow = memo(function FileTableFileRow({
           className={cn(
             "group absolute left-0 top-0 grid w-full cursor-pointer items-center gap-3 border-b border-white/5 px-3 outline-none transition-[background-color,color] last:border-0",
             desktop
-              ? "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px_28px]"
-              : "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px]",
+              ? "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px_28px] sm:grid-cols-[28px_28px_minmax(0,1fr)_140px_64px_28px_28px]"
+              : "grid-cols-[28px_28px_minmax(0,1fr)_64px_28px] sm:grid-cols-[28px_28px_minmax(0,1fr)_140px_64px_28px]",
             isSelected
               ? "bg-accent-fill/10"
               : isMultiSelected
@@ -171,6 +172,13 @@ export const FileTableFileRow = memo(function FileTableFileRow({
                 {meta}
               </span>
             ) : null}
+          </span>
+          <span className="hidden min-w-0 sm:block">
+            <RowWaveform
+              fileId={file.id}
+              filePath={file.path}
+              active={isSelected}
+            />
           </span>
           <span className="text-right font-mono text-xs font-medium tabular-nums text-zinc-300">
             {formatDuration(file.duration)}

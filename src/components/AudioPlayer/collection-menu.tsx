@@ -26,10 +26,12 @@ export function AudioPlayerCollectionMenu({
         render={
           <Button
             variant="ghost"
-            className="h-9 rounded-full border border-white/10 bg-white/5 px-3.5 text-sm font-medium text-zinc-200 hover:bg-white/[0.08] hover:text-zinc-100"
+            size="icon"
+            className="size-8 shrink-0 rounded-full text-zinc-400 hover:bg-white/10 hover:text-zinc-100"
+            aria-label="Add to collection"
+            title="Add to collection"
           >
-            <FolderPlus className="mr-2.5 size-4" />
-            Add to Collection
+            <FolderPlus className="size-4" />
           </Button>
         }
       />

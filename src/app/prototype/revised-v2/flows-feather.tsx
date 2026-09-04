@@ -12,8 +12,8 @@ const FEATHER_MASK = {
 function FeatherBed({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="rounded-2xl p-3 backdrop-blur-md sm:p-4"
-      style={{ ...FEATHER_MASK, backgroundColor: "rgba(0,0,0,0.6)" }}
+      className="rounded-2xl border border-white/10 p-3 backdrop-blur-md sm:p-4"
+      style={{ ...FEATHER_MASK, backgroundColor: "rgba(0,0,0,0.72)" }}
     >
       {children}
     </div>
@@ -43,7 +43,7 @@ export function FeatherFlows() {
   const color = selectionColor(shared);
   const wash: React.CSSProperties = {
     backgroundColor: `${color}0a`,
-    backgroundImage: `radial-gradient(circle at 12% 0%, ${color}38, transparent 75%)`,
+    backgroundImage: `radial-gradient(circle at 12% 0%, ${color}45, transparent 92%)`,
   };
 
   return (

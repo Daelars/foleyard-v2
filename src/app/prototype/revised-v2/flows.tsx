@@ -69,7 +69,7 @@ function FlowDetail({
       className="overflow-hidden rounded-2xl border border-white/10"
       style={{
         backgroundColor: `${color}0a`,
-        backgroundImage: `radial-gradient(circle at 12% 0%, ${color}38, transparent 75%)`,
+        backgroundImage: `radial-gradient(circle at 12% 0%, ${color}45, transparent 92%)`,
       }}
     >
       <div className="flex items-center gap-3 p-4">
@@ -77,7 +77,7 @@ function FlowDetail({
           className="flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold"
           style={tileStyle(color)}
         >
-          {meta.initials}
+          Ra
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-zinc-100">{meta.name}</p>

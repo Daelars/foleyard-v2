@@ -16,7 +16,7 @@ import { Swatches } from "./shared";
 
 const DETAIL_FILES = ["Metal Door Slam", "Glass Break Small", "Gravel Footsteps"];
 
-function AltRailDetail() {
+export function AltRailDetail() {
   const { selection, setSelection, collectionColors, setCollectionColors, tagColors, setTagColors } =
     useFlowState();
   const isCollection = selection.kind === "collection";

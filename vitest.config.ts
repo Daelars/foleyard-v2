@@ -23,6 +23,8 @@ export default defineConfig({
       exclude: [
         "**/*.test.{ts,tsx}",
         "**/*.d.ts",
+        // Shared test fixtures: exercised by tests, not product code.
+        "src/test/**",
         // Generated shadcn primitives: vendored, not our behaviour to assert.
         "src/components/ui/**",
         // Throwaway prototypes, deleted when their design question is answered.

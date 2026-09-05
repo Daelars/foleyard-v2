@@ -1,0 +1,1926 @@
+{
+  "baseline": "9772cc11e11a595b4728dfeaa5ace7446f4e6962",
+  "note": "Tracked first-party code inventory. User working-tree edits included in line counts. Vendor UI is included; dependencies, binaries, build outputs and this new prototype excluded.",
+  "files": [
+    {
+      "path": "electron/main.cjs",
+      "lines": 67,
+      "group": "electron"
+    },
+    {
+      "path": "electron/main/auto-updater.cjs",
+      "lines": 162,
+      "group": "electron"
+    },
+    {
+      "path": "electron/main/constants.cjs",
+      "lines": 15,
+      "group": "electron"
+    },
+    {
+      "path": "electron/main/database.cjs",
+      "lines": 136,
+      "group": "electron"
+    },
+    {
+      "path": "electron/main/desktop-service.cjs",
+      "lines": 179,
+      "group": "electron"
+    },
+    {
+      "path": "electron/main/errors.cjs",
+      "lines": 79,
+      "group": "electron"
+    },
+    {
+      "path": "electron/main/ipc.cjs",
+      "lines": 94,
+      "group": "electron"
+    },
+    {
+      "path": "electron/main/next-server-adapter.cjs",
+      "lines": 143,
+      "group": "electron"
+    },
+    {
+      "path": "electron/main/next-server.cjs",
+      "lines": 73,
+      "group": "electron"
+    },
+    {
+      "path": "electron/main/server-url.cjs",
+      "lines": 21,
+      "group": "electron"
+    },
+    {
+      "path": "electron/main/window.cjs",
+      "lines": 95,
+      "group": "electron"
+    },
+    {
+      "path": "electron/preload.cjs",
+      "lines": 97,
+      "group": "electron"
+    },
+    {
+      "path": "packages/yard-core/src/async/map-concurrent.test.ts",
+      "lines": 8,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-core/src/async/map-concurrent.ts",
+      "lines": 10,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/domain/audio-file.ts",
+      "lines": 31,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/domain/collection.ts",
+      "lines": 10,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/domain/filename.ts",
+      "lines": 5,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/domain/library.ts",
+      "lines": 9,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/domain/playback.ts",
+      "lines": 8,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/domain/search.ts",
+      "lines": 20,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/domain/tag.ts",
+      "lines": 7,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/errors/yard-core-error.ts",
+      "lines": 7,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/extensions/extension-command-registry.ts",
+      "lines": 59,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/extensions/extension-context.ts",
+      "lines": 70,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/extensions/extension-host.test.ts",
+      "lines": 246,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-core/src/extensions/extension-host.ts",
+      "lines": 152,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/extensions/extension-registry.ts",
+      "lines": 151,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/extensions/index.ts",
+      "lines": 9,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/extensions/vocabulary.ts",
+      "lines": 178,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/index.ts",
+      "lines": 33,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/repositories/audio-file-repository.ts",
+      "lines": 34,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/repositories/collection-repository.ts",
+      "lines": 15,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/repositories/favorite-repository.ts",
+      "lines": 4,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/repositories/settings-repository.ts",
+      "lines": 8,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/repositories/tag-repository.ts",
+      "lines": 12,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/services/commands/command-registry.ts",
+      "lines": 18,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/services/commands/command-types.ts",
+      "lines": 10,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/services/library/library-service.ts",
+      "lines": 8,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/services/library/scan-types.ts",
+      "lines": 90,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/services/library/scanner-service.ts",
+      "lines": 9,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/services/organization/collection-service.ts",
+      "lines": 14,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/services/organization/favorite-service.ts",
+      "lines": 4,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/services/organization/tag-service.ts",
+      "lines": 10,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-core/src/services/search/filter-service.ts",
+      "lines": 13,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/drop-rules/src/commands.test.ts",
+      "lines": 170,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-tools/drop-rules/src/commands.ts",
+      "lines": 136,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/drop-rules/src/index.ts",
+      "lines": 7,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/drop-rules/src/manifest.ts",
+      "lines": 47,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/drop-rules/src/permissions.ts",
+      "lines": 11,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/drop-rules/src/service.test.ts",
+      "lines": 186,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-tools/drop-rules/src/service.ts",
+      "lines": 263,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/drop-rules/src/settings.ts",
+      "lines": 41,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/drop-rules/src/staging.test.ts",
+      "lines": 22,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-tools/drop-rules/src/staging.ts",
+      "lines": 21,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/drop-rules/src/types.ts",
+      "lines": 51,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/folder-janitor/src/commands.test.ts",
+      "lines": 164,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-tools/folder-janitor/src/commands.ts",
+      "lines": 137,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/folder-janitor/src/index.ts",
+      "lines": 7,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/folder-janitor/src/manifest.ts",
+      "lines": 46,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/folder-janitor/src/permissions.ts",
+      "lines": 9,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/folder-janitor/src/service.test.ts",
+      "lines": 178,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-tools/folder-janitor/src/service.ts",
+      "lines": 188,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/folder-janitor/src/settings.ts",
+      "lines": 19,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/folder-janitor/src/types.ts",
+      "lines": 37,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/library-gatherer/src/commands.test.ts",
+      "lines": 131,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-tools/library-gatherer/src/commands.ts",
+      "lines": 89,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/library-gatherer/src/index.ts",
+      "lines": 7,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/library-gatherer/src/manifest.ts",
+      "lines": 32,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/library-gatherer/src/permissions.ts",
+      "lines": 10,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/library-gatherer/src/service.test.ts",
+      "lines": 85,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-tools/library-gatherer/src/service.ts",
+      "lines": 187,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/library-gatherer/src/settings.ts",
+      "lines": 19,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/library-gatherer/src/types.ts",
+      "lines": 26,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/make-pack/src/commands.test.ts",
+      "lines": 217,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-tools/make-pack/src/commands.ts",
+      "lines": 98,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/make-pack/src/index.ts",
+      "lines": 7,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/make-pack/src/manifest.ts",
+      "lines": 39,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/make-pack/src/permissions.ts",
+      "lines": 9,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/make-pack/src/service.test.ts",
+      "lines": 123,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-tools/make-pack/src/service.ts",
+      "lines": 212,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/make-pack/src/settings.ts",
+      "lines": 23,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/make-pack/src/types.ts",
+      "lines": 41,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/make-pack/src/zip.ts",
+      "lines": 167,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/smart-collections/src/commands.test.ts",
+      "lines": 94,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-tools/smart-collections/src/commands.ts",
+      "lines": 46,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/smart-collections/src/index.ts",
+      "lines": 7,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/smart-collections/src/manifest.ts",
+      "lines": 26,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/smart-collections/src/permissions.ts",
+      "lines": 8,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/smart-collections/src/service.ts",
+      "lines": 38,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/smart-collections/src/settings.ts",
+      "lines": 4,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/smart-collections/src/types.ts",
+      "lines": 4,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/sound-shelf/src/commands.test.ts",
+      "lines": 103,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-tools/sound-shelf/src/commands.ts",
+      "lines": 47,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/sound-shelf/src/index.ts",
+      "lines": 8,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/sound-shelf/src/manifest.ts",
+      "lines": 46,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/sound-shelf/src/permissions.ts",
+      "lines": 4,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/sound-shelf/src/service.test.ts",
+      "lines": 158,
+      "group": "test"
+    },
+    {
+      "path": "packages/yard-tools/sound-shelf/src/service.ts",
+      "lines": 80,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/sound-shelf/src/settings.ts",
+      "lines": 4,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/sound-shelf/src/store.ts",
+      "lines": 17,
+      "group": "packages"
+    },
+    {
+      "path": "packages/yard-tools/sound-shelf/src/types.ts",
+      "lines": 17,
+      "group": "packages"
+    },
+    {
+      "path": "scripts/benchmark-scan.ts",
+      "lines": 779,
+      "group": "scripts"
+    },
+    {
+      "path": "scripts/clean-binary.cjs",
+      "lines": 41,
+      "group": "scripts"
+    },
+    {
+      "path": "scripts/dev-desktop.cjs",
+      "lines": 109,
+      "group": "scripts"
+    },
+    {
+      "path": "scripts/postinstall.cjs",
+      "lines": 74,
+      "group": "scripts"
+    },
+    {
+      "path": "scripts/prepare-release.cjs",
+      "lines": 191,
+      "group": "scripts"
+    },
+    {
+      "path": "scripts/rebuild-desktop.cjs",
+      "lines": 59,
+      "group": "scripts"
+    },
+    {
+      "path": "scripts/rebuild-traced.cjs",
+      "lines": 115,
+      "group": "scripts"
+    },
+    {
+      "path": "scripts/verify-workspace-root.cjs",
+      "lines": 53,
+      "group": "scripts"
+    },
+    {
+      "path": "src/app/api/audio/route.test.ts",
+      "lines": 81,
+      "group": "test"
+    },
+    {
+      "path": "src/app/api/audio/route.ts",
+      "lines": 128,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/collections/route.ts",
+      "lines": 125,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/desktop/file/route.test.ts",
+      "lines": 75,
+      "group": "test"
+    },
+    {
+      "path": "src/app/api/desktop/file/route.ts",
+      "lines": 39,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/desktop/grants/route.test.ts",
+      "lines": 17,
+      "group": "test"
+    },
+    {
+      "path": "src/app/api/desktop/grants/route.ts",
+      "lines": 24,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/desktop/path/route.test.ts",
+      "lines": 67,
+      "group": "test"
+    },
+    {
+      "path": "src/app/api/desktop/path/route.ts",
+      "lines": 26,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/directories/route.ts",
+      "lines": 50,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/extensions/execute/route.test.ts",
+      "lines": 102,
+      "group": "test"
+    },
+    {
+      "path": "src/app/api/extensions/execute/route.ts",
+      "lines": 49,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/extensions/execute/transport.test.ts",
+      "lines": 459,
+      "group": "test"
+    },
+    {
+      "path": "src/app/api/extensions/execute/transport.ts",
+      "lines": 508,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/extensions/filesystem-access.test.ts",
+      "lines": 35,
+      "group": "test"
+    },
+    {
+      "path": "src/app/api/extensions/host-outcome.ts",
+      "lines": 43,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/extensions/route.ts",
+      "lines": 83,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/files/delete.test.ts",
+      "lines": 18,
+      "group": "test"
+    },
+    {
+      "path": "src/app/api/files/get.test.ts",
+      "lines": 47,
+      "group": "test"
+    },
+    {
+      "path": "src/app/api/files/patch-batch.test.ts",
+      "lines": 176,
+      "group": "test"
+    },
+    {
+      "path": "src/app/api/files/route.ts",
+      "lines": 181,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/mutations.test.ts",
+      "lines": 20,
+      "group": "test"
+    },
+    {
+      "path": "src/app/api/scan/route.ts",
+      "lines": 22,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/settings/route.ts",
+      "lines": 84,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/tags/route.ts",
+      "lines": 87,
+      "group": "src"
+    },
+    {
+      "path": "src/app/api/waveform/route.test.ts",
+      "lines": 78,
+      "group": "test"
+    },
+    {
+      "path": "src/app/api/waveform/route.ts",
+      "lines": 30,
+      "group": "src"
+    },
+    {
+      "path": "src/app/globals.css",
+      "lines": 304,
+      "group": "src"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "lines": 32,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/dialogs.tsx",
+      "lines": 223,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/file-query.test.ts",
+      "lines": 186,
+      "group": "test"
+    },
+    {
+      "path": "src/app/library/file-query.ts",
+      "lines": 268,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/refetch-map.test.ts",
+      "lines": 52,
+      "group": "test"
+    },
+    {
+      "path": "src/app/library/refetch-map.ts",
+      "lines": 46,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/smart-collection-counts.test.ts",
+      "lines": 65,
+      "group": "test"
+    },
+    {
+      "path": "src/app/library/smart-collection-counts.ts",
+      "lines": 95,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/types.ts",
+      "lines": 30,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-bulk-actions.ts",
+      "lines": 103,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-collections.ts",
+      "lines": 377,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-domain-slices.test.ts",
+      "lines": 93,
+      "group": "test"
+    },
+    {
+      "path": "src/app/library/use-extension-catalog.ts",
+      "lines": 145,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-extension-ui.ts",
+      "lines": 252,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-favorites.ts",
+      "lines": 51,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-library-files-batch.test.ts",
+      "lines": 128,
+      "group": "test"
+    },
+    {
+      "path": "src/app/library/use-library-files.ts",
+      "lines": 555,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-library-organization.ts",
+      "lines": 48,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-library-view.test.ts",
+      "lines": 121,
+      "group": "test"
+    },
+    {
+      "path": "src/app/library/use-library-view.ts",
+      "lines": 284,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-palette.ts",
+      "lines": 371,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-route-slices.test.ts",
+      "lines": 112,
+      "group": "test"
+    },
+    {
+      "path": "src/app/library/use-selection.test.ts",
+      "lines": 92,
+      "group": "test"
+    },
+    {
+      "path": "src/app/library/use-selection.ts",
+      "lines": 245,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-settings-scan.ts",
+      "lines": 268,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-shelf.ts",
+      "lines": 155,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-tags.ts",
+      "lines": 186,
+      "group": "src"
+    },
+    {
+      "path": "src/app/library/use-transport.ts",
+      "lines": 140,
+      "group": "src"
+    },
+    {
+      "path": "src/app/page.tsx",
+      "lines": 907,
+      "group": "src"
+    },
+    {
+      "path": "src/app/prototype/app-v2/console.tsx",
+      "lines": 172,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/app-v2/menus.tsx",
+      "lines": 223,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/app-v2/page.tsx",
+      "lines": 541,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/app-v2/palette.tsx",
+      "lines": 149,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/app-v2/views.tsx",
+      "lines": 198,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/code-investigation/data.ts",
+      "lines": 159,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/code-investigation/page.tsx",
+      "lines": 54,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/code-investigation/variant-a.tsx",
+      "lines": 53,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/code-investigation/variant-b.tsx",
+      "lines": 67,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/code-investigation/variant-c.tsx",
+      "lines": 55,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/extensions-diagram/diagram-data.ts",
+      "lines": 427,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/extensions-diagram/page.tsx",
+      "lines": 48,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/extensions-diagram/variant-hub.tsx",
+      "lines": 359,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/extensions-diagram/variant-pipeline.tsx",
+      "lines": 200,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/extensions-diagram/variant-trace.tsx",
+      "lines": 413,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/layout.tsx",
+      "lines": 19,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/redesign/page.tsx",
+      "lines": 8,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/redesign/workspace.tsx",
+      "lines": 2139,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/revised-v2/console-v2.tsx",
+      "lines": 78,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/revised-v2/flows-alt.tsx",
+      "lines": 859,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/revised-v2/flows.tsx",
+      "lines": 727,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/revised-v2/page.tsx",
+      "lines": 60,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/revised-v2/palette-v2.tsx",
+      "lines": 68,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/revised-v2/popups-v2.tsx",
+      "lines": 117,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/revised-v2/shared.tsx",
+      "lines": 94,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/showcase/console-designs.tsx",
+      "lines": 278,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/showcase/data.tsx",
+      "lines": 142,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/showcase/flyout-designs.tsx",
+      "lines": 235,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/showcase/organize-designs.tsx",
+      "lines": 379,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/showcase/page.tsx",
+      "lines": 79,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/showcase/palette-designs.tsx",
+      "lines": 333,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/showcase/popup-designs.tsx",
+      "lines": 158,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/prototype/showcase/row-designs.tsx",
+      "lines": 202,
+      "group": "existing prototype"
+    },
+    {
+      "path": "src/app/root-height-chain.test.ts",
+      "lines": 30,
+      "group": "test"
+    },
+    {
+      "path": "src/app/theme-tokens.test.ts",
+      "lines": 108,
+      "group": "test"
+    },
+    {
+      "path": "src/components/AudioPlayer.tsx",
+      "lines": 117,
+      "group": "src"
+    },
+    {
+      "path": "src/components/AudioPlayer/collection-menu.tsx",
+      "lines": 92,
+      "group": "src"
+    },
+    {
+      "path": "src/components/AudioPlayer/favorite-button.tsx",
+      "lines": 32,
+      "group": "src"
+    },
+    {
+      "path": "src/components/AudioPlayer/player-shell.tsx",
+      "lines": 186,
+      "group": "src"
+    },
+    {
+      "path": "src/components/AudioPlayer/transport-queue.test.ts",
+      "lines": 77,
+      "group": "test"
+    },
+    {
+      "path": "src/components/AudioPlayer/transport-queue.ts",
+      "lines": 88,
+      "group": "src"
+    },
+    {
+      "path": "src/components/AudioPlayer/types.ts",
+      "lines": 32,
+      "group": "src"
+    },
+    {
+      "path": "src/components/AudioPlayer/use-audio-element.ts",
+      "lines": 107,
+      "group": "src"
+    },
+    {
+      "path": "src/components/AudioPlayer/use-audio-playback.ts",
+      "lines": 26,
+      "group": "src"
+    },
+    {
+      "path": "src/components/AudioPlayer/use-transport-queue.ts",
+      "lines": 85,
+      "group": "src"
+    },
+    {
+      "path": "src/components/AudioPlayer/use-volume-preferences.ts",
+      "lines": 48,
+      "group": "src"
+    },
+    {
+      "path": "src/components/AudioPlayer/use-waveform-peaks.ts",
+      "lines": 31,
+      "group": "src"
+    },
+    {
+      "path": "src/components/AudioPlayer/volume-control.tsx",
+      "lines": 46,
+      "group": "src"
+    },
+    {
+      "path": "src/components/CommandPalette/CommandPalette.tsx",
+      "lines": 120,
+      "group": "src"
+    },
+    {
+      "path": "src/components/CommandPalette/command-palette.test.ts",
+      "lines": 148,
+      "group": "test"
+    },
+    {
+      "path": "src/components/CommandPalette/command-palette.ts",
+      "lines": 232,
+      "group": "src"
+    },
+    {
+      "path": "src/components/DesktopTitleBar.tsx",
+      "lines": 106,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ExtensionGrid.tsx",
+      "lines": 228,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable.tsx",
+      "lines": 277,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/breadcrumb-bar.tsx",
+      "lines": 91,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/bulk-bar.tsx",
+      "lines": 214,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/desktop-actions.test.ts",
+      "lines": 110,
+      "group": "test"
+    },
+    {
+      "path": "src/components/FileTable/desktop-actions.tsx",
+      "lines": 119,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/directory-row.tsx",
+      "lines": 87,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/empty-state.tsx",
+      "lines": 39,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/file-row-menu.tsx",
+      "lines": 128,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/file-row.tsx",
+      "lines": 253,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/highlight-match.tsx",
+      "lines": 23,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/hook-harness.ts",
+      "lines": 92,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/layout.ts",
+      "lines": 9,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/row-waveform.tsx",
+      "lines": 42,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/selection-scroll.test.ts",
+      "lines": 65,
+      "group": "test"
+    },
+    {
+      "path": "src/components/FileTable/selection-scroll.ts",
+      "lines": 39,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/selection.test.ts",
+      "lines": 33,
+      "group": "test"
+    },
+    {
+      "path": "src/components/FileTable/selection.ts",
+      "lines": 35,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/types.ts",
+      "lines": 74,
+      "group": "src"
+    },
+    {
+      "path": "src/components/FileTable/use-shelf-toggle.test.ts",
+      "lines": 22,
+      "group": "test"
+    },
+    {
+      "path": "src/components/FileTable/use-shelf-toggle.ts",
+      "lines": 39,
+      "group": "src"
+    },
+    {
+      "path": "src/components/IconRail.tsx",
+      "lines": 138,
+      "group": "src"
+    },
+    {
+      "path": "src/components/OnboardingDialog.tsx",
+      "lines": 351,
+      "group": "src"
+    },
+    {
+      "path": "src/components/OrganizeView.tsx",
+      "lines": 55,
+      "group": "src"
+    },
+    {
+      "path": "src/components/PrototypeSwitcher.tsx",
+      "lines": 103,
+      "group": "src"
+    },
+    {
+      "path": "src/components/Shortcuts/shortcuts.test.ts",
+      "lines": 80,
+      "group": "test"
+    },
+    {
+      "path": "src/components/Shortcuts/shortcuts.ts",
+      "lines": 186,
+      "group": "src"
+    },
+    {
+      "path": "src/components/UpdateNotifier.tsx",
+      "lines": 67,
+      "group": "src"
+    },
+    {
+      "path": "src/components/dotmatrix-loader.css",
+      "lines": 879,
+      "group": "src"
+    },
+    {
+      "path": "src/components/extensions/ExtensionDialogShell.tsx",
+      "lines": 83,
+      "group": "src"
+    },
+    {
+      "path": "src/components/extensions/dialog-fields.tsx",
+      "lines": 107,
+      "group": "src"
+    },
+    {
+      "path": "src/components/extensions/folder-janitor/FolderJanitorDialog.tsx",
+      "lines": 324,
+      "group": "src"
+    },
+    {
+      "path": "src/components/extensions/folder-janitor/use-folder-janitor.test.ts",
+      "lines": 43,
+      "group": "test"
+    },
+    {
+      "path": "src/components/extensions/folder-janitor/use-folder-janitor.ts",
+      "lines": 234,
+      "group": "src"
+    },
+    {
+      "path": "src/components/extensions/library-gatherer/LibraryGathererDialog.tsx",
+      "lines": 244,
+      "group": "src"
+    },
+    {
+      "path": "src/components/extensions/library-gatherer/use-library-gatherer.test.ts",
+      "lines": 22,
+      "group": "test"
+    },
+    {
+      "path": "src/components/extensions/library-gatherer/use-library-gatherer.ts",
+      "lines": 180,
+      "group": "src"
+    },
+    {
+      "path": "src/components/extensions/make-pack/MakePackDialog.tsx",
+      "lines": 186,
+      "group": "src"
+    },
+    {
+      "path": "src/components/extensions/make-pack/use-make-pack.test.ts",
+      "lines": 26,
+      "group": "test"
+    },
+    {
+      "path": "src/components/extensions/make-pack/use-make-pack.ts",
+      "lines": 138,
+      "group": "src"
+    },
+    {
+      "path": "src/components/organize/collections-section.test.ts",
+      "lines": 36,
+      "group": "test"
+    },
+    {
+      "path": "src/components/organize/collections-section.tsx",
+      "lines": 270,
+      "group": "src"
+    },
+    {
+      "path": "src/components/organize/name-color-composer.test.ts",
+      "lines": 16,
+      "group": "test"
+    },
+    {
+      "path": "src/components/organize/name-color-composer.tsx",
+      "lines": 75,
+      "group": "src"
+    },
+    {
+      "path": "src/components/organize/organize-shell.tsx",
+      "lines": 17,
+      "group": "src"
+    },
+    {
+      "path": "src/components/organize/swatches.tsx",
+      "lines": 31,
+      "group": "src"
+    },
+    {
+      "path": "src/components/organize/tag-confirm.test.ts",
+      "lines": 38,
+      "group": "test"
+    },
+    {
+      "path": "src/components/organize/tag-confirm.ts",
+      "lines": 41,
+      "group": "src"
+    },
+    {
+      "path": "src/components/organize/tags-section.tsx",
+      "lines": 198,
+      "group": "src"
+    },
+    {
+      "path": "src/components/organize/types.ts",
+      "lines": 57,
+      "group": "src"
+    },
+    {
+      "path": "src/components/settings/SettingsDialog.tsx",
+      "lines": 169,
+      "group": "src"
+    },
+    {
+      "path": "src/components/settings/about-tab.tsx",
+      "lines": 164,
+      "group": "src"
+    },
+    {
+      "path": "src/components/settings/appearance-tab.tsx",
+      "lines": 79,
+      "group": "src"
+    },
+    {
+      "path": "src/components/settings/extensions-tab.tsx",
+      "lines": 252,
+      "group": "src"
+    },
+    {
+      "path": "src/components/settings/library-tab.tsx",
+      "lines": 380,
+      "group": "src"
+    },
+    {
+      "path": "src/components/settings/metadata-tab.tsx",
+      "lines": 290,
+      "group": "src"
+    },
+    {
+      "path": "src/components/settings/shortcuts-tab.tsx",
+      "lines": 206,
+      "group": "src"
+    },
+    {
+      "path": "src/components/settings/types.ts",
+      "lines": 86,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/accordion.tsx",
+      "lines": 70,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/alert-dialog.tsx",
+      "lines": 164,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/alert.tsx",
+      "lines": 47,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/badge.tsx",
+      "lines": 50,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/button.tsx",
+      "lines": 54,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/card.tsx",
+      "lines": 34,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/collapsible.tsx",
+      "lines": 22,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/context-menu.tsx",
+      "lines": 186,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/dialog.tsx",
+      "lines": 161,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/dotm-square-3.tsx",
+      "lines": 64,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu.tsx",
+      "lines": 269,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/input.tsx",
+      "lines": 21,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/label.tsx",
+      "lines": 23,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/radio-group.tsx",
+      "lines": 48,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/scroll-area.tsx",
+      "lines": 56,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/select.tsx",
+      "lines": 95,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/separator.tsx",
+      "lines": 26,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/slider.tsx",
+      "lines": 53,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/sonner.tsx",
+      "lines": 52,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/switch.tsx",
+      "lines": 29,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/table.tsx",
+      "lines": 77,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/tabs.tsx",
+      "lines": 83,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/tooltip.tsx",
+      "lines": 67,
+      "group": "src"
+    },
+    {
+      "path": "src/components/ui/waveform.tsx",
+      "lines": 309,
+      "group": "src"
+    },
+    {
+      "path": "src/hooks/use-scan-polling.ts",
+      "lines": 41,
+      "group": "src"
+    },
+    {
+      "path": "src/hooks/use-zoom.ts",
+      "lines": 83,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/api/body.ts",
+      "lines": 24,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/api/errors.ts",
+      "lines": 19,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/api/pagination.ts",
+      "lines": 14,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/client-progress.ts",
+      "lines": 27,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/client-waveform.ts",
+      "lines": 16,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database-path.ts",
+      "lines": 70,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database/__tests__/browse-repository.test.ts",
+      "lines": 7,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/database/__tests__/file-batch-mutations.test.ts",
+      "lines": 120,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/database/__tests__/file-repository.test.ts",
+      "lines": 644,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/database/__tests__/settings-repository.test.ts",
+      "lines": 63,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/database/__tests__/shared-connection.test.ts",
+      "lines": 21,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/database/__tests__/tag-collection-color.test.ts",
+      "lines": 67,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/database/browse-repository.ts",
+      "lines": 74,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database/collection-repository.ts",
+      "lines": 222,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database/connection.ts",
+      "lines": 70,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database/file-repository.ts",
+      "lines": 77,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database/files/batch.ts",
+      "lines": 195,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database/files/context.ts",
+      "lines": 6,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database/files/reads.ts",
+      "lines": 267,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database/files/writes.ts",
+      "lines": 139,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database/migrations.ts",
+      "lines": 155,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database/settings-repository.ts",
+      "lines": 198,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database/sql-parameters.ts",
+      "lines": 22,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/database/tag-repository.ts",
+      "lines": 120,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/db.ts",
+      "lines": 137,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/desktop-main-hardening.test.ts",
+      "lines": 327,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/desktop-runtime-policy.test.ts",
+      "lines": 75,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/desktop.test.ts",
+      "lines": 84,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/desktop.ts",
+      "lines": 152,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/directory-navigation.test.ts",
+      "lines": 124,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/directory-navigation.ts",
+      "lines": 72,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/dotmatrix-hooks.ts",
+      "lines": 227,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/dotmatrix/DotMatrixBase.tsx",
+      "lines": 215,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/dotmatrix/animation-math.ts",
+      "lines": 175,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/dotmatrix/geometry.ts",
+      "lines": 41,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/dotmatrix/orders.ts",
+      "lines": 246,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/dotmatrix/patterns.ts",
+      "lines": 51,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/dotmatrix/resolvers.ts",
+      "lines": 28,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/dotmatrix/types.ts",
+      "lines": 50,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/extension-client.test.ts",
+      "lines": 61,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/extension-client.ts",
+      "lines": 50,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/extensions/host-commands.test.ts",
+      "lines": 345,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/extensions/host.ts",
+      "lines": 28,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/extensions/kv-store.ts",
+      "lines": 17,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/extensions/make-pack-recent-store.ts",
+      "lines": 16,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/extensions/registry.test.ts",
+      "lines": 55,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/extensions/registry.ts",
+      "lines": 121,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/extensions/runtime.ts",
+      "lines": 4,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/extensions/setting-previews.test.ts",
+      "lines": 35,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/extensions/setting-previews.ts",
+      "lines": 60,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/extensions/settings-store.ts",
+      "lines": 14,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/extensions/sound-shelf-events.ts",
+      "lines": 2,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/extensions/sound-shelf-store.ts",
+      "lines": 17,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/extensions/types.ts",
+      "lines": 32,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/extensions/ui-intent.test.ts",
+      "lines": 196,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/extensions/ui-intent.ts",
+      "lines": 107,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/files/delete-files.ts",
+      "lines": 53,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/filesystem-boundary.test.ts",
+      "lines": 56,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/filesystem-boundary.ts",
+      "lines": 80,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/format.ts",
+      "lines": 16,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/item-colors.test.ts",
+      "lines": 33,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/item-colors.ts",
+      "lines": 42,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/metadata.ts",
+      "lines": 108,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/postinstall.test.ts",
+      "lines": 22,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/scanner.ts",
+      "lines": 8,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/scanner/__tests__/metadata-queue.test.ts",
+      "lines": 21,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/scanner/__tests__/scan-runner.test.ts",
+      "lines": 336,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/scanner/discovery.ts",
+      "lines": 47,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/scanner/filesystem.ts",
+      "lines": 146,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/scanner/metadata-queue.ts",
+      "lines": 94,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/scanner/progress.ts",
+      "lines": 57,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/scanner/reconcile.ts",
+      "lines": 122,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/scanner/run-scan.ts",
+      "lines": 76,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/scanner/scan-runner.ts",
+      "lines": 163,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/scanner/types.ts",
+      "lines": 113,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/scanner/validation.ts",
+      "lines": 33,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/schema.ts",
+      "lines": 68,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/utils.ts",
+      "lines": 8,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/waveform-cache.test.ts",
+      "lines": 63,
+      "group": "test"
+    },
+    {
+      "path": "src/lib/waveform-cache.ts",
+      "lines": 66,
+      "group": "src"
+    },
+    {
+      "path": "src/lib/waveform-generator.ts",
+      "lines": 91,
+      "group": "src"
+    },
+    {
+      "path": "src/types/better-sqlite3.d.ts",
+      "lines": 23,
+      "group": "src"
+    }
+  ]
+}

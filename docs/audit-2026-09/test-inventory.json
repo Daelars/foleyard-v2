@@ -1,0 +1,2377 @@
+[
+  {
+    "path": "src\\lib\\waveform-cache.test.ts",
+    "lines": 63,
+    "tests": [
+      {
+        "line": 10,
+        "expression": "it",
+        "title": "\"caps concurrency at two and drains every waiter\""
+      },
+      {
+        "line": 41,
+        "expression": "it",
+        "title": "\"releases the slot when work throws\""
+      },
+      {
+        "line": 55,
+        "expression": "it",
+        "title": "\"keeps the on-disk cache directory out of git\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-tools\\sound-shelf\\src\\service.test.ts",
+    "lines": 158,
+    "tests": [
+      {
+        "line": 46,
+        "expression": "it",
+        "title": "\"should add selected files to the shelf\""
+      },
+      {
+        "line": 54,
+        "expression": "it",
+        "title": "\"should not add duplicates\""
+      },
+      {
+        "line": 61,
+        "expression": "it",
+        "title": "\"should handle empty selection\""
+      },
+      {
+        "line": 68,
+        "expression": "it",
+        "title": "\"should require library:read permission\""
+      },
+      {
+        "line": 86,
+        "expression": "it",
+        "title": "\"should remove selected files from the shelf\""
+      },
+      {
+        "line": 97,
+        "expression": "it",
+        "title": "\"should handle removing files not in shelf\""
+      },
+      {
+        "line": 106,
+        "expression": "it",
+        "title": "\"should handle empty selection\""
+      },
+      {
+        "line": 117,
+        "expression": "it",
+        "title": "\"should remove all items from the shelf\""
+      },
+      {
+        "line": 127,
+        "expression": "it",
+        "title": "\"should handle clearing an empty shelf\""
+      },
+      {
+        "line": 136,
+        "expression": "it",
+        "title": "\"should return true for files in the shelf\""
+      },
+      {
+        "line": 142,
+        "expression": "it",
+        "title": "\"should return false for files not in the shelf\""
+      },
+      {
+        "line": 148,
+        "expression": "it",
+        "title": "\"should return a copy of shelf fileIds\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-tools\\sound-shelf\\src\\commands.test.ts",
+    "lines": 103,
+    "tests": [
+      {
+        "line": 23,
+        "expression": "it",
+        "title": "\"clears the supplied shelf store through the Extension host\""
+      },
+      {
+        "line": 42,
+        "expression": "it",
+        "title": "\"adds only new selected files\""
+      },
+      {
+        "line": 60,
+        "expression": "it",
+        "title": "\"rejects add when the selection is missing\""
+      },
+      {
+        "line": 69,
+        "expression": "it",
+        "title": "\"removes selected files\""
+      },
+      {
+        "line": 87,
+        "expression": "it",
+        "title": "\"reads shelf IDs\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\scanner\\__tests__\\scan-runner.test.ts",
+    "lines": 336,
+    "tests": [
+      {
+        "line": 86,
+        "expression": "it",
+        "title": "\"fake filesystem streams correct batches\""
+      },
+      {
+        "line": 98,
+        "expression": "it",
+        "title": "\"startScan returns started=true and sets running\""
+      },
+      {
+        "line": 115,
+        "expression": "it",
+        "title": "\"scan with one file completes and upserts\""
+      },
+      {
+        "line": 136,
+        "expression": "it",
+        "title": "\"scan with multiple files upserts all\""
+      },
+      {
+        "line": 155,
+        "expression": "it",
+        "title": "\"startScan returns missing-root when no roots\""
+      },
+      {
+        "line": 171,
+        "expression": "it",
+        "title": "\"startScan returns already-running on second call\""
+      },
+      {
+        "line": 189,
+        "expression": "it",
+        "title": "\"progress callback fires with phase changes\""
+      },
+      {
+        "line": 209,
+        "expression": "it",
+        "title": "\"skips unchanged files on second scan\""
+      },
+      {
+        "line": 231,
+        "expression": "it",
+        "title": "\"detects changed files by mtime\""
+      },
+      {
+        "line": 253,
+        "expression": "it",
+        "title": "\"marks removed files\""
+      },
+      {
+        "line": 278,
+        "expression": "it",
+        "title": "\"saveLibraryRoot delegates to settings\""
+      },
+      {
+        "line": 293,
+        "expression": "it",
+        "title": "\"validateLibraryRoot returns valid for existing dir\""
+      },
+      {
+        "line": 309,
+        "expression": "it",
+        "title": "\"retries missing duration with a full parse on the next scan\""
+      },
+      {
+        "line": 317,
+        "expression": "it",
+        "title": "\"continues healthy roots and preserves files under an unreadable root\""
+      },
+      {
+        "line": 327,
+        "expression": "it",
+        "title": "\"flushes buffered metadata when another task stalls\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\scanner\\__tests__\\metadata-queue.test.ts",
+    "lines": 21,
+    "tests": [
+      {
+        "line": 5,
+        "expression": "it",
+        "title": "\"drains a backlog beyond 30 seconds while tasks continue completing\""
+      },
+      {
+        "line": 15,
+        "expression": "it",
+        "title": "\"reports a stalled task without polling every millisecond\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\postinstall.test.ts",
+    "lines": 22,
+    "tests": [
+      {
+        "line": 10,
+        "expression": "it",
+        "title": "\"rejects a checksum mismatch\""
+      },
+      {
+        "line": 11,
+        "expression": "it",
+        "title": "\"accepts the published checksum\""
+      },
+      {
+        "line": 12,
+        "expression": "it",
+        "title": "\"rejects missing digests\""
+      },
+      {
+        "line": 13,
+        "expression": "it",
+        "title": "\"refuses plain HTTP before sending a request\""
+      },
+      {
+        "line": 14,
+        "expression": "it",
+        "title": "\"refuses an HTTPS redirect to HTTP\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\item-colors.test.ts",
+    "lines": 33,
+    "tests": [
+      {
+        "line": 11,
+        "expression": "it",
+        "title": "\"accepts only #rrggbb hex strings\""
+      },
+      {
+        "line": 20,
+        "expression": "it",
+        "title": "\"assigns deterministic fallback colors from the preset palette\""
+      },
+      {
+        "line": 26,
+        "expression": "it",
+        "title": "\"keeps stored colors and falls back for the rest\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\filesystem-boundary.test.ts",
+    "lines": 56,
+    "tests": [
+      {
+        "line": 20,
+        "expression": "it",
+        "title": "\"returns the canonical path for a file inside a root\""
+      },
+      {
+        "line": 31,
+        "expression": "it",
+        "title": "\"rejects traversal outside a root\""
+      },
+      {
+        "line": 42,
+        "expression": "it",
+        "title": "\"rejects a canonical path that escapes through a directory link\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-tools\\smart-collections\\src\\commands.test.ts",
+    "lines": 94,
+    "tests": [
+      {
+        "line": 42,
+        "expression": "it",
+        "title": "\"saves search criteria through the supported Collection capability\""
+      },
+      {
+        "line": 60,
+        "expression": "it",
+        "title": "\"reports a missing Collection capability\""
+      },
+      {
+        "line": 70,
+        "expression": "it",
+        "title": "\"does not save when the Extension is disabled\""
+      },
+      {
+        "line": 80,
+        "expression": "it",
+        "title": "\"reports repository failures\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\extensions\\ui-intent.test.ts",
+    "lines": 196,
+    "tests": [
+      {
+        "line": 9,
+        "expression": "it",
+        "title": "\"opens Folder Janitor with the intent payload\""
+      },
+      {
+        "line": 33,
+        "expression": "it",
+        "title": "\"leaves unknown intents unhandled\""
+      },
+      {
+        "line": 47,
+        "expression": "it",
+        "title": "\"opens Library Gatherer\""
+      },
+      {
+        "line": 68,
+        "expression": "it",
+        "title": "\"opens Make Pack with its source and selected IDs\""
+      },
+      {
+        "line": 92,
+        "expression": "it",
+        "title": "\"opens settings for Drop Rules\""
+      },
+      {
+        "line": 113,
+        "expression": "it",
+        "title": "\"opens Folder Janitor for a library scan\""
+      },
+      {
+        "line": 134,
+        "expression": "it",
+        "title": "\"rejects a folder intent without a folder path\""
+      },
+      {
+        "line": 155,
+        "expression": "it",
+        "title": "\"rejects a malformed Make Pack payload\""
+      },
+      {
+        "line": 176,
+        "expression": "it",
+        "title": "\"dispatches a registered handler by intent type\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\extensions\\setting-previews.test.ts",
+    "lines": 35,
+    "tests": [
+      {
+        "line": 9,
+        "expression": "it",
+        "title": "\"renders the rename pattern with the sample sound\""
+      },
+      {
+        "line": 16,
+        "expression": "it",
+        "title": "\"rejects an empty pattern\""
+      },
+      {
+        "line": 22,
+        "expression": "it",
+        "title": "\"resolves the Drop Rules rename-pattern preview hook\""
+      },
+      {
+        "line": 28,
+        "expression": "it",
+        "title": "\"returns null when no preview hook is registered\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\extensions\\registry.test.ts",
+    "lines": 55,
+    "tests": [
+      {
+        "line": 19,
+        "expression": "it",
+        "title": "\"exposes real command IDs alongside titles for dispatch\""
+      },
+      {
+        "line": 42,
+        "expression": "it",
+        "title": "\"registers every extension from the single extension array\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\extensions\\host-commands.test.ts",
+    "lines": 345,
+    "tests": [
+      {
+        "line": 112,
+        "expression": "it",
+        "title": "\"covers every registered command through the host\""
+      },
+      {
+        "line": 285,
+        "expression": "it",
+        "title": "\"rejects invalid input per command with a 400-class outcome\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\extension-client.test.ts",
+    "lines": 61,
+    "tests": [
+      {
+        "line": 17,
+        "expression": "it",
+        "title": "\"posts to the generic execute endpoint and returns the value\""
+      },
+      {
+        "line": 35,
+        "expression": "it",
+        "title": "\"throws the host failure message when the outcome is not ok\""
+      },
+      {
+        "line": 49,
+        "expression": "it",
+        "title": "\"throws the transport error message for non-envelope failures\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\directory-navigation.test.ts",
+    "lines": 124,
+    "tests": [
+      {
+        "line": 28,
+        "expression": "it",
+        "title": "\"reads the last segment across separators\""
+      },
+      {
+        "line": 36,
+        "expression": "it",
+        "title": "\"builds the library-root descriptor preserving the current entry\""
+      },
+      {
+        "line": 50,
+        "expression": "it",
+        "title": "\"builds the descriptor for one breadcrumb segment\""
+      },
+      {
+        "line": 64,
+        "expression": "it",
+        "title": "\"returns null from a root entry so the table navigates to the library\""
+      },
+      {
+        "line": 70,
+        "expression": "it",
+        "title": "\"climbs one segment from a nested entry\""
+      },
+      {
+        "line": 82,
+        "expression": "it",
+        "title": "\"lands on the root descriptor from a first-level entry\""
+      },
+      {
+        "line": 101,
+        "expression": "it",
+        "title": "\"returns null from a first-level entry when the root is hidden\""
+      },
+      {
+        "line": 117,
+        "expression": "it",
+        "title": "\"shows the root path for roots and Folder otherwise\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\desktop.test.ts",
+    "lines": 84,
+    "tests": [
+      {
+        "line": 32,
+        "expression": "it",
+        "title": "\"renders the non-desktop layout on the server\""
+      },
+      {
+        "line": 38,
+        "expression": "it",
+        "title": "\"server and first client render agree in the desktop app\""
+      },
+      {
+        "line": 53,
+        "expression": "it",
+        "title": "\"reads no bridge outside the desktop app\""
+      },
+      {
+        "line": 58,
+        "expression": "it",
+        "title": "\"notifies subscribers when the bridge is injected late\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\desktop-runtime-policy.test.ts",
+    "lines": 75,
+    "tests": [
+      {
+        "line": 24,
+        "expression": "it",
+        "title": "\"uses the origin of the server that owns the renderer window\""
+      },
+      {
+        "line": 36,
+        "expression": "it.each([\"build:desktop\", \"release\", \"release:build\"])",
+        "title": "\"%s does not enable disposable-build metadata\""
+      },
+      {
+        "line": 36,
+        "expression": "it.each",
+        "title": "[\"build:desktop\", \"release\", \"release:build\"]"
+      },
+      {
+        "line": 48,
+        "expression": "it",
+        "title": "\"keeps disposable data and DevTools behind an explicit command\""
+      },
+      {
+        "line": 57,
+        "expression": "it",
+        "title": "\"allows a chosen folder and its descendants, but not sibling paths\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\desktop-main-hardening.test.ts",
+    "lines": 327,
+    "tests": [
+      {
+        "line": 133,
+        "expression": "it",
+        "title": "\"accepts the installed Next.js major version\""
+      },
+      {
+        "line": 140,
+        "expression": "it",
+        "title": "\"fails loud and localised when the installed Next.js is unsupported\""
+      },
+      {
+        "line": 149,
+        "expression": "it",
+        "title": "\"fails loud and localised when the Next.js version is unknown\""
+      },
+      {
+        "line": 161,
+        "expression": "it",
+        "title": "\"fails loud and localised when the private server module moved\""
+      },
+      {
+        "line": 173,
+        "expression": "it",
+        "title": "\"rejects a moved private module from startProductionServer with a loud error\""
+      },
+      {
+        "line": 185,
+        "expression": "it",
+        "title": "\"allocates a usable loopback port and validates startup\""
+      },
+      {
+        "line": 213,
+        "expression": "it",
+        "title": "\"logs every error but shows at most one dialog per session\""
+      },
+      {
+        "line": 226,
+        "expression": "it",
+        "title": "\"forwards errors to the renderer window when present\""
+      },
+      {
+        "line": 241,
+        "expression": "it",
+        "title": "\"terminates the process for fatal errors but keeps running otherwise\""
+      },
+      {
+        "line": 252,
+        "expression": "it",
+        "title": "\"still shows the dialog for fatal startup failures\""
+      },
+      {
+        "line": 287,
+        "expression": "it",
+        "title": "\"does not register the fake-update endpoint in the packaged app\""
+      },
+      {
+        "line": 296,
+        "expression": "it",
+        "title": "\"keeps the fake-update endpoint usable in development\""
+      },
+      {
+        "line": 314,
+        "expression": "it",
+        "title": "\"never emits fake update events in the packaged app, even when called directly\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-tools\\make-pack\\src\\service.test.ts",
+    "lines": 123,
+    "tests": [
+      {
+        "line": 65,
+        "expression": "it",
+        "title": "\"creates a clean folder pack with a manifest\""
+      },
+      {
+        "line": 83,
+        "expression": "it",
+        "title": "\"dedupes duplicate filenames\""
+      },
+      {
+        "line": 107,
+        "expression": "it",
+        "title": "\"creates a zip pack\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-tools\\make-pack\\src\\commands.test.ts",
+    "lines": 217,
+    "tests": [
+      {
+        "line": 54,
+        "expression": "it.each([\n    [\"make-pack.from-selection\", \"selection\", [\"one\"]],\n    [\"make-pack.from-shelf\", \"shelf\", []],\n    [\"make-pack.from-recent\", \"recent\", []],\n  ])",
+        "title": "\"opens the %s flow\""
+      },
+      {
+        "line": 54,
+        "expression": "it.each",
+        "title": "[\n    [\"make-pack.from-selection\", \"selection\", [\"one\"]],\n    [\"make-pack.from-shelf\", \"shelf\", []],\n    [\"make-pack.from-recent\", \"recent\", []],\n  ]"
+      },
+      {
+        "line": 75,
+        "expression": "it",
+        "title": "\"rejects a selection pack without selected files\""
+      },
+      {
+        "line": 84,
+        "expression": "it.each([\n    [\"make-pack.from-selection\", [\"one\"]],\n    [\"make-pack.from-shelf\", []],\n    [\"make-pack.from-recent\", []],\n  ])",
+        "title": "\"creates a pack through the host for %s\""
+      },
+      {
+        "line": 84,
+        "expression": "it.each",
+        "title": "[\n    [\"make-pack.from-selection\", [\"one\"]],\n    [\"make-pack.from-shelf\", []],\n    [\"make-pack.from-recent\", []],\n  ]"
+      },
+      {
+        "line": 112,
+        "expression": "it",
+        "title": "\"rejects a shelf pack with no sounds\""
+      },
+      {
+        "line": 128,
+        "expression": "it",
+        "title": "\"requires a destination directory\""
+      },
+      {
+        "line": 141,
+        "expression": "it",
+        "title": "\"reports an unregistered command lookup\""
+      },
+      {
+        "line": 150,
+        "expression": "it",
+        "title": "\"rejects commands when the extension is disabled\""
+      },
+      {
+        "line": 159,
+        "expression": "it",
+        "title": "\"reports permission failures through the host\""
+      },
+      {
+        "line": 175,
+        "expression": "it",
+        "title": "\"falls back to the host-resolved default format\""
+      },
+      {
+        "line": 196,
+        "expression": "it",
+        "title": "\"uses the folder default format without an override\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\database\\__tests__\\tag-collection-color.test.ts",
+    "lines": 67,
+    "tests": [
+      {
+        "line": 38,
+        "expression": "it",
+        "title": "\"migrates legacy tables with color columns\""
+      },
+      {
+        "line": 48,
+        "expression": "it",
+        "title": "\"round-trips tag colors\""
+      },
+      {
+        "line": 59,
+        "expression": "it",
+        "title": "\"round-trips collection colors through getAllCollections\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\database\\__tests__\\shared-connection.test.ts",
+    "lines": 21,
+    "tests": [
+      {
+        "line": 9,
+        "expression": "it",
+        "title": "\"shares committed writes between extension services and route repositories\""
+      },
+      {
+        "line": 14,
+        "expression": "it",
+        "title": "\"round-trips all extension stores through their existing keys and JSON shapes\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\database\\__tests__\\settings-repository.test.ts",
+    "lines": 63,
+    "tests": [
+      {
+        "line": 31,
+        "expression": "it",
+        "title": "\"writes the legacy and current Library-root keys together\""
+      },
+      {
+        "line": 40,
+        "expression": "it",
+        "title": "\"a failed write leaves legacy and current keys consistent\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\database\\__tests__\\file-repository.test.ts",
+    "lines": 644,
+    "tests": [
+      {
+        "line": 27,
+        "expression": "it",
+        "title": "\"getFiles returns empty array on fresh database\""
+      },
+      {
+        "line": 31,
+        "expression": "it",
+        "title": "\"upsertFile inserts a record\""
+      },
+      {
+        "line": 56,
+        "expression": "it",
+        "title": "\"upsertFile updates existing record on path conflict\""
+      },
+      {
+        "line": 90,
+        "expression": "it",
+        "title": "\"getFileCount returns correct count\""
+      },
+      {
+        "line": 110,
+        "expression": "it",
+        "title": "\"getFileCount respects showRemoved option\""
+      },
+      {
+        "line": 133,
+        "expression": "it",
+        "title": "\"getFiles filters by tagId\""
+      },
+      {
+        "line": 167,
+        "expression": "it",
+        "title": "\"toggleFavorite toggles the favorite flag\""
+      },
+      {
+        "line": 200,
+        "expression": "it",
+        "title": "\"toggleFavorite returns false for non-existent id\""
+      },
+      {
+        "line": 204,
+        "expression": "it",
+        "title": "\"batchTouchFiles updates lastScannedAt and clears removedAt\""
+      },
+      {
+        "line": 232,
+        "expression": "it",
+        "title": "\"getFiles filters by query\""
+      },
+      {
+        "line": 269,
+        "expression": "it",
+        "title": "\"getFilesByPaths returns files matching paths\""
+      },
+      {
+        "line": 306,
+        "expression": "it",
+        "title": "\"getFilesByPaths returns empty for empty input\""
+      },
+      {
+        "line": 310,
+        "expression": "it",
+        "title": "\"getAllFilesIncludingRemoved returns removed files\""
+      },
+      {
+        "line": 333,
+        "expression": "it",
+        "title": "\"batchUpsertFiles handles batch operations transactionally\""
+      },
+      {
+        "line": 371,
+        "expression": "it",
+        "title": "\"batchMarkRemoved marks multiple files\""
+      },
+      {
+        "line": 409,
+        "expression": "it",
+        "title": "\"batchUpdateFileMetadata updates metadata fields\""
+      },
+      {
+        "line": 436,
+        "expression": "it",
+        "title": "\"getFileById returns null for missing id\""
+      },
+      {
+        "line": 440,
+        "expression": "it",
+        "title": "\"getFileByPath returns null for missing path\""
+      },
+      {
+        "line": 463,
+        "expression": "it",
+        "title": "\"search treats % as a literal character\""
+      },
+      {
+        "line": 472,
+        "expression": "it",
+        "title": "\"search treats _ as a literal character\""
+      },
+      {
+        "line": 480,
+        "expression": "it",
+        "title": "\"search treats backslash as a literal character\""
+      },
+      {
+        "line": 488,
+        "expression": "it",
+        "title": "\"getFileCount matches getFiles for libraryRoot/directory/tagId/atLibraryRoot filters\""
+      },
+      {
+        "line": 517,
+        "expression": "it",
+        "title": "\"getFileCount matches getFiles for collection + tag filters\""
+      },
+      {
+        "line": 537,
+        "expression": "it",
+        "title": "\"getTagsForFiles handles more ids than the SQLite variable limit\""
+      },
+      {
+        "line": 571,
+        "expression": "it",
+        "title": "\"browse repository returns distinct directories without duplicates\""
+      },
+      {
+        "line": 581,
+        "expression": "it",
+        "title": "\"getFiles orders by duration server-side with stable paging\""
+      },
+      {
+        "line": 611,
+        "expression": "it",
+        "title": "\"getFiles orders by filename in either direction\""
+      },
+      {
+        "line": 621,
+        "expression": "it",
+        "title": "\"collection listings honor the server-side sort\""
+      },
+      {
+        "line": 636,
+        "expression": "it",
+        "title": "\"collection-membership lookups are index-served\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\database\\__tests__\\file-batch-mutations.test.ts",
+    "lines": 120,
+    "tests": [
+      {
+        "line": 47,
+        "expression": "it",
+        "title": "\"tags 500 files in a single transaction\""
+      },
+      {
+        "line": 73,
+        "expression": "it",
+        "title": "\"rolls back the whole batch when one file id is unknown\""
+      },
+      {
+        "line": 86,
+        "expression": "it",
+        "title": "\"rolls back favourite flags when one file id is unknown\""
+      },
+      {
+        "line": 94,
+        "expression": "it",
+        "title": "\"sets favourites with an explicit target state\""
+      },
+      {
+        "line": 105,
+        "expression": "it",
+        "title": "\"detaches a tag in one transaction and ignores empty batches\""
+      }
+    ]
+  },
+  {
+    "path": "src\\lib\\database\\__tests__\\browse-repository.test.ts",
+    "lines": 7,
+    "tests": [
+      {
+        "line": 3,
+        "expression": "it",
+        "title": "\"uses the same separator normalization for parent and child directories\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-tools\\library-gatherer\\src\\service.test.ts",
+    "lines": 85,
+    "tests": [
+      {
+        "line": 40,
+        "expression": "it",
+        "title": "\"previews audio files without copying\""
+      },
+      {
+        "line": 59,
+        "expression": "it",
+        "title": "\"copies audio files and writes a gather report\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-tools\\library-gatherer\\src\\commands.test.ts",
+    "lines": 131,
+    "tests": [
+      {
+        "line": 36,
+        "expression": "it",
+        "title": "\"opens the gather flow when invoked without transport input\""
+      },
+      {
+        "line": 49,
+        "expression": "it",
+        "title": "\"previews through the host\""
+      },
+      {
+        "line": 66,
+        "expression": "it",
+        "title": "\"returns typed validation when transport input is incomplete\""
+      },
+      {
+        "line": 76,
+        "expression": "it",
+        "title": "\"gathers through the host\""
+      },
+      {
+        "line": 97,
+        "expression": "it",
+        "title": "\"reports an unregistered command lookup\""
+      },
+      {
+        "line": 106,
+        "expression": "it",
+        "title": "\"rejects commands when the extension is disabled\""
+      },
+      {
+        "line": 115,
+        "expression": "it",
+        "title": "\"reports permission failures through the host\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-tools\\folder-janitor\\src\\service.test.ts",
+    "lines": 178,
+    "tests": [
+      {
+        "line": 72,
+        "expression": "it",
+        "title": "\"reports duplicates, tiny files, weird formats, and empty folders\""
+      },
+      {
+        "line": 121,
+        "expression": "it",
+        "title": "\"deletes an empty folder below a configured Library root\""
+      },
+      {
+        "line": 134,
+        "expression": "it",
+        "title": "\"rejects folders outside configured Library roots\""
+      },
+      {
+        "line": 148,
+        "expression": "it",
+        "title": "\"rejects folders that escape a root through a directory link\""
+      },
+      {
+        "line": 164,
+        "expression": "it",
+        "title": "\"rechecks that a folder is empty before deletion\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-tools\\folder-janitor\\src\\commands.test.ts",
+    "lines": 164,
+    "tests": [
+      {
+        "line": 29,
+        "expression": "it",
+        "title": "\"returns a typed intent for a library scan opened from the UI\""
+      },
+      {
+        "line": 45,
+        "expression": "it",
+        "title": "\"returns a direct report when scan input is supplied\""
+      },
+      {
+        "line": 59,
+        "expression": "it",
+        "title": "\"requires a folder path for the folder intent\""
+      },
+      {
+        "line": 68,
+        "expression": "it",
+        "title": "\"returns a typed folder intent when a folder path is selected\""
+      },
+      {
+        "line": 85,
+        "expression": "it",
+        "title": "\"returns a direct report when folder scan input is supplied\""
+      },
+      {
+        "line": 100,
+        "expression": "it",
+        "title": "\"removes selected files through the host\""
+      },
+      {
+        "line": 117,
+        "expression": "it",
+        "title": "\"rejects remove-files without a selection\""
+      },
+      {
+        "line": 126,
+        "expression": "it",
+        "title": "\"requires folder paths for delete-folders\""
+      },
+      {
+        "line": 136,
+        "expression": "it",
+        "title": "\"reports an unregistered command lookup\""
+      },
+      {
+        "line": 145,
+        "expression": "it",
+        "title": "\"rejects commands when the extension is disabled\""
+      },
+      {
+        "line": 154,
+        "expression": "it",
+        "title": "\"reports permission failures through the host\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\CommandPalette\\command-palette.test.ts",
+    "lines": 148,
+    "tests": [
+      {
+        "line": 53,
+        "expression": "it",
+        "title": "\"maps the view, transport, file, and tool sections on an empty query\""
+      },
+      {
+        "line": 80,
+        "expression": "it",
+        "title": "\"keeps sections ordered view, transport, file, tool, sound\""
+      },
+      {
+        "line": 88,
+        "expression": "it",
+        "title": "\"reflects playback, favorite, and autoplay state in labels\""
+      },
+      {
+        "line": 99,
+        "expression": "it",
+        "title": "\"gates transport and file rows on availability\""
+      },
+      {
+        "line": 118,
+        "expression": "it",
+        "title": "\"matches tool rows by extension name without drifting from the registry\""
+      },
+      {
+        "line": 126,
+        "expression": "it",
+        "title": "\"jumps to sounds by filename or tag and caps the list\""
+      },
+      {
+        "line": 142,
+        "expression": "it",
+        "title": "\"finds the Tools view through the legacy Extensions name\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\AudioPlayer\\transport-queue.test.ts",
+    "lines": 77,
+    "tests": [
+      {
+        "line": 17,
+        "expression": "it",
+        "title": "\"seeds from visible order with the cursor on the played file\""
+      },
+      {
+        "line": 24,
+        "expression": "it",
+        "title": "\"seeds a lone queue when the played file is not in the visible list\""
+      },
+      {
+        "line": 30,
+        "expression": "it",
+        "title": "\"appends explicit adds without duplicating queued ids\""
+      },
+      {
+        "line": 38,
+        "expression": "it",
+        "title": "\"advances with wrap-around and retreats with wrap-around\""
+      },
+      {
+        "line": 45,
+        "expression": "it",
+        "title": "\"advance and retreat on an empty queue stay empty\""
+      },
+      {
+        "line": 51,
+        "expression": "it",
+        "title": "\"removes an id and keeps the cursor on the same sound\""
+      },
+      {
+        "line": 59,
+        "expression": "it",
+        "title": "\"removing the current sound moves to the next one\""
+      },
+      {
+        "line": 67,
+        "expression": "it",
+        "title": "\"removing the last sound empties the queue\""
+      },
+      {
+        "line": 73,
+        "expression": "it",
+        "title": "\"clear empties the queue\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\FileTable\\desktop-actions.test.ts",
+    "lines": 110,
+    "tests": [
+      {
+        "line": 53,
+        "expression": "it",
+        "title": "\"returns referentially stable callbacks across renders with unchanged inputs\""
+      },
+      {
+        "line": 70,
+        "expression": "it",
+        "title": "\"keeps unrelated callbacks stable when the selection identity changes\""
+      },
+      {
+        "line": 85,
+        "expression": "it",
+        "title": "\"stays stable when the desktop bridge is present\""
+      },
+      {
+        "line": 101,
+        "expression": "it",
+        "title": "\"handles the web clipboard fallback without a desktop bridge\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\theme-tokens.test.ts",
+    "lines": 108,
+    "tests": [
+      {
+        "line": 16,
+        "expression": "it",
+        "title": "\"defines the ratified accent and canvas tokens in the theme layer\""
+      },
+      {
+        "line": 28,
+        "expression": "it",
+        "title": "\"registers the accent tokens as Tailwind color utilities\""
+      },
+      {
+        "line": 40,
+        "expression": "it",
+        "title": "\"keeps hard-coded accent hex values out of the ported app surface\""
+      },
+      {
+        "line": 53,
+        "expression": "it",
+        "title": "\"keeps old-skin tokens out of every inventoried surface\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\root-height-chain.test.ts",
+    "lines": 30,
+    "tests": [
+      {
+        "line": 12,
+        "expression": "it",
+        "title": "\"uses percentage heights, not viewport units\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\FileTable\\use-shelf-toggle.test.ts",
+    "lines": 22,
+    "tests": [
+      {
+        "line": 6,
+        "expression": "it",
+        "title": "\"adds a file that is not on the shelf\""
+      },
+      {
+        "line": 14,
+        "expression": "it",
+        "title": "\"removes a file that is already on the shelf\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\FileTable\\selection.test.ts",
+    "lines": 33,
+    "tests": [
+      {
+        "line": 10,
+        "expression": "it",
+        "title": "\"toggles an id in and out preserving order\""
+      },
+      {
+        "line": 16,
+        "expression": "it",
+        "title": "\"selects a forward and backward range from the anchor\""
+      },
+      {
+        "line": 24,
+        "expression": "it",
+        "title": "\"falls back to the target alone when the anchor is missing\""
+      },
+      {
+        "line": 29,
+        "expression": "it",
+        "title": "\"clears the selection\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\FileTable\\selection-scroll.test.ts",
+    "lines": 65,
+    "tests": [
+      {
+        "line": 8,
+        "expression": "it",
+        "title": "\"returns null when nothing is selected\""
+      },
+      {
+        "line": 19,
+        "expression": "it",
+        "title": "\"scrolls to the newly selected row on mount and on selection change\""
+      },
+      {
+        "line": 39,
+        "expression": "it",
+        "title": "\"leaves the viewport alone when the selection is unchanged\""
+      },
+      {
+        "line": 54,
+        "expression": "it",
+        "title": "\"returns null when the selected row is no longer visible\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-tools\\drop-rules\\src\\commands.test.ts",
+    "lines": 170,
+    "tests": [
+      {
+        "line": 42,
+        "expression": "it",
+        "title": "\"uses the canonical command IDs\""
+      },
+      {
+        "line": 51,
+        "expression": "it",
+        "title": "\"previews a drop through the host\""
+      },
+      {
+        "line": 74,
+        "expression": "it",
+        "title": "\"returns a settings intent for the Extension card\""
+      },
+      {
+        "line": 87,
+        "expression": "it",
+        "title": "\"applies a drop through the host\""
+      },
+      {
+        "line": 108,
+        "expression": "it",
+        "title": "\"reports an unregistered command lookup\""
+      },
+      {
+        "line": 117,
+        "expression": "it",
+        "title": "\"returns typed validation when drop input is incomplete\""
+      },
+      {
+        "line": 128,
+        "expression": "it",
+        "title": "\"rejects preview without a selection\""
+      },
+      {
+        "line": 144,
+        "expression": "it",
+        "title": "\"rejects commands when the extension is disabled\""
+      },
+      {
+        "line": 153,
+        "expression": "it",
+        "title": "\"reports permission failures through the host\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-tools\\drop-rules\\src\\service.test.ts",
+    "lines": 186,
+    "tests": [
+      {
+        "line": 40,
+        "expression": "it",
+        "title": "\"previews renamed drop actions without copying\""
+      },
+      {
+        "line": 57,
+        "expression": "it",
+        "title": "\"applies drop rules by copying and writing a used report\""
+      },
+      {
+        "line": 82,
+        "expression": "it",
+        "title": "\"prepares a renamed drag-out copy and records it as used\""
+      },
+      {
+        "line": 118,
+        "expression": "it",
+        "title": "\"drags the original file unchanged when copy, rename, and mark used are off\""
+      },
+      {
+        "line": 152,
+        "expression": "it",
+        "title": "\"stages a renamed file even when copy on drop is off\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-tools\\drop-rules\\src\\staging.test.ts",
+    "lines": 22,
+    "tests": [
+      {
+        "line": 7,
+        "expression": "it",
+        "title": "\"evicts only expired owned stages, preserving recent stages and user files\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\Shortcuts\\shortcuts.test.ts",
+    "lines": 80,
+    "tests": [
+      {
+        "line": 16,
+        "expression": "it",
+        "title": "\"adopts the full prototype set with no conflicts\""
+      },
+      {
+        "line": 28,
+        "expression": "it",
+        "title": "\"merges custom bindings over the defaults and reports new conflicts\""
+      },
+      {
+        "line": 41,
+        "expression": "it",
+        "title": "\"guards printable keys while typing\""
+      },
+      {
+        "line": 51,
+        "expression": "it",
+        "title": "\"skips global Space on sliders, buttons, and inputs\""
+      },
+      {
+        "line": 65,
+        "expression": "it",
+        "title": "\"matches Space by code and printable keys case-insensitively\""
+      },
+      {
+        "line": 71,
+        "expression": "it",
+        "title": "\"falls back to safe client defaults without stored prefs\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\organize\\tag-confirm.test.ts",
+    "lines": 38,
+    "tests": [
+      {
+        "line": 10,
+        "expression": "it",
+        "title": "\"arms per tag id so one tag never leaks into another\""
+      },
+      {
+        "line": 16,
+        "expression": "it",
+        "title": "\"disarms on Escape but keeps editing open; a second Escape closes\""
+      },
+      {
+        "line": 27,
+        "expression": "it",
+        "title": "\"Escape on an unarmed tag closes editing without touching other tags\""
+      },
+      {
+        "line": 34,
+        "expression": "it",
+        "title": "\"switching the edited tag clears the armed confirmation\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\organize\\name-color-composer.test.ts",
+    "lines": 16,
+    "tests": [
+      {
+        "line": 6,
+        "expression": "it",
+        "title": "\"rejects empty and whitespace-only names\""
+      },
+      {
+        "line": 11,
+        "expression": "it",
+        "title": "\"accepts names with non-whitespace content\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\organize\\collections-section.test.ts",
+    "lines": 36,
+    "tests": [
+      {
+        "line": 6,
+        "expression": "it",
+        "title": "\"prefers the lazily resolved smart count for Smart Collections\""
+      },
+      {
+        "line": 16,
+        "expression": "it",
+        "title": "\"falls back to the stored file count when no smart count resolved yet\""
+      },
+      {
+        "line": 25,
+        "expression": "it",
+        "title": "\"ignores smart counts for plain Collections\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\extensions\\make-pack\\use-make-pack.test.ts",
+    "lines": 26,
+    "tests": [
+      {
+        "line": 6,
+        "expression": "it",
+        "title": "\"names the pack after its source\""
+      },
+      {
+        "line": 14,
+        "expression": "it",
+        "title": "\"requires a destination folder\""
+      },
+      {
+        "line": 18,
+        "expression": "it",
+        "title": "\"requires a pack name\""
+      },
+      {
+        "line": 22,
+        "expression": "it",
+        "title": "\"accepts a destination plus a name\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\extensions\\folder-janitor\\use-folder-janitor.test.ts",
+    "lines": 43,
+    "tests": [
+      {
+        "line": 6,
+        "expression": "it",
+        "title": "\"targets the folder scan command with the folder path\""
+      },
+      {
+        "line": 14,
+        "expression": "it",
+        "title": "\"targets the library scan command otherwise\""
+      },
+      {
+        "line": 29,
+        "expression": "it",
+        "title": "\"tallies one count per issue kind\""
+      },
+      {
+        "line": 39,
+        "expression": "it",
+        "title": "\"returns an empty tally without issues\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\library\\use-selection.test.ts",
+    "lines": 92,
+    "tests": [
+      {
+        "line": 25,
+        "expression": "it",
+        "title": "\"prunes ids that left the visible list\""
+      },
+      {
+        "line": 32,
+        "expression": "it",
+        "title": "\"extends a range from the anchor on shift\""
+      },
+      {
+        "line": 46,
+        "expression": "it",
+        "title": "\"toggles one id on ctrl without playing\""
+      },
+      {
+        "line": 61,
+        "expression": "it",
+        "title": "\"toggles playback when the current file is clicked again\""
+      },
+      {
+        "line": 73,
+        "expression": "it",
+        "title": "\"plays a newly clicked file\""
+      },
+      {
+        "line": 85,
+        "expression": "it",
+        "title": "\"moves keyboard focus with wraparound\""
+      }
+    ]
+  },
+  {
+    "path": "src\\components\\extensions\\library-gatherer\\use-library-gatherer.test.ts",
+    "lines": 22,
+    "tests": [
+      {
+        "line": 6,
+        "expression": "it",
+        "title": "\"requires at least one source folder\""
+      },
+      {
+        "line": 12,
+        "expression": "it",
+        "title": "\"requires a destination directory\""
+      },
+      {
+        "line": 18,
+        "expression": "it",
+        "title": "\"accepts folders plus a destination\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\library\\use-route-slices.test.ts",
+    "lines": 112,
+    "tests": [
+      {
+        "line": 31,
+        "expression": "it",
+        "title": "\"returns null for short queues\""
+      },
+      {
+        "line": 37,
+        "expression": "it",
+        "title": "\"titles the queued next file without its extension\""
+      },
+      {
+        "line": 48,
+        "expression": "it",
+        "title": "\"skips the selected file when the cursor points at it\""
+      },
+      {
+        "line": 61,
+        "expression": "it",
+        "title": "\"reads the make-pack default format and falls back to zip\""
+      },
+      {
+        "line": 79,
+        "expression": "it",
+        "title": "\"prefers errors, then skipped items, then success\""
+      },
+      {
+        "line": 93,
+        "expression": "it",
+        "title": "\"parses entry ids into kind and payload\""
+      },
+      {
+        "line": 105,
+        "expression": "it",
+        "title": "\"clamps and steps the cursor with wraparound\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\library\\use-library-view.test.ts",
+    "lines": 121,
+    "tests": [
+      {
+        "line": 24,
+        "expression": "it",
+        "title": "\"navigates between top-level views and clears composition\""
+      },
+      {
+        "line": 44,
+        "expression": "it",
+        "title": "\"filters by tag without touching the view\""
+      },
+      {
+        "line": 50,
+        "expression": "it",
+        "title": "\"navigates directories and back to the library root\""
+      },
+      {
+        "line": 68,
+        "expression": "it",
+        "title": "\"opens smart collections in the library view with their query\""
+      },
+      {
+        "line": 78,
+        "expression": "it",
+        "title": "\"opens regular collections in the collection view\""
+      },
+      {
+        "line": 91,
+        "expression": "it",
+        "title": "\"falls back to the collection view for invalid smart filters\""
+      },
+      {
+        "line": 98,
+        "expression": "it",
+        "title": "\"enters a view without touching filters or selection\""
+      },
+      {
+        "line": 111,
+        "expression": "it",
+        "title": "\"derives the rail view for every route\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\library\\use-library-files-batch.test.ts",
+    "lines": 128,
+    "tests": [
+      {
+        "line": 33,
+        "expression": "it",
+        "title": "\"applies one batch optimistically and confirms it by keeping state\""
+      },
+      {
+        "line": 41,
+        "expression": "it",
+        "title": "\"rolls back only the failed batch without touching other files\""
+      },
+      {
+        "line": 55,
+        "expression": "it",
+        "title": "\"preserves concurrent edits to the same file on rollback\""
+      },
+      {
+        "line": 70,
+        "expression": "it",
+        "title": "\"rolls back only the failed tag batch and keeps concurrent favourites\""
+      },
+      {
+        "line": 87,
+        "expression": "it",
+        "title": "\"carries an explicit attach target instead of toggling\""
+      },
+      {
+        "line": 94,
+        "expression": "it",
+        "title": "\"treats empty batches as no-ops\""
+      },
+      {
+        "line": 102,
+        "expression": "it",
+        "title": "\"builds single-request batch bodies with explicit target state\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\library\\use-domain-slices.test.ts",
+    "lines": 93,
+    "tests": [
+      {
+        "line": 28,
+        "expression": "it",
+        "title": "\"removes one collection optimistically\""
+      },
+      {
+        "line": 35,
+        "expression": "it",
+        "title": "\"restores a deleted collection in name order without duplicates\""
+      },
+      {
+        "line": 44,
+        "expression": "it",
+        "title": "\"drops only the deleted smart count\""
+      },
+      {
+        "line": 52,
+        "expression": "it",
+        "title": "\"removes and restores one tag without touching others\""
+      },
+      {
+        "line": 60,
+        "expression": "it",
+        "title": "\"renames and recolors one tag\""
+      },
+      {
+        "line": 68,
+        "expression": "it",
+        "title": "\"consumes numeric totals and ignores anything else\""
+      },
+      {
+        "line": 76,
+        "expression": "it",
+        "title": "\"derives file ids from shelf items\""
+      },
+      {
+        "line": 82,
+        "expression": "it",
+        "title": "\"resolves a choice only at the confirm stage with ids\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\library\\smart-collection-counts.test.ts",
+    "lines": 65,
+    "tests": [
+      {
+        "line": 10,
+        "expression": "it",
+        "title": "\"returns the trimmed query from a smart-collection filter\""
+      },
+      {
+        "line": 14,
+        "expression": "it",
+        "title": "\"returns null for missing, empty, or invalid filters\""
+      },
+      {
+        "line": 24,
+        "expression": "it",
+        "title": "\"is keyed per query string, not per collection\""
+      },
+      {
+        "line": 32,
+        "expression": "it",
+        "title": "\"fetches once per query string across repeated opens\""
+      },
+      {
+        "line": 48,
+        "expression": "it",
+        "title": "\"returns null without fetching when there is no query\""
+      },
+      {
+        "line": 55,
+        "expression": "it",
+        "title": "\"returns null when the count endpoint fails\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\library\\refetch-map.test.ts",
+    "lines": 52,
+    "tests": [
+      {
+        "line": 28,
+        "expression": "it",
+        "title": "\"refetches collections only for every collection mutation\""
+      },
+      {
+        "line": 34,
+        "expression": "it",
+        "title": "\"refetches tags only for every tag mutation\""
+      },
+      {
+        "line": 40,
+        "expression": "it",
+        "title": "\"never pulls the extension catalog for an organization mutation\""
+      },
+      {
+        "line": 46,
+        "expression": "it",
+        "title": "\"settles a scan with files and collections only (no catalog re-register)\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\library\\file-query.test.ts",
+    "lines": 186,
+    "tests": [
+      {
+        "line": 42,
+        "expression": "it",
+        "title": "\"routes the shelf view to the sound-shelf endpoint\""
+      },
+      {
+        "line": 46,
+        "expression": "it",
+        "title": "\"loads no files for the extensions view\""
+      },
+      {
+        "line": 50,
+        "expression": "it",
+        "title": "\"loads no files for the all view without exactly one library root\""
+      },
+      {
+        "line": 57,
+        "expression": "it",
+        "title": "\"scopes the all view to the single library root\""
+      },
+      {
+        "line": 69,
+        "expression": "it",
+        "title": "\"keeps a stable pagination query separate from the fetch params\""
+      },
+      {
+        "line": 76,
+        "expression": "it",
+        "title": "\"searches across roots instead of scoping to a directory\""
+      },
+      {
+        "line": 88,
+        "expression": "it",
+        "title": "\"passes sort through to the fetch params and the pagination query\""
+      },
+      {
+        "line": 101,
+        "expression": "it",
+        "title": "\"maps ascending filename sort to asc\""
+      },
+      {
+        "line": 108,
+        "expression": "it",
+        "title": "\"combines view, collection, tag, and favorite filters\""
+      },
+      {
+        "line": 127,
+        "expression": "it",
+        "title": "\"sorts by filename in either direction without mutating input\""
+      },
+      {
+        "line": 137,
+        "expression": "it",
+        "title": "\"sorts null durations last in both directions\""
+      },
+      {
+        "line": 157,
+        "expression": "it",
+        "title": "\"toggles a favorite flag\""
+      },
+      {
+        "line": 162,
+        "expression": "it",
+        "title": "\"attaches a known tag with its name and detaches it again\""
+      },
+      {
+        "line": 173,
+        "expression": "it",
+        "title": "\"attaches an unknown tag with a blank placeholder name\""
+      },
+      {
+        "line": 178,
+        "expression": "it",
+        "title": "\"supports rollback by restoring the previous snapshot\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\api\\waveform\\route.test.ts",
+    "lines": 78,
+    "tests": [
+      {
+        "line": 33,
+        "expression": "it",
+        "title": "\"resolves a current Audio file id inside a Library root\""
+      },
+      {
+        "line": 48,
+        "expression": "it",
+        "title": "\"rejects stale and removed Audio file records\""
+      },
+      {
+        "line": 67,
+        "expression": "it",
+        "title": "\"rejects an indexed path outside the configured roots\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\api\\extensions\\filesystem-access.test.ts",
+    "lines": 35,
+    "tests": [
+      {
+        "line": 28,
+        "expression": "it",
+        "title": "\"accepts Library sources and a granted destination\""
+      },
+      {
+        "line": 29,
+        "expression": "it",
+        "title": "\"rejects sources outside Library roots\""
+      },
+      {
+        "line": 30,
+        "expression": "it",
+        "title": "\"rejects destinations without a picker grant\""
+      },
+      {
+        "line": 31,
+        "expression": "it",
+        "title": "\"rejects destinations outside the token's directory\""
+      },
+      {
+        "line": 32,
+        "expression": "it",
+        "title": "\"accepts new descendants inside the granted directory\""
+      },
+      {
+        "line": 33,
+        "expression": "it",
+        "title": "\"rejects a junction escaping the grant\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\api\\audio\\route.test.ts",
+    "lines": 81,
+    "tests": [
+      {
+        "line": 48,
+        "expression": "it",
+        "title": "\"streams an indexed file inside a Library root\""
+      },
+      {
+        "line": 55,
+        "expression": "it",
+        "title": "\"supports byte ranges inside a Library root\""
+      },
+      {
+        "line": 61,
+        "expression": "it",
+        "title": "\"rejects an indexed path outside the configured roots\""
+      },
+      {
+        "line": 68,
+        "expression": "it",
+        "title": "\"rejects missing, removed, and unidentified files\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\api\\extensions\\execute\\transport.test.ts",
+    "lines": 459,
+    "tests": [
+      {
+        "line": 107,
+        "expression": "it",
+        "title": "\"resolves a folder scan to indexed files before executing\""
+      },
+      {
+        "line": 133,
+        "expression": "it",
+        "title": "\"rejects a folder scan outside the configured Library roots\""
+      },
+      {
+        "line": 146,
+        "expression": "it",
+        "title": "\"caps a folder scan listing so one huge directory cannot OOM the host\""
+      },
+      {
+        "line": 164,
+        "expression": "it",
+        "title": "\"returns 404 when a make-pack selection hydrates to no indexed files\""
+      },
+      {
+        "line": 181,
+        "expression": "it",
+        "title": "\"rejects delete-folders paths outside the Library roots\""
+      },
+      {
+        "line": 194,
+        "expression": "it",
+        "title": "\"rejects delete-folders with non-string paths\""
+      },
+      {
+        "line": 207,
+        "expression": "it",
+        "title": "\"degrades a malformed shelf list to empty items instead of throwing\""
+      },
+      {
+        "line": 228,
+        "expression": "it",
+        "title": "\"maps a save-search query to a smart-collection filter\""
+      },
+      {
+        "line": 254,
+        "expression": "it",
+        "title": "\"rejects a save-search without a query before executing\""
+      },
+      {
+        "line": 267,
+        "expression": "it",
+        "title": "\"adds the Library roots to delete-folders input\""
+      },
+      {
+        "line": 289,
+        "expression": "it",
+        "title": "\"prepares a drag-out file from a file id\""
+      },
+      {
+        "line": 331,
+        "expression": "it",
+        "title": "\"returns 404 when the drag-out file is not indexed\""
+      },
+      {
+        "line": 345,
+        "expression": "it",
+        "title": "\"hydrates make-pack file ids to readable files\""
+      },
+      {
+        "line": 382,
+        "expression": "it",
+        "title": "\"resolves gather directories against the filesystem boundary\""
+      },
+      {
+        "line": 408,
+        "expression": "it",
+        "title": "\"rejects a gather destination outside the granted directory\""
+      },
+      {
+        "line": 425,
+        "expression": "it",
+        "title": "\"enriches the sound-shelf list to library items\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\api\\extensions\\execute\\route.test.ts",
+    "lines": 102,
+    "tests": [
+      {
+        "line": 25,
+        "expression": "it",
+        "title": "\"forwards caller-supplied command input to the host\""
+      },
+      {
+        "line": 55,
+        "expression": "it",
+        "title": "\"maps command validation failures to a 400 outcome\""
+      },
+      {
+        "line": 76,
+        "expression": "it",
+        "title": "\"requires extensionId and commandId\""
+      },
+      {
+        "line": 83,
+        "expression": "it",
+        "title": "\"keeps input-free palette commands working\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\api\\mutations.test.ts",
+    "lines": 20,
+    "tests": [
+      {
+        "line": 16,
+        "expression": "it",
+        "title": "\"returns 409 and logs a duplicate name\""
+      },
+      {
+        "line": 17,
+        "expression": "it",
+        "title": "\"rejects non-string names\""
+      },
+      {
+        "line": 18,
+        "expression": "it",
+        "title": "\"rejects missing attachments with a readable 4xx\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\api\\files\\patch-batch.test.ts",
+    "lines": 176,
+    "tests": [
+      {
+        "line": 82,
+        "expression": "it",
+        "title": "\"completes a 500-file bulk tag as one request and one transaction\""
+      },
+      {
+        "line": 101,
+        "expression": "it",
+        "title": "\"rolls back a bulk tag when one file id is unknown\""
+      },
+      {
+        "line": 114,
+        "expression": "it",
+        "title": "\"sets favourites with an explicit target and returns the total\""
+      },
+      {
+        "line": 130,
+        "expression": "it",
+        "title": "\"rolls back favourites when one file id is unknown\""
+      },
+      {
+        "line": 142,
+        "expression": "it",
+        "title": "\"rejects single-file actions without an id instead of throwing\""
+      },
+      {
+        "line": 165,
+        "expression": "it",
+        "title": "\"validates batch payloads\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\api\\desktop\\path\\route.test.ts",
+    "lines": 67,
+    "tests": [
+      {
+        "line": 40,
+        "expression": "it",
+        "title": "\"resolves a path inside the Library roots\""
+      },
+      {
+        "line": 47,
+        "expression": "it",
+        "title": "\"resolves a granted path outside the Library roots\""
+      },
+      {
+        "line": 54,
+        "expression": "it",
+        "title": "\"rejects a path outside the Library roots and grants\""
+      },
+      {
+        "line": 61,
+        "expression": "it",
+        "title": "\"rejects traversal escapes and missing paths\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\api\\files\\get.test.ts",
+    "lines": 47,
+    "tests": [
+      {
+        "line": 27,
+        "expression": "it",
+        "title": "\"orders server-side by duration descending\""
+      },
+      {
+        "line": 35,
+        "expression": "it",
+        "title": "\"defaults to filename ascending\""
+      },
+      {
+        "line": 42,
+        "expression": "it",
+        "title": "\"rejects unknown sort keys and directions\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\api\\files\\delete.test.ts",
+    "lines": 18,
+    "tests": [
+      {
+        "line": 14,
+        "expression": "it",
+        "title": "\"unlinks only indexed files inside Library roots\""
+      },
+      {
+        "line": 15,
+        "expression": "it",
+        "title": "\"soft deletion leaves disk contents intact\""
+      },
+      {
+        "line": 16,
+        "expression": "it",
+        "title": "\"rejects malformed ids before touching files\""
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\api\\desktop\\file\\route.test.ts",
+    "lines": 75,
+    "tests": [
+      {
+        "line": 48,
+        "expression": "it",
+        "title": "\"resolves an indexed file inside the Library roots\""
+      },
+      {
+        "line": 55,
+        "expression": "it",
+        "title": "\"rejects an indexed file outside the Library roots\""
+      },
+      {
+        "line": 63,
+        "expression": "it",
+        "title": "\"reports a missing file on disk\""
+      },
+      {
+        "line": 70,
+        "expression": "it.each([[\"unknown\"], [\"removed\"], [undefined]])",
+        "title": "\"rejects %s without touching the disk\""
+      },
+      {
+        "line": 70,
+        "expression": "it.each",
+        "title": "[[\"unknown\"], [\"removed\"], [undefined]]"
+      }
+    ]
+  },
+  {
+    "path": "src\\app\\api\\desktop\\grants\\route.test.ts",
+    "lines": 17,
+    "tests": [
+      {
+        "line": 13,
+        "expression": "it",
+        "title": "\"rejects renderer requests without desktop authentication\""
+      },
+      {
+        "line": 14,
+        "expression": "it",
+        "title": "\"rejects incorrect desktop authentication\""
+      },
+      {
+        "line": 15,
+        "expression": "it",
+        "title": "\"issues an opaque token for a chosen directory\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-core\\src\\async\\map-concurrent.test.ts",
+    "lines": 8,
+    "tests": [
+      {
+        "line": 3,
+        "expression": "it",
+        "title": "\"bounds active work and preserves input order\""
+      }
+    ]
+  },
+  {
+    "path": "packages\\yard-core\\src\\extensions\\extension-host.test.ts",
+    "lines": 246,
+    "tests": [
+      {
+        "line": 54,
+        "expression": "it",
+        "title": "\"executes a registered command with resolved Extension settings\""
+      },
+      {
+        "line": 67,
+        "expression": "it",
+        "title": "\"distinguishes a UI intent from a direct value\""
+      },
+      {
+        "line": 96,
+        "expression": "it",
+        "title": "\"reports an unknown extension without checking enablement\""
+      },
+      {
+        "line": 113,
+        "expression": "it",
+        "title": "\"does not register commands for a disabled extension\""
+      },
+      {
+        "line": 129,
+        "expression": "it",
+        "title": "\"reports a command that the extension did not register\""
+      },
+      {
+        "line": 141,
+        "expression": "it",
+        "title": "\"rejects a selection command when no files are selected\""
+      },
+      {
+        "line": 162,
+        "expression": "it",
+        "title": "\"reports permission failures from command execution\""
+      },
+      {
+        "line": 182,
+        "expression": "it",
+        "title": "\"does not mistake an ordinary command error for a permission failure\""
+      },
+      {
+        "line": 204,
+        "expression": "it",
+        "title": "\"rejects invalid command input through the declared input schema\""
+      }
+    ]
+  }
+]

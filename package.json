@@ -21,10 +21,11 @@
     "release:build": "node scripts/clean-binary.cjs && node node_modules/@electron/rebuild/lib/cli.js -m . -o better-sqlite3 --force && next build && node scripts/rebuild-traced.cjs && electron-builder --publish never && node scripts/postinstall.cjs",
     "release:prepare": "node scripts/prepare-release.cjs",
     "postinstall": "node scripts/postinstall.cjs",
-    "lint": "eslint",
+    "lint": "eslint . && node scripts/lint-theme-css.cjs",
     "typecheck": "tsc --noEmit",
     "test": "npx vitest run",
-    "test:watch": "npx vitest"
+    "test:watch": "npx vitest",
+    "test:coverage": "npx vitest run --coverage"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -50,15 +51,19 @@
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^20",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "@vitest/coverage-v8": "4.1.5",
     "concurrently": "^9.2.1",
     "drizzle-kit": "^0.31.10",
     "electron": "^41.3.0",
     "electron-builder": "^26.8.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "jsdom": "^30.0.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.5",

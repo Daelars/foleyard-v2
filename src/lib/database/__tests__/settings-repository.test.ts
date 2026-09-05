@@ -1,16 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import Database from "better-sqlite3";
 
-import { initializeDatabaseSchema } from "../migrations";
+import { createTestDatabase } from "@/test/fixtures";
 import { SqliteSettingsRepository } from "../settings-repository";
-
-function createTestDb() {
-  const sqlite = new Database(":memory:");
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("foreign_keys = ON");
-  initializeDatabaseSchema(sqlite);
-  return sqlite;
-}
 
 function readRawSetting(sqlite: Database, key: string): string | null {
   const row = sqlite.prepare("SELECT value FROM settings WHERE key = ?").get(key) as {
@@ -24,7 +16,7 @@ describe("SqliteSettingsRepository library roots", () => {
   let repo: SqliteSettingsRepository;
 
   beforeEach(() => {
-    sqlite = createTestDb();
+    sqlite = createTestDatabase();
     repo = new SqliteSettingsRepository(sqlite);
   });
 

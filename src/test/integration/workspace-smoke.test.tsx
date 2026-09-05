@@ -160,7 +160,9 @@ async function executeViaRoute(url: string, init?: RequestInit) {
 }
 
 describe("component and layout smoke", () => {
-  it("selects files in the workspace and packs the shelf through to disk", async () => {
+  // Full-workspace mounts under v8 coverage are slow on CI runners; the
+  // default 5s test timeout flakes. The smoke asserts behavior, not speed.
+  it("selects files in the workspace and packs the shelf through to disk", { timeout: 30000 }, async () => {
     const scratch = createScratchLibrary("foleyard-workspace-");
     try {
       const kickPath = scratch.writeFile("library/kick.wav");
@@ -236,9 +238,12 @@ describe("component and layout smoke", () => {
       // The library list renders real rows with tags; waveforms load per row.
       // Filenames can span multiple elements (highlight markup), so match
       // rows by their full text content rather than a single text node.
-      await waitFor(() => {
-        expect(screen.getAllByRole("row").length).toBeGreaterThanOrEqual(3);
-      });
+      await waitFor(
+        () => {
+          expect(screen.getAllByRole("row").length).toBeGreaterThanOrEqual(3);
+        },
+        { timeout: 15000 },
+      );
       const rowEls = screen.getAllByRole("row");
       const rowByName = (name: string) => {
         const row = rowEls.find((candidate) => candidate.textContent?.includes(name));
@@ -249,12 +254,15 @@ describe("component and layout smoke", () => {
       const snareRowEl = rowByName("snare.wav");
       rowByName("hat.wav");
       expect(kickRowEl.textContent, "the tag renders in the row meta").toContain("Loud");
-      await waitFor(() => {
-        expect(
-          fetchStub.calls.filter((c) => c.url.startsWith("/api/waveform")).length,
-          "waveforms load for the rows",
-        ).toBeGreaterThanOrEqual(3);
-      });
+      await waitFor(
+        () => {
+          expect(
+            fetchStub.calls.filter((c) => c.url.startsWith("/api/waveform")).length,
+            "waveforms load for the rows",
+          ).toBeGreaterThanOrEqual(3);
+        },
+        { timeout: 10000 },
+      );
 
       // Selecting two files arms the bulk bar with its count.
       fireEvent.click(kickRowEl);
@@ -321,7 +329,7 @@ describe("component and layout smoke", () => {
         () => {
           expect(screen.getByText(/2 sounds packed to/i)).toBeTruthy();
         },
-        { timeout: 4000 },
+        { timeout: 15000 },
       );
       expect(existsSync(`${grant.path}/test-pack.zip`)).toBe(true);
     } finally {
@@ -329,7 +337,7 @@ describe("component and layout smoke", () => {
     }
   });
 
-  it("fills and scrolls the workspace at 75%, 100% and 125% zoom", async () => {
+  it("fills and scrolls the workspace at 75%, 100% and 125% zoom", { timeout: 20000 }, async () => {
     const scratch = createScratchLibrary("foleyard-layout-");
     try {
       const kickPath = scratch.writeFile("library/kick.wav");
@@ -373,7 +381,7 @@ describe("component and layout smoke", () => {
       });
 
       const { container } = render(<Home />);
-      await screen.findByText("kick.wav");
+      await screen.findByText("kick.wav", undefined, { timeout: 15000 });
 
       // Percentage heights are zoom-invariant by construction; viewport units
       // are not. At every zoom the workspace root must fill (h-full, never

@@ -1,15 +1,17 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import path from "path";
 
+// Collect by pattern, not by tree root. Naming three roots meant a test placed
+// under electron/ or scripts/ was silently never run, and only *.test.ts was
+// matched, so a *.test.tsx file would vanish too. test-collection.test.ts holds
+// this to the repo's actual contents; UNCOLLECTED_BY_DESIGN there is the one
+// place a test file is allowed to sit outside this pattern.
 export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: [
-      "packages/yard-core/**/*.test.ts",
-      "packages/yard-tools/**/*.test.ts",
-      "src/**/*.test.ts",
-    ],
+    include: ["**/*.test.{ts,tsx}"],
+    exclude: [...configDefaults.exclude, "docs/**", "dist-electron/**"],
   },
   resolve: {
     alias: {

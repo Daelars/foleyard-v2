@@ -12,6 +12,10 @@ jobs:
           node-version: 22
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - run: npx tsc --noEmit
-      - run: npx eslint .
-      - run: npx vitest run
+      # Every step resolves to the locally installed binaries through the
+      # package.json scripts. npx tsc resolves to an unrelated tsc@2.0.4
+      # package on CI runners instead of the TypeScript compiler.
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun run test
+      - run: bun run build

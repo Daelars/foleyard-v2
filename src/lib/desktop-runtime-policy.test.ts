@@ -65,7 +65,8 @@ describe("desktop chosen-folder grants", () => {
 
     try {
       await registerGrant(chosen);
-      expect(await resolveGrantedExistingPath(child)).toBe(fs.realpathSync(child));
+      // Same canonicalization call the implementation uses (see above).
+      expect(await resolveGrantedExistingPath(child)).toBe(await fs.promises.realpath(child));
       expect(await resolveGrantedExistingPath(sibling)).toBeNull();
     } finally {
       fs.rmSync(temp, { recursive: true, force: true });

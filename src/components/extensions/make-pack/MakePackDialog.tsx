@@ -1,6 +1,5 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
 import {
   FolderUp,
   FolderOpen,
@@ -9,7 +8,6 @@ import {
   FileAudio,
   FileText,
 } from "lucide-react"
-import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { ExtensionDialogShell } from "@/components/extensions/ExtensionDialogShell"
@@ -19,16 +17,27 @@ import {
 } from "@/components/ui/radio-group"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { getDesktopBridge, isDesktopApp } from "@/lib/desktop"
+import {
+  ExtensionFooterRow,
+  ExtensionHintRow,
+  ExtensionPathField,
+  ExtensionSection,
+  ExtensionStatusBanner,
+} from "@/components/extensions/dialog-fields"
+
+import {
+  useMakePack,
+  type MakePackOutputFormat,
+  type MakePackSource,
+} from "./use-make-pack"
 
 interface MakePackDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  initialSource?: "selection" | "shelf" | "recent"
+  initialSource?: MakePackSource
   initialFileIds?: string[]
-  initialOutputFormat?: "folder" | "zip"
+  initialOutputFormat?: MakePackOutputFormat
 }
 
 export function MakePackDialog({
@@ -38,114 +47,37 @@ export function MakePackDialog({
   initialFileIds = [],
   initialOutputFormat = "zip",
 }: MakePackDialogProps) {
-  const [source, setSource] = useState<"selection" | "shelf" | "recent">(
-    initialSource
-  )
-  const [packName, setPackName] = useState("")
-  const [destDir, setDestDir] = useState("")
-  const [outputFormat, setOutputFormat] = useState<"folder" | "zip">(
-    initialOutputFormat
-  )
-  const [isLoading, setIsLoading] = useState(false)
-  const [result, setResult] = useState<{
-    fileCount: number
-    outputPath: string
-  } | null>(null)
-
-  // Reset extension-local workflow state each time this modal opens.
-  useEffect(() => {
-    if (open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSource(initialSource)
-      setPackName(
-        initialSource === "selection"
-          ? "Selected Sounds Pack"
-          : initialSource === "shelf"
-            ? "Shelf Pack"
-            : "Recent Sounds Pack"
-      )
-      setDestDir("")
-      setOutputFormat(initialOutputFormat)
-      setIsLoading(false)
-      setResult(null)
-    }
-  }, [open, initialSource, initialOutputFormat])
-
-  const handlePickDest = useCallback(async () => {
-    if (!isDesktopApp()) {
-      toast.error("Folder picker requires the desktop app")
-      return
-    }
-
-    const result = await getDesktopBridge()?.pickFolder()
-    if (result?.ok && result.path) {
-      setDestDir(result.path)
-    }
-  }, [])
-
-  const handleMakePack = useCallback(async () => {
-    if (!destDir.trim()) {
-      toast.error("Choose a destination folder")
-      return
-    }
-    if (!packName.trim()) {
-      toast.error("Enter a pack name")
-      return
-    }
-
-    setIsLoading(true)
-
-    try {
-      const body: Record<string, unknown> = {
-        source,
-        fileIds: initialFileIds,
-        destinationDirectory: destDir.trim(),
-        packName: packName.trim(),
-        outputFormat,
-      }
-
-      const res = await fetch("/api/extensions/make-pack", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to make pack")
-      }
-
-      setResult(data)
-      toast.success(`Packed ${data.fileCount} sounds`)
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to make pack"
-      )
-    } finally {
-      setIsLoading(false)
-    }
-  }, [
+  const {
     source,
-    initialFileIds,
-    destDir,
+    setSource,
     packName,
+    setPackName,
+    destDir,
+    setDestDir,
     outputFormat,
-  ])
+    setOutputFormat,
+    isLoading,
+    result,
+    handlePickDest,
+    handleMakePack,
+  } = useMakePack({ open, initialSource, initialFileIds, initialOutputFormat })
 
   const footer = !result ? (
-    <Button
-      onClick={handleMakePack}
-      disabled={
-        isLoading || !destDir.trim() || !packName.trim()
-      }
-    >
-      {isLoading ? (
-        <Loader2 className="mr-2 size-4 animate-spin" />
-      ) : (
-        <PackagePlus className="mr-2 size-4" />
-      )}
-      Make Pack
-    </Button>
+    <ExtensionFooterRow>
+      <Button
+        onClick={handleMakePack}
+        disabled={
+          isLoading || !destDir.trim() || !packName.trim()
+        }
+      >
+        {isLoading ? (
+          <Loader2 className="mr-2 size-4 animate-spin" />
+        ) : (
+          <PackagePlus className="mr-2 size-4" />
+        )}
+        Make Pack
+      </Button>
+    </ExtensionFooterRow>
   ) : null
 
   return (
@@ -158,19 +90,15 @@ export function MakePackDialog({
       footer={footer}
       showCloseButton={!result}
     >
-          <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-            <div className="flex items-center gap-2">
-              <PackagePlus className="size-4 text-accent-text" />
-              <span className="text-sm font-medium">Pack source</span>
-              {initialFileIds.length > 0 && source === "selection" && (
-                <Badge variant="secondary">{initialFileIds.length}</Badge>
-              )}
-            </div>
-
+          <ExtensionSection
+            icon={<PackagePlus className="size-4 text-accent-text" />}
+            title="Pack source"
+            count={initialFileIds.length > 0 && source === "selection" ? initialFileIds.length : undefined}
+          >
             <RadioGroup
               value={source}
               onValueChange={(v) =>
-                setSource(v as "selection" | "shelf" | "recent")
+                setSource(v as MakePackSource)
               }
             >
               <RadioGroupItem value="selection">
@@ -184,14 +112,12 @@ export function MakePackDialog({
               <RadioGroupItem value="shelf">Sound Shelf</RadioGroupItem>
               <RadioGroupItem value="recent">Recently used</RadioGroupItem>
             </RadioGroup>
-          </section>
+          </ExtensionSection>
 
-          <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-            <div className="flex items-center gap-2">
-              <FileText className="size-4 text-accent-text" />
-              <span className="text-sm font-medium">Pack details</span>
-            </div>
-
+          <ExtensionSection
+            icon={<FileText className="size-4 text-accent-text" />}
+            title="Pack details"
+          >
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label>Pack name</Label>
@@ -204,53 +130,39 @@ export function MakePackDialog({
 
               <div className="space-y-1.5">
                 <Label>Destination</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={destDir}
-                    onChange={(e) => setDestDir(e.target.value)}
-                    placeholder="/path/to/output/folder"
-                    className="flex-1"
-                  />
-                  {isDesktopApp() && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handlePickDest}
-                    >
-                      <FolderOpen className="mr-1 size-3" />
-                      Choose
-                    </Button>
-                  )}
-                </div>
+                <ExtensionPathField
+                  value={destDir}
+                  onChange={setDestDir}
+                  placeholder="/path/to/output/folder"
+                  showPick={isDesktopApp()}
+                  pickLabel="Choose"
+                  onPick={handlePickDest}
+                />
               </div>
             </div>
-          </section>
+          </ExtensionSection>
 
-          <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-            <div className="flex items-center gap-2">
-              <FileAudio className="size-4 text-accent-text" />
-              <span className="text-sm font-medium">Output format</span>
-            </div>
-
+          <ExtensionSection
+            icon={<FileAudio className="size-4 text-accent-text" />}
+            title="Output format"
+          >
             <RadioGroup
               value={outputFormat}
               onValueChange={(v) =>
-                setOutputFormat(v as "folder" | "zip")
+                setOutputFormat(v as MakePackOutputFormat)
               }
             >
               <RadioGroupItem value="folder">Folder</RadioGroupItem>
               <RadioGroupItem value="zip">Zip archive</RadioGroupItem>
             </RadioGroup>
-          </section>
+          </ExtensionSection>
 
           {result ? (
             <div className="space-y-3">
-              <Alert>
-                <AlertDescription>
-                  {result.fileCount} sounds packed to {result.outputPath}.
-                  No originals were changed.
-                </AlertDescription>
-              </Alert>
+              <ExtensionStatusBanner>
+                {result.fileCount} sounds packed to {result.outputPath}.
+                No originals were changed.
+              </ExtensionStatusBanner>
 
               {isDesktopApp() && (
                 <Button
@@ -264,12 +176,9 @@ export function MakePackDialog({
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2 rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-3">
-              <FolderUp className="size-4 text-zinc-400" />
-              <p className="text-xs text-zinc-400">
-                Set a destination and pack name above, then click &quot;Make Pack&quot;
-              </p>
-            </div>
+            <ExtensionHintRow icon={<FolderUp className="size-4 text-zinc-400" />}>
+              Set a destination and pack name above, then click &quot;Make Pack&quot;
+            </ExtensionHintRow>
           )}
     </ExtensionDialogShell>
   )

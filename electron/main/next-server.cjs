@@ -1,6 +1,7 @@
 const { app } = require("electron");
 
 const { appendDesktopLog } = require("./errors.cjs");
+const { startProductionServer } = require("./next-server-adapter.cjs");
 
 let nextServerUrlPromise = null;
 let consoleCaptureInstalled = false;
@@ -49,22 +50,18 @@ async function startNextProductionServer() {
   nextServerUrlPromise = (async () => {
     installServerConsoleCapture();
     process.env.FOLEYARD_DESKTOP = "1";
-    process.env.NEXT_PRIVATE_START_TIME = String(Date.now());
 
-    const { startServer } = require("next/dist/server/lib/start-server");
-
-    await startServer({
+    // All private Next.js coupling (version check, private module import,
+    // loopback port selection) lives in next-server-adapter.cjs, which fails
+    // loud instead of presenting a blank window when a framework upgrade
+    // moves the private server bootstrap.
+    const { url, port } = await startProductionServer({
       dir: app.getAppPath(),
       hostname: "127.0.0.1",
-      port: 0,
-      isDev: false,
-      allowRetry: false,
-      minimalMode: false,
-      keepAliveTimeout: 5000,
     });
 
-    appendDesktopLog(`Next production server ready on port ${process.env.PORT}`);
-    return `http://127.0.0.1:${process.env.PORT}`;
+    appendDesktopLog(`Next production server ready on port ${port}`);
+    return url;
   })();
 
   return nextServerUrlPromise;

@@ -2,21 +2,7 @@ import { useEffect, useRef } from "react";
 
 const POLL_INTERVAL_MS = 2000;
 
-type ScanStatusResponse = {
-  running: boolean;
-  phase: string;
-  discovered: number;
-  indexed: number;
-  skippedUnchanged: number;
-  metadataProcessed: number;
-  added: number;
-  updated: number;
-  removed: number;
-  failed: number;
-  errors: number;
-  total: number;
-  error: string | null;
-};
+import type { ScanStatusResponse } from "@/lib/scanner/types";
 
 export function useScanPolling(
   scanStatus: { running: boolean },

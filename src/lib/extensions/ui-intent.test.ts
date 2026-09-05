@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { interpretExtensionUiIntent } from "./ui-intent";
+import {
+  interpretExtensionUiIntent,
+  registerUiIntentHandler,
+} from "./ui-intent";
 
 describe("interpretExtensionUiIntent", () => {
   it("opens Folder Janitor with the intent payload", () => {
@@ -168,5 +171,25 @@ describe("interpretExtensionUiIntent", () => {
 
     expect(handled).toBe(false);
     expect(openMakePack).not.toHaveBeenCalled();
+  });
+
+  it("dispatches a registered handler by intent type", () => {
+    const handler = vi.fn(() => true);
+    registerUiIntentHandler("test.custom-open", handler);
+
+    const actions = {
+      openFolderJanitor: vi.fn(),
+      openLibraryGatherer: vi.fn(),
+      openMakePack: vi.fn(),
+      openSettings: vi.fn(),
+    };
+
+    const handled = interpretExtensionUiIntent(
+      { kind: "yard-ui-intent", type: "test.custom-open", payload: { id: "one" } },
+      actions,
+    );
+
+    expect(handled).toBe(true);
+    expect(handler).toHaveBeenCalledWith({ id: "one" }, actions);
   });
 });

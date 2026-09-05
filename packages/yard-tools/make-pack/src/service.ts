@@ -1,3 +1,4 @@
+import { sanitizeFilename } from "yard-core";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -41,6 +42,7 @@ export class MakePackService {
     const outputPath =
       outputFormat === "zip" ? `${packDirectory}.zip` : packDirectory;
 
+    if (this.context.services.filesystem && !await this.context.services.filesystem.resolveWritablePath(outputPath)) throw new Error("Output is outside the granted directory");
     if (fs.existsSync(outputPath)) {
       throw new Error(`Pack output already exists: ${outputPath}`);
     }
@@ -53,6 +55,7 @@ export class MakePackService {
         continue;
       }
 
+      if (this.context.services.filesystem && !await this.context.services.filesystem.resolveReadablePath(file.path)) throw new Error("Source is outside the configured Library roots");
       const stats = await fs.promises.stat(file.path);
       if (!stats.isFile()) {
         skipped.push(file.filename);
@@ -107,6 +110,7 @@ export class MakePackService {
         ? path.join(destinationDirectory, `.${packName}-manifest.tmp.json`)
         : null;
 
+      if (tempManifestPath && this.context.services.filesystem && !await this.context.services.filesystem.resolveWritablePath(tempManifestPath)) throw new Error("Manifest is outside the granted directory");
       try {
         if (manifestEntry && tempManifestPath) {
           await fs.promises.writeFile(tempManifestPath, manifestEntry.content);
@@ -189,11 +193,11 @@ function sanitizePackName(packName: string | undefined) {
     return null;
   }
 
-  return trimmed.replace(/[<>:"/\\|?*\x00-\x1f]/g, "-").slice(0, 80).trim();
+  return sanitizeFilename(trimmed).slice(0, 80).trim();
 }
 
 function makeUniqueFilename(filename: string, usedNames: Set<string>) {
-  const cleanName = path.basename(filename).replace(/[<>:"/\\|?*\x00-\x1f]/g, "-");
+  const cleanName = sanitizeFilename(path.basename(filename));
   const parsed = path.parse(cleanName);
   let candidate = cleanName || "sound";
   let index = 2;

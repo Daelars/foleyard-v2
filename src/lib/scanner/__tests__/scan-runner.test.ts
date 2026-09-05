@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import path from "node:path";
+import { describe, it, expect, vi } from "vitest";
 import { initializeDatabaseSchema } from "@/lib/database/migrations";
 import { SqliteAudioFileRepository } from "@/lib/database/file-repository";
 import { SqliteSettingsRepository } from "@/lib/database/settings-repository";
@@ -31,10 +32,10 @@ class FakeFileSystem implements FileSystemSeam {
     return file;
   }
 
-  async existsReadableDirectory(_dirPath: string) {
+  async existsReadableDirectory() {
   }
 
-  async findFirstAudioFile(_rootPath: string) {
+  async findFirstAudioFile() {
     return null;
   }
 
@@ -54,15 +55,7 @@ class FakeFileSystem implements FileSystemSeam {
 }
 
 class FakeMetadata implements MetadataSeam {
-  async extract(
-    filePath: string,
-    _options?: {
-      fileSize?: number;
-      filename?: string;
-      format?: string | null;
-      fullParse?: boolean;
-    },
-  ) {
+  async extract(filePath: string) {
     return {
       filename: filePath.split("/").pop() ?? "unknown",
       format: filePath.split(".").pop() ?? null,
@@ -311,4 +304,32 @@ describe("ScanRunner", () => {
     const result = await runner.validateLibraryRoot("/music");
     expect(result.valid).toBe(true);
   });
+});
+
+it("retries missing duration with a full parse on the next scan", async () => {
+  const sqlite=createTestDb(); const repo=new SqliteAudioFileRepository(sqlite);const filesystem=new FakeFileSystem();filesystem.setFile("/music/retry.wav");
+  const extract=vi.fn().mockResolvedValueOnce({filename:"retry.wav",format:"wav",codec:null,duration:null,sampleRate:null,bitDepth:null,channels:null,fileSize:1000}).mockImplementation((filePath:string)=>new FakeMetadata().extract(filePath));
+  const runner=new ScanRunner({fileRepo:repo,settingsRepo:new SqliteSettingsRepository(sqlite),getLibraryRoots:()=>["/music"],fs:filesystem,metadataExtractor:{extract}});
+  runner.startScan();await waitForScan(runner);runner.startScan();await waitForScan(runner);
+  expect(extract).toHaveBeenCalledTimes(2);expect(extract.mock.calls[1][1]).toMatchObject({fullParse:true});expect(repo.getFiles()[0].duration).toBe(120);sqlite.close();
+});
+
+it("continues healthy roots and preserves files under an unreadable root",async()=>{
+  const sqlite=createTestDb();const repo=new SqliteAudioFileRepository(sqlite);const filesystem=new FakeFileSystem();filesystem.setFile("/healthy/hit.wav");
+  let roots=["/healthy"];const runner=new ScanRunner({fileRepo:repo,settingsRepo:new SqliteSettingsRepository(sqlite),getLibraryRoots:()=>roots,fs:filesystem,metadataExtractor:new FakeMetadata()});
+  runner.startScan();await waitForScan(runner);
+  const record=repo.getAllFilesIncludingRemoved()[0];repo.upsertFile({...record,path:"/unreadable/keep.wav",filename:"keep.wav",libraryRoot:path.resolve("/unreadable"),codec:null,mtimeMs:1000000,lastScannedAt:new Date().toISOString()});
+  roots=["/unreadable","/healthy"];
+  filesystem.existsReadableDirectory=vi.fn(async(directory?:string)=>{if(directory?.includes("unreadable"))throw new Error("Access denied");});
+  runner.startScan();await waitForScan(runner);expect(runner.getStatus().phase).toBe("complete");expect(runner.getStatus().errors).toBe(1);expect(repo.getFileByPath("/unreadable/keep.wav")?.removedAt).toBeNull();expect(repo.getFileByPath("/healthy/hit.wav")?.removedAt).toBeNull();sqlite.close();
+});
+
+it("flushes buffered metadata when another task stalls",async()=>{
+  vi.useFakeTimers();const sqlite=createTestDb();
+  try {
+    const repo=new SqliteAudioFileRepository(sqlite);const filesystem=new FakeFileSystem();filesystem.setFile("/music/ok.wav");filesystem.setFile("/music/stalled.wav");
+    const extract:MetadataSeam["extract"]=(filePath)=>filePath.includes("stalled")?new Promise(()=>{}):new FakeMetadata().extract(filePath);
+    const runner=new ScanRunner({fileRepo:repo,settingsRepo:new SqliteSettingsRepository(sqlite),getLibraryRoots:()=>["/music"],fs:filesystem,metadataExtractor:{extract}});
+    runner.startScan();await vi.advanceTimersByTimeAsync(30001);expect(runner.getStatus().phase).toBe("error");expect(repo.getFileByPath("/music/ok.wav")?.duration).toBe(120);
+  }finally{vi.useRealTimers();sqlite.close();}
 });

@@ -73,6 +73,7 @@ export class LibraryGathererService {
         extension.startsWith(".") ? extension.toLowerCase() : `.${extension.toLowerCase()}`,
       ),
     );
+    if (this.context.services.filesystem && !await this.context.services.filesystem.resolveWritablePath(path.join(destinationDirectory, "foleyard-gather-report.json"))) throw new Error("Report is outside the granted directory");
     const existingKeys = skipDuplicates
       ? await collectExistingKeys(destinationDirectory, audioExtensions)
       : new Set<string>();
@@ -93,6 +94,7 @@ export class LibraryGathererService {
       }
 
       for (const sourcePath of await findAudioFiles(sourceRoot, audioExtensions)) {
+        if (this.context.services.filesystem && !await this.context.services.filesystem.resolveReadablePath(sourcePath)) throw new Error("Source is outside the configured Library roots");
         const stats = await fs.promises.stat(sourcePath);
         const sourceFolderName = path.basename(sourceRoot);
         const relativeName = preserveFolderNames
@@ -103,6 +105,7 @@ export class LibraryGathererService {
           relativeName,
           plannedNames,
         );
+        if (this.context.services.filesystem && !await this.context.services.filesystem.resolveWritablePath(outputPath)) throw new Error("Output is outside the granted directory");
         const duplicateKey = `${path.basename(sourcePath).toLowerCase()}::${stats.size}`;
         const skipped = skipDuplicates && existingKeys.has(duplicateKey);
 
@@ -137,7 +140,7 @@ async function findAudioFiles(root: string, audioExtensions: Set<string>) {
       const entryPath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         await visit(entryPath);
-      } else if (audioExtensions.has(path.extname(entry.name).toLowerCase())) {
+      } else if (entry.isFile() && audioExtensions.has(path.extname(entry.name).toLowerCase())) {
         results.push(entryPath);
       }
     }

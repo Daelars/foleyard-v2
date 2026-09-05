@@ -23,15 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { getDesktopBridge } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
-
-type ValidationResult = {
-  valid: boolean;
-  normalizedPath: string | null;
-  readable: boolean;
-  audioFileCount: number;
-  samples: string[];
-  error: string | null;
-};
+import type { ValidationResult } from "@/components/settings/types";
 
 type OnboardingDialogProps = {
   open: boolean;

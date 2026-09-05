@@ -1,5 +1,5 @@
 export { manifest } from "./manifest";
-export { registerCommands } from "./commands";
+export { registerCommands, saveSearchInputSchema, validateSaveSearchInput } from "./commands";
 export { createService, SmartCollectionService } from "./service";
 export { permissions } from "./permissions";
 export { settings } from "./settings";

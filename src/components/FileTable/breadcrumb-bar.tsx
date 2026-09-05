@@ -3,6 +3,11 @@
 import { ChevronLeft, ListMusic } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  basename,
+  navigateToRoot,
+  navigateToSegment,
+} from "@/lib/directory-navigation";
 import { cn } from "@/lib/utils";
 import type { FileTableDirectory } from "./types";
 
@@ -44,16 +49,9 @@ export function FileTableBreadcrumbBar({
                 "max-w-[150px] cursor-pointer truncate transition-colors hover:text-accent-text",
                 currentDirectory.directory === null && "font-bold text-zinc-100",
               )}
-              onClick={() => onNavigate({
-                ...currentDirectory,
-                key: JSON.stringify([currentDirectory.libraryRoot, null]),
-                label: currentDirectory.libraryRoot.split(/[\\/]/).pop() || currentDirectory.libraryRoot,
-                directory: null,
-                absolutePath: currentDirectory.libraryRoot,
-                isRoot: true,
-              })}
+              onClick={() => onNavigate(navigateToRoot(currentDirectory))}
             >
-              {currentDirectory.libraryRoot.split(/[\\/]/).pop() || currentDirectory.libraryRoot}
+              {basename(currentDirectory.libraryRoot)}
             </span>
           </span>
         ) : null}
@@ -67,15 +65,9 @@ export function FileTableBreadcrumbBar({
                     index === allParts.length - 1 && "font-bold text-zinc-100",
                   )}
                   onClick={() => {
-                    const directory = allParts.slice(0, index + 1).join("/");
-                    onNavigate({
-                      ...currentDirectory,
-                      key: JSON.stringify([currentDirectory.libraryRoot, directory]),
-                      label: part,
-                      directory,
-                      absolutePath: `${currentDirectory.libraryRoot}/${directory}`,
-                      isRoot: false,
-                    });
+                    onNavigate(
+                      navigateToSegment(currentDirectory, allParts, index),
+                    );
                   }}
                 >
                   {part}

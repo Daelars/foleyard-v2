@@ -6,6 +6,7 @@ const { dialog } = require("electron");
 const { getDesktopUserDataDir } = require("./database.cjs");
 
 let mainWindow = null;
+let errorDialogShown = false;
 
 function setMainWindow(windowInstance) {
   mainWindow = windowInstance;
@@ -19,7 +20,32 @@ function appendDesktopLog(message) {
   } catch {}
 }
 
-function reportMainProcessError(error) {
+function showErrorDialogOnce(title, message) {
+  if (errorDialogShown) {
+    return;
+  }
+
+  errorDialogShown = true;
+
+  try {
+    dialog.showErrorBox(title, message);
+  } catch {}
+}
+
+function terminateMainProcess(code) {
+  try {
+    const { app } = require("electron");
+    if (app && typeof app.exit === "function") {
+      app.exit(code);
+      return;
+    }
+  } catch {}
+
+  process.exit(code);
+}
+
+function reportMainProcessError(error, options = {}) {
+  const { dialog: showDialog = true, fatal = false } = options;
   const message =
     error instanceof Error ? `${error.message}\n\n${error.stack ?? ""}` : String(error);
 
@@ -31,11 +57,22 @@ function reportMainProcessError(error) {
     }
   } catch {}
 
-  dialog.showErrorBox("Main process error", message);
+  if (showDialog) {
+    showErrorDialogOnce("Foleyard desktop error", message);
+  }
+
+  if (fatal) {
+    terminateMainProcess(1);
+  }
+}
+
+function resetMainProcessErrorState() {
+  errorDialogShown = false;
 }
 
 module.exports = {
   appendDesktopLog,
   reportMainProcessError,
+  resetMainProcessErrorState,
   setMainWindow,
 };

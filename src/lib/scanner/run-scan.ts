@@ -3,7 +3,6 @@ import {
   batchTouchFiles,
   batchUpdateFileMetadata,
   batchUpsertFiles,
-  clearLibraryData,
   getAllFilesIncludingRemoved,
   getFileById,
   getFileByPath,
@@ -20,7 +19,6 @@ import {
 } from "@/lib/db";
 import { extractMetadata } from "@/lib/metadata";
 
-import { scanStatus } from "./scan-state";
 import { RealFileSystemSeam } from "./filesystem";
 import { ScanRunner } from "./scan-runner";
 
@@ -48,15 +46,11 @@ function getRunner(): ScanRunner {
         getLibraryRoot,
         setLibraryRoot: (root: string) => setLibraryRoots([root]),
         getLibraryStats,
-        clearLibraryData,
       },
       getLibraryRoots,
       fs: new RealFileSystemSeam(),
       metadataExtractor: {
         extract: extractMetadata,
-      },
-      onProgress: (status) => {
-        Object.assign(scanStatus, status);
       },
     });
   }

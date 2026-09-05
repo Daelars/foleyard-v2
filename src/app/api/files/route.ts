@@ -1,22 +1,13 @@
+import { errorResponse } from "@/lib/api/errors";
+import { readMutationBody } from "@/lib/api/body";
+import { mutationError } from "@/lib/api/errors";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, parsePageInteger } from "@/lib/api/pagination";
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'node:fs';
-import { attachTagToFile, detachTagFromFile, getFileById, getFileCount, getFiles, getTagsForFiles, markFileRemoved, toggleFavorite } from '@/lib/db';
+import { deleteFiles } from '@/lib/files/delete-files';
+import { attachTagToFile, detachTagFromFile, getFileCount, getFiles, getTagsForFiles, setFavorites, setFileTagBatch, toggleFavorite } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const DEFAULT_PAGE_SIZE = 500;
-const MAX_PAGE_SIZE = 500;
-
-function parsePageInteger(value: string | null, fallback: number, minimum: number, maximum?: number) {
-  if (value === null) return fallback;
-  if (!/^\d+$/.test(value)) return null;
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < minimum || (maximum !== undefined && parsed > maximum)) {
-    return null;
-  }
-  return parsed;
-}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -28,14 +19,21 @@ export async function GET(request: NextRequest) {
   const atLibraryRoot = searchParams.get('atLibraryRoot') === 'true';
   const tagId = searchParams.get('tagId');
   const showRemoved = searchParams.get('showRemoved') === 'true';
+  const sortKey = searchParams.get('sortKey') ?? 'filename';
+  const sortDir = searchParams.get('sortDir') ?? 'asc';
   const limit = parsePageInteger(searchParams.get('limit'), DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
   const offset = parsePageInteger(searchParams.get('offset'), 0, 0);
 
   if (limit === null || offset === null) {
-    return NextResponse.json(
-      { error: `limit must be an integer from 1 to ${MAX_PAGE_SIZE}; offset must be a non-negative integer` },
-      { status: 400 },
-    );
+    return errorResponse(`limit must be an integer from 1 to ${MAX_PAGE_SIZE}; offset must be a non-negative integer`, 400);
+  }
+
+  if (sortKey !== 'filename' && sortKey !== 'duration') {
+    return errorResponse('sortKey must be filename or duration', 400);
+  }
+
+  if (sortDir !== 'asc' && sortDir !== 'desc') {
+    return errorResponse('sortDir must be asc or desc', 400);
   }
 
   const files = getFiles({
@@ -49,6 +47,8 @@ export async function GET(request: NextRequest) {
     showRemoved,
     limit,
     offset,
+    sortKey,
+    sortDir,
   });
 
   const fileIds = files.map((f) => f.id);
@@ -70,88 +70,111 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readMutationBody(request);
     const { id, action } = body;
 
     if (action === 'toggleFavorite') {
-      await toggleFavorite(id);
-      return NextResponse.json({ success: true });
+      if (typeof id !== 'string' || !id.trim()) {
+        return errorResponse('id must be a non-empty string', 400);
+      }
+      if (body.isFavorite !== undefined) {
+        if (typeof body.isFavorite !== 'boolean') {
+          return errorResponse('isFavorite must be a boolean', 400);
+        }
+        setFavorites([id], body.isFavorite);
+      } else {
+        await toggleFavorite(id);
+      }
+      return NextResponse.json({ success: true, favoritesTotal: getFileCount({ favorites: true }) });
+    }
+
+    if (action === 'setFavorites') {
+      const { ids, isFavorite } = body;
+      if (!Array.isArray(ids) || ids.some((entry) => typeof entry !== 'string' || !entry)) {
+        return errorResponse('ids must be string[]', 400);
+      }
+      if (typeof isFavorite !== 'boolean') {
+        return errorResponse('isFavorite must be a boolean', 400);
+      }
+      try {
+        setFavorites(ids, isFavorite);
+      } catch (error) {
+        if (error instanceof Error && /does not exist/.test(error.message)) {
+          return errorResponse(error.message, 404);
+        }
+        throw error;
+      }
+      return NextResponse.json({ success: true, favoritesTotal: getFileCount({ favorites: true }) });
+    }
+
+    if (action === 'setFileTag') {
+      const { fileIds, tagId, attached } = body;
+      if (!Array.isArray(fileIds) || fileIds.some((entry) => typeof entry !== 'string' || !entry)) {
+        return errorResponse('fileIds must be string[]', 400);
+      }
+      if (typeof tagId !== 'string' || !tagId.trim()) {
+        return errorResponse('tagId must be a non-empty string', 400);
+      }
+      if (typeof attached !== 'boolean') {
+        return errorResponse('attached must be a boolean', 400);
+      }
+      try {
+        setFileTagBatch(fileIds, tagId, attached);
+      } catch (error) {
+        if (error instanceof Error && /does not exist/.test(error.message)) {
+          return errorResponse(error.message, 404);
+        }
+        throw error;
+      }
+      return NextResponse.json({ success: true, favoritesTotal: getFileCount({ favorites: true }) });
     }
 
     if (action === 'attachTag') {
       const { tagId } = body;
+      if (typeof id !== 'string' || !id.trim()) {
+        return errorResponse('id must be a non-empty string', 400);
+      }
+      if (typeof tagId !== 'string' || !tagId.trim()) {
+        return errorResponse('tagId must be a non-empty string', 400);
+      }
       attachTagToFile(id, tagId);
       return NextResponse.json({ success: true });
     }
 
     if (action === 'detachTag') {
       const { tagId } = body;
+      if (typeof id !== 'string' || !id.trim()) {
+        return errorResponse('id must be a non-empty string', 400);
+      }
+      if (typeof tagId !== 'string' || !tagId.trim()) {
+        return errorResponse('tagId must be a non-empty string', 400);
+      }
       detachTagFromFile(id, tagId);
       return NextResponse.json({ success: true });
     }
 
-    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    return errorResponse('Unknown action', 400);
+  } catch (error) {
+    return mutationError(error);
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readMutationBody(request, false);
     const { fileIds, permanent } = body;
 
     if (
       !Array.isArray(fileIds) ||
       fileIds.some((id) => typeof id !== 'string')
     ) {
-      return NextResponse.json({ error: 'fileIds must be string[]' }, { status: 400 });
+      return errorResponse('fileIds must be string[]', 400);
     }
 
-    const removed: string[] = [];
-    const failed: Array<{ id: string; error: string }> = [];
-    const now = new Date().toISOString();
-
-    const ids = fileIds as string[];
-    const concurrency = 8;
-    for (let start = 0; start < ids.length; start += concurrency) {
-      const batch = ids.slice(start, start + concurrency);
-      const results = await Promise.all(
-        batch.map(async (id) => {
-          const record = getFileById(id);
-          if (!record) {
-            return { id, error: 'Not found' };
-          }
-
-          if (permanent === true) {
-            try {
-              await fs.promises.unlink(record.path);
-            } catch (error) {
-              if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-                return {
-                  id,
-                  error: error instanceof Error ? error.message : 'Delete failed',
-                };
-              }
-            }
-          }
-
-          markFileRemoved(record.path, now);
-          return { id };
-        }),
-      );
-
-      for (const result of results) {
-        if (result.error) {
-          failed.push({ id: result.id, error: result.error });
-        } else {
-          removed.push(result.id);
-        }
-      }
-    }
+    const { removed, failed } = await deleteFiles(fileIds, permanent === true);
 
     return NextResponse.json({ removed, failed });
-  } catch {
-    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+  } catch (error) {
+    return mutationError(error);
   }
 }

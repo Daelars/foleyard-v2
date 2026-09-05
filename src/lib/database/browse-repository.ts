@@ -7,6 +7,20 @@ import * as schema from "@/lib/schema";
 
 import type Database from "better-sqlite3";
 
+export function immediateSubdirectories(directories: string[], parent: string | null): string[] {
+  const result = new Set<string>();
+  const normalizedParent = parent === null ? null : normalizeDirectoryPath(parent);
+  for (const directory of directories) {
+    const normalized = normalizeDirectoryPath(directory);
+    if (normalizedParent === null) { const first = normalized.split("/")[0]; if (first) result.add(first); }
+    else if (normalized.startsWith(normalizedParent + "/")) {
+      const next = normalized.slice(normalizedParent.length + 1).split("/")[0];
+      if (next) result.add(normalizedParent + "/" + next);
+    }
+  }
+  return [...result].sort();
+}
+
 export class SqliteBrowseRepository {
   private sqlite: Database;
   private db: ReturnType<typeof drizzle<typeof schema>>;
@@ -18,7 +32,7 @@ export class SqliteBrowseRepository {
 
   getUniqueDirectories(): string[] {
     const rows = this.db
-      .select({ directory: schema.files.directory })
+      .selectDistinct({ directory: schema.files.directory })
       .from(schema.files)
       .where(and(isNotNull(schema.files.directory), isNull(schema.files.removedAt)))
       .all();
@@ -29,7 +43,7 @@ export class SqliteBrowseRepository {
 
   getDirectoriesForRoot(libraryRoot: string): string[] {
     const rows = this.db
-      .select({ directory: schema.files.directory })
+      .selectDistinct({ directory: schema.files.directory })
       .from(schema.files)
       .where(
         and(
@@ -43,56 +57,7 @@ export class SqliteBrowseRepository {
     return [...new Set(rows.map((row) => row.directory).filter(Boolean) as string[])].sort();
   }
 
-  getSubdirectories(parentDir: string | null): string[] {
-    const allDirs = this.getUniqueDirectories();
-    const subdirs = new Set<string>();
-
-    for (const dir of allDirs) {
-      if (parentDir === null) {
-        const firstPart = dir.split(/[\\/]/)[0];
-        if (firstPart) {
-          subdirs.add(firstPart);
-        }
-        continue;
-      }
-
-      const normalizedParent = normalizeDirectoryPath(parentDir);
-      const normalizedDir = normalizeDirectoryPath(dir);
-
-      if (normalizedDir.startsWith(`${normalizedParent}/`)) {
-        const remaining = normalizedDir.slice(normalizedParent.length + 1);
-        const nextPart = remaining.split("/")[0];
-        if (nextPart) {
-          subdirs.add(`${parentDir}/${nextPart}`);
-        }
-      }
-    }
-
-    return Array.from(subdirs).sort();
-  }
-
-
-  getSubdirectoriesForRoot(libraryRoot: string, parentDir: string | null): string[] {
-    const allDirs = this.getDirectoriesForRoot(libraryRoot);
-    const subdirs = new Set<string>();
-
-    for (const dir of allDirs) {
-      const normalizedDir = normalizeDirectoryPath(dir);
-      if (parentDir === null) {
-        const firstPart = normalizedDir.split("/")[0];
-        if (firstPart) subdirs.add(firstPart);
-        continue;
-      }
-
-      const normalizedParent = normalizeDirectoryPath(parentDir);
-      if (normalizedDir.startsWith(`${normalizedParent}/`)) {
-        const nextPart = normalizedDir.slice(normalizedParent.length + 1).split("/")[0];
-        if (nextPart) subdirs.add(`${normalizedParent}/${nextPart}`);
-      }
-    }
-
-    return Array.from(subdirs).sort();
-  }
+  getSubdirectoriesForRoot(libraryRoot: string, parentDir: string | null): string[] { return immediateSubdirectories(this.getDirectoriesForRoot(libraryRoot), parentDir); }
 }
 
 let _browseRepo: SqliteBrowseRepository | null = null;
@@ -104,6 +69,5 @@ function getBrowseRepo(): SqliteBrowseRepository {
 }
 
 export const getUniqueDirectories = () => getBrowseRepo().getUniqueDirectories();
-export const getSubdirectories = (parentDir: string | null) => getBrowseRepo().getSubdirectories(parentDir);
 export const getSubdirectoriesForRoot = (libraryRoot: string, parentDir: string | null) =>
   getBrowseRepo().getSubdirectoriesForRoot(libraryRoot, parentDir);

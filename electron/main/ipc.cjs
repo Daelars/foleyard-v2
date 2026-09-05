@@ -1,4 +1,4 @@
-const { ipcMain } = require("electron");
+const { app, ipcMain } = require("electron");
 
 const { checkForUpdates, quitAndInstall, simulateUpdate } = require("./auto-updater.cjs");
 const {
@@ -31,8 +31,7 @@ function registerIpcHandlers() {
     if (result.canceled || !result.filePaths.length) {
       return { ok: false, error: "No folder selected" };
     }
-    grantDirectoryPath(result.filePaths[0]);
-    return { ok: true, path: result.filePaths[0] };
+    return await grantDirectoryPath(result.filePaths[0]);
   });
   ipcMain.handle("desktop:reveal-in-explorer", async (_event, fileId) =>
     revealInExplorer(fileId),
@@ -79,10 +78,14 @@ function registerIpcHandlers() {
     quitAndInstall();
     return { ok: true };
   });
-  ipcMain.handle("desktop:simulate-update", async () => {
-    simulateUpdate();
-    return { ok: true };
-  });
+  // Dev-only: the update simulator is never registered in the packaged app,
+  // so the fake-update endpoint is unreachable outside development.
+  if (!app.isPackaged) {
+    ipcMain.handle("desktop:simulate-update", async () => {
+      simulateUpdate();
+      return { ok: true };
+    });
+  }
 }
 
 module.exports = {

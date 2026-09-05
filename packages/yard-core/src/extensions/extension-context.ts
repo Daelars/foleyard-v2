@@ -1,4 +1,3 @@
-import type { EventBus } from "../events/event-bus";
 import type { CollectionService } from "../services/organization/collection-service";
 import type { FavoriteService } from "../services/organization/favorite-service";
 import type { TagService } from "../services/organization/tag-service";
@@ -8,7 +7,7 @@ import {
   createPermissionChecker,
   type PermissionChecker,
   type YardPermission,
-} from "./extension-permissions";
+} from "./vocabulary";
 import type { YardCommandRegistry } from "./extension-command-registry";
 
 export type YardExtensionSettings = {
@@ -21,6 +20,11 @@ export type YardExtensionFileService = {
 
 export type YardExtensionContext = {
   services: {
+    scanProgress?: { report(completed: number, total: number): void };
+    filesystem?: {
+      resolveReadablePath(path: string, allowRoot?: boolean): Promise<string | null>;
+      resolveWritablePath(path: string): Promise<string | null>;
+    };
     library?: LibraryService;
     files?: YardExtensionFileService;
     collections?: CollectionService;
@@ -28,7 +32,6 @@ export type YardExtensionContext = {
     favorites?: FavoriteService;
     settings?: YardExtensionSettings;
     commands: YardCommandRegistry;
-    events?: EventBus;
   };
   selection: {
     fileIds: string[];

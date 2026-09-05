@@ -1,10 +1,10 @@
 "use client";
 
 import { Minus, Square, X } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
-import { getDesktopBridge, isDesktopApp } from "@/lib/desktop";
+import { getDesktopBridge, useDesktopApp } from "@/lib/desktop";
 
 function TitleBarButton({
   ariaLabel,
@@ -36,11 +36,7 @@ function TitleBarButton({
 
 export function DesktopTitleBar() {
   const [isMaximized, setIsMaximized] = useState(false);
-  const desktop = useSyncExternalStore(
-    () => () => undefined,
-    isDesktopApp,
-    () => false,
-  );
+  const desktop = useDesktopApp();
 
   useEffect(() => {
     if (!desktop) {

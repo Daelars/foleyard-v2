@@ -1,173 +1,73 @@
-const { execSync } = require("child_process");
-const { existsSync, mkdirSync, unlinkSync, writeFileSync } = require("fs");
-const { dirname, join } = require("path");
-const https = require("https");
-const http = require("http");
+const { execFileSync } = require("node:child_process");
+const { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { dirname, join } = require("node:path");
+const { createHash } = require("node:crypto");
+const https = require("node:https");
 
-const BETTER_SQLITE3_VERSION = "12.9.0";
-const NODE_MODULE_VERSION = "137";
-const PLATFORM = process.platform;
-const ARCH = process.arch;
-
-function resolveBetterSqlite3() {
-  try {
-    const resolved = execSync(
-      `node -e "console.log(require.resolve('better-sqlite3'))"`,
-      { encoding: "utf-8", timeout: 10000, cwd: join(__dirname, "..") },
-    ).trim();
-    if (!resolved) return null;
-    return resolved;
-  } catch {
-    return null;
-  }
+class IntegrityError extends Error {}
+function verifyDigest(buffer, digest) {
+  if (!/^sha256:[a-f0-9]{64}$/.test(digest ?? "")) throw new IntegrityError("Release asset has no valid SHA-256 digest");
+  if ("sha256:" + createHash("sha256").update(buffer).digest("hex") !== digest) throw new IntegrityError("Native module checksum mismatch");
 }
-
-function findBinary(dir) {
-  if (!dir) return null;
-  const releaseDir = join(dir, "build", "Release");
-  const binary = join(releaseDir, "better_sqlite3.node");
-  return existsSync(binary) ? binary : null;
-}
-
 function downloadWithRedirects(url, redirectLimit = 10) {
   return new Promise((resolve, reject) => {
-    const doRequest = (currentUrl, redirectsLeft) => {
-      const isHttps = currentUrl.startsWith("https");
-      const mod = isHttps ? https : http;
-
-      mod.get(currentUrl, (res) => {
+    const request = (currentUrl, redirectsLeft) => {
+      const target = new URL(currentUrl);
+      if (target.protocol !== "https:") { reject(new IntegrityError("Refusing a non-HTTPS download or redirect")); return; }
+      const req = https.get(target, { headers: { "User-Agent": "Foleyard-postinstall", Accept: "application/vnd.github+json" } }, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400) {
-          if (redirectsLeft <= 0) {
-            reject(new Error(`Too many redirects`));
-            return;
-          }
-          const location = res.headers.location;
-          if (!location) {
-            reject(new Error(`Redirect with no Location header`));
-            return;
-          }
-          const nextUrl = location.startsWith("http") ? location : new URL(location, currentUrl).href;
           res.resume();
-          doRequest(nextUrl, redirectsLeft - 1);
-          return;
+          if (!res.headers.location || redirectsLeft <= 0) { reject(new Error("Invalid or excessive redirects")); return; }
+          request(new URL(res.headers.location, target).href, redirectsLeft - 1); return;
         }
-
-        if (res.statusCode !== 200) {
-          reject(new Error(`HTTP ${res.statusCode}`));
-          return;
-        }
-
-        const chunks = [];
-        res.on("data", (c) => chunks.push(c));
+        if (res.statusCode !== 200) { res.resume(); reject(new Error("HTTP " + res.statusCode)); return; }
+        const chunks = []; let bytes = 0;
+        res.on("data", chunk => { bytes += chunk.length; if (bytes > 128 * 1024 * 1024) req.destroy(new Error("Download exceeds size limit")); else chunks.push(chunk); });
         res.on("end", () => resolve(Buffer.concat(chunks)));
-      }).on("error", reject);
+        res.on("error", reject);
+        res.on("aborted", () => reject(new Error("Download interrupted")));
+      });
+      req.setTimeout(30000, () => req.destroy(new Error("Download timed out")));
+      req.on("error", reject);
     };
-
-    doRequest(url, redirectLimit);
+    request(url, redirectLimit);
   });
 }
-
-function tryDownload(dir) {
+async function tryDownload(dir) {
+  const version = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).version;
+  const assetName = `better-sqlite3-v${version}-node-v${process.versions.modules}-${process.platform}-${process.arch}.tar.gz`;
+  const release = JSON.parse((await downloadWithRedirects(`https://api.github.com/repos/WiseLibs/better-sqlite3/releases/tags/v${version}`)).toString("utf8"));
+  const asset = release.assets?.find(candidate => candidate.name === assetName);
+  if (!asset) throw new Error("No prebuild for " + assetName);
+  const buffer = await downloadWithRedirects(asset.browser_download_url);
+  verifyDigest(buffer, asset.digest);
   const releaseDir = join(dir, "build", "Release");
   mkdirSync(releaseDir, { recursive: true });
-  const url = `https://github.com/WiseLibs/better-sqlite3/releases/download/v${BETTER_SQLITE3_VERSION}/better-sqlite3-v${BETTER_SQLITE3_VERSION}-node-v${NODE_MODULE_VERSION}-${PLATFORM}-${ARCH}.tar.gz`;
-  const tgz = join(releaseDir, ".tmp.tar.gz");
-
-  console.log(`[postinstall] downloading better-sqlite3 prebuild:\n  ${url}`);
-
-  return downloadWithRedirects(url)
-    .then((buf) => {
-      writeFileSync(tgz, buf);
-      execSync(`tar -xzf "${tgz}" -C "${releaseDir}" --strip-components=2`, {
-        stdio: "pipe",
-      });
-      unlinkSync(tgz);
-      return true;
-    })
-    .catch((err) => {
-      console.error(`[postinstall] prebuild download failed: ${err.message}`);
-      return false;
-    });
-}
-
-function tryBuildFromSource(dir) {
-  console.log("[postinstall] trying to build better-sqlite3 from source...");
+  const archive = join(releaseDir, ".verified-prebuild.tar.gz");
   try {
-    execSync("npx --no-install node-gyp rebuild --release || npx node-gyp rebuild --release", {
-      cwd: dir,
-      stdio: "inherit",
-      shell: true,
-      timeout: 120000,
-    });
-    return true;
-  } catch (e) {
-    console.log(`[postinstall] node-gyp rebuild failed: ${e.message}`);
-    return false;
-  }
+    writeFileSync(archive, buffer);
+    execFileSync("tar", ["-xzf", archive, "-C", releaseDir, "--strip-components=2"], { stdio: "pipe" });
+  } finally { rmSync(archive, { force: true }); }
 }
-
-async function ensureBinary(dir) {
-  const releaseDir = join(dir, "build", "Release");
-  const binaryPath = join(releaseDir, "better_sqlite3.node");
-
-  const ok = await tryDownload(dir);
-  if (ok && existsSync(binaryPath)) return true;
-
-  return await tryBuildFromSource(dir);
+function assertBinary(binary) {
+  execFileSync(process.execPath, ["-e", "const Database = require(process.argv[1]);", binary], { stdio: "pipe", timeout: 10000 });
 }
-
 async function main() {
-  const resolvedPath = resolveBetterSqlite3();
-  if (!resolvedPath) {
-    console.log("[postinstall] better-sqlite3 not found via require.resolve, skipping");
-    return;
+  const pkg = require.resolve("better-sqlite3/package.json");
+  const dir = dirname(pkg);
+  const binary = join(dir, "build", "Release", "better_sqlite3.node");
+  if (existsSync(binary)) {
+    try { assertBinary(binary); console.log("[postinstall] better-sqlite3 binary ok"); return; } catch {}
   }
-
-  const pkgDir = dirname(dirname(resolvedPath));
-  const binaryPath = findBinary(pkgDir);
-
-  let needsRebuild = true;
-  if (binaryPath) {
-    try {
-      execSync(
-        `node -e "require(process.argv[1])" ${JSON.stringify(binaryPath)}`,
-        { stdio: "pipe", timeout: 10000 },
-      );
-      needsRebuild = false;
-    } catch {
-      needsRebuild = true;
-    }
+  try { await tryDownload(dir); }
+  catch (error) {
+    if (error instanceof IntegrityError) throw error;
+    console.error("[postinstall] prebuild unavailable, building from source:", error.message);
+    const nodeGyp = require.resolve("node-gyp/bin/node-gyp.js");
+    execFileSync(process.execPath, [nodeGyp, "rebuild", "--release"], { cwd: dir, stdio: "inherit", timeout: 120000 });
   }
-
-  if (!needsRebuild) {
-    console.log("[postinstall] better-sqlite3 binary ok");
-    return;
-  }
-
-  console.log("[postinstall] binary incompatible or missing, rebuilding...");
-  const ok = await ensureBinary(pkgDir);
-
-  if (!ok) {
-    console.error("[postinstall] all attempts failed. The native module is missing.");
-    return;
-  }
-
-  const finalBinary = findBinary(pkgDir);
-  if (finalBinary) {
-    try {
-      execSync(
-        `node -e "require(process.argv[1])" ${JSON.stringify(finalBinary)}`,
-        { stdio: "pipe", timeout: 10000 },
-      );
-      console.log("[postinstall] better-sqlite3 binary ok");
-    } catch {
-      console.error("[postinstall] binary still incompatible after all attempts");
-    }
-  }
+  assertBinary(binary);
+  console.log("[postinstall] verified native module ready");
 }
-
-if (require.main === module) {
-  main().catch(console.error);
-}
-
-module.exports = { main };
+if (require.main === module) main().catch(error => { console.error("[postinstall]", error); process.exitCode = 1; });
+module.exports = { main, downloadWithRedirects, verifyDigest, tryDownload };

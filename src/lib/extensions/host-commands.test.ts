@@ -1,3 +1,4 @@
+import { registerGrant, resolveWritablePath, resolveReadablePath } from "@/lib/filesystem-boundary";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -81,6 +82,7 @@ function createHost() {
     isEnabled: () => true,
     getSettingValue: (_extensionId, _settingId, defaultValue) => defaultValue,
     services: {
+      filesystem: { resolveReadablePath: (candidate, allowRoot = true) => resolveReadablePath(candidate, tempDirectories, { allowRoot }), resolveWritablePath: async (candidate) => { for (const directory of tempDirectories) { const grant = await registerGrant(directory); const resolved = await resolveWritablePath(candidate, grant.grantToken); if (resolved) return resolved; } return null; } },
       files: { markRemoved: vi.fn() },
       collections: {
         getAllCollections: () => [],
@@ -276,5 +278,67 @@ describe("registered Extension command set", () => {
       ),
     );
     expect(covered).toEqual(registered);
+  });
+});
+
+describe("command input validation", () => {
+  it("rejects invalid input per command with a 400-class outcome", async () => {
+    const host = createHost();
+    const cases: Array<{
+      extensionId: string;
+      commandId: string;
+      options?: Omit<
+        Parameters<typeof host.execute>[0],
+        "extensionId" | "commandId"
+      >;
+    }> = [
+      {
+        extensionId: "make-pack",
+        commandId: "make-pack.from-shelf",
+        options: { input: {} },
+      },
+      {
+        extensionId: "drop-rules",
+        commandId: "drop-rules.preview",
+        options: { selection: { fileIds: ["one"] }, input: {} },
+      },
+      {
+        extensionId: "drop-rules",
+        commandId: "drop-rules.prepare-drag",
+        options: { selection: { fileIds: ["one"] }, input: {} },
+      },
+      {
+        extensionId: "folder-janitor",
+        commandId: "folder-janitor.scan-library",
+        options: { input: { files: "nope" } },
+      },
+      {
+        extensionId: "folder-janitor",
+        commandId: "folder-janitor.delete-folders",
+        options: { input: {} },
+      },
+      {
+        extensionId: "library-gatherer",
+        commandId: "library-gatherer.gather",
+        options: { input: {} },
+      },
+      {
+        extensionId: "smart-collections",
+        commandId: "smart-collections.save-search",
+        options: { input: { name: "   ", filter: { q: "impact" } } },
+      },
+    ];
+
+    for (const { extensionId, commandId, options } of cases) {
+      const outcome = await host.execute({
+        extensionId,
+        commandId,
+        ...options,
+      } as Parameters<typeof host.execute>[0]);
+      expect(outcome, commandId).toMatchObject({
+        ok: false,
+        reason: "validation-failed",
+      });
+    }
   });
 });

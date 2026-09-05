@@ -8,7 +8,10 @@ import { useFileTableDesktopActions } from "@/components/FileTable/desktop-actio
 import { FileTableDirectoryRow } from "@/components/FileTable/directory-row";
 import { FileTableEmptyState } from "@/components/FileTable/empty-state";
 import { FileTableFileRow } from "@/components/FileTable/file-row";
+import { fileTableGridClass } from "@/components/FileTable/layout";
+import { resolveSelectionScrollIndex } from "@/components/FileTable/selection-scroll";
 import type { FileTableProps } from "@/components/FileTable/types";
+import { navigateToParent } from "@/lib/directory-navigation";
 import { cn } from "@/lib/utils";
 
 export type { FileTableProps } from "@/components/FileTable/types";
@@ -62,33 +65,12 @@ export const FileTable = memo(function FileTable({
   });
 
   const handleBack = () => {
-    if (!currentDirectory) {
+    if (!currentDirectory || currentDirectory.directory === null) {
       onNavigateLibrary?.();
       return;
     }
 
-    if (currentDirectory.directory === null) {
-      onNavigateLibrary?.();
-      return;
-    }
-
-    const parts = currentDirectory.directory.split(/[\\/]/);
-    parts.pop();
-    const parent = parts.length > 0 ? parts.join("/") : null;
-    onNavigate(
-      parent || currentDirectory.showRoot
-        ? {
-            ...currentDirectory,
-            key: JSON.stringify([currentDirectory.libraryRoot, parent]),
-            label: parent?.split("/").pop() || currentDirectory.libraryRoot.split(/[\\/]/).pop() || currentDirectory.libraryRoot,
-            directory: parent,
-            absolutePath: parent
-              ? `${currentDirectory.libraryRoot}/${parent}`
-              : currentDirectory.libraryRoot,
-            isRoot: parent === null,
-          }
-        : null,
-    );
+    onNavigate(navigateToParent(currentDirectory));
   };
 
   const handleNavigateLibrary = () => {
@@ -138,11 +120,28 @@ export const FileTable = memo(function FileTable({
     });
   };
 
+  // Viewport follows genuine selection changes only. The effect keys on the
+  // selected id (not the file array, whose identity churns on every
+  // optimistic update, favourite toggle, or page append), so favouriting a
+  // row while scrolled elsewhere leaves the viewport alone while keyboard
+  // selection still scrolls to the newly selected row.
+  const filesRef = useRef(files);
   useEffect(() => {
-    if (!selectedFileId) return;
-    const index = files.findIndex((file) => file.id === selectedFileId);
-    if (index >= 0) virtualizer.scrollToIndex(directories.length + index, { align: "auto" });
-  }, [directories.length, files, selectedFileId, virtualizer]);
+    filesRef.current = files;
+  }, [files]);
+  const prevSelectedFileIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const target = resolveSelectionScrollIndex({
+      files: filesRef.current,
+      directoryCount: directories.length,
+      selectedFileId,
+      prevSelectedFileId: prevSelectedFileIdRef.current,
+    });
+    prevSelectedFileIdRef.current = selectedFileId;
+    if (target !== null) {
+      virtualizer.scrollToIndex(target, { align: "auto" });
+    }
+  }, [directories.length, selectedFileId, virtualizer]);
 
   if (items.length === 0 && !isLoading) {
     return (
@@ -169,11 +168,7 @@ export const FileTable = memo(function FileTable({
 
       {items.length > 0 && (
         <div
-          className={`mt-4 mb-4 grid items-center gap-3 border-b border-white/10 px-3 pb-2 font-mono text-[11px] font-semibold uppercase tracking-widest text-zinc-400 ${
-            desktopActions.desktop
-              ? "grid-cols-[32px_minmax(0,1fr)_140px_64px_28px_28px]"
-              : "grid-cols-[32px_minmax(0,1fr)_140px_64px_28px]"
-          }`}
+          className={`mt-4 mb-4 grid items-center gap-3 border-b border-white/10 px-3 pb-2 font-mono text-[11px] font-semibold uppercase tracking-widest text-zinc-400 ${fileTableGridClass(desktopActions.desktop)}`}
         >
           <span />
           <button

@@ -97,16 +97,11 @@ export async function extractMetadata(
 
     const fullMetadata = await mm.parseFile(filePath, { duration: true, skipCovers: true });
     return toAudioMetadata(fullMetadata, filename, ext, fileSize);
-  } catch {
-    return {
-      filename,
-      format: ext,
-      codec: null,
-      duration: null,
-      sampleRate: null,
-      bitDepth: null,
-      channels: null,
-      fileSize,
-    };
+  } catch (error) {
+    if (fullParse) {
+      const fullMetadata = await mm.parseFile(filePath, { duration: true, skipCovers: true });
+      return toAudioMetadata(fullMetadata, filename, ext, fileSize);
+    }
+    throw error;
   }
 }

@@ -2,9 +2,9 @@ import type { YardExtensionContext } from "./extension-context";
 import { createYardExtensionContext } from "./extension-context";
 import { YardCommandRegistry } from "./extension-command-registry";
 import type { YardExtensionRegistry } from "./extension-registry";
-import { YardPermissionError } from "./extension-permissions";
-import { isYardUiIntent, type YardUiIntent } from "./extension-ui-intent";
-import { YardCommandValidationError } from "./extension-command-error";
+import { YardPermissionError } from "./vocabulary";
+import { isYardUiIntent, type YardUiIntent } from "./vocabulary";
+import { YardCommandValidationError } from "./vocabulary";
 
 export type YardExtensionHostFailureReason =
   | "extension-not-found"
@@ -128,7 +128,7 @@ export class YardExtensionHost {
         };
       }
 
-      const value = await commands.execute(request.commandId);
+      const value = await commands.execute(request.commandId, request.input);
 
       return isYardUiIntent(value)
         ? { ok: true, type: "ui-intent", intent: value }

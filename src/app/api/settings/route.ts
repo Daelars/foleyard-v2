@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from 'next/server';
 
 import {
@@ -10,8 +11,7 @@ import {
   setOnboardingVersion,
 } from '@/lib/db';
 import { validateLibraryRoot } from '@/lib/scanner';
-
-const CURRENT_ONBOARDING_VERSION = 1;
+import { CURRENT_ONBOARDING_VERSION } from '@/app/library/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -76,11 +76,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+    return errorResponse('Unknown action', 400);
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Settings request failed' },
-      { status: 500 },
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Settings request failed', 500);
   }
 }

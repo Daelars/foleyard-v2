@@ -2,11 +2,11 @@
 
 import type { CSSProperties } from "react";
 
-import { DotMatrixBase } from "@/lib/dotmatrix-core";
+import { DotMatrixBase } from "@/lib/dotmatrix/DotMatrixBase";
 import { useDotMatrixPhases } from "@/lib/dotmatrix-hooks";
-import { spiralInwardNormFromIndex, spiralInwardOrderValue } from "@/lib/dotmatrix-core";
+import { spiralInwardNormFromIndex, spiralInwardOrderValue } from "@/lib/dotmatrix/orders";
 import { usePrefersReducedMotion } from "@/lib/dotmatrix-hooks";
-import type { DotAnimationResolver, DotMatrixCommonProps } from "@/lib/dotmatrix-core";
+import type { DotAnimationResolver, DotMatrixCommonProps } from "@/lib/dotmatrix/types";
 
 export type DotmSquare3Props = DotMatrixCommonProps;
 

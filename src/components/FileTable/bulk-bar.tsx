@@ -11,11 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-export interface BulkBarTag {
-  id: string;
-  name: string;
-}
+import type { FileTableFileTag } from "./types";
 
 export type BulkRemoveStage =
   | { stage: "choose" }
@@ -38,7 +34,7 @@ export function SelectionBulkBar({
   onClear,
 }: {
   count: number;
-  tags: BulkBarTag[];
+  tags: FileTableFileTag[];
   soundShelfEnabled: boolean;
   onSaveAll: () => void;
   onAddToQueue: () => void;

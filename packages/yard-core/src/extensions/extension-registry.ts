@@ -1,10 +1,10 @@
 import { YardCoreError } from "../errors/yard-core-error";
 
-import type { YardCommand } from "./extension-command";
-import type { YardExtensionManifest } from "./extension-manifest";
-import type { YardPermission } from "./extension-permissions";
-import type { YardSetting } from "./extension-settings";
-import type { YardExtensionDefinition } from "./extension-types";
+import type { YardCommand } from "./vocabulary";
+import type { YardExtensionManifest } from "./vocabulary";
+import type { YardPermission } from "./vocabulary";
+import type { YardSetting } from "./vocabulary";
+import type { YardExtensionDefinition } from "./vocabulary";
 
 function cloneCommand(command: YardCommand): YardCommand {
   return { ...command };

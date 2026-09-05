@@ -1,3 +1,4 @@
+import { registerGrant, resolveGrantedExistingPath } from "./filesystem-boundary";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,15 +16,6 @@ const { getDesktopServerUrl, setDesktopServerUrl } = require(
   getDesktopServerUrl: () => string;
   setDesktopServerUrl: (startUrl: string) => void;
 };
-const { createGrantedPathRegistry } = require(
-  "../../electron/main/granted-paths.cjs",
-) as {
-  createGrantedPathRegistry: () => {
-    grant: (path: string) => boolean;
-    resolve: (path: string) => string | null;
-  };
-};
-
 afterEach(() => {
   setDesktopServerUrl(DEV_SERVER_URL);
 });
@@ -62,7 +54,7 @@ describe("desktop build metadata policy", () => {
 });
 
 describe("desktop chosen-folder grants", () => {
-  it("allows a chosen folder and its descendants, but not sibling paths", () => {
+  it("allows a chosen folder and its descendants, but not sibling paths", async () => {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-grant-"));
     const chosen = path.join(temp, "chosen");
     const child = path.join(chosen, "pack", "hit.wav");
@@ -72,10 +64,9 @@ describe("desktop chosen-folder grants", () => {
     fs.writeFileSync(sibling, "private");
 
     try {
-      const grants = createGrantedPathRegistry();
-      expect(grants.grant(chosen)).toBe(true);
-      expect(grants.resolve(child)).toBe(fs.realpathSync(child));
-      expect(grants.resolve(sibling)).toBeNull();
+      await registerGrant(chosen);
+      expect(await resolveGrantedExistingPath(child)).toBe(fs.realpathSync(child));
+      expect(await resolveGrantedExistingPath(sibling)).toBeNull();
     } finally {
       fs.rmSync(temp, { recursive: true, force: true });
     }

@@ -28,8 +28,25 @@ function createContext(): YardExtensionContext {
 }
 
 function createDeleteContext(): YardExtensionContext {
+  // Local containment stub: Yard Tools must not import Application modules
+  // (@/lib/*). The production host supplies the real filesystem resolver
+  // through the Extension context; tests stub the same seam locally.
+  const resolveReadablePath = async (candidate: string) => {
+    let resolved: string;
+    try {
+      resolved = await fs.promises.realpath(candidate);
+    } catch {
+      return null;
+    }
+    const root = await fs.promises.realpath(path.join(tempDir, "library"));
+    const relative = path.relative(root, resolved);
+    if (relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      return null;
+    }
+    return resolved;
+  };
   return {
-    services: { commands: { register: () => {} } } as unknown as YardExtensionContext["services"],
+    services: { commands: { register: () => {} }, filesystem: { resolveReadablePath } } as unknown as YardExtensionContext["services"],
     selection: { fileIds: [] },
     permissions: {
       has: (permission) => permission === "files:delete",
@@ -108,7 +125,6 @@ describe("FolderJanitorService", () => {
 
     const result = await new FolderJanitorService(createDeleteContext()).deleteFolders(
       [emptyFolder],
-      [root],
     );
 
     expect(result.results).toEqual([{ path: emptyFolder, ok: true }]);
@@ -123,7 +139,6 @@ describe("FolderJanitorService", () => {
 
     const result = await new FolderJanitorService(createDeleteContext()).deleteFolders(
       [outside],
-      [root],
     );
 
     expect(result.results[0]).toMatchObject({ path: outside, ok: false });
@@ -140,7 +155,6 @@ describe("FolderJanitorService", () => {
 
     const result = await new FolderJanitorService(createDeleteContext()).deleteFolders(
       [link],
-      [root],
     );
 
     expect(result.results[0]).toMatchObject({ path: link, ok: false });
@@ -155,7 +169,6 @@ describe("FolderJanitorService", () => {
 
     const result = await new FolderJanitorService(createDeleteContext()).deleteFolders(
       [folder],
-      [root],
     );
 
     expect(result.results[0]).toMatchObject({ path: folder, ok: false });

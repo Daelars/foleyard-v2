@@ -1,3 +1,6 @@
+import { errorResponse } from "@/lib/api/errors";
+import { readMutationBody } from "@/lib/api/body";
+import { ApiError, mutationError } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from 'next/server';
 import {
   attachFileToCollection,
@@ -7,6 +10,7 @@ import {
   detachFileFromCollection,
   getAllCollections,
   getFiles,
+  getSmartCollectionCount,
   renameCollection,
   updateCollectionColor,
   updateCollectionFilter,
@@ -18,17 +22,29 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const collectionId = searchParams.get('collectionId');
+  const countFor = searchParams.get('countFor');
 
   if (collectionId) {
     return NextResponse.json({ files: getFiles({ collectionId }) });
   }
 
-  return NextResponse.json({ collections: getAllCollections() });
+  // Lazy smart-collection count resolved on open; cached per query string
+  // on the client so the list endpoint stays a single grouped join.
+  if (countFor) {
+    const count = getSmartCollectionCount(countFor);
+    if (count === null) {
+      return errorResponse('Smart collection not found', 404);
+    }
+    return NextResponse.json({ count });
+  }
+
+  const includeSmartCounts = searchParams.get('includeSmartCounts') === '1';
+  return NextResponse.json({ collections: getAllCollections({ includeSmartCounts }) });
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readMutationBody(request);
     const { name, fileId, collectionId, isSmart, filter } = body;
 
     if (fileId && collectionId) {
@@ -39,26 +55,28 @@ export async function POST(request: NextRequest) {
     const trimmedName = typeof name === 'string' ? name.trim() : '';
 
     if (trimmedName) {
+      if (getAllCollections().some(collection => collection.name === trimmedName)) throw new ApiError("A collection with that name already exists", 409);
       const id = createCollection(trimmedName, !!isSmart, filter ?? null);
       return NextResponse.json({ success: true, id });
     }
 
-    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    return errorResponse('Invalid request', 400);
+  } catch (error) {
+    return mutationError(error);
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readMutationBody(request);
     const { action, collectionId, name, filter, color } = body;
 
     if (!collectionId) {
-      return NextResponse.json({ error: 'collectionId is required' }, { status: 400 });
+      return errorResponse('collectionId is required', 400);
     }
 
     if (action === 'rename' && typeof name === 'string' && name.trim()) {
+      if (getAllCollections().some(collection => collection.id !== collectionId && collection.name === name.trim())) throw new ApiError("A collection with that name already exists", 409);
       renameCollection(collectionId, name.trim());
       return NextResponse.json({ success: true });
     }
@@ -78,15 +96,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    return errorResponse('Invalid request', 400);
+  } catch (error) {
+    return mutationError(error);
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readMutationBody(request);
     const { fileId, collectionId } = body;
 
     if (fileId && collectionId) {
@@ -99,8 +117,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    return errorResponse('Invalid request', 400);
+  } catch (error) {
+    return mutationError(error);
   }
 }

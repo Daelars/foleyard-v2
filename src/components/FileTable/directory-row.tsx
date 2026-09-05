@@ -10,6 +10,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import type { FileTableDirectory } from "./types";
+import { getDirectorySubtitle } from "@/lib/directory-navigation";
 
 export const FileTableDirectoryRow = memo(function FileTableDirectoryRow({
   dir,
@@ -55,7 +56,7 @@ export const FileTableDirectoryRow = memo(function FileTableDirectoryRow({
           {dir.label}
         </span>
         <span className="mt-0.5 block truncate font-mono text-[11px] text-zinc-400">
-          {dir.isRoot ? dir.libraryRoot : "Folder"}
+          {getDirectorySubtitle(dir)}
         </span>
       </span>
       <span className="hidden min-w-0 sm:block" />

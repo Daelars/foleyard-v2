@@ -1,3 +1,9 @@
+// Database migrations live here and are hand-rolled against better-sqlite3.
+// There is intentionally no drizzle.config.ts: drizzle-kit points at a
+// database file that does not exist (./foleyard.db; the real file is
+// foleyard.sqlite) with an output directory that was never generated, so it
+// cannot do anything until it is wired up. Do not re-add the config without
+// wiring it to this module's migration history.
 import type Database from "better-sqlite3";
 import path from "node:path";
 
@@ -141,6 +147,8 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_library_root ON files(library_root)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_last_scanned_at ON files(last_scanned_at)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_tags_tag_id ON file_tags(tag_id)`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_collections_collection_id ON file_collections(collection_id)`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_collections_file_id ON file_collections(file_id)`);
 
   backfillLibraryRoots(sqlite);
 }

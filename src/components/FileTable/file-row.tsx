@@ -2,35 +2,27 @@
 
 import { memo } from "react";
 import {
-  Copy,
-  FolderPlus,
   GripVertical,
   Heart,
-  PackagePlus,
   Pause,
   Play,
-  Puzzle,
-  Tags,
-  Trash2,
-  X,
 } from "lucide-react";
 
 import {
   ContextMenu,
-  ContextMenuCheckboxItem,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuLabel,
-  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
-import { cn, formatDuration } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { formatDuration } from "@/lib/format";
+
+import { FileRowMenu } from "./file-row-menu";
+import { useShelfToggle } from "./use-shelf-toggle";
 
 import { highlightMatch } from "./highlight-match";
+import { fileTableGridClass } from "./layout";
 import { RowWaveform } from "./row-waveform";
-import type { FileTableFileRecord } from "./types";
+import type { FileTableFileRecord, FileTableFileTag, SelectModifiers } from "./types";
 
 export const FileTableFileRow = memo(function FileTableFileRow({
   desktop,
@@ -72,7 +64,7 @@ export const FileTableFileRow = memo(function FileTableFileRow({
   onSelect: (
     file: FileTableFileRecord,
     index: number,
-    modifiers?: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean },
+    modifiers?: SelectModifiers,
   ) => void;
   onToggleFavorite: (id: string) => Promise<void>;
   onMakePackFile?: (file: FileTableFileRecord) => Promise<void>;
@@ -81,29 +73,13 @@ export const FileTableFileRow = memo(function FileTableFileRow({
   makePackEnabled: boolean;
   soundShelfEnabled: boolean;
   inShelf: boolean;
-  allTags?: { id: string; name: string; color?: string }[];
+  allTags?: FileTableFileTag[];
   onToggleFileTag?: (fileId: string, tagId: string) => void;
   onRemoveFile?: (file: FileTableFileRecord) => Promise<void>;
   start: number;
   virtualIndex: number;
 }) {
-  const dispatchSoundShelfChanged = () => {
-    window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
-  };
-
-  const toggleShelf = async () => {
-    const response = await fetch(
-      `/api/extensions/sound-shelf/${inShelf ? "remove" : "add"}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileIds: [file.id] }),
-      },
-    );
-    if (response.ok) {
-      dispatchSoundShelfChanged();
-    }
-  };
+  const { toggleShelf } = useShelfToggle(file.id, inShelf);
 
   const meta = [file.format, ...file.tags.map((tag) => tag.name)]
     .filter((part): part is string => Boolean(part))
@@ -124,9 +100,7 @@ export const FileTableFileRow = memo(function FileTableFileRow({
         <div
           className={cn(
             "group absolute left-0 top-0 grid w-full cursor-pointer items-center gap-3 border-b border-white/5 px-3 outline-none transition-[background-color,color] last:border-0",
-            desktop
-              ? "grid-cols-[32px_minmax(0,1fr)_140px_64px_28px_28px]"
-              : "grid-cols-[32px_minmax(0,1fr)_140px_64px_28px]",
+            fileTableGridClass(desktop),
             isSelected
               ? "bg-accent-fill/10"
               : isMultiSelected
@@ -259,79 +233,20 @@ export const FileTableFileRow = memo(function FileTableFileRow({
         </div>
       </ContextMenuTrigger>
 
-      <ContextMenuContent className="w-60">
-        <ContextMenuLabel
-          className="line-clamp-2 break-words leading-relaxed"
-          title={file.filename}
-        >
-          {menuFilename}
-        </ContextMenuLabel>
-        <ContextMenuItem onClick={() => void handleCopyPath(file)}>
-          <Copy className="text-zinc-500" />
-          Copy path
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => void onToggleFavorite(file.id)}>
-          <FolderPlus className="text-zinc-500" />
-          {file.isFavorite ? "Unsave" : "Save to favorites"}
-        </ContextMenuItem>
-        {makePackEnabled ? (
-          <ContextMenuItem onClick={() => void onMakePackFile?.(file)}>
-            <PackagePlus className="text-zinc-500" />
-            Make Pack
-          </ContextMenuItem>
-        ) : null}
-        {soundShelfEnabled ? (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem onClick={() => void toggleShelf()}>
-              {inShelf ? (
-                <X className="text-zinc-500" />
-              ) : (
-                <Puzzle className="text-zinc-500" />
-              )}
-              {inShelf ? "Remove from Shelf" : "Add to Shelf"}
-            </ContextMenuItem>
-          </>
-        ) : null}
-        <ContextMenuSeparator />
-        <ContextMenuLabel className="text-zinc-600">
-          <span className="inline-flex items-center gap-1.5">
-            <Tags className="size-3" /> Tags
-          </span>
-        </ContextMenuLabel>
-        {allTags && allTags.length > 0 ? (
-          allTags.map((tag) => (
-            <ContextMenuCheckboxItem
-              key={tag.id}
-              checked={file.tags.some((item) => item.id === tag.id)}
-              closeOnClick={false}
-              onCheckedChange={() => onToggleFileTag?.(file.id, tag.id)}
-            >
-              <span
-                className="size-2 shrink-0 rounded-full"
-                style={{ backgroundColor: tag.color ?? "var(--accent-fill)" }}
-              />
-              <span className="min-w-0 flex-1 truncate">{tag.name}</span>
-            </ContextMenuCheckboxItem>
-          ))
-        ) : (
-          <ContextMenuItem disabled className="text-zinc-500">
-            No tags yet
-          </ContextMenuItem>
-        )}
-        {onRemoveFile ? (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem
-              onClick={() => void onRemoveFile(file)}
-              className="text-zinc-400 hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive"
-            >
-              <Trash2 />
-              Remove from library
-            </ContextMenuItem>
-          </>
-        ) : null}
-      </ContextMenuContent>
+      <FileRowMenu
+        file={file}
+        menuFilename={menuFilename}
+        handleCopyPath={handleCopyPath}
+        onToggleFavorite={onToggleFavorite}
+        makePackEnabled={makePackEnabled}
+        onMakePackFile={onMakePackFile}
+        soundShelfEnabled={soundShelfEnabled}
+        inShelf={inShelf}
+        onToggleShelf={() => void toggleShelf()}
+        allTags={allTags}
+        onToggleFileTag={onToggleFileTag}
+        onRemoveFile={onRemoveFile}
+      />
     </ContextMenu>
   );
 });

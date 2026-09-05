@@ -1,3 +1,6 @@
+import { errorResponse } from "@/lib/api/errors";
+import { readMutationBody } from "@/lib/api/body";
+import { mutationError } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from 'next/server';
 import { attachTagToFile, createTag, deleteTag, detachTagFromFile, getAllTags, getTagsForFile, renameTag, updateTagColor } from '@/lib/db';
 
@@ -17,7 +20,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readMutationBody(request);
     const { name, fileId, tagId } = body;
 
     if (fileId && tagId) {
@@ -26,19 +29,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (name) {
-      const id = createTag(name);
+      const id = createTag(name.trim());
       return NextResponse.json({ success: true, id });
     }
 
-    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    return errorResponse('Invalid request', 400);
+  } catch (error) {
+    return mutationError(error);
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readMutationBody(request);
     const { fileId, tagId } = body;
 
     if (fileId && tagId) {
@@ -51,19 +54,19 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    return errorResponse('Invalid request', 400);
+  } catch (error) {
+    return mutationError(error);
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readMutationBody(request);
     const { tagId, color, name } = body;
 
     if (typeof tagId !== 'string' || !tagId) {
-      return NextResponse.json({ error: 'tagId is required' }, { status: 400 });
+      return errorResponse('tagId is required', 400);
     }
 
     if (typeof name === 'string' && name.trim()) {
@@ -72,12 +75,12 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (color !== null && (typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color))) {
-      return NextResponse.json({ error: 'color must be a #rrggbb hex string or null' }, { status: 400 });
+      return errorResponse('color must be a #rrggbb hex string or null', 400);
     }
 
     updateTagColor(tagId, color);
     return NextResponse.json({ success: true });
-  } catch {
-    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+  } catch (error) {
+    return mutationError(error);
   }
 }

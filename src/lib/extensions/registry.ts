@@ -1,6 +1,6 @@
 import type { YardExtensionManifest } from "@yard-core";
 
-import type { ExtensionGridItem } from "@/components/ExtensionGrid";
+import type { ExtensionGridItem } from "@/lib/extensions/types";
 import { getExtensionEnabled, setExtensionEnabled } from "@/lib/db";
 import { getExtensionSettingValue } from "@/lib/extensions/settings-store";
 
@@ -67,48 +67,18 @@ function toGridItem(manifest: YardExtensionManifest): ExtensionGridItem {
   };
 }
 
+const extensions: import("@yard-core").YardExtensionDefinition[] = [
+  { manifest, registerCommands: context => registerCommands(context, new DbSoundShelfStore()) },
+  { manifest: makePackManifest, registerCommands: registerMakePackCommands },
+  { manifest: dropRulesManifest, registerCommands: registerDropRulesCommands },
+  { manifest: folderJanitorManifest, registerCommands: registerFolderJanitorCommands },
+  { manifest: libraryGathererManifest, registerCommands: registerLibraryGathererCommands },
+  { manifest: smartCollectionsManifest, registerCommands: registerSmartCollectionsCommands },
+];
+
 export function registerAllExtensions() {
-  if (!extensionRegistry.has(manifest.id)) {
-    extensionRegistry.register({
-      manifest,
-      registerCommands: (context) =>
-        registerCommands(context, new DbSoundShelfStore()),
-    });
-  }
-
-  if (!extensionRegistry.has(makePackManifest.id)) {
-    extensionRegistry.register({
-      manifest: makePackManifest,
-      registerCommands: registerMakePackCommands,
-    });
-  }
-
-  if (!extensionRegistry.has(dropRulesManifest.id)) {
-    extensionRegistry.register({
-      manifest: dropRulesManifest,
-      registerCommands: registerDropRulesCommands,
-    });
-  }
-
-  if (!extensionRegistry.has(folderJanitorManifest.id)) {
-    extensionRegistry.register({
-      manifest: folderJanitorManifest,
-      registerCommands: registerFolderJanitorCommands,
-    });
-  }
-
-  if (!extensionRegistry.has(libraryGathererManifest.id)) {
-    extensionRegistry.register({
-      manifest: libraryGathererManifest,
-      registerCommands: registerLibraryGathererCommands,
-    });
-  }
-
-  if (!extensionRegistry.has(smartCollectionsManifest.id)) {
-    extensionRegistry.register({
-      manifest: smartCollectionsManifest,
-      registerCommands: registerSmartCollectionsCommands,
-    });
+  for (const extension of extensions) {
+    if (!extensionRegistry.has(extension.manifest.id)) extensionRegistry.register(extension);
   }
 }
 

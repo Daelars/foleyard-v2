@@ -1,3 +1,5 @@
+import type { FileSortKey } from "@yard-core";
+
 export interface FileTableFileRecord {
   id: string;
   filename: string;
@@ -33,7 +35,7 @@ export interface SelectModifiers {
   metaKey?: boolean;
 }
 
-export type FileTableSortKey = "filename" | "duration";
+export type FileTableSortKey = FileSortKey;
 
 export interface FileTableProps {
   files: FileTableFileRecord[];

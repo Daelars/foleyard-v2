@@ -1,14 +1,41 @@
+import { createDragStage } from "./staging";
 import os from "node:os";
 import path from "node:path";
 
 import {
   createYardUiIntent,
+  defineYardCommandInputSchema,
   YardCommandValidationError,
   type YardExtensionContext,
 } from "yard-core";
 
 import { createService } from "./service";
 import type { DropRuleOptions, PrepareDragOptions } from "./types";
+
+export const dropRuleInputSchema =
+  defineYardCommandInputSchema(validateDropRuleInput);
+
+export const prepareDragInputSchema = defineYardCommandInputSchema(
+  validatePrepareDragInput,
+);
+
+export function validateDropRuleInput(input: unknown): string | null {
+  const candidate = input as Partial<DropRuleOptions> | undefined;
+  if (!candidate?.targetDirectory || !Array.isArray(candidate.files)) {
+    return "targetDirectory and files are required";
+  }
+
+  return null;
+}
+
+export function validatePrepareDragInput(input: unknown): string | null {
+  const candidate = input as Partial<PrepareDragOptions> | undefined;
+  if (!candidate?.file) {
+    return "file is required";
+  }
+
+  return null;
+}
 
 function booleanSetting(
   context: YardExtensionContext,
@@ -46,9 +73,9 @@ function getRuleOptions(context: YardExtensionContext): DropRuleOptions {
   };
 }
 
-function getPrepareDragOptions(
+async function getPrepareDragOptions(
   context: YardExtensionContext,
-): PrepareDragOptions {
+): Promise<PrepareDragOptions> {
   const input = context.input as Partial<PrepareDragOptions> | undefined;
   if (!input?.file) {
     throw new YardCommandValidationError("file is required");
@@ -57,11 +84,7 @@ function getPrepareDragOptions(
   const configuredDirectory = stringSetting(context, "drag-out-folder", "");
 
   return {
-    stagingDirectory:
-      input.stagingDirectory ||
-      (configuredDirectory.trim()
-        ? configuredDirectory
-        : path.join(os.tmpdir(), "foleyard-drop-rules")),
+    stagingDirectory: await createDragStage(input.stagingDirectory || (configuredDirectory.trim() ? configuredDirectory : path.join(os.tmpdir(), "foleyard-drop-rules"))),
     file: input.file,
     copyOnDrop: booleanSetting(context, "copy-on-drop", true),
     renameOnDrop: booleanSetting(context, "rename-on-drop", true),
@@ -85,6 +108,7 @@ export function registerCommands(context: YardExtensionContext) {
     description: "Preview the file actions that Drop Rules would perform.",
     scope: "drop",
     requiresSelection: true,
+    inputSchema: dropRuleInputSchema,
     handler: () => createService(context).preview(getRuleOptions(context)),
   });
 
@@ -94,6 +118,7 @@ export function registerCommands(context: YardExtensionContext) {
     description: "Copy and rename dropped sounds using the configured rules.",
     scope: "drop",
     requiresSelection: true,
+    inputSchema: dropRuleInputSchema,
     handler: () => createService(context).apply(getRuleOptions(context)),
   });
 
@@ -103,7 +128,8 @@ export function registerCommands(context: YardExtensionContext) {
     description: "Prepare one sound for drag-out using the configured rules.",
     scope: "drop",
     requiresSelection: true,
-    handler: () =>
-      createService(context).prepareDrag(getPrepareDragOptions(context)),
+    inputSchema: prepareDragInputSchema,
+    handler: async () =>
+      createService(context).prepareDrag(await getPrepareDragOptions(context)),
   });
 }

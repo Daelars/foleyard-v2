@@ -176,14 +176,6 @@ export type AudioScrubberProps = WaveformProps & {
   showHandle?: boolean;
 };
 
-function createStaticFallbackWaveform(length: number) {
-  return Array.from({ length }, (_, index) => {
-    const x = Math.sin(42 + index) * 10000;
-    const noise = x - Math.floor(x);
-    return 0.2 + noise * 0.6;
-  });
-}
-
 export const AudioScrubber = ({
   data = [],
   currentTime = 0,
@@ -204,7 +196,7 @@ export const AudioScrubber = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const waveformData = useMemo(() => {
-    return data.length > 0 ? data : createStaticFallbackWaveform(100);
+    return data;
   }, [data]);
 
   const progress = useMemo(() => {

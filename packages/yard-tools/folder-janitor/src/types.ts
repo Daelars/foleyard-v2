@@ -8,6 +8,7 @@ export type JanitorFile = {
 };
 
 export type JanitorScanOptions = {
+  onProgress?: (completed: number, total: number) => void;
   libraryRoots: string[];
   files: JanitorFile[];
   tinyFileThresholdBytes?: number;

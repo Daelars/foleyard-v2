@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
@@ -41,7 +41,7 @@ export const fileTags = sqliteTable(
     fileId: text('file_id').notNull().references(() => files.id),
     tagId: text('tag_id').notNull().references(() => tags.id),
   },
-  (table) => [primaryKey({ columns: [table.fileId, table.tagId] })],
+  (table) => [primaryKey({ columns: [table.fileId, table.tagId] }), index('idx_file_tags_tag_id').on(table.tagId)],
 );
 
 export const collections = sqliteTable('collections', {
@@ -59,10 +59,9 @@ export const fileCollections = sqliteTable(
     fileId: text('file_id').notNull().references(() => files.id),
     collectionId: text('collection_id').notNull().references(() => collections.id),
   },
-  (table) => [primaryKey({ columns: [table.fileId, table.collectionId] })],
+  (table) => [
+    primaryKey({ columns: [table.fileId, table.collectionId] }),
+    index('idx_file_collections_collection_id').on(table.collectionId),
+    index('idx_file_collections_file_id').on(table.fileId),
+  ],
 );
-
-export type Setting = typeof settings.$inferSelect;
-export type File = typeof files.$inferSelect;
-export type Tag = typeof tags.$inferSelect;
-export type Collection = typeof collections.$inferSelect;

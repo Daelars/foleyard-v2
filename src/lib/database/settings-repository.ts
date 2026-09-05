@@ -60,30 +60,39 @@ export class SqliteSettingsRepository implements SettingsRepository {
   setLibraryRoots(libraryRoots: string[]): void {
     const roots = Array.from(new Set(libraryRoots.filter(Boolean)));
     const now = new Date().toISOString();
+    const legacyValue = roots[0] ?? null;
+    const rootsValue = JSON.stringify(roots);
 
-    this.db.insert(schema.settings)
-      .values({
-        key: "libraryRoot",
-        value: roots[0] ?? null,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: schema.settings.key,
-        set: { value: roots[0] ?? null, updatedAt: now },
-      })
-      .run();
+    // The legacy libraryRoot key and the current libraryRoots key store the
+    // same fact twice; write both in one transaction so a failure between
+    // them cannot desynchronise the two keys.
+    const writeBoth = this.sqlite.transaction(() => {
+      this.db.insert(schema.settings)
+        .values({
+          key: "libraryRoot",
+          value: legacyValue,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: schema.settings.key,
+          set: { value: legacyValue, updatedAt: now },
+        })
+        .run();
 
-    this.db.insert(schema.settings)
-      .values({
-        key: "libraryRoots",
-        value: JSON.stringify(roots),
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: schema.settings.key,
-        set: { value: JSON.stringify(roots), updatedAt: now },
-      })
-      .run();
+      this.db.insert(schema.settings)
+        .values({
+          key: "libraryRoots",
+          value: rootsValue,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: schema.settings.key,
+          set: { value: rootsValue, updatedAt: now },
+        })
+        .run();
+    });
+
+    writeBoth();
   }
 
   addLibraryRoot(libraryRoot: string): void {
@@ -92,14 +101,6 @@ export class SqliteSettingsRepository implements SettingsRepository {
 
   removeLibraryRoot(libraryRoot: string): void {
     this.setLibraryRoots(this.getLibraryRoots().filter((root) => root !== libraryRoot));
-  }
-
-  clearLibraryData(): void {
-    this.db.delete(schema.fileTags).run();
-    this.db.delete(schema.fileCollections).run();
-    this.db.delete(schema.tags).run();
-    this.db.delete(schema.collections).run();
-    this.db.delete(schema.files).run();
   }
 
   getExtensionEnabled(extensionId: string): boolean {
@@ -189,7 +190,6 @@ export const setLibraryRoot = (root: string) => getSettingsRepo().setLibraryRoot
 export const setLibraryRoots = (roots: string[]) => getSettingsRepo().setLibraryRoots(roots);
 export const addLibraryRoot = (root: string) => getSettingsRepo().addLibraryRoot(root);
 export const removeLibraryRoot = (root: string) => getSettingsRepo().removeLibraryRoot(root);
-export const clearLibraryData = () => getSettingsRepo().clearLibraryData();
 export const getExtensionEnabled = (extId: string) => getSettingsRepo().getExtensionEnabled(extId);
 export const setExtensionEnabled = (extId: string, enabled: boolean) => getSettingsRepo().setExtensionEnabled(extId, enabled);
 export const getLibraryStats = () => getSettingsRepo().getLibraryStats();

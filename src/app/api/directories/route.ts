@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'node:path';
 import { getLibraryRoots, getSubdirectoriesForRoot } from '@/lib/db';
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
   const roots = getLibraryRoots();
 
   if (requestedRoot && !roots.includes(requestedRoot)) {
-    return NextResponse.json({ error: 'Unknown Library root' }, { status: 400 });
+    return errorResponse('Unknown Library root', 400);
   }
 
   if (!requestedRoot && roots.length > 1) {

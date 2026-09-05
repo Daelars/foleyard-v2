@@ -1,662 +1,248 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FileRecord } from "./library/types";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { PackagePlus, PanelLeft, Save, Search, X } from "lucide-react";
-import { toast } from "sonner";
 
 import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";
-import { useTransportQueue } from "@/components/AudioPlayer/use-transport-queue";
-import {
-  buildPaletteEntries,
-  type PaletteEntry,
-} from "@/components/CommandPalette/command-palette";
 import { CommandPalette } from "@/components/CommandPalette/CommandPalette";
-import {
-  DEFAULT_SHORTCUTS,
-  isTypingTarget,
-  loadRemoveDefault,
-  loadShortcutBindings,
-  matchShortcutKey,
-  persistRemoveDefault,
-  persistShortcutBindings,
-  shouldSkipSpace,
-  type RemoveDefault,
-  type ShortcutAction,
-  type ShortcutBindings,
-} from "@/components/Shortcuts/shortcuts";
 import { SelectionBulkBar } from "@/components/FileTable/bulk-bar";
-import {
-  clearSelection,
-  rangeSelect,
-  toggleInSelection,
-} from "@/components/FileTable/selection";
-import type { SelectModifiers } from "@/components/FileTable/types";
-import type { FileTableDirectory } from "@/components/FileTable/types";
 import { DesktopTitleBar } from "@/components/DesktopTitleBar";
-import { ExtensionGrid, type ExtensionGridItem } from "@/components/ExtensionGrid";
+import { ExtensionGrid } from "@/components/ExtensionGrid";
 import { FolderJanitorDialog } from "@/components/extensions/folder-janitor/FolderJanitorDialog";
 import { LibraryGathererDialog } from "@/components/extensions/library-gatherer/LibraryGathererDialog";
 import { MakePackDialog } from "@/components/extensions/make-pack/MakePackDialog";
 import { OnboardingDialog } from "@/components/OnboardingDialog";
 import { FileTable } from "@/components/FileTable";
 import { OrganizeView } from "@/components/OrganizeView";
-import { SettingsDialog } from "@/components/SettingsDialog";
-import { IconRail, type RailView } from "@/components/IconRail";
+import { SettingsDialog } from "@/components/settings/SettingsDialog";
+import { IconRail } from "@/components/IconRail";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
-import { interpretExtensionUiIntent } from "@/lib/extensions/ui-intent";
-import { isDesktopApp } from "@/lib/desktop";
-import { resolveItemColor } from "@/lib/item-colors";
-import { useZoom } from "@/hooks/use-zoom";
-import { useScanPolling } from "@/hooks/use-scan-polling";
-import type { YardExtensionHostOutcome } from "@yard-core";
-
-interface FileRecord {
-  id: string;
-  filename: string;
-  path: string;
-  directory: string | null;
-  format: string | null;
-  duration: number | null;
-  fileSize: number | null;
-  mtimeMs?: number | null;
-  isFavorite: boolean;
-  tags: { id: string; name: string }[];
-}
-
-interface CollectionRecord {
-  id: string;
-  name: string;
-  color?: string | null;
-  fileCount?: number;
-  isSmart?: boolean;
-  filter?: string | null;
-}
-
-interface TagRecord {
-  id: string;
-  name: string;
-  color: string;
-}
-
-interface ScanStatus {
-  running: boolean;
-  phase: string;
-  discovered: number;
-  indexed: number;
-  skippedUnchanged: number;
-  metadataProcessed: number;
-  added: number;
-  updated: number;
-  removed: number;
-  failed: number;
-  errors: number;
-  total: number;
-  error: string | null;
-}
-
-const emptyScanStatus: ScanStatus = {
-  running: false,
-  phase: "idle",
-  discovered: 0,
-  indexed: 0,
-  skippedUnchanged: 0,
-  metadataProcessed: 0,
-  added: 0,
-  updated: 0,
-  removed: 0,
-  failed: 0,
-  errors: 0,
-  total: 0,
-  error: null,
-};
-
-const CURRENT_ONBOARDING_VERSION = 1;
+import { useExtensionCatalog } from "./library/use-extension-catalog";
+import { useLibraryFiles } from "./library/use-library-files";
+import { useLibraryOrganization } from "./library/use-library-organization";
+import { useLibraryView } from "./library/use-library-view";
+import { useSelection } from "./library/use-selection";
+import { useBulkActions } from "./library/use-bulk-actions";
+import { useSettingsScan } from "./library/use-settings-scan";
+import { useExtensionUi } from "./library/use-extension-ui";
+import { useTransport } from "./library/use-transport";
+import { usePalette } from "./library/use-palette";
+import { useShelf } from "./library/use-shelf";
+import {
+  ExtensionDetailsDialog,
+  RenameCollectionDialog,
+  SaveSearchDialog,
+} from "./library/dialogs";
+import { SCAN_SETTLE_SLICES, type RefetchSlice } from "./library/refetch-map";
 
 export default function Home() {
   return <HomeContent />;
 }
 
 function HomeContent() {
-  const [files, setFiles] = useState<FileRecord[]>([]);
-  const [collections, setCollections] = useState<CollectionRecord[]>([]);
-  const [directories, setDirectories] = useState<FileTableDirectory[]>([]);
-  const [tags, setTags] = useState<TagRecord[]>([]);
-  const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const selectionAnchorRef = useRef<string | null>(null);
-
-  const handleClearSelection = useCallback(() => {
-    setSelectedIds(clearSelection());
-    selectionAnchorRef.current = null;
-  }, []);
-  const transportQueue = useTransportQueue();
-  const {
-    playIds,
-    advanceIfEnabled,
-    enqueue,
-    clear: clearQueue,
-    remove: removeFromQueue,
-    stepNext,
-    stepPrev,
-    autoplay,
-    setAutoplay,
-    queueState,
-  } = transportQueue;
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [paletteQuery, setPaletteQuery] = useState("");
-  const [paletteIndex, setPaletteIndex] = useState(0);
-  const paletteInputRef = useRef<HTMLInputElement | null>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const [shortcutBindings, setShortcutBindings] =
-    useState<ShortcutBindings>(loadShortcutBindings);
-  const [removeDefault, setRemoveDefault] =
-    useState<RemoveDefault>(loadRemoveDefault);
-  const [currentView, setCurrentView] = useState<
-    "all" | "favorites" | "extensions" | "collection" | "directory" | "shelf" | "organize"
-  >("all");
-  const [selectedCollection, setSelectedCollection] = useState<string | null>(
-    null,
-  );
-  const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
-  const [favoritesCount, setFavoritesCount] = useState(0);
-  const [selectedDirectory, setSelectedDirectory] = useState<FileTableDirectory | null>(
-    null,
-  );
-  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
-  const [hasMoreFiles, setHasMoreFiles] = useState(false);
-  const [isPlayerPlaying, setIsPlayerPlaying] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
-  const [settings, setSettings] = useState<{
-    libraryRoot: string | null;
-    libraryRoots: string[];
-    onboardingVersion: number;
-    stats: { activeFiles: number; removedFiles: number };
-  }>({
-    libraryRoot: null,
-    libraryRoots: [],
-    onboardingVersion: 0,
-    stats: { activeFiles: 0, removedFiles: 0 },
-  });
-  const [scanStatus, setScanStatus] = useState<ScanStatus>(emptyScanStatus);
-  const [extensions, setExtensions] = useState<ExtensionGridItem[]>([]);
-  const [isLoadingExtensions, setIsLoadingExtensions] = useState(true);
-  const [pendingExtensionId, setPendingExtensionId] = useState<string | null>(
-    null,
-  );
-  const [soundShelfItemCount, setSoundShelfItemCount] = useState(0);
-  const [soundShelfFileIds, setSoundShelfFileIds] = useState<string[]>([]);
-  const [selectedExtension, setSelectedExtension] =
-    useState<ExtensionGridItem | null>(null);
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
-  const filesRequestIdRef = useRef(0);
-  const filesQueryRef = useRef<string | null>(null);
-  const filesNextOffsetRef = useRef(0);
-  const isLoadingMoreFilesRef = useRef(false);
-  const directoriesRequestIdRef = useRef(0);
-  const selectedFileRef = useRef(selectedFile);
-  const filesRef = useRef(files);
-  const tagsRef = useRef(tags);
 
-  useEffect(() => { selectedFileRef.current = selectedFile; }, [selectedFile]);
-  useEffect(() => { tagsRef.current = tags; }, [tags]);
+  // ---- Route shell: compose hooks, derive view memos, render. Fetches,
+  // mutations, and dialog/selection/transport state live in
+  // src/app/library/. Refs below break hook-order cycles; every cross-hook
+  // side effect travels through an explicit callback. ----
+  const selectionApiRef = useRef<{
+    get: () => FileRecord | null;
+    sync: (updater: (prev: FileRecord | null) => FileRecord | null) => void;
+    clear: () => void;
+    removeIds: (removedIds: Set<string>) => void;
+    focus: (file: FileRecord) => void;
+  }>({
+    get: () => null,
+    sync: () => {},
+    clear: () => {},
+    removeIds: () => {},
+    focus: () => {},
+  });
+  const navigateRef = useRef(() => {});
+  const scanSettledRef = useRef(() => {});
+  const selectedCollectionMirrorRef = useRef<string | null>(null);
 
-  const [sortKey, setSortKey] = useState<"filename" | "duration">("filename");
-  const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const transport = useTransport();
+  const { playIds, enqueue } = transport;
 
-  const flipSort = useCallback(
-    (key: "filename" | "duration") => {
-      if (key === sortKey) {
-        setSortDir((prevDir) => (prevDir === 1 ? -1 : 1));
+  const view = useLibraryView({
+    onNavigate: () => navigateRef.current(),
+  });
+  const {
+    currentView,
+    selectedCollection,
+    selectedTagId,
+    selectedDirectory,
+    searchQuery,
+    setSearchQuery,
+    debouncedSearchQuery,
+    showLibrary,
+    showFavorites,
+    showShelf,
+    showOrganize,
+    handleFilterTag,
+    navigateDirectory,
+  } = view;
+  useEffect(() => {
+    selectedCollectionMirrorRef.current = selectedCollection;
+  }, [selectedCollection]);
+
+  const settingsScan = useSettingsScan({
+    onScanSettled: () => scanSettledRef.current(),
+  });
+  const shelf = useShelf();
+  const { loadShelfCount: loadSoundShelfCount, setShelfItems } = shelf;
+
+  const catalog = useExtensionCatalog({
+    onSoundShelfToggled: (enabled) => {
+      if (enabled) {
+        void shelf.loadShelfCount();
       } else {
-        setSortKey(key);
-        setSortDir(1);
+        shelf.clearShelfState();
       }
     },
-    [sortKey],
+  });
+  const { extensions } = catalog;
+
+  const org = useLibraryOrganization({
+    isCollectionSelected: (id) => selectedCollectionMirrorRef.current === id,
+    onSelectedCollectionGone: () => {
+      view.clearCollectionSelection();
+    },
+    onSelectedCollectionRestored: (id) => {
+      view.restoreCollectionSelection(id);
+    },
+  });
+
+  const filesApi = useLibraryFiles({
+    libraryRoots: settingsScan.settings.libraryRoots,
+    view: currentView,
+    search: debouncedSearchQuery,
+    collectionId: selectedCollection,
+    tagId: selectedTagId,
+    directory: selectedDirectory,
+    getTags: () => org.tags,
+    getSelectedFile: () => selectionApiRef.current.get(),
+    syncSelectedFile: (updater) => selectionApiRef.current.sync(updater),
+    onFilesRemoved: (removedIds, mode) => {
+      transport.remove(removedIds);
+      if (mode === "bulk") {
+        selectionApiRef.current.clear();
+      } else {
+        selectionApiRef.current.removeIds(removedIds);
+      }
+      const selected = selectionApiRef.current.get();
+      if (selected && removedIds.has(selected.id)) {
+        selectionApiRef.current.sync(() => null);
+        transport.setIsPlayerPlaying(false);
+      }
+    },
+    onShelfItemsLoaded: setShelfItems,
+  });
+  const {
+    files,
+    orderedFiles,
+    sortKey,
+    sortDir,
+    flipSort,
+    directories,
+    isLoadingFiles,
+    hasMoreFiles,
+    favoritesCount,
+    loadFiles,
+    loadMoreFiles,
+    loadDirectories,
+    toggleFavorite: handleToggleFavorite,
+    toggleFileTag: handleToggleFileTag,
+  } = filesApi;
+
+  // ---- Selection: created after the file list so pruning sees the
+  // current order. The data layer above delegates through selectionApiRef. ----
+  const selection = useSelection({
+    orderedFiles,
+    playIds,
+    togglePlayback: () => audioPlayerRef.current?.togglePlayback(),
+  });
+  const {
+    selectedFile,
+    selectedIds,
+    selectedIdsRef,
+    handleClearSelection,
+    handleSelectFile,
+    handleMoveSelection,
+  } = selection;
+  useEffect(() => {
+    selectionApiRef.current = {
+      get: selection.getSelectedFile,
+      sync: selection.syncSelectedFile,
+      clear: selection.handleClearSelection,
+      removeIds: (removedIds) => selection.removeFromSelection(removedIds),
+      focus: selection.focusFile,
+    };
+    navigateRef.current = selection.handleClearSelection;
+  }, [selection]);
+
+  // Initial mount only: full workspace load. Every mutation and the scan
+  // settle path below refetch only their own slice, never the catalog, so a
+  // collection rename costs one collections round-trip with no extension
+  // re-registration. The shelf count resolves after the extension list, since
+  // only an enabled sound-shelf reports items.
+  const loadInitialData = useCallback(async () => {
+    const [, loadedExtensions] = await Promise.all([
+      settingsScan.loadSettingsScan(),
+      catalog.loadExtensions(),
+      org.loadOrganization(),
+    ]);
+    if (
+      loadedExtensions?.some(
+        (extension) => extension.id === "sound-shelf" && extension.enabled,
+      )
+    ) {
+      void shelf.loadShelfCount();
+    } else {
+      shelf.clearShelfState();
+    }
+  }, [settingsScan, catalog, org, shelf]);
+
+  // Targeted post-scan refetch driven by the per-mutation refetch map:
+  // files plus collection counts, nothing else.
+  const reloadAfterScan = useCallback(() => {
+    const loaders: Partial<Record<RefetchSlice, () => Promise<unknown>>> = {
+      files: loadFiles,
+      collections: org.loadCollections,
+    };
+    return Promise.all(
+      (SCAN_SETTLE_SLICES as RefetchSlice[]).map((slice) => {
+        const load = loaders[slice];
+        if (!load) {
+          throw new Error(`No loader for refetch slice "${slice}"`);
+        }
+        return load();
+      }),
+    );
+  }, [loadFiles, org.loadCollections]);
+  useEffect(() => {
+    scanSettledRef.current = reloadAfterScan;
+  }, [reloadAfterScan]);
+
+  // Collection navigation needs organization data at call time, so the
+  // route composes the view hook with the organization slice here.
+  const handleOpenCollection = useCallback(
+    (collectionId: string) => {
+      view.showCollection(collectionId, org.collections, org.loadSmartCount);
+    },
+    [view, org.collections, org.loadSmartCount],
   );
 
-  const orderedFiles = useMemo(() => {
-    const sorted = [...files];
-    sorted.sort((a, b) => {
-      if (sortKey === "duration") {
-        const av = a.duration ?? Number.POSITIVE_INFINITY;
-        const bv = b.duration ?? Number.POSITIVE_INFINITY;
-        return (av - bv) * sortDir;
-      }
-      return a.filename.localeCompare(b.filename) * sortDir;
-    });
-    return sorted;
-  }, [files, sortKey, sortDir]);
-
-  useEffect(() => { filesRef.current = orderedFiles; }, [orderedFiles]);
-  useEffect(() => {
-    const visibleIds = new Set(orderedFiles.map((file) => file.id));
-    setSelectedIds((current) => current.filter((id) => visibleIds.has(id)));
-    setSelectedFile((current) => {
-      if (!current) return null;
-      return orderedFiles.find((file) => file.id === current.id) ?? current;
-    });
-    if (selectionAnchorRef.current && !visibleIds.has(selectionAnchorRef.current)) {
-      selectionAnchorRef.current = null;
-    }
-  }, [orderedFiles]);
-
-  const { zoom, setZoom: handleUpdateZoom } = useZoom();
-
-  const [folderJanitorOpen, setFolderJanitorOpen] = useState(false);
-  const [folderJanitorTarget, setFolderJanitorTarget] = useState<
-    "library" | "folder"
-  >("library");
-  const [folderJanitorFolderPath, setFolderJanitorFolderPath] = useState("");
-
-  const [gatherOpen, setGatherOpen] = useState(false);
-
-  const [packSource, setPackSource] = useState<
-    "selection" | "shelf" | "recent" | null
-  >(null);
-  const [packFileIds, setPackFileIds] = useState<string[]>([]);
-
-  const [showSaveSearch, setShowSaveSearch] = useState(false);
-  const [renamingCollection, setRenamingCollection] = useState<{ id: string; name: string } | null>(null);
-
-  const loadSoundShelfCount = useCallback(async () => {
-    try {
-      const res = await fetch("/api/extensions/sound-shelf");
-      if (!res.ok) {
-        setSoundShelfItemCount(0);
-        setSoundShelfFileIds([]);
-        return;
-      }
-
-      const data = (await res.json()) as { items?: Array<{ id: string }> };
-      const items = data.items ?? [];
-      setSoundShelfItemCount(items.length);
-      setSoundShelfFileIds(items.map((item) => item.id));
-    } catch {
-      setSoundShelfItemCount(0);
-      setSoundShelfFileIds([]);
-    }
-  }, []);
-
-  const showLibrary = useCallback(() => {
-    setCurrentView("all");
-    setSelectedCollection(null);
-    setSelectedDirectory(null);
-    setSelectedTagId(null);
-    setSearchQuery("");
-    handleClearSelection();
-  }, [handleClearSelection]);
-
-  const showFavorites = useCallback(() => {
-    setCurrentView("favorites");
-    setSelectedCollection(null);
-    setSelectedDirectory(null);
-    setSelectedTagId(null);
-    setSearchQuery("");
-    handleClearSelection();
-  }, [handleClearSelection]);
-
-  const showExtensions = useCallback(() => {
-    setCurrentView("extensions");
-    setSelectedCollection(null);
-    setSelectedDirectory(null);
-    setSelectedTagId(null);
-    setSelectedFile(null);
-    setSearchQuery("");
-    handleClearSelection();
-  }, [handleClearSelection]);
-
-  const showShelf = useCallback(() => {
-    setCurrentView("shelf");
-    setSelectedCollection(null);
-    setSelectedDirectory(null);
-    setSelectedTagId(null);
-    setSearchQuery("");
-    handleClearSelection();
-  }, [handleClearSelection]);
-
-  const showOrganize = useCallback(() => {
-    setCurrentView("organize");
-    setSelectedCollection(null);
-    setSelectedDirectory(null);
-    setSelectedTagId(null);
-    setSearchQuery("");
-    handleClearSelection();
-  }, [handleClearSelection]);
-
-  const handleFilterTag = useCallback((id: string | null) => {
-    setSelectedTagId(id);
-  }, []);
-  const showCollection = useCallback((collectionId: string) => {
-    const collection = collections.find((c) => c.id === collectionId);
-    if (collection?.isSmart && collection.filter) {
-      try {
-        const filter = JSON.parse(collection.filter) as { q?: string };
-        setSearchQuery(filter.q ?? "");
-        setCurrentView("all");
-        setSelectedCollection(collectionId);
-        setSelectedDirectory(null);
-        handleClearSelection();
-        return;
-      } catch {
-        // Invalid filter JSON, fall through to regular view
-      }
-    }
-    setCurrentView("collection");
-    setSelectedCollection(collectionId);
-    setSelectedDirectory(null);
-    setSearchQuery("");
-    handleClearSelection();
-  }, [collections, handleClearSelection]);
-
-  const navigateDirectory = useCallback((directory: FileTableDirectory | null) => {
-    setCurrentView(directory ? "directory" : "all");
-    setSelectedCollection(null);
-    setSelectedDirectory(directory);
-    handleClearSelection();
-  }, [handleClearSelection]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearchQuery(searchQuery);
-    }, 180);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [searchQuery]);
-
-  const loadFiles = useCallback(async () => {
-    const requestId = filesRequestIdRef.current + 1;
-    filesRequestIdRef.current = requestId;
-    filesQueryRef.current = null;
-    filesNextOffsetRef.current = 0;
-    isLoadingMoreFilesRef.current = false;
-    setHasMoreFiles(false);
-
-    if (currentView === "shelf") {
-      setIsLoadingFiles(true);
-      try {
-        const res = await fetch("/api/extensions/sound-shelf");
-        if (!res.ok) {
-          throw new Error("Failed to fetch shelf");
-        }
-
-        const data = await res.json();
-        if (filesRequestIdRef.current === requestId) {
-          const items = (data.items ?? []) as FileRecord[];
-          setFiles(items);
-          setSoundShelfItemCount(items.length);
-          setSoundShelfFileIds(items.map((item) => item.id));
-        }
-      } catch {
-        if (filesRequestIdRef.current === requestId) {
-          toast.error("Failed to load shelf");
-        }
-      } finally {
-        if (filesRequestIdRef.current === requestId) {
-          setIsLoadingFiles(false);
-        }
-      }
-      return;
-    }
-
-    if (currentView === "extensions") {
-      setFiles([]);
-      setIsLoadingFiles(false);
-      return;
-    }
-
-    setIsLoadingFiles(true);
-    const params = new URLSearchParams();
-    if (debouncedSearchQuery.trim()) {
-      params.set("q", debouncedSearchQuery.trim());
-    } else {
-      if (currentView === "directory" && selectedDirectory) {
-        params.set("libraryRoot", selectedDirectory.libraryRoot);
-        if (selectedDirectory.directory) {
-          params.set("directory", selectedDirectory.directory);
-        } else {
-          params.set("atLibraryRoot", "true");
-        }
-      } else if (currentView === "all") {
-        if (settings.libraryRoots.length !== 1) {
-          setFiles([]);
-          setIsLoadingFiles(false);
-          return;
-        }
-        params.set("libraryRoot", settings.libraryRoots[0]);
-        params.set("atLibraryRoot", "true");
-      }
-    }
-
-    if (currentView === "favorites") {
-      params.set("favorites", "true");
-    }
-    if (currentView === "collection" && selectedCollection) {
-      params.set("collectionId", selectedCollection);
-    }
-    if (selectedTagId) {
-      params.set("tagId", selectedTagId);
-    }
-
-    try {
-      const query = params.toString();
-      params.set("limit", "500");
-      params.set("offset", "0");
-      const response = await fetch(`/api/files?${params.toString()}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch files");
-      }
-
-      const data = (await response.json()) as {
-        files?: FileRecord[];
-        favoritesTotal?: number;
-        hasMore?: boolean;
-      };
-      const pageFiles = data.files ?? [];
-
-      if (filesRequestIdRef.current !== requestId) {
-        return;
-      }
-
-      filesQueryRef.current = query;
-      filesNextOffsetRef.current = pageFiles.length;
-      setFiles(pageFiles);
-      setHasMoreFiles(data.hasMore === true && pageFiles.length > 0);
-      if (typeof data.favoritesTotal === "number") {
-        setFavoritesCount(data.favoritesTotal);
-      }
-    } catch {
-      if (filesRequestIdRef.current === requestId) {
-        toast.error("Failed to load library");
-      }
-    } finally {
-      if (filesRequestIdRef.current === requestId) {
-        setIsLoadingFiles(false);
-      }
-    }
-  }, [currentView, debouncedSearchQuery, selectedCollection, selectedDirectory, selectedTagId, settings.libraryRoots]);
-
-  const loadMoreFiles = useCallback(async () => {
-    const query = filesQueryRef.current;
-    if (
-      query === null ||
-      !hasMoreFiles ||
-      isLoadingFiles ||
-      isLoadingMoreFilesRef.current
-    ) {
-      return;
-    }
-
-    isLoadingMoreFilesRef.current = true;
-    const requestId = filesRequestIdRef.current;
-    const params = new URLSearchParams(query);
-    params.set("limit", "500");
-    params.set("offset", String(filesNextOffsetRef.current));
-
-    try {
-      const response = await fetch(`/api/files?${params.toString()}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch more files");
-      }
-
-      const data = (await response.json()) as {
-        files?: FileRecord[];
-        hasMore?: boolean;
-      };
-      const pageFiles = data.files ?? [];
-
-      if (filesRequestIdRef.current !== requestId) {
-        return;
-      }
-
-      filesNextOffsetRef.current += pageFiles.length;
-      setFiles((current) => [...current, ...pageFiles]);
-      setHasMoreFiles(data.hasMore === true && pageFiles.length > 0);
-    } catch {
-      if (filesRequestIdRef.current === requestId) {
-        toast.error("Failed to load more files");
-      }
-    } finally {
-      isLoadingMoreFilesRef.current = false;
-    }
-  }, [hasMoreFiles, isLoadingFiles]);
-
-  const loadDirectories = useCallback(async () => {
-    const requestId = directoriesRequestIdRef.current + 1;
-    directoriesRequestIdRef.current = requestId;
-
-    if (
-      debouncedSearchQuery.trim() ||
-      selectedTagId ||
-      currentView === "favorites" ||
-      currentView === "collection" ||
-      currentView === "extensions" ||
-      currentView === "shelf"
-    ) {
-      setDirectories([]);
-      return;
-    }
-
-    try {
-      const params = new URLSearchParams();
-      if (selectedDirectory) {
-        params.set("root", selectedDirectory.libraryRoot);
-        if (selectedDirectory.directory) {
-          params.set("parent", selectedDirectory.directory);
-        }
-      }
-      const res = await fetch(`/api/directories?${params.toString()}`);
-      const data = await res.json();
-      if (directoriesRequestIdRef.current === requestId) {
-        setDirectories(data.directories ?? []);
-      }
-    } catch (error) {
-      if (directoriesRequestIdRef.current === requestId) {
-        console.error("Failed to load directories:", error);
-        toast.error("Failed to load directories");
-      }
-    }
-  }, [debouncedSearchQuery, currentView, selectedDirectory, selectedTagId]);
-
-  const loadInitialData = useCallback(async () => {
-    setIsLoadingExtensions(true);
-
-    try {
-      const [
-        settingsRes,
-        collectionsRes,
-        tagsRes,
-        scanRes,
-        extensionsRes,
-      ] = await Promise.all([
-        fetch("/api/settings"),
-        fetch("/api/collections"),
-        fetch("/api/tags"),
-        fetch("/api/scan"),
-        fetch("/api/extensions"),
-      ]);
-
-      const initialResponses = [
-        ["settings", settingsRes],
-        ["collections", collectionsRes],
-        ["tags", tagsRes],
-        ["scan", scanRes],
-        ["extensions", extensionsRes],
-      ] as const;
-      const failedResponse = initialResponses.find(([, response]) => !response.ok);
-      if (failedResponse) {
-        throw new Error(
-          `Failed to load ${failedResponse[0]} (${failedResponse[1].status})`,
-        );
-      }
-
-      const [
-        settingsData,
-        collectionsData,
-        tagsData,
-        scanData,
-        extensionsData,
-      ] = await Promise.all([
-        settingsRes.json(),
-        collectionsRes.json(),
-        tagsRes.json(),
-        scanRes.json(),
-        extensionsRes.json(),
-      ]);
-
-      const nextLibraryRoots =
-        settingsData.libraryRoots ??
-        (settingsData.libraryRoot ? [settingsData.libraryRoot] : []);
-      const nextOnboardingVersion = settingsData.onboardingVersion ?? 0;
-
-      setSettings({
-        ...settingsData,
-        libraryRoots: nextLibraryRoots,
-        onboardingVersion: nextOnboardingVersion,
-      });
-      setShowOnboarding(
-        nextOnboardingVersion < CURRENT_ONBOARDING_VERSION &&
-        nextLibraryRoots.length === 0,
-      );
-      setCollections(collectionsData.collections ?? []);
-      setTags(
-        ((tagsData.tags ?? []) as TagRecord[]).map((tag) => ({
-          ...tag,
-          color: resolveItemColor(tag.name, tag.color),
-        })),
-      );
-      setScanStatus(scanData);
-
-      const nextExtensions = (extensionsData.extensions ?? []) as ExtensionGridItem[];
-      setExtensions(nextExtensions);
-
-      if (
-        nextExtensions.some(
-          (extension) => extension.id === "sound-shelf" && extension.enabled,
-        )
-      ) {
-        void loadSoundShelfCount();
-      } else {
-        setSoundShelfItemCount(0);
-        setSoundShelfFileIds([]);
-      }
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to sync with server",
-      );
-    } finally {
-      setIsLoadingExtensions(false);
-    }
-  }, [loadSoundShelfCount]);
+  // The extensions view also drops the player selection (no files listed).
+  const handleShowExtensions = useCallback(() => {
+    view.showExtensions();
+    selection.setSelectedFile(null);
+  }, [view, selection]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -700,953 +286,126 @@ function HomeContent() {
     };
   }, [loadFiles, loadDirectories]);
 
-  const loadFavoritesCount = useCallback(async () => {
-    try {
-      const res = await fetch("/api/files?favorites=true&limit=1");
-      if (!res.ok) {
-        return;
-      }
-
-      const data = (await res.json()) as { favoritesTotal?: number };
-      if (typeof data.favoritesTotal === "number") {
-        setFavoritesCount(data.favoritesTotal);
-      }
-    } catch {
-      // Badge keeps its last count.
-    }
-  }, []);
-
-  const handleToggleFavorite = useCallback(async (id: string) => {
-    try {
-      const res = await fetch("/api/files", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, action: "toggleFavorite" }),
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-
-      setFiles((prev) =>
-        prev.map((file) =>
-          file.id === id ? { ...file, isFavorite: !file.isFavorite } : file,
-        ),
-      );
-
-      setSelectedFile((prev) =>
-        prev?.id === id ? { ...prev, isFavorite: !prev.isFavorite } : prev,
-      );
-
-      void loadFavoritesCount();
-    } catch {
-      toast.error("Failed to update favorite status");
-    }
-  }, [loadFavoritesCount]);
-
-  const handleToggleFileTag = useCallback(async (fileId: string, tagId: string) => {
-    const currentFiles = filesRef.current;
-    const currentTags = tagsRef.current;
-    const currentSelectedFile = selectedFileRef.current;
-
-    const file = currentFiles.find((f) => f.id === fileId);
-    if (!file) return;
-
-    const alreadyAttached = file.tags.some((t) => t.id === tagId);
-    const action = alreadyAttached ? "detachTag" : "attachTag";
-
-    setFiles((prev) =>
-      prev.map((f) =>
-        f.id === fileId
-          ? {
-              ...f,
-              tags: alreadyAttached
-                ? f.tags.filter((t) => t.id !== tagId)
-                : [...f.tags, currentTags.find((t) => t.id === tagId) ?? { id: tagId, name: "" }],
-            }
-          : f,
-      ),
-    );
-
-    if (currentSelectedFile?.id === fileId) {
-      setSelectedFile((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          tags: alreadyAttached
-            ? prev.tags.filter((t) => t.id !== tagId)
-            : [...prev.tags, currentTags.find((t) => t.id === tagId) ?? { id: tagId, name: "" }],
-        };
-      });
-    }
-
-    try {
-      const response = await fetch("/api/files", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: fileId, action, tagId }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error ?? "Failed to update tag");
-      }
-    } catch (error) {
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === fileId ? file : f,
-        ),
-      );
-      if (currentSelectedFile?.id === fileId) {
-        setSelectedFile(currentSelectedFile);
-      }
-      toast.error(error instanceof Error ? error.message : "Failed to update tag");
-    }
-  }, []);
-
-  const [confirmBulkRemove, setConfirmBulkRemove] = useState<
-    | { stage: "choose" }
-    | { stage: "confirm"; choice: RemoveDefault }
-    | null
-  >(null);
-  const [confirmClearShelf, setConfirmClearShelf] = useState(false);
-
-  useEffect(() => {
-    if (!confirmClearShelf) {
-      return;
-    }
-    const timer = window.setTimeout(() => setConfirmClearShelf(false), 4000);
-    return () => window.clearTimeout(timer);
-  }, [confirmClearShelf]);
-
-  const handleRebindShortcut = useCallback(
-    (action: ShortcutAction, key: string) => {
-      setShortcutBindings((prev) => {
-        const next = { ...prev, [action]: key };
-        persistShortcutBindings(next);
-        return next;
-      });
-    },
-    [],
-  );
-
-  const handleResetShortcuts = useCallback(() => {
-    setShortcutBindings({ ...DEFAULT_SHORTCUTS });
-    persistShortcutBindings({ ...DEFAULT_SHORTCUTS });
-  }, []);
-
-  const handleRemoveDefaultChange = useCallback((value: RemoveDefault) => {
-    setRemoveDefault(value);
-    persistRemoveDefault(value);
-  }, []);
-
-  const selectedIdsRef = useRef(selectedIds);
-  useEffect(() => {
-    selectedIdsRef.current = selectedIds;
-  }, [selectedIds]);
-
-  const handleBulkSaveAll = useCallback(async () => {
-    const unfavorited = selectedIdsRef.current.filter(
-      (id) => !filesRef.current.find((file) => file.id === id)?.isFavorite,
-    );
-    await Promise.all(unfavorited.map((id) => handleToggleFavorite(id)));
-    void loadFavoritesCount();
-  }, [handleToggleFavorite, loadFavoritesCount]);
-
-  const handleBulkAddToQueue = useCallback(() => {
-    enqueue(selectedIdsRef.current);
-  }, [enqueue]);
-
-  const handleBulkAddToShelf = useCallback(async () => {
-    const ids = selectedIdsRef.current;
-    if (ids.length === 0) {
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/extensions/sound-shelf/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileIds: ids }),
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-
-      window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
+  // ---- Remaining slices: bulk, extension UI, palette. Each takes
+  // explicit callbacks; none writes another hook's state. ----
+  const bulk = useBulkActions({
+    getSelectedIds: () => selectedIdsRef.current,
+    bulkFavorite: (ids) => filesApi.bulkFavorite(ids),
+    bulkTag: (ids, tagId) => filesApi.bulkTag(ids, tagId),
+    bulkRemove: (ids, choice) => filesApi.bulkRemove(ids, choice),
+    addToShelf: (ids) => shelf.addToShelf(ids),
+    enqueue,
+    removeFile: (id, filename) => filesApi.removeFile(id, filename),
+    reloadShelfCount: () => {
       void loadSoundShelfCount();
-      toast.success(`Added ${ids.length} sound(s) to Shelf`);
-    } catch {
-      toast.error("Failed to add sounds to Shelf");
-    }
-  }, [loadSoundShelfCount]);
-
-  const handleBulkTag = useCallback(async (tagId: string) => {
-    const missing = selectedIdsRef.current.filter(
-      (id) =>
-        !filesRef.current
-          .find((file) => file.id === id)
-          ?.tags.some((tag) => tag.id === tagId),
-    );
-    await Promise.all(
-      missing.map((id) => handleToggleFileTag(id, tagId)),
-    );
-  }, [handleToggleFileTag]);
-
-  const executeBulkRemove = useCallback(async () => {
-    const choice =
-      confirmBulkRemove?.stage === "confirm" ? confirmBulkRemove.choice : null;
-    const ids = selectedIdsRef.current;
-    setConfirmBulkRemove(null);
-
-    if (!choice || ids.length === 0) {
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/files", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileIds: ids,
-          permanent: choice === "disk",
-        }),
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-
-      const data = (await res.json()) as {
-        removed?: string[];
-        failed?: Array<{ id: string }>;
-      };
-      const removedIds = new Set(data.removed ?? ids);
-
-      setFiles((prev) => prev.filter((file) => !removedIds.has(file.id)));
-      removeFromQueue(removedIds);
-      handleClearSelection();
-
-      if (
-        selectedFileRef.current &&
-        removedIds.has(selectedFileRef.current.id)
-      ) {
-        setSelectedFile(null);
-        setIsPlayerPlaying(false);
-      }
-
-      if (data.failed && data.failed.length > 0) {
-        toast.error(`Could not remove ${data.failed.length} file(s)`);
-      } else if (choice === "disk") {
-        toast.success(`Deleted ${removedIds.size} file(s) from disk`);
-      } else {
-        toast.success(`Removed ${removedIds.size} file(s) from library`);
-      }
-
-      void loadFavoritesCount();
-    } catch {
-      toast.error("Failed to remove files");
-    }
-  }, [confirmBulkRemove, handleClearSelection, loadFavoritesCount, removeFromQueue]);
-
-  const handleRemoveFileFromLibrary = useCallback(async (file: FileRecord) => {
-    try {
-      const response = await fetch("/api/files", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileIds: [file.id], permanent: false }),
-      });
-      if (!response.ok) {
-        throw new Error();
-      }
-
-      const data = (await response.json()) as {
-        removed?: string[];
-        failed?: Array<{ id: string }>;
-      };
-      if (data.failed?.some((item) => item.id === file.id)) {
-        throw new Error();
-      }
-
-      const removedIds = new Set(data.removed ?? [file.id]);
-      setFiles((current) => current.filter((item) => !removedIds.has(item.id)));
-      removeFromQueue(removedIds);
-      setSelectedIds((current) => current.filter((id) => !removedIds.has(id)));
-      if (selectedFileRef.current && removedIds.has(selectedFileRef.current.id)) {
-        setSelectedFile(null);
-        setIsPlayerPlaying(false);
-      }
-      void loadFavoritesCount();
-      void loadSoundShelfCount();
-      toast.success(`Removed ${file.filename} from library`);
-    } catch {
-      toast.error("Failed to remove file from library");
-    }
-  }, [loadFavoritesCount, loadSoundShelfCount, removeFromQueue]);
-
-  const handleSaveSearch = useCallback(async (name: string) => {
-    if (!name.trim() || !debouncedSearchQuery.trim()) return;
-
-    try {
-      const res = await fetch(
-        "/api/extensions/smart-collections/save-search",
-        {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          query: debouncedSearchQuery.trim(),
-        }),
-        },
-      );
-      if (!res.ok) throw new Error();
-      await loadInitialData();
-      toast.success("Smart collection saved");
-      setShowSaveSearch(false);
-    } catch {
-      toast.error("Failed to save smart collection");
-    }
-  }, [debouncedSearchQuery, loadInitialData]);
-
-  const handleRenameCollection = useCallback(async (id: string, name: string) => {
-    if (!name.trim()) return;
-    try {
-      const res = await fetch("/api/collections", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "rename", collectionId: id, name: name.trim() }),
-      });
-      if (!res.ok) throw new Error();
-      void loadInitialData();
-      toast.success("Collection renamed");
-    } catch {
-      toast.error("Failed to rename collection");
-    }
-  }, [loadInitialData]);
-
-  const handleUpdateCollectionFilter = useCallback(async (id: string, filter: string) => {
-    try {
-      const res = await fetch("/api/collections", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "update-filter", collectionId: id, filter }),
-      });
-      if (!res.ok) throw new Error();
-      void loadInitialData();
-      toast.success("Search filter updated");
-    } catch {
-      toast.error("Failed to update search filter");
-    }
-  }, [loadInitialData]);
-
-  const handleConvertToRegularCollection = useCallback(async (collectionId: string) => {
-    try {
-      const res = await fetch("/api/collections", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "convert-to-regular", collectionId }),
-      });
-      if (!res.ok) throw new Error();
-      void loadInitialData();
-      toast.success("Converted to collection");
-    } catch {
-      toast.error("Failed to convert collection");
-    }
-  }, [loadInitialData]);
-
-  const saveLibraryRoot = useCallback(async (path: string) => {
-    try {
-      const res = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save", path }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to save settings");
-      }
-
-      setSettings({
-        libraryRoot: data.libraryRoot,
-        libraryRoots: data.libraryRoots ?? (data.libraryRoot ? [data.libraryRoot] : []),
-        onboardingVersion: data.onboardingVersion ?? settings.onboardingVersion,
-        stats: data.stats,
-      });
-      return true;
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to save settings",
-      );
-      return false;
-    }
-  }, [settings]);
-
-  const handleSaveRoot = useCallback(async (path: string) => {
-    await saveLibraryRoot(path);
-  }, [saveLibraryRoot]);
-
-  const startLibraryScan = useCallback(async () => {
-    try {
-      const res = await fetch("/api/scan", { method: "POST" });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to start scan");
-      }
-
-      setScanStatus(data.status);
-      toast.info("Scan started");
-      return true;
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to start scan",
-      );
-      return false;
-    }
-  }, []);
-
-  const handleStartScan = useCallback(async () => {
-    await startLibraryScan();
-  }, [startLibraryScan]);
-
-  const handleCompleteOnboarding = useCallback(async () => {
-    try {
-      const res = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "onboarding_complete" }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to complete onboarding");
-      }
-
-      setSettings((current) => ({
-        ...current,
-        onboardingVersion: data.onboardingVersion ?? CURRENT_ONBOARDING_VERSION,
-      }));
-      return true;
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to complete onboarding",
-      );
-      return false;
-    }
-  }, []);
-
-  const handleCreateCollection = useCallback(async (name: string, color?: string) => {
-    if (!name.trim()) {
-      return null;
-    }
-
-    try {
-      const res = await fetch("/api/collections", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-
-      const data = (await res.json()) as { id?: string };
-      if (color && data.id) {
-        await fetch("/api/collections", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "update-color", collectionId: data.id, color }),
-        });
-      }
-
-      void loadInitialData();
-      toast.success("Collection created");
-      return data.id ?? null;
-    } catch {
-      toast.error("Failed to create collection");
-      return null;
-    }
-  }, [loadInitialData]);
-
-  const executeDeleteCollection = useCallback(async (collectionId: string) => {
-    const deletedCollection = collections.find(
-      (collection) => collection.id === collectionId,
-    );
-    setCollections((current) =>
-      current.filter((collection) => collection.id !== collectionId),
-    );
-
-    const wasSelected = selectedCollection === collectionId;
-    if (wasSelected) {
-      setSelectedCollection(null);
-      setCurrentView("all");
-    }
-
-    try {
-      const res = await fetch("/api/collections", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collectionId }),
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-
-      toast.success("Collection deleted");
-    } catch {
-      if (deletedCollection) {
-        setCollections((current) =>
-          current.some((collection) => collection.id === deletedCollection.id)
-            ? current
-            : [...current, deletedCollection].sort((a, b) =>
-                a.name.localeCompare(b.name),
-              ),
-        );
-      }
-      if (wasSelected) {
-        setSelectedCollection(collectionId);
-        setCurrentView("collection");
-      }
-      toast.error("Failed to delete collection");
-    }
-  }, [collections, selectedCollection]);
-
-  const handleDeleteCollection = useCallback(async (collectionId: string) => {
-    await executeDeleteCollection(collectionId);
-  }, [executeDeleteCollection]);
-
-  const handleRemoveRoot = useCallback(async (path: string) => {
-    const previousSettings = settings;
-    const nextRoots = settings.libraryRoots.filter((root) => root !== path);
-
-    setSettings({
-      ...settings,
-      libraryRoot: nextRoots[0] ?? null,
-      libraryRoots: nextRoots,
-    });
-
-    try {
-      const res = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "remove", path }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to remove library folder");
-      }
-
-      setSettings({
-        libraryRoot: data.libraryRoot,
-        libraryRoots: data.libraryRoots ?? (data.libraryRoot ? [data.libraryRoot] : []),
-        onboardingVersion: data.onboardingVersion ?? settings.onboardingVersion,
-        stats: data.stats,
-      });
-    } catch (error) {
-      setSettings(previousSettings);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to remove library folder",
-      );
-    }
-  }, [settings]);
-
-  const handleCreateTag = useCallback(async (name: string, color?: string) => {
-    if (!name.trim()) {
-      return null;
-    }
-
-    try {
-      const res = await fetch("/api/tags", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-
-      const data = (await res.json()) as { id?: string };
-      if (color && data.id) {
-        await fetch("/api/tags", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tagId: data.id, color }),
-        });
-      }
-
-      void loadInitialData();
-      toast.success("Tag created");
-      return data.id ?? null;
-    } catch {
-      toast.error("Failed to create tag");
-      return null;
-    }
-  }, [loadInitialData]);
-
-  const handleDeleteTag = useCallback(async (tagId: string) => {
-    const deletedTag = tags.find((tag) => tag.id === tagId);
-    setTags((current) => current.filter((tag) => tag.id !== tagId));
-
-    try {
-      const res = await fetch("/api/tags", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tagId }),
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-
-      toast.success("Tag deleted");
-    } catch {
-      if (deletedTag) {
-        setTags((current) =>
-          current.some((tag) => tag.id === deletedTag.id)
-            ? current
-            : [...current, deletedTag].sort((a, b) =>
-                a.name.localeCompare(b.name),
-              ),
-        );
-      }
-      toast.error("Failed to delete tag");
-    }
-  }, [tags]);
-
-  const handleRenameTag = useCallback(async (tagId: string, name: string) => {
-    if (!name.trim()) {
-      return;
-    }
-
-    setTags((current) =>
-      current.map((tag) => (tag.id === tagId ? { ...tag, name: name.trim() } : tag)),
-    );
-
-    try {
-      const res = await fetch("/api/tags", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tagId, name: name.trim() }),
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-
-      toast.success("Tag renamed");
-    } catch {
-      void loadInitialData();
-      toast.error("Failed to rename tag");
-    }
-  }, [loadInitialData]);
-
-  const handleUpdateTagColor = useCallback(async (tagId: string, color: string) => {
-    setTags((current) =>
-      current.map((tag) => (tag.id === tagId ? { ...tag, color } : tag)),
-    );
-
-    try {
-      const res = await fetch("/api/tags", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tagId, color }),
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-    } catch {
-      void loadInitialData();
-      toast.error("Failed to update tag color");
-    }
-  }, [loadInitialData]);
-
-  const handleUpdateCollectionColor = useCallback(async (collectionId: string, color: string) => {
-    setCollections((current) =>
-      current.map((collection) =>
-        collection.id === collectionId ? { ...collection, color } : collection,
-      ),
-    );
-
-    try {
-      const res = await fetch("/api/collections", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "update-color", collectionId, color }),
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-    } catch {
-      void loadInitialData();
-      toast.error("Failed to update collection color");
-    }
-  }, [loadInitialData]);
-
-  const extensionsRef = useRef(extensions);
-
-  useEffect(() => {
-    extensionsRef.current = extensions;
-  }, [extensions]);
-
-  const handleToggleExtensionEnabled = useCallback(
-    async (extensionId: string, enabled: boolean) => {
-      setPendingExtensionId(extensionId);
-      const previousExtensions = extensionsRef.current;
-      setExtensions((current) =>
-        current.map((extension) =>
-          extension.id === extensionId ? { ...extension, enabled } : extension,
-        ),
-      );
-
-      try {
-        const res = await fetch("/api/extensions", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ extensionId, enabled }),
-        });
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.error ?? "Failed to update extension");
-        }
-
-        setExtensions((current) =>
-          current.map((extension) =>
-            extension.id === extensionId ? data.extension : extension,
-          ),
-        );
-
-        if (extensionId === "sound-shelf") {
-          if (enabled) {
-            void loadSoundShelfCount();
-          } else {
-            setSoundShelfItemCount(0);
-            setSoundShelfFileIds([]);
-          }
-        }
-
-        toast.success(enabled ? "Extension enabled" : "Extension disabled");
-      } catch (error) {
-        setExtensions(previousExtensions);
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to update extension",
-        );
-      } finally {
-        setPendingExtensionId(null);
+    },
+  });
+  const {
+    confirmBulkRemove,
+    setConfirmBulkRemove,
+    handleBulkSaveAll,
+    handleBulkAddToQueue,
+    handleBulkAddToShelf,
+    handleBulkTag,
+    executeBulkRemove,
+    handleRemoveFile: handleRemoveFileFromLibrary,
+  } = bulk;
+
+  const extUi = useExtensionUi({
+    showShelf,
+    enterLibraryView: () => view.enterView("all"),
+    openSettings: settingsScan.openSettings,
+    requestClearShelf: shelf.requestClearShelf,
+    getSelectedFile: () => selectionApiRef.current.get(),
+    addToCollection: (collectionId, fileId) =>
+      org.addToCollection(collectionId, fileId),
+    addToShelf: (ids) => shelf.addToShelf(ids),
+    saveSearch: (name) => org.saveSearch(name, debouncedSearchQuery),
+    renameCollection: (id, name) => org.renameCollection(id, name),
+    extensions,
+  });
+
+  const palette = usePalette({
+    extensions,
+    orderedFiles,
+    isPlaying: transport.isPlayerPlaying,
+    autoplay: transport.autoplay,
+    selectedFile,
+    canStepQueue: transport.queueState.queue.length > 1,
+    shelfEnabled: extensions.some(
+      (extension) => extension.id === "sound-shelf" && extension.enabled,
+    ),
+    showLibrary,
+    showFavorites,
+    showShelf,
+    showExtensions: handleShowExtensions,
+    showOrganize,
+    openSettings: settingsScan.openSettings,
+    togglePlayback: () => audioPlayerRef.current?.togglePlayback(),
+    stepNext: () =>
+      transport.stepTo("next", {
+        orderedFiles,
+        files,
+        focusFile: selection.focusFile,
+      }),
+    stepPrev: () =>
+      transport.stepTo("prev", {
+        orderedFiles,
+        files,
+        focusFile: selection.focusFile,
+      }),
+    toggleAutoplay: () => transport.setAutoplay(!transport.autoplay),
+    toggleFavoriteCurrent: () => {
+      const current = selectionApiRef.current.get();
+      if (current) {
+        void handleToggleFavorite(current.id);
       }
     },
-    [loadSoundShelfCount],
-  );
-
-  const handleUpdateExtensionSetting = useCallback(
-    async (extensionId: string, settingId: string, value: unknown) => {
-      const previousExtensions = extensionsRef.current;
-      setExtensions((current) =>
-        current.map((extension) =>
-          extension.id === extensionId
-            ? {
-                ...extension,
-                settings: extension.settings?.map((setting) =>
-                  setting.id === settingId ? { ...setting, value } : setting,
-                ),
-              }
-            : extension,
-        ),
-      );
-
-      try {
-        const res = await fetch("/api/extensions", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ extensionId, settingId, value }),
-        });
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.error ?? "Failed to update extension setting");
-        }
-
-        setExtensions((current) =>
-          current.map((extension) =>
-            extension.id === extensionId ? data.extension : extension,
-          ),
-        );
-        toast.success("Extension setting saved");
-      } catch (error) {
-        setExtensions(previousExtensions);
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to update extension setting",
-        );
+    addCurrentToShelf: () => {
+      void extUi.handleAddCurrentToShelf();
+    },
+    runCommand: extUi.handleRunCommand,
+    playSound: (fileId) => {
+      const match = orderedFiles.find((file) => file.id === fileId);
+      if (match) {
+        transport.playFile(orderedFiles, match);
+        selection.focusFile(match);
       }
     },
-    [],
-  );
-
-  const handleAddToCollection = useCallback(async (collectionId: string) => {
-    if (!selectedFile) {
-      return;
-    }
-
-    const collection = collections.find(
-      (collection) => collection.id === collectionId,
-    );
-
-    try {
-      const res = await fetch("/api/collections", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileId: selectedFile.id,
-          collectionId,
-        }),
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-
-      await loadInitialData();
-      toast.success(`Added to ${collection?.name ?? "collection"}`);
-    } catch {
-      toast.error("Failed to add to collection");
-    }
-  }, [selectedFile, collections, loadInitialData]);
-
-  const executeHostedCommand = useCallback(
-    async (
-      extensionId: string,
-      commandId: string,
-      selection?: { fileIds?: string[]; folderPath?: string },
-      input?: unknown,
-    ) => {
-      try {
-        const response = await fetch("/api/extensions/execute", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ extensionId, commandId, selection, input }),
-        });
-        const outcome = (await response.json()) as YardExtensionHostOutcome;
-
-        if (!response.ok || !outcome.ok) {
-          throw new Error(
-            outcome.ok ? "Extension command failed" : outcome.message,
-          );
-        }
-
-        if (outcome.type === "ui-intent") {
-          const handled = interpretExtensionUiIntent(outcome.intent, {
-            openFolderJanitor: (payload) => {
-              setFolderJanitorTarget(payload.target);
-              setFolderJanitorFolderPath(
-                payload.target === "folder" ? payload.folderPath : "",
-              );
-              setFolderJanitorOpen(true);
-            },
-            openLibraryGatherer: () => setGatherOpen(true),
-            openMakePack: ({ source, fileIds }) => {
-              if (source === "shelf" && !isDesktopApp()) {
-                toast.error(
-                  "Make Pack needs the desktop app to choose an output folder",
-                );
-                return;
-              }
-              setCurrentView("all");
-              setPackSource(source);
-              setPackFileIds(fileIds);
-            },
-            openSettings: () => setShowSettings(true),
-          });
-
-          if (!handled) {
-            toast.info(`No UI handles intent "${outcome.intent.type}" yet`);
-          }
-        }
-
-        if (outcome.type === "value" && extensionId === "sound-shelf") {
-          window.dispatchEvent(
-            new CustomEvent(SOUND_SHELF_CHANGED_EVENT),
-          );
-        }
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to run extension command",
-        );
-      }
-    },
-    [],
-  );
-
-  const handleScanFolder = useCallback(
-    (folderPath: string) => {
-      void executeHostedCommand(
-        "folder-janitor",
-        "folder-janitor.scan-folder",
-        { folderPath },
-      );
-    },
-    [executeHostedCommand],
-  );
-
-  const handleRunCommand = useCallback(
-    (extensionId: string, commandId: string) => {
-      if (extensionId === "sound-shelf" && commandId === "sound-shelf.clear") {
-        showShelf();
-        setConfirmClearShelf(true);
-        return;
-      }
-
-      void executeHostedCommand(extensionId, commandId);
-    },
-    [executeHostedCommand, showShelf],
-  );
-
-  useScanPolling(
-    scanStatus,
-    useCallback((data) => setScanStatus(data), []),
-    useCallback((status: ScanStatus) => {
-      void loadFiles();
-      void loadInitialData();
-      if (status.phase === "error" || status.error) {
-        toast.error(status.error ?? "Scan failed");
-      } else if (status.errors > 0) {
-        toast.warning(`Scan complete with ${status.errors} skipped item${status.errors === 1 ? "" : "s"}`);
-      } else {
-        toast.success("Scan complete");
-      }
-    }, [loadFiles, loadInitialData]),
-  );
+    moveNext: () => handleMoveSelection(1),
+    movePrev: () => handleMoveSelection(-1),
+  });
+  // Destructure palette locals so render only touches plain values; the
+  // hook object itself carries input refs.
+  const {
+    paletteOpen,
+    paletteQuery,
+    paletteEntries,
+    activePaletteIndex,
+    paletteInputRef,
+    searchInputRef,
+    shortcutBindings,
+    openPalette,
+    closePalette,
+    handlePaletteQueryChange,
+    handlePaletteSelect,
+    handleRebindShortcut,
+    handleResetShortcuts,
+    setPaletteIndex,
+  } = palette;
 
   const selectedCollectionName = useMemo(() =>
     currentView === "collection"
-      ? (collections.find((c) => c.id === selectedCollection)?.name ?? null)
+      ? (org.collections.find((c) => c.id === selectedCollection)?.name ?? null)
       : null,
-  [currentView, collections, selectedCollection]);
+  [currentView, org.collections, selectedCollection]);
 
   const showExtensionsView = currentView === "extensions";
   const showShelfView = currentView === "shelf";
   const showOrganizeView = currentView === "organize";
   const hideHeaderActions = showExtensionsView || showShelfView || showOrganizeView;
 
-  const railView: RailView | null =
-    currentView === "all" ||
-    currentView === "collection" ||
-    currentView === "directory"
-      ? "library"
-      : currentView === "favorites"
-        ? "favorites"
-        : currentView === "shelf"
-          ? "shelf"
-          : currentView === "extensions"
-            ? "extensions"
-            : currentView === "organize"
-              ? "organize"
-              : null;
+  const railView = view.railView;
 
   const viewHeading =
     currentView === "favorites"
@@ -1671,509 +430,24 @@ function HomeContent() {
     viewingSmartCollection,
     activeSmartCollectionId,
   } = useMemo(() => {
-    const shelf = extensions.find((e) => e.id === "sound-shelf")?.enabled ?? false;
+    const shelfEnabled = extensions.find((e) => e.id === "sound-shelf")?.enabled ?? false;
     const pack = extensions.find((e) => e.id === "make-pack")?.enabled ?? false;
     const janitor = extensions.find((e) => e.id === "folder-janitor")?.enabled ?? false;
     const smart = extensions.find((e) => e.id === "smart-collections")?.enabled ?? false;
     const activeSmart = selectedCollection
-      ? collections.find((c) => c.id === selectedCollection && c.isSmart) ?? null
+      ? org.collections.find((c) => c.id === selectedCollection && c.isSmart) ?? null
       : null;
     return {
-      soundShelfEnabled: shelf,
+      soundShelfEnabled: shelfEnabled,
       makePackEnabled: pack,
       folderJanitorEnabled: janitor,
       smartCollectionsEnabled: smart,
       viewingSmartCollection: activeSmart !== null,
       activeSmartCollectionId: activeSmart?.id ?? null,
     };
-  }, [extensions, selectedCollection, collections]);
+  }, [extensions, selectedCollection, org.collections]);
 
-  const handleOpenMobileSidebar = useCallback(() => setShowMobileSidebar(true), []);
-  const handleCloseMobileSidebar = useCallback(() => setShowMobileSidebar(false), []);
-  const handleOpenSettings = useCallback(() => setShowSettings(true), []);
-
-  const makePackDefaultFormat = useMemo(() => {
-    const value = extensions
-      .find((e) => e.id === "make-pack")
-      ?.settings?.find((s) => s.id === "default-format")?.value;
-    return value === "zip" || value === "folder" ? value : "zip";
-  }, [extensions]);
-
-  const handleSelectFile = useCallback((file: FileRecord, _index: number, modifiers: SelectModifiers = {}) => {
-    if (modifiers.shiftKey) {
-      const orderedIds = filesRef.current.map((listed) => listed.id);
-      setSelectedIds(rangeSelect(orderedIds, selectionAnchorRef.current, file.id));
-      return;
-    }
-
-    if (modifiers.ctrlKey || modifiers.metaKey) {
-      setSelectedIds((prev) => toggleInSelection(prev, file.id));
-      selectionAnchorRef.current = file.id;
-      return;
-    }
-
-    if (selectedFileRef.current?.id === file.id) {
-      audioPlayerRef.current?.togglePlayback();
-    } else {
-      playIds(
-        filesRef.current.map((listed) => listed.id),
-        file.id,
-      );
-      setSelectedFile(file);
-    }
-
-    setSelectedIds([file.id]);
-    selectionAnchorRef.current = file.id;
-  }, [playIds]);
-
-  const handleMoveSelection = useCallback(
-    (direction: 1 | -1) => {
-      const visible = filesRef.current;
-      if (visible.length === 0) {
-        return;
-      }
-
-      const currentId =
-        selectedFileRef.current?.id ??
-        selectedIdsRef.current[selectedIdsRef.current.length - 1];
-      const index = visible.findIndex((file) => file.id === currentId);
-      const next =
-        visible[(index + direction + visible.length) % visible.length];
-      if (!next) {
-        return;
-      }
-
-      playIds(
-        visible.map((listed) => listed.id),
-        next.id,
-      );
-      setSelectedFile(next);
-      setSelectedIds([next.id]);
-      selectionAnchorRef.current = next.id;
-
-      const row = document.querySelector(`[data-file-id="${CSS.escape(next.id)}"]`);
-      if (row instanceof HTMLElement) {
-        row.scrollIntoView({ block: "nearest" });
-        row.focus({ preventScroll: true });
-      }
-    },
-    [playIds],
-  );
-
-  const handleTrackEnded = useCallback(() => {
-    const nextId = advanceIfEnabled();
-    if (!nextId) {
-      return;
-    }
-
-    const match = filesRef.current.find((file) => file.id === nextId);
-    if (match) {
-      setSelectedFile(match);
-      setSelectedIds([match.id]);
-      selectionAnchorRef.current = match.id;
-    }
-  }, [advanceIfEnabled]);
-
-  const handleStepNext = useCallback(() => {
-    const nextId = stepNext();
-    if (!nextId) {
-      return;
-    }
-
-    const match = filesRef.current.find((file) => file.id === nextId);
-    if (match) {
-      setSelectedFile(match);
-      setSelectedIds([match.id]);
-      selectionAnchorRef.current = match.id;
-    }
-  }, [stepNext]);
-
-  const handleStepPrev = useCallback(() => {
-    const prevId = stepPrev();
-    if (!prevId) {
-      return;
-    }
-
-    const match = filesRef.current.find((file) => file.id === prevId);
-    if (match) {
-      setSelectedFile(match);
-      setSelectedIds([match.id]);
-      selectionAnchorRef.current = match.id;
-    }
-  }, [stepPrev]);
-
-  const handleToggleAutoplay = useCallback(
-    (checked: boolean) => {
-      setAutoplay(checked);
-    },
-    [setAutoplay],
-  );
-
-  const nextTitle = useMemo(() => {
-    if (queueState.queue.length <= 1) {
-      return null;
-    }
-
-    const nextIndex =
-      (queueState.cursor + 1) % queueState.queue.length;
-    const nextId = queueState.queue[nextIndex];
-    if (!nextId || nextId === selectedFile?.id) {
-      const following = queueState.queue.find((id) => id !== selectedFile?.id);
-      if (!following) {
-        return null;
-      }
-
-      const followingMatch = files.find(
-        (file) => file.id === following,
-      );
-      return (
-        followingMatch?.filename.replace(/\.[^.]+$/, "") ??
-        followingMatch?.filename ??
-        null
-      );
-    }
-
-    const match = files.find((file) => file.id === nextId);
-    return (
-      match?.filename.replace(/\.[^.]+$/, "") ?? match?.filename ?? null
-    );
-  }, [queueState, selectedFile?.id, files]);
-
-  const handleMakePackFile = useCallback(
-    (file: FileRecord) =>
-      executeHostedCommand(
-        "make-pack",
-        "make-pack.from-selection",
-        { fileIds: [file.id] },
-      ),
-    [executeHostedCommand],
-  );
-
-  const handleMakePackShelf = useCallback(
-    () => executeHostedCommand("make-pack", "make-pack.from-shelf"),
-    [executeHostedCommand],
-  );
-
-  const handleClearShelf = useCallback(async () => {
-    try {
-      const res = await fetch("/api/extensions/sound-shelf/clear", {
-        method: "POST",
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-
-      window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
-    } catch {
-      toast.error("Failed to clear Shelf");
-    }
-  }, []);
-
-  const handleClosePlayer = useCallback(() => {
-    clearQueue();
-    setSelectedFile(null);
-    setIsPlayerPlaying(false);
-  }, [clearQueue]);
-
-  const openPalette = useCallback(() => {
-    setPaletteQuery("");
-    setPaletteIndex(0);
-    setPaletteOpen(true);
-  }, []);
-
-  const closePalette = useCallback(() => {
-    setPaletteOpen(false);
-  }, []);
-
-  const handlePaletteQueryChange = useCallback((query: string) => {
-    setPaletteQuery(query);
-    setPaletteIndex(0);
-  }, []);
-
-  const handleAddCurrentToShelf = useCallback(async () => {
-    const current = selectedFileRef.current;
-    if (!current) {
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/extensions/sound-shelf/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileIds: [current.id] }),
-      });
-      if (!res.ok) {
-        throw new Error();
-      }
-
-      window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
-      void loadSoundShelfCount();
-      toast.success("Added to Shelf");
-    } catch {
-      toast.error("Failed to add to Shelf");
-    }
-  }, [loadSoundShelfCount]);
-
-  const paletteToolCommands = useMemo(
-    () =>
-      extensions.flatMap((extension) =>
-        extension.enabled
-          ? ((extension.commands ?? []).map((command) => ({
-              extensionId: extension.id,
-              extensionName: extension.name,
-              commandId: command.id,
-              title: command.title,
-            })) as Array<{
-              extensionId: string;
-              extensionName: string;
-              commandId: string;
-              title: string;
-            }>)
-          : [],
-      ),
-    [extensions],
-  );
-
-  const paletteSounds = useMemo(
-    () =>
-      orderedFiles.map((file) => ({
-        id: file.id,
-        filename: file.filename,
-        format: file.format,
-        duration: file.duration,
-        tags: file.tags.map((tag) => tag.name),
-      })),
-    [orderedFiles],
-  );
-
-  const paletteEntries = useMemo(
-    () =>
-      buildPaletteEntries({
-        query: paletteQuery,
-        isPlaying: isPlayerPlaying,
-        autoplay,
-        hasCurrentFile: selectedFile !== null,
-        canStepQueue: queueState.queue.length > 1,
-        isFavorite: selectedFile?.isFavorite ?? false,
-        shelfEnabled: soundShelfEnabled,
-        toolCommands: paletteToolCommands,
-        sounds: paletteSounds,
-      }),
-    [
-      paletteQuery,
-      isPlayerPlaying,
-      autoplay,
-      selectedFile,
-      queueState,
-      soundShelfEnabled,
-      paletteToolCommands,
-      paletteSounds,
-    ],
-  );
-
-  const activePaletteIndex =
-    paletteEntries.length === 0
-      ? 0
-      : Math.min(paletteIndex, paletteEntries.length - 1);
-
-  const handlePaletteSelect = useCallback(
-    (entry: PaletteEntry) => {
-      const separator = entry.id.indexOf(":");
-      const kind = separator === -1 ? entry.id : entry.id.slice(0, separator);
-      const rest = separator === -1 ? "" : entry.id.slice(separator + 1);
-
-      switch (kind) {
-        case "view": {
-          if (rest === "library") showLibrary();
-          else if (rest === "favorites") showFavorites();
-          else if (rest === "shelf") showShelf();
-          else if (rest === "tools") showExtensions();
-          else if (rest === "organize") showOrganize();
-          else if (rest === "settings") setShowSettings(true);
-          break;
-        }
-        case "transport": {
-          if (rest === "toggle-play") audioPlayerRef.current?.togglePlayback();
-          else if (rest === "next") handleStepNext();
-          else if (rest === "prev") handleStepPrev();
-          else if (rest === "autoplay") setAutoplay(!autoplay);
-          break;
-        }
-        case "file": {
-          if (rest === "toggle-favorite" && selectedFileRef.current) {
-            void handleToggleFavorite(selectedFileRef.current.id);
-          } else if (rest === "add-to-shelf") {
-            void handleAddCurrentToShelf();
-          }
-          break;
-        }
-        case "tool": {
-          const split = rest.indexOf(":");
-          if (split !== -1) {
-            handleRunCommand(rest.slice(0, split), rest.slice(split + 1));
-          }
-          break;
-        }
-        case "sound": {
-          const match = filesRef.current.find((file) => file.id === rest);
-          if (match) {
-            playIds(
-              filesRef.current.map((listed) => listed.id),
-              match.id,
-            );
-            setSelectedFile(match);
-            setSelectedIds([match.id]);
-            selectionAnchorRef.current = match.id;
-          }
-          break;
-        }
-      }
-
-      setPaletteOpen(false);
-    },
-    [
-      showLibrary,
-      showFavorites,
-      showShelf,
-      showExtensions,
-      showOrganize,
-      handleStepNext,
-      handleStepPrev,
-      autoplay,
-      setAutoplay,
-      playIds,
-      handleToggleFavorite,
-      handleAddCurrentToShelf,
-      handleRunCommand,
-    ],
-  );
-
-  useEffect(() => {
-    if (paletteOpen) {
-      paletteInputRef.current?.focus();
-    }
-  }, [paletteOpen]);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        if (paletteOpen) {
-          setPaletteOpen(false);
-        } else {
-          setPaletteQuery("");
-          setPaletteIndex(0);
-          setPaletteOpen(true);
-        }
-        return;
-      }
-
-      if (!paletteOpen) {
-        return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        setPaletteOpen(false);
-        return;
-      }
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        event.stopPropagation();
-        setPaletteIndex((index) => (index + 1) % Math.max(1, paletteEntries.length));
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        event.stopPropagation();
-        setPaletteIndex(
-          (index) =>
-            (index - 1 + Math.max(1, paletteEntries.length)) %
-            Math.max(1, paletteEntries.length),
-        );
-        return;
-      }
-
-      if (event.key === "Enter") {
-        const target = event.target as HTMLElement | null;
-        const inPaletteInput = target === paletteInputRef.current;
-        const entry = paletteEntries[activePaletteIndex];
-        if (entry && (inPaletteInput || target === document.body)) {
-          event.preventDefault();
-          event.stopPropagation();
-          handlePaletteSelect(entry);
-        }
-      }
-    };
-
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [paletteOpen, paletteEntries, activePaletteIndex, handlePaletteSelect]);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) {
-        return;
-      }
-
-      if (paletteOpen) {
-        return;
-      }
-
-      if (matchShortcutKey(event, shortcutBindings["toggle-playback"])) {
-        if (shouldSkipSpace(event.target)) {
-          return;
-        }
-
-        event.preventDefault();
-        audioPlayerRef.current?.togglePlayback();
-        return;
-      }
-
-      if (isTypingTarget(event.target)) {
-        return;
-      }
-
-      if (matchShortcutKey(event, shortcutBindings["focus-search"])) {
-        event.preventDefault();
-        searchInputRef.current?.focus();
-      } else if (
-        matchShortcutKey(event, shortcutBindings["toggle-favorite"])
-      ) {
-        const current = selectedFileRef.current;
-        if (current) {
-          void handleToggleFavorite(current.id);
-        }
-      } else if (matchShortcutKey(event, shortcutBindings["move-next"])) {
-        event.preventDefault();
-        handleMoveSelection(1);
-      } else if (matchShortcutKey(event, shortcutBindings["move-prev"])) {
-        event.preventDefault();
-        handleMoveSelection(-1);
-      } else if (matchShortcutKey(event, shortcutBindings["open-settings"])) {
-        event.preventDefault();
-        setShowSettings(true);
-      }
-    };
-
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [paletteOpen, shortcutBindings, handleMoveSelection, handleToggleFavorite]);
-
-  const handleCloseExtensionDetails = useCallback((open: boolean) => {
-    if (!open) setSelectedExtension(null);
-  }, []);
-
-  const handleCloseGather = useCallback((open: boolean) => {
-    if (!open) setGatherOpen(false);
-  }, []);
-
-  const handleClosePack = useCallback((open: boolean) => {
-    if (!open) setPackSource(null);
-  }, []);
+  const nextTitle = transport.nextTitleFor(files, selectedFile?.id);
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-canvas font-sans">
@@ -2184,17 +458,17 @@ function HomeContent() {
         className="hidden md:flex"
         activeView={railView}
         favoritesCount={favoritesCount}
-        shelfCount={soundShelfItemCount}
+        shelfCount={shelf.soundShelfItemCount}
         onSelectLibrary={showLibrary}
         onSelectFavorites={showFavorites}
         onSelectShelf={showShelf}
-        onSelectExtensions={showExtensions}
+        onSelectExtensions={handleShowExtensions}
         onSelectOrganize={showOrganize}
-        onOpenSettings={handleOpenSettings}
-        settingsActive={showSettings}
+        onOpenSettings={settingsScan.openSettings}
+        settingsActive={settingsScan.showSettings}
       />
 
-      <Dialog open={showMobileSidebar} onOpenChange={setShowMobileSidebar}>
+      <Dialog open={view.showMobileSidebar} onOpenChange={(open) => { if (!open) view.closeMobileSidebar(); }}>
         <DialogContent
           showCloseButton={false}
           className="left-0 top-0 h-full w-auto translate-x-0 translate-y-0 rounded-none border-r border-white/10 bg-shell/95 p-2 shadow-2xl backdrop-blur-2xl duration-300 ease-out data-open:slide-in-from-left-8 data-open:fade-in-0 data-closed:slide-out-to-left-8 data-closed:fade-out-0"
@@ -2203,32 +477,32 @@ function HomeContent() {
           <IconRail
             activeView={railView}
             favoritesCount={favoritesCount}
-            shelfCount={soundShelfItemCount}
+            shelfCount={shelf.soundShelfItemCount}
             onSelectLibrary={() => {
               showLibrary();
-              handleCloseMobileSidebar();
+              view.closeMobileSidebar();
             }}
             onSelectFavorites={() => {
               showFavorites();
-              handleCloseMobileSidebar();
+              view.closeMobileSidebar();
             }}
             onSelectShelf={() => {
               showShelf();
-              handleCloseMobileSidebar();
+              view.closeMobileSidebar();
             }}
             onSelectExtensions={() => {
-              showExtensions();
-              handleCloseMobileSidebar();
+              handleShowExtensions();
+              view.closeMobileSidebar();
             }}
             onSelectOrganize={() => {
               showOrganize();
-              handleCloseMobileSidebar();
+              view.closeMobileSidebar();
             }}
             onOpenSettings={() => {
-              handleOpenSettings();
-              handleCloseMobileSidebar();
+              settingsScan.openSettings();
+              view.closeMobileSidebar();
             }}
-            settingsActive={showSettings}
+            settingsActive={settingsScan.showSettings}
           />
         </DialogContent>
       </Dialog>
@@ -2242,7 +516,7 @@ function HomeContent() {
               variant="ghost"
               size="icon"
               className="size-10 shrink-0 rounded-xl border-white/10 bg-white/5 duration-200 animate-in fade-in-0 zoom-in-95 hover:border-accent-fill/50 md:hidden"
-              onClick={handleOpenMobileSidebar}
+              onClick={view.openMobileSidebar}
               aria-label="Open navigation menu"
             >
               <PanelLeft className="size-4" />
@@ -2289,7 +563,7 @@ function HomeContent() {
                     className="hidden h-10 shrink-0 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
                     onClick={() => {
                       if (activeSmartCollectionId) {
-                        handleUpdateCollectionFilter(
+                        void org.updateCollectionFilter(
                           activeSmartCollectionId,
                           JSON.stringify({ q: searchQuery.trim() }),
                         );
@@ -2304,7 +578,7 @@ function HomeContent() {
                   variant="outline"
                   size="sm"
                   className="hidden h-10 shrink-0 gap-2 rounded-xl border-white/10 bg-white/5 text-xs text-zinc-400 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.07] hover:text-zinc-100 sm:inline-flex"
-                  onClick={() => setShowSaveSearch(true)}
+                  onClick={() => extUi.setShowSaveSearch(true)}
                 >
                   <Save className="size-4" />
                   Save Search
@@ -2329,14 +603,14 @@ function HomeContent() {
                     variant="outline"
                     size="sm"
                     className="h-9 gap-2 rounded-xl px-3 text-xs"
-                    onClick={() => void handleMakePackShelf()}
+                    onClick={() => void extUi.handleMakePackShelf()}
                   >
                     <PackagePlus className="size-4" />
                     Pack Shelf
                   </Button>
                 ) : null}
                 {files.length > 0 ? (
-                  confirmClearShelf ? (
+                  shelf.confirmClearShelf ? (
                     <>
                       <Button
                         type="button"
@@ -2344,8 +618,8 @@ function HomeContent() {
                         size="sm"
                         className="h-9 gap-2 rounded-xl bg-destructive/15 px-3 text-xs font-semibold text-destructive transition-all hover:bg-destructive/25 active:scale-95"
                         onClick={() => {
-                          setConfirmClearShelf(false);
-                          void handleClearShelf();
+                          shelf.cancelClearShelf();
+                          void shelf.clearShelf();
                         }}
                       >
                         Sure?
@@ -2355,7 +629,7 @@ function HomeContent() {
                         variant="ghost"
                         size="sm"
                         className="h-9 gap-2 rounded-xl px-3 text-xs text-zinc-400"
-                        onClick={() => setConfirmClearShelf(false)}
+                        onClick={() => shelf.cancelClearShelf()}
                         aria-label="Cancel clear shelf"
                       >
                         <X className="size-4" />
@@ -2367,7 +641,7 @@ function HomeContent() {
                       variant="ghost"
                       size="sm"
                       className="h-9 gap-2 rounded-xl px-3 text-xs text-zinc-400 hover:text-red-400"
-                      onClick={() => setConfirmClearShelf(true)}
+                      onClick={() => shelf.requestClearShelf()}
                     >
                       <X className="size-4" />
                       Clear
@@ -2391,27 +665,29 @@ function HomeContent() {
         {showExtensionsView ? (
           <ExtensionGrid
             extensions={extensions}
-            isLoading={isLoadingExtensions}
-            onOpenDetails={setSelectedExtension}
-            onToggleEnabled={handleToggleExtensionEnabled}
-            onRunCommand={handleRunCommand}
-            pendingExtensionId={pendingExtensionId}
+            isLoading={catalog.isLoadingExtensions}
+            onOpenDetails={extUi.setSelectedExtension}
+            onToggleEnabled={catalog.handleToggleExtensionEnabled}
+            onRunCommand={extUi.handleRunCommand}
+            pendingExtensionId={catalog.pendingExtensionId}
           />
         ) : showOrganizeView ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <OrganizeView
-              collections={collections}
-              tags={tags}
+              collections={org.collections}
+              tags={org.tags}
               selectedTagId={selectedTagId}
-              onOpenCollection={showCollection}
-              onCreateCollection={handleCreateCollection}
-              onRenameCollection={handleRenameCollection}
-              onDeleteCollection={executeDeleteCollection}
-              onUpdateCollectionColor={handleUpdateCollectionColor}
-              onCreateTag={handleCreateTag}
-              onRenameTag={handleRenameTag}
-              onDeleteTag={handleDeleteTag}
-              onUpdateTagColor={handleUpdateTagColor}
+              smartCounts={org.smartCounts}
+              onOpenCollection={handleOpenCollection}
+              onRequestSmartCount={(id) => void org.loadSmartCount(id)}
+              onCreateCollection={org.createCollection}
+              onRenameCollection={org.renameCollection}
+              onDeleteCollection={org.deleteCollection}
+              onUpdateCollectionColor={org.updateCollectionColor}
+              onCreateTag={org.createTag}
+              onRenameTag={org.renameTag}
+              onDeleteTag={org.deleteTag}
+              onUpdateTagColor={org.updateTagColor}
               onSelectTag={handleFilterTag}
             />
           </div>
@@ -2421,7 +697,7 @@ function HomeContent() {
               <div className="px-4 pt-3 md:px-5">
                 <SelectionBulkBar
                   count={selectedIds.length}
-                  tags={tags}
+                  tags={org.tags}
                   soundShelfEnabled={soundShelfEnabled}
                   onSaveAll={() => void handleBulkSaveAll()}
                   onAddToQueue={handleBulkAddToQueue}
@@ -2429,7 +705,7 @@ function HomeContent() {
                     onTag={(tagId) => void handleBulkTag(tagId)}
                     onRemove={() => setConfirmBulkRemove({ stage: "choose" })}
                     bulkRemove={confirmBulkRemove}
-                    removeDefault={removeDefault}
+                    removeDefault={settingsScan.removeDefault}
                     onChooseRemove={(choice) =>
                       setConfirmBulkRemove({ stage: "confirm", choice })
                     }
@@ -2450,7 +726,7 @@ function HomeContent() {
                 onNavigateLibrary={showLibrary}
                 selectedFileId={selectedFile?.id ?? null}
                 selectedIds={selectedIds}
-                isSelectedFilePlaying={isPlayerPlaying}
+                isSelectedFilePlaying={transport.isPlayerPlaying}
                 onSelect={handleSelectFile}
                 onToggleFavorite={handleToggleFavorite}
                 searchQuery={debouncedSearchQuery}
@@ -2459,13 +735,13 @@ function HomeContent() {
                 onLoadMore={() => void loadMoreFiles()}
                 showContainerBorder={currentView !== "favorites"}
                 soundShelfEnabled={soundShelfEnabled}
-                shelfFileIds={soundShelfFileIds}
+                shelfFileIds={shelf.soundShelfFileIds}
                 makePackEnabled={makePackEnabled}
-                onMakePackFile={handleMakePackFile}
+                onMakePackFile={extUi.handleMakePackFile}
                 onRemoveFile={handleRemoveFileFromLibrary}
                 folderJanitorEnabled={folderJanitorEnabled}
-                onScanFolder={handleScanFolder}
-                allTags={tags}
+                onScanFolder={extUi.handleScanFolder}
+                allTags={org.tags}
                 onToggleFileTag={handleToggleFileTag}
                 sortKey={sortKey}
                 sortDir={sortDir}
@@ -2482,18 +758,41 @@ function HomeContent() {
       <AudioPlayer
         ref={audioPlayerRef}
         selectedFile={selectedFile}
-        onClose={handleClosePlayer}
-        onPlaybackChange={setIsPlayerPlaying}
-        onEnded={handleTrackEnded}
-        onNext={handleStepNext}
-        onPrev={handleStepPrev}
-        autoplay={autoplay}
-        onToggleAutoplay={handleToggleAutoplay}
+        onClose={() =>
+          transport.closePlayer({
+            clearSelectedFile: () => selection.setSelectedFile(null),
+            setPlaying: transport.setIsPlayerPlaying,
+          })
+        }
+        onPlaybackChange={transport.setIsPlayerPlaying}
+        onEnded={() =>
+          transport.trackEnded({
+            orderedFiles,
+            files,
+            focusFile: selection.focusFile,
+          })
+        }
+        onNext={() =>
+          transport.stepTo("next", {
+            orderedFiles,
+            files,
+            focusFile: selection.focusFile,
+          })
+        }
+        onPrev={() =>
+          transport.stepTo("prev", {
+            orderedFiles,
+            files,
+            focusFile: selection.focusFile,
+          })
+        }
+        autoplay={transport.autoplay}
+        onToggleAutoplay={transport.setAutoplay}
         nextTitle={nextTitle}
         onToggleFavorite={handleToggleFavorite}
-        collections={collections}
-        onAddToCollection={handleAddToCollection}
-        onCreateCollection={() => setShowSettings(true)}
+        collections={org.collections}
+        onAddToCollection={extUi.handleAddToCollection}
+        onCreateCollection={settingsScan.openSettings}
       />
 
       <CommandPalette
@@ -2509,241 +808,86 @@ function HomeContent() {
       />
 
       <SettingsDialog
-        open={showSettings}
-        onOpenChange={setShowSettings}
-        settings={settings}
-        onSaveRoot={handleSaveRoot}
-        onRemoveRoot={handleRemoveRoot}
-        scanStatus={scanStatus}
-        onStartScan={handleStartScan}
-        collections={collections}
-        tags={tags}
-        onCreateCollection={handleCreateCollection}
-        onDeleteCollection={handleDeleteCollection}
-        onRenameCollection={(id, name) => setRenamingCollection({ id, name })}
-        onConvertToRegularCollection={handleConvertToRegularCollection}
-        onCreateTag={handleCreateTag}
-        onDeleteTag={handleDeleteTag}
+        open={settingsScan.showSettings}
+        onOpenChange={settingsScan.setShowSettings}
+        settings={settingsScan.settings}
+        onSaveRoot={settingsScan.handleSaveRoot}
+        onRemoveRoot={settingsScan.handleRemoveRoot}
+        scanStatus={settingsScan.scanStatus}
+        onStartScan={settingsScan.handleStartScan}
+        collections={org.collections}
+        tags={org.tags}
+        onCreateCollection={org.createCollection}
+        onDeleteCollection={org.deleteCollection}
+        onRenameCollection={(id, name) => extUi.openRenameCollection(id, name)}
+        onConvertToRegularCollection={org.convertToRegularCollection}
+        onCreateTag={org.createTag}
+        onDeleteTag={org.deleteTag}
         extensions={extensions}
-        onToggleExtension={handleToggleExtensionEnabled}
-        onUpdateExtensionSetting={handleUpdateExtensionSetting}
-        zoom={zoom}
-        onUpdateZoom={handleUpdateZoom}
+        onToggleExtension={catalog.handleToggleExtensionEnabled}
+        onUpdateExtensionSetting={catalog.handleUpdateExtensionSetting}
+        zoom={settingsScan.zoom}
+        onUpdateZoom={settingsScan.handleUpdateZoom}
         shortcutBindings={shortcutBindings}
         onRebindShortcut={handleRebindShortcut}
         onResetShortcuts={handleResetShortcuts}
-        removeDefault={removeDefault}
-        onRemoveDefaultChange={handleRemoveDefaultChange}
+        removeDefault={settingsScan.removeDefault}
+        onRemoveDefaultChange={settingsScan.handleRemoveDefaultChange}
       />
 
       <OnboardingDialog
-        open={showOnboarding}
-        onOpenChange={setShowOnboarding}
-        onSaveRoot={saveLibraryRoot}
-        onStartScan={startLibraryScan}
-        onComplete={handleCompleteOnboarding}
+        open={settingsScan.showOnboarding}
+        onOpenChange={settingsScan.setShowOnboarding}
+        onSaveRoot={settingsScan.saveLibraryRoot}
+        onStartScan={settingsScan.startLibraryScan}
+        onComplete={settingsScan.handleCompleteOnboarding}
       />
 
-      <Dialog
-        open={selectedExtension !== null}
-        onOpenChange={handleCloseExtensionDetails}
-      >
-        <DialogContent className="max-w-lg rounded-2xl border border-white/10 bg-shell/95 p-6 backdrop-blur-2xl">
-          <DialogTitle className="text-lg font-extrabold tracking-tight text-zinc-50">
-            {selectedExtension?.name ?? "Extension details"}
-          </DialogTitle>
-          {selectedExtension ? (
-            <div className="space-y-5 text-sm">
-              <div className="space-y-1">
-                <p className="text-zinc-400">
-                  {selectedExtension.description}
-                </p>
-                <p className="font-mono text-xs text-zinc-500">
-                  {selectedExtension.provider} · v{selectedExtension.version}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-zinc-200">Commands</h3>
-                {selectedExtension.commands?.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedExtension.commands.map((command) => (
-                      <button
-                        key={command.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedExtension(null);
-                          handleRunCommand(
-                            selectedExtension.id,
-                            command.id,
-                          );
-                        }}
-                        className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-zinc-300 ring-1 ring-white/10 transition-colors hover:border-accent-fill/50 hover:bg-accent-fill/10 hover:text-accent-text hover:ring-accent-fill/30"
-                        title={`Run: ${command.title}`}
-                      >
-                        {command.title}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-zinc-500">
-                    No commands exposed.
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-zinc-200">Permissions</h3>
-                {selectedExtension.permissions?.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedExtension.permissions.map((permission) => (
-                      <span
-                        key={permission}
-                        className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-zinc-400 ring-1 ring-white/10"
-                      >
-                        {permission}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-zinc-500">
-                    No permissions declared.
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-zinc-200">Surfaces</h3>
-                {selectedExtension.surfaces?.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedExtension.surfaces.map((surface) => (
-                      <span
-                        key={surface}
-                        className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-zinc-400 ring-1 ring-white/10"
-                      >
-                        {surface}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-zinc-500">
-                    No UI surfaces declared.
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-zinc-200">Settings</h3>
-                {selectedExtension.settingsCount ? (
-                  <p className="text-xs text-zinc-500">
-                    This extension exposes {selectedExtension.settingsCount} configurable settings.
-                  </p>
-                ) : (
-                  <p className="text-xs text-zinc-500">
-                    This extension has no configurable settings yet.
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <ExtensionDetailsDialog
+        extension={extUi.selectedExtension}
+        onOpenChange={extUi.handleCloseExtensionDetails}
+        onRunCommand={extUi.handleRunCommand}
+      />
 
       <FolderJanitorDialog
-        open={folderJanitorOpen}
-        onOpenChange={setFolderJanitorOpen}
-        initialTarget={folderJanitorTarget}
+        open={extUi.folderJanitorOpen}
+        onOpenChange={extUi.setFolderJanitorOpen}
+        initialTarget={extUi.folderJanitorTarget}
         initialFolderPath={
-          folderJanitorTarget === "folder" ? folderJanitorFolderPath : undefined
+          extUi.folderJanitorTarget === "folder" ? extUi.folderJanitorFolderPath : undefined
         }
       />
 
       <LibraryGathererDialog
-        open={gatherOpen}
-        onOpenChange={handleCloseGather}
+        open={extUi.gatherOpen}
+        onOpenChange={extUi.handleCloseGather}
       />
 
       <MakePackDialog
-        open={packSource !== null}
-        onOpenChange={handleClosePack}
-        initialSource={packSource ?? "selection"}
-        initialFileIds={packFileIds}
-        initialOutputFormat={makePackDefaultFormat}
+        open={extUi.packSource !== null}
+        onOpenChange={extUi.handleClosePack}
+        initialSource={extUi.packSource ?? "selection"}
+        initialFileIds={extUi.packFileIds}
+        initialOutputFormat={extUi.makePackDefaultFormat}
       />
 
-      <Dialog open={showSaveSearch} onOpenChange={setShowSaveSearch}>
-        <DialogContent className="max-w-sm rounded-2xl border border-white/10 bg-shell/95 p-6 backdrop-blur-2xl">
-          <DialogTitle className="text-lg font-extrabold tracking-tight text-zinc-50">Save Search</DialogTitle>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              const data = new FormData(event.currentTarget);
-              const name = data.get("name") as string;
-              if (name.trim()) handleSaveSearch(name.trim());
-            }}
-            className="mt-4 space-y-4"
-          >
-            <Input
-              name="name"
-              placeholder="Collection name..."
-              autoFocus
-              className="rounded-xl border-white/10 bg-black/30"
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setShowSaveSearch(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit">
-                <Save className="size-4" />
-                Save
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <SaveSearchDialog
+        open={extUi.showSaveSearch}
+        onOpenChange={extUi.setShowSaveSearch}
+        onSave={(name) => {
+          void extUi.submitSaveSearch(name);
+        }}
+      />
 
-      <Dialog open={renamingCollection !== null} onOpenChange={(open) => { if (!open) setRenamingCollection(null); }}>
-        <DialogContent className="max-w-sm rounded-2xl border border-white/10 bg-shell/95 p-6 backdrop-blur-2xl">
-          <DialogTitle className="text-lg font-extrabold tracking-tight text-zinc-50">Rename Collection</DialogTitle>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              const data = new FormData(event.currentTarget);
-              const name = data.get("name") as string;
-              if (name.trim() && renamingCollection) {
-                handleRenameCollection(renamingCollection.id, name.trim());
-                setRenamingCollection(null);
-              }
-            }}
-            className="mt-4 space-y-4"
-          >
-            <Input
-              key={renamingCollection?.id ?? "new"}
-              name="name"
-              defaultValue={renamingCollection?.name ?? ""}
-              placeholder="Collection name..."
-              autoFocus
-              className="rounded-xl border-white/10 bg-black/30"
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setRenamingCollection(null)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit">
-                Save
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <RenameCollectionDialog
+        target={extUi.renamingCollection}
+        onOpenChange={(open) => {
+          if (!open) extUi.setRenamingCollection(null);
+        }}
+        onRename={(name) => {
+          void extUi.submitRenameCollection(name);
+        }}
+      />
     </div>
   );
 }

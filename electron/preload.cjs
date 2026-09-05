@@ -20,7 +20,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     };
   },
   onUpdateNotAvailable(listener) {
-    const wrapped = (_event) => listener();
+    const wrapped = () => listener();
     ipcRenderer.on("desktop:update-not-available", wrapped);
     return () => {
       ipcRenderer.removeListener("desktop:update-not-available", wrapped);

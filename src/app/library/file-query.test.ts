@@ -2,12 +2,10 @@ import { describe } from "vitest";
 import { expect, it } from "vitest";
 
 import {
-  applyFavoriteToggle,
-  applyTagToggle,
   describeFilesQuery,
   sortFileRecords,
 } from "./file-query";
-import type { FileRecord, TagRecord } from "./types";
+import type { FileRecord } from "./types";
 
 function file(overrides: Partial<FileRecord> & { id: string }): FileRecord {
   return {
@@ -22,11 +20,6 @@ function file(overrides: Partial<FileRecord> & { id: string }): FileRecord {
     ...overrides,
   };
 }
-
-const tags: TagRecord[] = [
-  { id: "t1", name: "Drums", color: "red" },
-  { id: "t2", name: "Bass", color: "blue" },
-];
 
 describe("describeFilesQuery", () => {
   const base = {
@@ -150,36 +143,5 @@ describe("sortFileRecords", () => {
       "long",
       "short",
     ]);
-  });
-});
-
-describe("optimistic reducers", () => {
-  it("toggles a favorite flag", () => {
-    const next = applyFavoriteToggle([file({ id: "a" })], "a");
-    expect(next[0].isFavorite).toBe(true);
-  });
-
-  it("attaches a known tag with its name and detaches it again", () => {
-    const start = [file({ id: "a" })];
-    const attached = applyTagToggle(start, "a", "t1", tags);
-    expect(attached.attached).toBe(true);
-    expect(attached.files[0].tags).toEqual([{ id: "t1", name: "Drums", color: "red" }]);
-
-    const detached = applyTagToggle(attached.files, "a", "t1", tags);
-    expect(detached.attached).toBe(false);
-    expect(detached.files[0].tags).toEqual([]);
-  });
-
-  it("attaches an unknown tag with a blank placeholder name", () => {
-    const result = applyTagToggle([file({ id: "a" })], "a", "missing", tags);
-    expect(result.files[0].tags).toEqual([{ id: "missing", name: "" }]);
-  });
-
-  it("supports rollback by restoring the previous snapshot", () => {
-    const start = [file({ id: "a" })];
-    const optimistic = applyTagToggle(start, "a", "t1", tags).files;
-    expect(optimistic[0].tags).toHaveLength(1);
-    const rolledBack = start;
-    expect(rolledBack[0].tags).toEqual([]);
   });
 });

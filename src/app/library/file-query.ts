@@ -105,12 +105,6 @@ export function sortFileRecords(
   return sorted;
 }
 
-export function applyFavoriteToggle(files: FileRecord[], id: string): FileRecord[] {
-  return files.map((file) =>
-    file.id === id ? { ...file, isFavorite: !file.isFavorite } : file,
-  );
-}
-
 /**
  * Batch contract for the files data layer: bulk mutations carry an explicit
  * target state and run server-side in one transaction. The per-batch
@@ -230,36 +224,6 @@ export function rollbackBulkTags(
       ? { ...file, tags: previousTagsById.get(file.id) as FileRecord["tags"] }
       : file,
   );
-}
-
-export interface TagToggleResult {
-  files: FileRecord[];
-  /** True when the tag was attached, false when detached. */
-  attached: boolean;
-}
-
-/** Optimistic attach/detach; callers keep the previous array for rollback. */
-export function applyTagToggle(
-  files: FileRecord[],
-  fileId: string,
-  tagId: string,
-  tags: TagRecord[],
-): TagToggleResult {
-  let attached = false;
-  const next = files.map((file) => {
-    if (file.id !== fileId) {
-      return file;
-    }
-    const alreadyAttached = file.tags.some((tag) => tag.id === tagId);
-    attached = !alreadyAttached;
-    return {
-      ...file,
-      tags: alreadyAttached
-        ? file.tags.filter((tag) => tag.id !== tagId)
-        : [...file.tags, tags.find((tag) => tag.id === tagId) ?? { id: tagId, name: "" }],
-    };
-  });
-  return { files: next, attached };
 }
 
 export function pageLimit(): number {

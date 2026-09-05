@@ -159,6 +159,39 @@ export async function callRoute<T = unknown>(
   return { status: response.status, body: body as T };
 }
 
+type ExtensionServices = Record<string, unknown>;
+
+/**
+ * A Yard extension context with a real permission checker. Every extension
+ * service test built this by hand; the checker is the part that matters, since
+ * an extension's own `permissions.require` is currently the only thing standing
+ * between it and a privileged service (finding E01).
+ */
+export function createExtensionContext(
+  permissions: string[] = ["library:read", "files:read"],
+  services: ExtensionServices = {},
+) {
+  const granted = new Set(permissions);
+  return {
+    services: {
+      commands: { register: () => {} },
+      ...services,
+    },
+    selection: { fileIds: [] as string[] },
+    permissions: {
+      has: (permission: string) => granted.has(permission),
+      require: (permission: string) => {
+        if (!granted.has(permission)) {
+          throw new Error(`Missing permission: ${permission}`);
+        }
+      },
+      list: () => Array.from(granted),
+    },
+    // Services and permission shapes are structural across yard-core and the
+    // tools; the cast keeps a single fixture usable from both sides.
+  } as never;
+}
+
 /**
  * A promise a test resolves or rejects on demand, for asserting what happens
  * when requests complete out of order. B04 and B11 are both out-of-order

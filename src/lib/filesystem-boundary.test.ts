@@ -24,7 +24,9 @@ describe("resolveExistingPathWithinRoots", () => {
     fs.writeFileSync(file, "audio");
 
     await expect(resolveExistingPathWithinRoots(file, [root])).resolves.toBe(
-      fs.realpathSync(file),
+      // Same canonicalization call the implementation uses: sync and async
+      // realpath disagree on short-name tmpdirs on some Windows runners.
+      await fs.promises.realpath(file),
     );
   });
 

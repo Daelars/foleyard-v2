@@ -17,3 +17,12 @@ it("passes every indexed file in a 501-file folder to the Janitor",async()=>{
     const response=await POST(new NextRequest("http://localhost/api/extensions/folder-janitor/scan-folder",{method:"POST",body:JSON.stringify({folderPath:root})}));expect(response.status).toBe(200);expect(mocks.execute.mock.calls[0][0].input.files).toHaveLength(501);
   }finally{db.close();await fs.rm(root,{recursive:true,force:true});}
 });
+it("rejects a folder outside the configured Library roots",async()=>{
+  const temp=await fs.mkdtemp(path.join(os.tmpdir(),"foleyard-janitor-outside-"));
+  const root=path.join(temp,"library");const outside=path.join(temp,"private");
+  await Promise.all([root,outside].map(p=>fs.mkdir(p)));
+  try {mocks.roots=[root];mocks.execute.mockReset();
+    const response=await POST(new NextRequest("http://localhost/api/extensions/folder-janitor/scan-folder",{method:"POST",body:JSON.stringify({folderPath:outside})}));
+    expect(response.status).toBe(400);expect(((await response.json()) as {error:string}).error).toMatch(/Library roots/);expect(mocks.execute).not.toHaveBeenCalled();
+  }finally{await fs.rm(temp,{recursive:true,force:true});}
+});

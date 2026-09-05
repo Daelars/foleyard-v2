@@ -10,6 +10,7 @@ import {
   detachFileFromCollection,
   getAllCollections,
   getFiles,
+  getSmartCollectionCount,
   renameCollection,
   updateCollectionColor,
   updateCollectionFilter,
@@ -21,12 +22,24 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const collectionId = searchParams.get('collectionId');
+  const countFor = searchParams.get('countFor');
 
   if (collectionId) {
     return NextResponse.json({ files: getFiles({ collectionId }) });
   }
 
-  return NextResponse.json({ collections: getAllCollections() });
+  // Lazy smart-collection count resolved on open; cached per query string
+  // on the client so the list endpoint stays a single grouped join.
+  if (countFor) {
+    const count = getSmartCollectionCount(countFor);
+    if (count === null) {
+      return errorResponse('Smart collection not found', 404);
+    }
+    return NextResponse.json({ count });
+  }
+
+  const includeSmartCounts = searchParams.get('includeSmartCounts') === '1';
+  return NextResponse.json({ collections: getAllCollections({ includeSmartCounts }) });
 }
 
 export async function POST(request: NextRequest) {

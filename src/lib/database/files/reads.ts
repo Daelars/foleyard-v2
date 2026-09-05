@@ -1,9 +1,107 @@
-import { and, asc, count, eq, inArray, isNull, like, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { AudioFile, IndexedAudioFile, FileSearchQuery } from "@yard-core";
 import { normalizeDirectoryPath } from "@yard-core";
-import { chunkArray, SQLITE_MAX_VARIABLES } from "../sql-parameters";
+import { chunkArray, escapeLikePattern, SQLITE_MAX_VARIABLES } from "../sql-parameters";
 import * as schema from "@/lib/schema";
 import type { FileRepositoryContext } from "./context";
+
+/** LIKE predicate on the Audio file filename with `%`/`_`/`\` treated literally. */
+function filenameLike(query: string) {
+  return sql`${schema.files.filename} LIKE ${`%${escapeLikePattern(query)}%`} ESCAPE '\\'`;
+}
+
+function tagIdSubselect(context: FileRepositoryContext, tagId: string) {
+  return inArray(
+    schema.files.id,
+    context.db
+      .select({ fileId: schema.fileTags.fileId })
+      .from(schema.fileTags)
+      .where(eq(schema.fileTags.tagId, tagId)),
+  );
+}
+
+function buildCollectionFilters(context: FileRepositoryContext, options: FileSearchQuery) {
+  const { collectionId, tagId, showRemoved } = options;
+  const collectionFilters = [eq(schema.fileCollections.collectionId, collectionId as string)];
+
+  if (tagId) {
+    collectionFilters.push(tagIdSubselect(context, tagId));
+  }
+
+  if (!showRemoved) {
+    collectionFilters.push(isNull(schema.files.removedAt));
+  }
+
+  return collectionFilters;
+}
+
+function buildFileFilters(context: FileRepositoryContext, options: FileSearchQuery) {
+  const { query, favorites, directory, libraryRoot, atLibraryRoot, tagId, showRemoved } = options;
+  const filters = [];
+
+  if (!showRemoved) {
+    filters.push(isNull(schema.files.removedAt));
+  }
+
+  if (favorites) {
+    filters.push(eq(schema.files.isFavorite, true));
+  }
+
+  if (libraryRoot) {
+    filters.push(eq(schema.files.libraryRoot, libraryRoot));
+    if (atLibraryRoot) {
+      filters.push(isNull(schema.files.directory));
+    }
+  }
+
+  if (tagId) {
+    filters.push(tagIdSubselect(context, tagId));
+  }
+
+  if (query) {
+    filters.push(filenameLike(query));
+  }
+
+  if (directory) {
+    const normalizedDirectory = normalizeDirectoryPath(directory);
+    filters.push(
+      or(
+        eq(schema.files.directory, directory),
+        eq(schema.files.directory, normalizedDirectory),
+        eq(schema.files.directory, normalizedDirectory.replace(/\//g, "\\")),
+      ),
+    );
+  }
+
+  return filters;
+}
+
+/**
+ * Server-side ordering for the Audio file list. Pages must arrive in final
+ * order so infinite scroll appends globally-correct rows. Duration ordering
+ * mirrors the client sort: Audio files without a duration sort last when
+ * ascending and first when descending. Filename and id tiebreakers keep
+ * LIMIT/OFFSET paging deterministic.
+ */
+function buildFileOrderBy(options: FileSearchQuery) {
+  const descending = options.sortDir === "desc";
+
+  if (options.sortKey === "duration") {
+    return [
+      descending
+        ? sql`${schema.files.duration} IS NULL DESC`
+        : sql`${schema.files.duration} IS NULL ASC`,
+      descending ? desc(schema.files.duration) : asc(schema.files.duration),
+      asc(schema.files.filename),
+      asc(schema.files.id),
+    ];
+  }
+
+  return [
+    descending ? desc(schema.files.filename) : asc(schema.files.filename),
+    asc(schema.files.id),
+  ];
+}
 
 export function getFiles(context: FileRepositoryContext, options?: FileSearchQuery): AudioFile[] {
     const {
@@ -17,26 +115,13 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
       showRemoved,
       limit = 500,
       offset = 0,
+      sortKey,
+      sortDir,
     } = options ?? {};
+    const orderBy = buildFileOrderBy({ sortKey, sortDir });
 
     if (collectionId) {
-      const collectionFilters = [eq(schema.fileCollections.collectionId, collectionId)];
-
-      if (tagId) {
-        collectionFilters.push(
-          inArray(
-            schema.files.id,
-            context.db
-              .select({ fileId: schema.fileTags.fileId })
-              .from(schema.fileTags)
-              .where(eq(schema.fileTags.tagId, tagId)),
-          ),
-        );
-      }
-
-      if (!showRemoved) {
-        collectionFilters.push(isNull(schema.files.removedAt));
-      }
+      const collectionFilters = buildCollectionFilters(context, { collectionId, tagId, showRemoved });
 
       const rows = context.db
         .select({
@@ -58,7 +143,7 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
         .from(schema.fileCollections)
         .innerJoin(schema.files, eq(schema.fileCollections.fileId, schema.files.id))
         .where(and(...collectionFilters))
-        .orderBy(asc(schema.files.filename), asc(schema.files.id))
+        .orderBy(...orderBy)
         .limit(limit)
         .offset(offset)
         .all();
@@ -66,49 +151,15 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
       return rows as AudioFile[];
     }
 
-    const filters = [];
-
-    if (!showRemoved) {
-      filters.push(isNull(schema.files.removedAt));
-    }
-
-    if (favorites) {
-      filters.push(eq(schema.files.isFavorite, true));
-    }
-
-    if (libraryRoot) {
-      filters.push(eq(schema.files.libraryRoot, libraryRoot));
-      if (atLibraryRoot) {
-        filters.push(isNull(schema.files.directory));
-      }
-    }
-
-    if (tagId) {
-      filters.push(
-        inArray(
-          schema.files.id,
-          context.db
-            .select({ fileId: schema.fileTags.fileId })
-            .from(schema.fileTags)
-            .where(eq(schema.fileTags.tagId, tagId)),
-        ),
-      );
-    }
-
-    if (query) {
-      filters.push(like(schema.files.filename, `%${query}%`));
-    }
-
-    if (directory) {
-      const normalizedDirectory = normalizeDirectoryPath(directory);
-      filters.push(
-        or(
-          eq(schema.files.directory, directory),
-          eq(schema.files.directory, normalizedDirectory),
-          eq(schema.files.directory, normalizedDirectory.replace(/\//g, "\\")),
-        ),
-      );
-    }
+    const filters = buildFileFilters(context, {
+      query,
+      favorites,
+      directory,
+      libraryRoot,
+      atLibraryRoot,
+      tagId,
+      showRemoved,
+    });
 
     return context.db
       .select({
@@ -129,20 +180,17 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
       })
       .from(schema.files)
       .where(filters.length ? and(...filters) : undefined)
-      .orderBy(asc(schema.files.filename), asc(schema.files.id))
+      .orderBy(...orderBy)
       .limit(limit)
       .offset(offset)
       .all() as AudioFile[];
   }
 
 export function getFileCount(context: FileRepositoryContext, options?: FileSearchQuery): number {
-    const { query, favorites, collectionId, showRemoved } = options ?? {};
+    const { collectionId, tagId, showRemoved } = options ?? {};
 
     if (collectionId) {
-      const collectionFilters = [eq(schema.fileCollections.collectionId, collectionId)];
-      if (!showRemoved) {
-        collectionFilters.push(isNull(schema.files.removedAt));
-      }
+      const collectionFilters = buildCollectionFilters(context, { collectionId, tagId, showRemoved });
       const result = context.db
         .select({ count: count() })
         .from(schema.fileCollections)
@@ -153,10 +201,7 @@ export function getFileCount(context: FileRepositoryContext, options?: FileSearc
       return result?.count ?? 0;
     }
 
-    const filters = [];
-    if (!showRemoved) filters.push(isNull(schema.files.removedAt));
-    if (favorites) filters.push(eq(schema.files.isFavorite, true));
-    if (query) filters.push(like(schema.files.filename, `%${query}%`));
+    const filters = buildFileFilters(context, options ?? {});
 
     const result = context.db
       .select({ count: count() })

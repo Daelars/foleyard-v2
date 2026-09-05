@@ -6,6 +6,7 @@ import type { TagRepository } from "@yard-core";
 import type { Tag } from "@yard-core";
 
 import { sqlite as defaultSqlite } from "./connection";
+import { chunkArray, SQLITE_MAX_VARIABLES } from "./sql-parameters";
 import * as schema from "@/lib/schema";
 
 import type Database from "better-sqlite3";
@@ -65,15 +66,22 @@ export class SqliteTagRepository implements TagRepository {
   getTagsForFiles(fileIds: string[]): Map<string, Tag[]> {
     if (fileIds.length === 0) return new Map();
 
-    const rows = this.db
-      .select({
-        fileId: schema.fileTags.fileId,
-        tag: schema.tags,
-      })
-      .from(schema.fileTags)
-      .innerJoin(schema.tags, eq(schema.fileTags.tagId, schema.tags.id))
-      .where(inArray(schema.fileTags.fileId, fileIds))
-      .all();
+    const rows: Array<{ fileId: string; tag: Tag }> = [];
+    const chunkSize = Math.max(1, SQLITE_MAX_VARIABLES - 1);
+
+    for (const chunk of chunkArray(fileIds, chunkSize)) {
+      rows.push(
+        ...(this.db
+          .select({
+            fileId: schema.fileTags.fileId,
+            tag: schema.tags,
+          })
+          .from(schema.fileTags)
+          .innerJoin(schema.tags, eq(schema.fileTags.tagId, schema.tags.id))
+          .where(inArray(schema.fileTags.fileId, chunk))
+          .all() as Array<{ fileId: string; tag: Tag }>),
+      );
+    }
 
     const map = new Map<string, Tag[]>();
     for (const row of rows) {

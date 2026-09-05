@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useCallback } from "react";
 import {
   FileInput,
   FolderOpen,
@@ -9,7 +8,6 @@ import {
   Trash2,
   FolderSearch,
 } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,29 +19,15 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { getDesktopBridge, isDesktopApp } from "@/lib/desktop";
+import {
+  ExtensionFooterRow,
+  ExtensionPathField,
+  ExtensionSection,
+  ExtensionStatusBanner,
+} from "@/components/extensions/dialog-fields";
 
-interface GatherFile {
-  sourcePath: string;
-  outputPath: string;
-  skipped: boolean;
-  reason: string | null;
-}
-
-interface GatherPreviewResult {
-  copied: number;
-  skipped: number;
-  files: GatherFile[];
-  reportPath: string;
-}
-
-interface GatherCompletedResult {
-  copied: number;
-  skipped: number;
-  reportPath: string;
-}
+import { useLibraryGatherer } from "./use-library-gatherer";
 
 export function LibraryGathererDialog({
   open,
@@ -52,139 +36,30 @@ export function LibraryGathererDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [sourceFolders, setSourceFolders] = useState<string[]>([]);
-  const [newFolderPath, setNewFolderPath] = useState("");
-  const [destinationGrant, setDestinationGrant] = useState("");
-  const [destDir, setDestDir] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [previewResult, setPreviewResult] =
-    useState<GatherPreviewResult | null>(null);
-  const [completedResult, setCompletedResult] =
-    useState<GatherCompletedResult | null>(null);
-
-  const handleAddFolder = useCallback(() => {
-    const path = newFolderPath.trim();
-    if (!path) return;
-
-    if (sourceFolders.includes(path)) {
-      toast.error("Folder already added");
-      return;
-    }
-
-    setSourceFolders((prev) => [...prev, path]);
-    setNewFolderPath("");
-  }, [newFolderPath, sourceFolders]);
-
-  const handlePickFolder = useCallback(async () => {
-    if (!isDesktopApp()) {
-      toast.error("Folder picker requires the desktop app");
-      return;
-    }
-
-    const result = await getDesktopBridge()?.pickFolder();
-    if (result?.ok && result.path) {
-      setNewFolderPath(result.path);
-    }
-  }, []);
-
-  const handleRemoveFolder = useCallback((path: string) => {
-    setSourceFolders((prev) => prev.filter((p) => p !== path));
-  }, []);
-
-  const handlePickDest = useCallback(async () => {
-    if (!isDesktopApp()) {
-      toast.error("Folder picker requires the desktop app");
-      return;
-    }
-
-    const result = await getDesktopBridge()?.pickFolder();
-    if (result?.ok && result.path) {
-      setDestDir(result.path);
-      setDestinationGrant(result.grantToken ?? "");
-    }
-  }, []);
-
-  const handlePreview = useCallback(async () => {
-    if (sourceFolders.length === 0) {
-      toast.error("Add at least one source folder");
-      return;
-    }
-    if (!destDir.trim()) {
-      toast.error("Choose a destination directory");
-      return;
-    }
-
-    setIsLoading(true);
-    setPreviewResult(null);
-    setCompletedResult(null);
-
-    try {
-      const res = await fetch("/api/extensions/library-gatherer/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceDirectories: sourceFolders,
-          destinationDirectory: destDir.trim(),
-          destinationGrant,
-        }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Preview failed");
-      }
-
-      setPreviewResult(data);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Preview failed");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [sourceFolders, destDir, destinationGrant]);
-
-  const handleGather = useCallback(async () => {
-    if (sourceFolders.length === 0 || !destDir.trim()) return;
-
-    setIsLoading(true);
-
-    try {
-      const res = await fetch("/api/extensions/library-gatherer/gather", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceDirectories: sourceFolders,
-          destinationDirectory: destDir.trim(),
-          destinationGrant,
-        }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Gather failed");
-      }
-
-      setCompletedResult(data);
-      setPreviewResult(null);
-      toast.success(`Gathered ${data.copied} files (${data.skipped} skipped)`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Gather failed");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [sourceFolders, destDir, destinationGrant]);
+  const {
+    sourceFolders,
+    newFolderPath,
+    setNewFolderPath,
+    destDir,
+    setDestDir,
+    isLoading,
+    previewResult,
+    completedResult,
+    reset,
+    handleAddFolder,
+    handlePickFolder,
+    handleRemoveFolder,
+    handlePickDest,
+    handlePreview,
+    handleGather,
+  } = useLibraryGatherer();
 
   return (
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
-          setSourceFolders([]);
-          setNewFolderPath("");
-          setDestinationGrant("");
-          setDestDir("");
-          setIsLoading(false);
-          setPreviewResult(null);
-          setCompletedResult(null);
+          reset();
         }
         onOpenChange(nextOpen);
       }}
@@ -198,15 +73,11 @@ export function LibraryGathererDialog({
         </DialogHeader>
 
         <div className="mt-6 space-y-6">
-          <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-            <div className="flex items-center gap-2">
-              <FolderSearch className="size-4 text-accent-text" />
-              <span className="text-sm font-medium">Source folders</span>
-              {sourceFolders.length > 0 && (
-                <Badge variant="secondary">{sourceFolders.length}</Badge>
-              )}
-            </div>
-
+          <ExtensionSection
+            icon={<FolderSearch className="size-4 text-accent-text" />}
+            title="Source folders"
+            count={sourceFolders.length}
+          >
             {sourceFolders.length > 0 && (
               <div className="space-y-1.5">
                 {sourceFolders.map((folder) => (
@@ -254,44 +125,31 @@ export function LibraryGathererDialog({
                 Add
               </Button>
             </div>
-          </section>
+          </ExtensionSection>
 
-          <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-            <div className="flex items-center gap-2">
-              <FolderOpen className="size-4 text-accent-text" />
-              <span className="text-sm font-medium">
-                Main library destination
-              </span>
-            </div>
-
-            <div className="flex gap-2">
-              <Input
-                value={destDir}
-                onChange={(e) => setDestDir(e.target.value)}
-                placeholder="/path/to/main/library"
-                className="flex-1"
-              />
-              {isDesktopApp() && (
-                <Button variant="outline" size="sm" onClick={handlePickDest}>
-                  <FolderOpen className="mr-1 size-3" />
-                  Choose
-                </Button>
-              )}
-            </div>
-          </section>
+          <ExtensionSection
+            icon={<FolderOpen className="size-4 text-accent-text" />}
+            title="Main library destination"
+          >
+            <ExtensionPathField
+              value={destDir}
+              onChange={setDestDir}
+              placeholder="/path/to/main/library"
+              showPick={isDesktopApp()}
+              pickLabel="Choose"
+              onPick={handlePickDest}
+            />
+          </ExtensionSection>
 
           {previewResult && (
-            <Alert>
-              <AlertTitle>Gather preview</AlertTitle>
-              <AlertDescription>
-                {previewResult.copied.toLocaleString()} files will be copied.
-                {previewResult.skipped > 0 &&
-                  ` ${previewResult.skipped.toLocaleString()} ${
-                    previewResult.skipped === 1 ? "duplicate" : "duplicates"
-                  } will be skipped.`}{" "}
-                No originals will be moved or deleted.
-              </AlertDescription>
-            </Alert>
+            <ExtensionStatusBanner title="Gather preview">
+              {previewResult.copied.toLocaleString()} files will be copied.
+              {previewResult.skipped > 0 &&
+                ` ${previewResult.skipped.toLocaleString()} ${
+                  previewResult.skipped === 1 ? "duplicate" : "duplicates"
+                } will be skipped.`}{" "}
+              No originals will be moved or deleted.
+            </ExtensionStatusBanner>
           )}
 
           {previewResult && previewResult.files.length > 0 && (
@@ -317,17 +175,14 @@ export function LibraryGathererDialog({
 
           {completedResult && (
             <div className="space-y-3">
-              <Alert>
-                <AlertTitle>Gather complete</AlertTitle>
-                <AlertDescription>
-                  {completedResult.copied.toLocaleString()} files copied,{" "}
-                  {completedResult.skipped.toLocaleString()} skipped.
-                  <br />
-                  <span className="font-mono text-xs text-zinc-500">
-                    Report saved to {completedResult.reportPath}
-                  </span>
-                </AlertDescription>
-              </Alert>
+              <ExtensionStatusBanner title="Gather complete">
+                {completedResult.copied.toLocaleString()} files copied,{" "}
+                {completedResult.skipped.toLocaleString()} skipped.
+                <br />
+                <span className="font-mono text-xs text-zinc-500">
+                  Report saved to {completedResult.reportPath}
+                </span>
+              </ExtensionStatusBanner>
 
               {isDesktopApp() && (
                 <div className="flex gap-2">
@@ -357,7 +212,7 @@ export function LibraryGathererDialog({
 
         <DialogFooter showCloseButton={!completedResult}>
           {!completedResult ? (
-            <>
+            <ExtensionFooterRow>
               <Button
                 variant="secondary"
                 onClick={handlePreview}
@@ -379,7 +234,7 @@ export function LibraryGathererDialog({
                 <FileInput className="mr-2 size-4" />
                 {isLoading ? "Working..." : "Gather into library"}
               </Button>
-            </>
+            </ExtensionFooterRow>
           ) : null}
         </DialogFooter>
       </DialogContent>

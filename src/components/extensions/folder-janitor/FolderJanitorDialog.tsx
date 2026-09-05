@@ -1,8 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
 import { Bug, Eye, Loader2, Search } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { ExtensionDialogShell } from "@/components/extensions/ExtensionDialogShell";
@@ -27,37 +25,23 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { getDesktopBridge, isDesktopApp } from "@/lib/desktop";
+import { isDesktopApp } from "@/lib/desktop";
+import { ExtensionStatusBanner } from "@/components/extensions/dialog-fields";
 
-type IssueKind =
-  | "duplicate"
-  | "missing-file"
-  | "broken"
-  | "tiny-file"
-  | "weird-format"
-  | "empty-folder";
-
-interface Issue {
-  kind: IssueKind;
-  path: string;
-  fileIds: string[];
-  message: string;
-}
-
-interface ScanResult {
-  scannedFiles: number;
-  scannedRoots: string[];
-  issues: Issue[];
-}
+import {
+  useFolderJanitor,
+  type JanitorIssueKind,
+  type JanitorTarget,
+} from "./use-folder-janitor";
 
 interface FolderJanitorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialTarget?: "library" | "folder";
+  initialTarget?: JanitorTarget;
   initialFolderPath?: string;
 }
 
-const ISSUE_GROUPS: { kind: IssueKind; label: string }[] = [
+const ISSUE_GROUPS: { kind: JanitorIssueKind; label: string }[] = [
   { kind: "duplicate", label: "Duplicates" },
   { kind: "missing-file", label: "Missing files" },
   { kind: "broken", label: "Broken files" },
@@ -72,151 +56,24 @@ export function FolderJanitorDialog({
   initialTarget = "library",
   initialFolderPath,
 }: FolderJanitorDialogProps) {
-  const [isScanning, setIsScanning] = useState(false);
-  const [result, setResult] = useState<ScanResult | null>(null);
-  const [allowCleanup, setAllowCleanup] = useState(false);
-  const [isRemoving, setIsRemoving] = useState(false);
-  const [confirmingCleanup, setConfirmingCleanup] = useState(false);
-
-  // Reset extension-local workflow state each time this modal opens.
-  useEffect(() => {
-    if (open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setResult(null);
-      setAllowCleanup(false);
-      setIsScanning(false);
-      setIsRemoving(false);
-      setConfirmingCleanup(false);
-    }
-  }, [open]);
-
-  const isFolderScan = initialTarget === "folder" && Boolean(initialFolderPath);
-  const scanLabel = isFolderScan ? "Scan folder" : "Scan library";
-  const scanDescription = isFolderScan
-    ? initialFolderPath
-    : "Scans every indexed file across your configured library roots.";
-
-  const handleScan = useCallback(async () => {
-    setIsScanning(true);
-    setResult(null);
-
-    try {
-      let res: Response;
-
-      if (isFolderScan) {
-        res = await fetch("/api/extensions/folder-janitor/scan-folder", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ folderPath: initialFolderPath }),
-        });
-      } else {
-        res = await fetch("/api/extensions/folder-janitor/scan-library", {
-          method: "POST",
-        });
-      }
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Scan failed");
-      }
-
-      setResult(data);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Scan failed");
-    } finally {
-      setIsScanning(false);
-    }
-  }, [initialFolderPath, isFolderScan]);
-
-  const handleReveal = useCallback(async (fileId?: string, path?: string) => {
-    const bridge = getDesktopBridge();
-    if (bridge) {
-      if (fileId) {
-        await bridge.revealInExplorer(fileId);
-      } else if (path) {
-        await bridge.revealPath(path);
-      }
-    }
-  }, []);
-
-  const handleRemove = useCallback(async (fileIds: string[]) => {
-    setIsRemoving(true);
-    try {
-      const res = await fetch("/api/extensions/folder-janitor/remove-files", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileIds }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to remove files");
-      }
-
-      toast.success(
-        `Removed ${data.removed} file${data.removed !== 1 ? "s" : ""}`,
-      );
-      await handleScan();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to remove files",
-      );
-    } finally {
-      setIsRemoving(false);
-    }
-  }, [handleScan]);
-
-  const handleDeleteFolders = useCallback(async (paths: string[]) => {
-    setIsRemoving(true);
-    try {
-      const res = await fetch("/api/extensions/folder-janitor/delete-folders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paths }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to delete folders");
-      }
-
-      const deleted = data.results.filter((r: { ok: boolean }) => r.ok).length;
-      toast.success(
-        `Deleted ${deleted} empty folder${deleted !== 1 ? "s" : ""}`,
-      );
-      await handleScan();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete folders",
-      );
-    } finally {
-      setIsRemoving(false);
-    }
-  }, [handleScan]);
-
-  const handleAllowCleanupChange = useCallback((checked: boolean) => {
-    if (checked) {
-      setConfirmingCleanup(true);
-    } else {
-      setAllowCleanup(false);
-    }
-  }, []);
-
-  const handleConfirmCleanup = useCallback(() => {
-    setAllowCleanup(true);
-    setConfirmingCleanup(false);
-  }, []);
-
-  const issueCounts: Record<string, number> = result
-    ? result.issues.reduce(
-        (acc, issue) => {
-          acc[issue.kind] = (acc[issue.kind] ?? 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>,
-      )
-    : {};
+  const {
+    progress,
+    isScanning,
+    result,
+    issueCounts,
+    allowCleanup,
+    isRemoving,
+    confirmingCleanup,
+    setConfirmingCleanup,
+    scanLabel,
+    scanDescription,
+    handleScan,
+    handleReveal,
+    handleRemove,
+    handleDeleteFolders,
+    handleAllowCleanupChange,
+    handleConfirmCleanup,
+  } = useFolderJanitor({ open, initialTarget, initialFolderPath });
 
   return (
     <ExtensionDialogShell
@@ -254,7 +111,7 @@ export function FolderJanitorDialog({
             ) : (
               <Bug className="mr-2 size-4" />
             )}
-            {isScanning ? "Scanning..." : "Scan for issues"}
+            {isScanning ? `Scanning ${progress.completed.toLocaleString()} / ${progress.total.toLocaleString()}...` : "Scan for issues"}
           </Button>
         </div>
       </section>
@@ -262,11 +119,9 @@ export function FolderJanitorDialog({
       {result && (
         <>
           {result.issues.length === 0 ? (
-            <Alert>
-              <AlertDescription>
-                No issues found. Your library is clean.
-              </AlertDescription>
-            </Alert>
+            <ExtensionStatusBanner>
+              No issues found. Your library is clean.
+            </ExtensionStatusBanner>
           ) : (
             <>
               <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">

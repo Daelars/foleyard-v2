@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { initializeDatabaseSchema } from "../migrations";
 import { SqliteAudioFileRepository } from "../file-repository";
+import { SqliteBrowseRepository } from "../browse-repository";
 import { SqliteTagRepository } from "../tag-repository";
+import { SqliteCollectionRepository } from "../collection-repository";
+import { SQLITE_MAX_VARIABLES } from "../sql-parameters";
 import Database from "better-sqlite3";
 
 function createTestDb() {
@@ -13,10 +16,11 @@ function createTestDb() {
 }
 
 describe("SqliteAudioFileRepository", () => {
+  let sqlite: Database;
   let repo: SqliteAudioFileRepository;
 
   beforeEach(() => {
-    const sqlite = createTestDb();
+    sqlite = createTestDb();
     repo = new SqliteAudioFileRepository(sqlite);
   });
 
@@ -435,5 +439,205 @@ describe("SqliteAudioFileRepository", () => {
 
   it("getFileByPath returns null for missing path", () => {
     expect(repo.getFileByPath("/nonexistent.mp3")).toBeNull();
+  });
+
+  function insertAudioFile(overrides: Record<string, unknown>) {
+    repo.upsertFile({
+      path: "/music/a.mp3",
+      filename: "a.mp3",
+      directory: "/music",
+      format: ".mp3",
+      codec: null,
+      duration: null,
+      sampleRate: null,
+      bitDepth: null,
+      channels: null,
+      fileSize: null,
+      mtimeMs: 0,
+      removedAt: null,
+      lastScannedAt: "",
+      ...overrides,
+    } as Parameters<typeof repo.upsertFile>[0]);
+  }
+
+  it("search treats % as a literal character", () => {
+    insertAudioFile({ path: "/music/50%.mp3", filename: "50%.mp3" });
+    insertAudioFile({ path: "/music/5000.mp3", filename: "5000.mp3" });
+    insertAudioFile({ path: "/music/50x.mp3", filename: "50x.mp3" });
+
+    const results = repo.getFiles({ query: "50%" });
+    expect(results.map((file) => file.filename)).toEqual(["50%.mp3"]);
+  });
+
+  it("search treats _ as a literal character", () => {
+    insertAudioFile({ path: "/music/a_b.mp3", filename: "a_b.mp3" });
+    insertAudioFile({ path: "/music/aXb.mp3", filename: "aXb.mp3" });
+
+    const results = repo.getFiles({ query: "a_b" });
+    expect(results.map((file) => file.filename)).toEqual(["a_b.mp3"]);
+  });
+
+  it("search treats backslash as a literal character", () => {
+    insertAudioFile({ path: "/music/a\\b.mp3", filename: "a\\b.mp3" });
+    insertAudioFile({ path: "/music/aXb.mp3", filename: "aXb.mp3" });
+
+    const results = repo.getFiles({ query: "a\\b" });
+    expect(results.map((file) => file.filename)).toEqual(["a\\b.mp3"]);
+  });
+
+  it("getFileCount matches getFiles for libraryRoot/directory/tagId/atLibraryRoot filters", () => {
+    insertAudioFile({ path: "/root-a/rock/anthem.mp3", filename: "anthem.mp3", libraryRoot: "/root-a", directory: "/root-a/rock" });
+    insertAudioFile({ path: "/root-a/rock/ballad.mp3", filename: "ballad.mp3", libraryRoot: "/root-a", directory: "/root-a/rock" });
+    insertAudioFile({ path: "/root-a/top.mp3", filename: "top.mp3", libraryRoot: "/root-a", directory: null });
+    insertAudioFile({ path: "/root-b/jazz/standard.mp3", filename: "standard.mp3", libraryRoot: "/root-b", directory: "/root-b/jazz" });
+
+    const tagRepo = new SqliteTagRepository(sqlite);
+    const tagId = tagRepo.createTag("punchy");
+    const anthemId = repo.getFiles().find((file) => file.filename === "anthem.mp3")!.id;
+    tagRepo.attachTagToFile(anthemId, tagId);
+
+    const queries = [
+      { libraryRoot: "/root-a" },
+      { libraryRoot: "/root-a", atLibraryRoot: true },
+      { directory: "/root-a/rock" },
+      { libraryRoot: "/root-a", directory: "/root-a/rock" },
+      { tagId },
+      { libraryRoot: "/root-a", tagId },
+      { query: "anthem" },
+      { favorites: false },
+    ] as const;
+
+    for (const options of queries) {
+      expect(repo.getFileCount(options), JSON.stringify(options)).toBe(
+        repo.getFiles({ ...options, limit: 5000 }).length,
+      );
+    }
+  });
+
+  it("getFileCount matches getFiles for collection + tag filters", () => {
+    insertAudioFile({ path: "/music/a.mp3", filename: "a.mp3" });
+    insertAudioFile({ path: "/music/b.mp3", filename: "b.mp3" });
+
+    const tagRepo = new SqliteTagRepository(sqlite);
+    const collectionRepo = new SqliteCollectionRepository(sqlite);
+    const tagId = tagRepo.createTag("riser");
+    const collectionId = collectionRepo.createCollection("favorites");
+    const files = repo.getFiles();
+    for (const file of files) {
+      collectionRepo.attachFileToCollection(file.id, collectionId);
+    }
+    tagRepo.attachTagToFile(files[0].id, tagId);
+
+    const options = { collectionId, tagId };
+    expect(repo.getFileCount(options)).toBe(repo.getFiles({ ...options, limit: 5000 }).length);
+    expect(repo.getFileCount(options)).toBe(1);
+    expect(repo.getFileCount({ collectionId })).toBe(2);
+  });
+
+  it("getTagsForFiles handles more ids than the SQLite variable limit", () => {
+    const tagRepo = new SqliteTagRepository(sqlite);
+    const tagId = tagRepo.createTag("whoosh");
+    const total = SQLITE_MAX_VARIABLES + 10;
+    const records = Array.from({ length: total }, (_, index) => ({
+      path: `/music/file-${index}.mp3`,
+      filename: `file-${index}.mp3`,
+      directory: "/music",
+      format: ".mp3",
+      codec: null,
+      duration: null,
+      sampleRate: null,
+      bitDepth: null,
+      channels: null,
+      fileSize: null,
+      mtimeMs: 0,
+      removedAt: null,
+      lastScannedAt: "",
+    }));
+    repo.batchUpsertFiles(records, new Date().toISOString());
+
+    const files = repo.getFiles({ limit: total + 10 });
+    expect(files).toHaveLength(total);
+    for (const file of files) {
+      tagRepo.attachTagToFile(file.id, tagId);
+    }
+
+    const map = tagRepo.getTagsForFiles(files.map((file) => file.id));
+    expect(map.size).toBe(total);
+    for (const file of files) {
+      expect(map.get(file.id)?.map((tag) => tag.name)).toEqual(["whoosh"]);
+    }
+  });
+
+  it("browse repository returns distinct directories without duplicates", () => {
+    insertAudioFile({ path: "/music/rock/a.mp3", filename: "a.mp3", libraryRoot: "/music", directory: "/music/rock" });
+    insertAudioFile({ path: "/music/rock/b.mp3", filename: "b.mp3", libraryRoot: "/music", directory: "/music/rock" });
+    insertAudioFile({ path: "/music/jazz/c.mp3", filename: "c.mp3", libraryRoot: "/music", directory: "/music/jazz" });
+
+    const browseRepo = new SqliteBrowseRepository(sqlite);
+    expect(browseRepo.getUniqueDirectories()).toEqual(["/music/jazz", "/music/rock"]);
+    expect(browseRepo.getDirectoriesForRoot("/music")).toEqual(["/music/jazz", "/music/rock"]);
+  });
+
+  it("getFiles orders by duration server-side with stable paging", () => {
+    insertAudioFile({ path: "/music/c.mp3", filename: "c.mp3", duration: 30 });
+    insertAudioFile({ path: "/music/a.mp3", filename: "a.mp3", duration: 5 });
+    insertAudioFile({ path: "/music/b.mp3", filename: "b.mp3", duration: null });
+    insertAudioFile({ path: "/music/d.mp3", filename: "d.mp3", duration: 10 });
+
+    const ascending = repo.getFiles({ sortKey: "duration", sortDir: "asc" });
+    expect(ascending.map((file) => file.filename)).toEqual([
+      "a.mp3",
+      "d.mp3",
+      "c.mp3",
+      "b.mp3",
+    ]);
+
+    // Paged reads continue the global order instead of reshuffling per page.
+    const pageOne = repo.getFiles({ sortKey: "duration", sortDir: "asc", limit: 2, offset: 0 });
+    const pageTwo = repo.getFiles({ sortKey: "duration", sortDir: "asc", limit: 2, offset: 2 });
+    expect([...pageOne, ...pageTwo].map((file) => file.filename)).toEqual(
+      ascending.map((file) => file.filename),
+    );
+
+    const descending = repo.getFiles({ sortKey: "duration", sortDir: "desc" });
+    expect(descending.map((file) => file.filename)).toEqual([
+      "b.mp3",
+      "c.mp3",
+      "d.mp3",
+      "a.mp3",
+    ]);
+  });
+
+  it("getFiles orders by filename in either direction", () => {
+    insertAudioFile({ path: "/music/b.mp3", filename: "b.mp3" });
+    insertAudioFile({ path: "/music/a.mp3", filename: "a.mp3" });
+
+    expect(repo.getFiles().map((file) => file.filename)).toEqual(["a.mp3", "b.mp3"]);
+    expect(
+      repo.getFiles({ sortKey: "filename", sortDir: "desc" }).map((file) => file.filename),
+    ).toEqual(["b.mp3", "a.mp3"]);
+  });
+
+  it("collection listings honor the server-side sort", () => {
+    insertAudioFile({ path: "/music/c.mp3", filename: "c.mp3", duration: 30 });
+    insertAudioFile({ path: "/music/a.mp3", filename: "a.mp3", duration: 5 });
+    insertAudioFile({ path: "/music/nodur.mp3", filename: "nodur.mp3", duration: null });
+
+    const collectionRepo = new SqliteCollectionRepository(sqlite);
+    const collectionId = collectionRepo.createCollection("evening");
+    for (const file of repo.getFiles()) {
+      collectionRepo.attachFileToCollection(file.id, collectionId);
+    }
+
+    const ordered = repo.getFiles({ collectionId, sortKey: "duration", sortDir: "asc" });
+    expect(ordered.map((file) => file.filename)).toEqual(["a.mp3", "c.mp3", "nodur.mp3"]);
+  });
+
+  it("collection-membership lookups are index-served", () => {
+    const indexes = sqlite
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'file_collections'")
+      .all() as Array<{ name: string }>;
+    const names = indexes.map((index) => index.name);
+    expect(names).toContain("idx_file_collections_collection_id");
   });
 });

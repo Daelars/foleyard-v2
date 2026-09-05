@@ -128,7 +128,7 @@ export class YardExtensionHost {
         };
       }
 
-      const value = await commands.execute(request.commandId);
+      const value = await commands.execute(request.commandId, request.input);
 
       return isYardUiIntent(value)
         ? { ok: true, type: "ui-intent", intent: value }

@@ -36,11 +36,17 @@ app.whenReady().then(() => {
   ensureDesktopDatabaseInitialized();
   void openMainWindow().then(() => {
     initAutoUpdater();
-  }).catch(reportMainProcessError);
+  }).catch((error) => {
+    // Startup failure: loud dialog, then terminate instead of lingering on a
+    // blank window.
+    reportMainProcessError(error, { fatal: true });
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void openMainWindow().catch(reportMainProcessError);
+      void openMainWindow().catch((error) => {
+        reportMainProcessError(error, { fatal: true });
+      });
     }
   });
 });
@@ -52,5 +58,9 @@ app.on("window-all-closed", () => {
 });
 
 process.on("uncaughtException", (error) => {
-  reportMainProcessError(error);
+  reportMainProcessError(error, { fatal: true });
+});
+
+process.on("unhandledRejection", (reason) => {
+  reportMainProcessError(reason, { fatal: true });
 });

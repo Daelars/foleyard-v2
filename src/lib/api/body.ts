@@ -8,6 +8,9 @@ export async function readMutationBody(request: Request, references = true) {
     if (body[key] !== undefined && (typeof body[key] !== "string" || !body[key].trim())) throw new ApiError(key + " must be a non-empty string");
   }
   if (body.fileIds !== undefined && (!Array.isArray(body.fileIds) || body.fileIds.some((id: unknown) => typeof id !== "string" || !id))) throw new ApiError("fileIds must be string[]");
+  if (body.ids !== undefined && (!Array.isArray(body.ids) || body.ids.some((id: unknown) => typeof id !== "string" || !id))) throw new ApiError("ids must be string[]");
+  if (body.isFavorite !== undefined && typeof body.isFavorite !== "boolean") throw new ApiError("isFavorite must be a boolean");
+  if (body.attached !== undefined && typeof body.attached !== "boolean") throw new ApiError("attached must be a boolean");
   if (body.isSmart !== undefined && typeof body.isSmart !== "boolean") throw new ApiError("isSmart must be a boolean");
   if (body.permanent !== undefined && typeof body.permanent !== "boolean") throw new ApiError("permanent must be a boolean");
   if (body.filter !== undefined && body.filter !== null && typeof body.filter !== "string") throw new ApiError("filter must be a string or null");

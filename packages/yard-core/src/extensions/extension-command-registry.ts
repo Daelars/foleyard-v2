@@ -1,6 +1,7 @@
 import { YardCoreError } from "../errors/yard-core-error";
 
 import type { RegisteredYardCommand } from "./vocabulary";
+import { YardCommandValidationError } from "./vocabulary";
 
 function assertNonEmptyCommandId(commandId: string) {
   if (!commandId.trim()) {
@@ -34,7 +35,7 @@ export class YardCommandRegistry {
     return Array.from(this.commands.values(), (command) => ({ ...command }));
   }
 
-  async execute(commandId: string): Promise<unknown> {
+  async execute(commandId: string, input?: unknown): Promise<unknown> {
     const command = this.commands.get(commandId);
 
     if (!command) {
@@ -43,6 +44,13 @@ export class YardCommandRegistry {
 
     if (!command.handler) {
       throw new YardCoreError(`Command "${commandId}" does not have a handler.`);
+    }
+
+    if (command.inputSchema) {
+      const error = command.inputSchema.validate(input);
+      if (error) {
+        throw new YardCommandValidationError(error);
+      }
     }
 
     return await command.handler();

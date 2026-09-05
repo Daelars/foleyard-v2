@@ -1,6 +1,6 @@
 import type { YardExtensionManifest } from "@yard-core";
 
-import type { ExtensionGridItem } from "@/components/ExtensionGrid";
+import type { ExtensionGridItem } from "@/lib/extensions/types";
 import { getExtensionEnabled, setExtensionEnabled } from "@/lib/db";
 import { getExtensionSettingValue } from "@/lib/extensions/settings-store";
 

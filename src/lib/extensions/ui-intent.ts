@@ -53,28 +53,54 @@ export function interpretExtensionUiIntent(
   intent: YardUiIntent,
   actions: ExtensionUiIntentActions,
 ): boolean {
-  if (
-    intent.type === "folder-janitor.open-scan" &&
-    isFolderJanitorPayload(intent.payload)
-  ) {
-    actions.openFolderJanitor(intent.payload);
-    return true;
-  }
+  return uiIntentHandlers.get(intent.type)?.(intent.payload, actions) ?? false;
+}
 
-  if (intent.type === "library-gatherer.open") {
-    actions.openLibraryGatherer();
-    return true;
-  }
+export type ExtensionUiIntentHandler = (
+  payload: unknown,
+  actions: ExtensionUiIntentActions,
+) => boolean;
 
-  if (intent.type === "make-pack.open" && isMakePackPayload(intent.payload)) {
-    actions.openMakePack(intent.payload);
-    return true;
-  }
+const uiIntentHandlers = new Map<string, ExtensionUiIntentHandler>([
+  [
+    "folder-janitor.open-scan",
+    (payload, actions) => {
+      if (!isFolderJanitorPayload(payload)) {
+        return false;
+      }
+      actions.openFolderJanitor(payload);
+      return true;
+    },
+  ],
+  [
+    "library-gatherer.open",
+    (_payload, actions) => {
+      actions.openLibraryGatherer();
+      return true;
+    },
+  ],
+  [
+    "make-pack.open",
+    (payload, actions) => {
+      if (!isMakePackPayload(payload)) {
+        return false;
+      }
+      actions.openMakePack(payload);
+      return true;
+    },
+  ],
+  [
+    "drop-rules.open-settings",
+    (_payload, actions) => {
+      actions.openSettings();
+      return true;
+    },
+  ],
+]);
 
-  if (intent.type === "drop-rules.open-settings") {
-    actions.openSettings();
-    return true;
-  }
-
-  return false;
+export function registerUiIntentHandler(
+  type: string,
+  handler: ExtensionUiIntentHandler,
+): void {
+  uiIntentHandlers.set(type, handler);
 }

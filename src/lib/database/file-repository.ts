@@ -43,6 +43,8 @@ markFileRemoved(pathValue: string, removedAt: string) { return writes.markFileRe
 batchMarkRemoved(paths: string[], removedAt: string, now: string): void { return batch.batchMarkRemoved({ sqlite: this.sqlite, db: this.db }, paths, removedAt, now); }
 reconcileMovedFiles(): number { return batch.reconcileMovedFiles({ sqlite: this.sqlite, db: this.db }); }
 toggleFavorite(id: string): boolean { return writes.toggleFavorite({ sqlite: this.sqlite, db: this.db }, id); }
+setFavorites(ids: string[], isFavorite: boolean): void { return writes.setFavorites({ sqlite: this.sqlite, db: this.db }, ids, isFavorite); }
+setFileTagBatch(fileIds: string[], tagId: string, attached: boolean): void { return writes.setFileTagBatch({ sqlite: this.sqlite, db: this.db }, fileIds, tagId, attached); }
 }
 
 
@@ -69,3 +71,6 @@ export const markFileRemoved = (path: string, removed: string) => getFileRepo().
 export const batchMarkRemoved = (paths: string[], removed: string, now: string) => getFileRepo().batchMarkRemoved(paths, removed, now);
 export const reconcileMovedFiles = () => getFileRepo().reconcileMovedFiles();
 export const toggleFavorite = (id: string) => getFileRepo().toggleFavorite(id);
+export const setFavorites = (ids: string[], isFavorite: boolean) => getFileRepo().setFavorites(ids, isFavorite);
+export const setFileTagBatch = (fileIds: string[], tagId: string, attached: boolean) =>
+  getFileRepo().setFileTagBatch(fileIds, tagId, attached);

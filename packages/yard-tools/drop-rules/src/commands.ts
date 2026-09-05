@@ -4,12 +4,38 @@ import path from "node:path";
 
 import {
   createYardUiIntent,
+  defineYardCommandInputSchema,
   YardCommandValidationError,
   type YardExtensionContext,
 } from "yard-core";
 
 import { createService } from "./service";
 import type { DropRuleOptions, PrepareDragOptions } from "./types";
+
+export const dropRuleInputSchema =
+  defineYardCommandInputSchema(validateDropRuleInput);
+
+export const prepareDragInputSchema = defineYardCommandInputSchema(
+  validatePrepareDragInput,
+);
+
+export function validateDropRuleInput(input: unknown): string | null {
+  const candidate = input as Partial<DropRuleOptions> | undefined;
+  if (!candidate?.targetDirectory || !Array.isArray(candidate.files)) {
+    return "targetDirectory and files are required";
+  }
+
+  return null;
+}
+
+export function validatePrepareDragInput(input: unknown): string | null {
+  const candidate = input as Partial<PrepareDragOptions> | undefined;
+  if (!candidate?.file) {
+    return "file is required";
+  }
+
+  return null;
+}
 
 function booleanSetting(
   context: YardExtensionContext,
@@ -82,6 +108,7 @@ export function registerCommands(context: YardExtensionContext) {
     description: "Preview the file actions that Drop Rules would perform.",
     scope: "drop",
     requiresSelection: true,
+    inputSchema: dropRuleInputSchema,
     handler: () => createService(context).preview(getRuleOptions(context)),
   });
 
@@ -91,6 +118,7 @@ export function registerCommands(context: YardExtensionContext) {
     description: "Copy and rename dropped sounds using the configured rules.",
     scope: "drop",
     requiresSelection: true,
+    inputSchema: dropRuleInputSchema,
     handler: () => createService(context).apply(getRuleOptions(context)),
   });
 
@@ -100,6 +128,7 @@ export function registerCommands(context: YardExtensionContext) {
     description: "Prepare one sound for drag-out using the configured rules.",
     scope: "drop",
     requiresSelection: true,
+    inputSchema: prepareDragInputSchema,
     handler: async () =>
       createService(context).prepareDrag(await getPrepareDragOptions(context)),
   });

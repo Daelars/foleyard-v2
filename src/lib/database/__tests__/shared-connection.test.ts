@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 vi.mock("@/lib/database-path",()=>({getDatabasePath:()=>":memory:",ensureDesktopDatabaseInitialized:()=>{}}));
 import { sqlite } from "../connection";
-import { getAppServices } from "@/lib/composition-root";
+import { getAppServices } from "@/lib/db";
 import { getFileById } from "../file-repository";
 import { getExtensionSettingValue, setExtensionSettingValue } from "@/lib/extensions/settings-store";
 import { DbSoundShelfStore } from "@/lib/extensions/sound-shelf-store";

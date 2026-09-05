@@ -27,7 +27,18 @@ export type YardCommand = {
   scope: YardCommandScope;
   destructive?: boolean;
   requiresSelection?: boolean;
+  inputSchema?: YardCommandInputSchema;
 };
+
+export type YardCommandInputSchema = {
+  validate(input: unknown): string | null;
+};
+
+export function defineYardCommandInputSchema(
+  validate: (input: unknown) => string | null,
+): YardCommandInputSchema {
+  return { validate };
+}
 
 export type RegisteredYardCommand = YardCommand & {
   handler?: () => Promise<unknown> | unknown;

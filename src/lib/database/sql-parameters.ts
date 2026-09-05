@@ -10,3 +10,12 @@ export function chunkArray<T>(values: T[], size: number) {
   return chunks;
 }
 
+/**
+ * Escape a user-supplied search string for use inside a SQL LIKE pattern.
+ * `%`, `_`, and the escape character `\` match literally after escaping.
+ * Pair with `ESCAPE '\'` on the LIKE predicate.
+ */
+export function escapeLikePattern(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+

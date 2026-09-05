@@ -1,4 +1,3 @@
-import { resolveReadablePath } from "@/lib/filesystem-boundary";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -29,8 +28,25 @@ function createContext(): YardExtensionContext {
 }
 
 function createDeleteContext(): YardExtensionContext {
+  // Local containment stub: Yard Tools must not import Application modules
+  // (@/lib/*). The production host supplies the real filesystem resolver
+  // through the Extension context; tests stub the same seam locally.
+  const resolveReadablePath = async (candidate: string) => {
+    let resolved: string;
+    try {
+      resolved = await fs.promises.realpath(candidate);
+    } catch {
+      return null;
+    }
+    const root = await fs.promises.realpath(path.join(tempDir, "library"));
+    const relative = path.relative(root, resolved);
+    if (relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      return null;
+    }
+    return resolved;
+  };
   return {
-    services: { commands: { register: () => {} }, filesystem: { resolveReadablePath: (candidate: string, allowRoot: boolean) => resolveReadablePath(candidate, [path.join(tempDir, "library")], { allowRoot }) } } as unknown as YardExtensionContext["services"],
+    services: { commands: { register: () => {} }, filesystem: { resolveReadablePath } } as unknown as YardExtensionContext["services"],
     selection: { fileIds: [] },
     permissions: {
       has: (permission) => permission === "files:delete",

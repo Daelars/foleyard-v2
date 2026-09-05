@@ -1,8 +1,6 @@
-import { getLibraryRoots } from "@/lib/db";
+import { createExtensionServices, getLibraryRoots } from "@/lib/db";
 import { resolveReadablePath, resolveWritablePath } from "@/lib/filesystem-boundary";
 import { YardExtensionHost } from "@yard-core";
-
-import { createExtensionServices } from "@/lib/composition-root";
 import {
   isExtensionEnabled,
   registerAllExtensions,
@@ -10,7 +8,7 @@ import {
 import { extensionRegistry } from "@/lib/extensions/runtime";
 import { getExtensionSettingValue } from "@/lib/extensions/settings-store";
 
-export function createAppExtensionHost(destinationGrant?: string) {
+export function createAppExtensionHost(destinationGrant?: string, onProgress?: (completed: number, total: number) => void) {
   registerAllExtensions();
 
   return new YardExtensionHost({
@@ -19,6 +17,7 @@ export function createAppExtensionHost(destinationGrant?: string) {
     getSettingValue: getExtensionSettingValue,
     services: {
       ...createExtensionServices(),
+      scanProgress: onProgress ? { report: onProgress } : undefined,
       filesystem: {
         resolveReadablePath: (candidate, allowRoot = true) => resolveReadablePath(candidate, getLibraryRoots(), { allowRoot }),
         resolveWritablePath: (candidate) => resolveWritablePath(candidate, destinationGrant ?? ""),

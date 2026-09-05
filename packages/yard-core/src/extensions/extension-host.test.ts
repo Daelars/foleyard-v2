@@ -200,4 +200,46 @@ describe("YardExtensionHost", () => {
       host.execute({ extensionId: "example", commandId: "example.run" }),
     ).resolves.toMatchObject({ ok: false, reason: "execution-failed" });
   });
+
+  it("rejects invalid command input through the declared input schema", async () => {
+    const host = new YardExtensionHost({
+      registry: createRegistry((context) => {
+        context.services.commands.register({
+          id: "example.run",
+          title: "Run Example",
+          description: "Runs the example command.",
+          scope: "global",
+          inputSchema: {
+            validate: (input: unknown) =>
+              typeof input === "object" && input !== null && "name" in input
+                ? null
+                : "name is required",
+          },
+          handler: () => "should not run",
+        });
+      }),
+      isEnabled: () => true,
+      getSettingValue: (_extensionId, _settingId, defaultValue) => defaultValue,
+    });
+
+    await expect(
+      host.execute({
+        extensionId: "example",
+        commandId: "example.run",
+        input: { name: "Impacts" },
+      }),
+    ).resolves.toEqual({ ok: true, type: "value", value: "should not run" });
+
+    await expect(
+      host.execute({
+        extensionId: "example",
+        commandId: "example.run",
+        input: {},
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      reason: "validation-failed",
+      message: "name is required",
+    });
+  });
 });

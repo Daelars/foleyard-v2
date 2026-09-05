@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from "react";
+
 export type DesktopActionResult = {
   ok: boolean;
   error?: string;
@@ -65,4 +67,85 @@ export function getDesktopBridge() {
 
 export function isDesktopApp() {
   return getDesktopBridge()?.isDesktop === true;
+}
+
+type DesktopBridgeListener = () => void;
+
+const desktopBridgeListeners = new Set<DesktopBridgeListener>();
+let desktopBridgeTrapTarget: unknown = null;
+
+/**
+ * Notify subscribed readers that the desktop bridge changed (late injection,
+ * tests, or explicit re-read). Late preload injection assigns
+ * `window.desktopBridge` after first render; without a notification the
+ * `useSyncExternalStore` snapshot would stay stuck at `false`.
+ */
+export function notifyDesktopBridgeChanged(): void {
+  for (const listener of desktopBridgeListeners) {
+    listener();
+  }
+}
+
+function armLateBridgeTrap(): void {
+  if (typeof window === "undefined" || desktopBridgeTrapTarget === window) {
+    return;
+  }
+  desktopBridgeTrapTarget = window;
+  try {
+    window.addEventListener("desktop-bridge-ready", notifyDesktopBridgeChanged);
+  } catch {
+    // Ignore: notification still works via the setter trap below.
+  }
+  try {
+    let current = window.desktopBridge;
+    Object.defineProperty(window, "desktopBridge", {
+      configurable: true,
+      enumerable: true,
+      get: () => current,
+      set: (value: DesktopBridge | undefined) => {
+        current = value;
+        notifyDesktopBridgeChanged();
+      },
+    });
+  } catch {
+    // Non-configurable bridge (e.g. contextBridge getter): subscribers still
+    // re-read on demand and on "desktop-bridge-ready" if dispatched.
+  }
+}
+
+/**
+ * The desktop bridge is injected by the preload script, normally before the
+ * renderer loads but occasionally after first render. The subscription
+ * notifies on late assignment (via a setter trap plus a
+ * `desktop-bridge-ready` window event) so readers re-render instead of
+ * staying stuck at `false`.
+ */
+export function subscribeDesktopBridge(
+  listener: DesktopBridgeListener,
+): () => void {
+  armLateBridgeTrap();
+  desktopBridgeListeners.add(listener);
+  return () => {
+    desktopBridgeListeners.delete(listener);
+  };
+}
+
+export function getDesktopSnapshot(): boolean {
+  return isDesktopApp();
+}
+
+export function getDesktopServerSnapshot(): boolean {
+  return false;
+}
+
+export function useDesktopApp(): boolean {
+  return useSyncExternalStore(
+    subscribeDesktopBridge,
+    getDesktopSnapshot,
+    getDesktopServerSnapshot,
+  );
+}
+
+declare global {
+  interface Window { desktopBridge?: DesktopBridge; }
 }

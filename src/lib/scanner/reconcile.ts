@@ -1,3 +1,4 @@
+import { mapConcurrent } from "@yard-core";
 import path from "node:path";
 import type { AudioFileTouchEntry, ScanFileRecord } from "@yard-core";
 import type { ExistingFileRecord, ScanPhaseContext } from "./types";
@@ -20,8 +21,7 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
     const upsertRecords: ScanFileRecord[] = [];
 
     filePaths.forEach((filePath) => seenPaths.add(filePath));
-    const statResults = await Promise.all(
-      filePaths.map(async (filePath) => {
+    const statResults = await mapConcurrent(filePaths, 8, async (filePath) => {
         try {
           const stats = await context.fs.stat(filePath);
           return { filePath, stats };
@@ -29,8 +29,7 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
           context.incrementScanErrors();
           return null;
         }
-      }),
-    );
+      });
 
     for (const result of statResults) {
       if (!result) {

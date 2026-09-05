@@ -32,6 +32,8 @@ redesign-plan.md
 /*.sqlite-*
 /*.db
 /*.db-*
+/.waveform-cache/
+**/.waveform-cache/
 
 # electron-builder output
 /dist-electron/

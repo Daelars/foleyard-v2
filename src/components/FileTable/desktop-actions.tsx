@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { getDesktopBridge, isDesktopApp } from "@/lib/desktop";
+import { getDesktopBridge, useDesktopApp } from "@/lib/desktop";
 
 import type { FileTableFileRecord } from "./types";
 
@@ -12,7 +12,7 @@ export function useFileTableDesktopActions(
   selectedIds: string[],
 ) {
   const [draggingFile, setDraggingFile] = useState<string | null>(null);
-  const desktop = isDesktopApp();
+  const desktop = useDesktopApp();
 
   useEffect(() => {
     const bridge = getDesktopBridge();
@@ -26,71 +26,93 @@ export function useFileTableDesktopActions(
     });
   }, []);
 
-  const handleCopyPath = async (file: FileTableFileRecord) => {
-    if (desktop) {
-      const result = await getDesktopBridge()?.copyFilePath(file.id);
-      if (result?.ok) {
-        toast.success("File path copied", {
-          action: {
-            label: "Copy",
-            onClick: () => navigator.clipboard.writeText(file.path),
-          },
-        });
+  const handleCopyPath = useCallback(
+    async (file: FileTableFileRecord) => {
+      if (desktop) {
+        const result = await getDesktopBridge()?.copyFilePath(file.id);
+        if (result?.ok) {
+          toast.success("File path copied", {
+            action: {
+              label: "Copy",
+              onClick: () => navigator.clipboard.writeText(file.path),
+            },
+          });
+          return;
+        }
+
+        toast.error(result?.error ?? "Failed to copy file path");
         return;
       }
 
-      toast.error(result?.error ?? "Failed to copy file path");
-      return;
-    }
+      try {
+        await navigator.clipboard.writeText(file.path);
+        toast.success("File path copied");
+      } catch {
+        toast.error("Failed to copy file path");
+      }
+    },
+    [desktop],
+  );
 
-    try {
-      await navigator.clipboard.writeText(file.path);
-      toast.success("File path copied");
-    } catch {
-      toast.error("Failed to copy file path");
-    }
-  };
+  const handleRevealInExplorer = useCallback(
+    async (file: FileTableFileRecord) => {
+      const result = await getDesktopBridge()?.revealInExplorer(file.id);
+      if (!result?.ok) {
+        toast.error(result?.error ?? "Failed to reveal file in Explorer");
+      }
+    },
+    [],
+  );
 
-  const handleRevealInExplorer = async (file: FileTableFileRecord) => {
-    const result = await getDesktopBridge()?.revealInExplorer(file.id);
-    if (!result?.ok) {
-      toast.error(result?.error ?? "Failed to reveal file in Explorer");
-    }
-  };
-
-  const handleOpenFile = async (file: FileTableFileRecord) => {
+  const handleOpenFile = useCallback(async (file: FileTableFileRecord) => {
     const result = await getDesktopBridge()?.openFileExternally(file.id);
     if (!result?.ok) {
       toast.error(result?.error ?? "Failed to open file");
     }
-  };
+  }, []);
 
-  const handleNativeDragStart = (
-    event: React.DragEvent<HTMLElement>,
-    file: FileTableFileRecord,
-    index: number,
-  ) => {
-    if (!desktop) {
-      return;
-    }
+  const handleNativeDragStart = useCallback(
+    (
+      event: React.DragEvent<HTMLElement>,
+      file: FileTableFileRecord,
+      index: number,
+    ) => {
+      if (!desktop) {
+        return;
+      }
 
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.effectAllowed = "copy";
-    event.dataTransfer.setData("text/plain", file.filename);
-    const dragIds = selectedIds.includes(file.id) ? selectedIds : [file.id];
-    if (!selectedIds.includes(file.id)) onSelect(file, index);
-    setDraggingFile(file.id);
-    getDesktopBridge()?.startDragFiles(dragIds);
-  };
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.effectAllowed = "copy";
+      event.dataTransfer.setData("text/plain", file.filename);
+      const dragIds = selectedIds.includes(file.id) ? selectedIds : [file.id];
+      if (!selectedIds.includes(file.id)) onSelect(file, index);
+      setDraggingFile(file.id);
+      getDesktopBridge()?.startDragFiles(dragIds);
+    },
+    [desktop, onSelect, selectedIds],
+  );
 
-  return {
-    desktop,
-    draggingFile,
-    handleCopyPath,
-    handleDragEnd: () => setDraggingFile(null),
-    handleNativeDragStart,
-    handleOpenFile,
-    handleRevealInExplorer,
-  };
+  const handleDragEnd = useCallback(() => setDraggingFile(null), []);
+
+  return useMemo(
+    () => ({
+      desktop,
+      draggingFile,
+      handleCopyPath,
+      handleDragEnd,
+      handleNativeDragStart,
+      handleOpenFile,
+      handleRevealInExplorer,
+    }),
+    [
+      desktop,
+      draggingFile,
+      handleCopyPath,
+      handleDragEnd,
+      handleNativeDragStart,
+      handleOpenFile,
+      handleRevealInExplorer,
+    ],
+  );
 }

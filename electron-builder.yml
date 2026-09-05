@@ -21,6 +21,7 @@ files:
   - "!.next/node_modules/better-sqlite3*/build/**/*.cpp"
   - "!.next/node_modules/better-sqlite3*/build/**/*.h"
   - "!.next/node_modules/better-sqlite3*/build/**/test_extension.node"
+  - "!.next/server/app/prototype/**"
   - icon.png
   - icon.ico
   - package.json

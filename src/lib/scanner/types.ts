@@ -78,3 +78,35 @@ export type ScanPhaseContext = {
   emitProgress(): void;
   incrementScanErrors(): void;
 };
+
+export interface ScanStatusResponse {
+  running: boolean;
+  phase: string;
+  discovered: number;
+  indexed: number;
+  skippedUnchanged: number;
+  metadataProcessed: number;
+  added: number;
+  updated: number;
+  removed: number;
+  failed: number;
+  errors: number;
+  total: number;
+  error: string | null;
+}
+
+export const emptyScanStatus: ScanStatusResponse = {
+  running: false,
+  phase: "idle",
+  discovered: 0,
+  indexed: 0,
+  skippedUnchanged: 0,
+  metadataProcessed: 0,
+  added: 0,
+  updated: 0,
+  removed: 0,
+  failed: 0,
+  errors: 0,
+  total: 0,
+  error: null,
+};

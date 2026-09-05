@@ -1,3 +1,4 @@
+import { mapConcurrent } from "yard-core";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -24,18 +25,22 @@ export class FolderJanitorService {
     const issues: JanitorIssue[] = [];
     const duplicateBuckets = new Map<string, typeof options.files>();
 
-    for (const file of options.files) {
-      if (!fs.existsSync(file.path)) {
-        issues.push({
-          kind: "missing-file",
-          path: file.path,
-          fileIds: [file.id],
-          message: "Indexed file is missing on disk.",
-        });
+    let completed = 0;
+    options.onProgress?.(0, options.files.length);
+    const statsByFile = await mapConcurrent(options.files, 8, async (file) => {
+      try { return { stats: await fs.promises.stat(file.path) }; }
+      catch (error) { return { error }; }
+      finally { options.onProgress?.(++completed, options.files.length); }
+    });
+    for (let index = 0; index < options.files.length; index++) {
+      const file = options.files[index];
+      const result = statsByFile[index];
+      if (!result.stats) {
+        const missing = result.error && typeof result.error === "object" && "code" in result.error && result.error.code === "ENOENT";
+        issues.push({ kind: missing ? "missing-file" : "broken", path: file.path, fileIds: [file.id], message: missing ? "Indexed file is missing on disk." : "Indexed file could not be read." });
         continue;
       }
-
-      const stats = await fs.promises.stat(file.path);
+      const stats = result.stats;
       if (!stats.isFile()) {
         issues.push({
           kind: "broken",
@@ -149,9 +154,7 @@ export class FolderJanitorService {
 }
 
 async function findEmptyFolders(root: string): Promise<string[]> {
-  if (!fs.existsSync(root)) {
-    return [];
-  }
+  try { await fs.promises.access(root); } catch { return []; }
 
   const emptyFolders: string[] = [];
 

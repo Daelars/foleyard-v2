@@ -38,4 +38,17 @@ describe("listRegisteredExtensionGridItems", () => {
       title: "Clear Shelf",
     });
   });
+
+  it("registers every extension from the single extension array", () => {
+    const items = listRegisteredExtensionGridItems();
+
+    expect(items.map((item) => item.id).sort()).toEqual([
+      "drop-rules",
+      "folder-janitor",
+      "library-gatherer",
+      "make-pack",
+      "smart-collections",
+      "sound-shelf",
+    ]);
+  });
 });

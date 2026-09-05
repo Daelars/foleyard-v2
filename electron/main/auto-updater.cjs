@@ -90,6 +90,12 @@ function quitAndInstall() {
 }
 
 function simulateUpdate() {
+  // Defense in depth alongside the ipc.cjs registration gate: the simulator
+  // is dev-only and must never emit fake update events in the packaged app.
+  if (require("electron").app.isPackaged) {
+    return;
+  }
+
   if (!mainWindow || mainWindow.isDestroyed()) {
     return;
   }

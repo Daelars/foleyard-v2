@@ -55,7 +55,7 @@ describe("theme token law", () => {
       "./page.tsx",
       "../components/IconRail.tsx",
       "../components/ExtensionGrid.tsx",
-      "../components/SettingsDialog.tsx",
+      "../components/settings/SettingsDialog.tsx",
       "../components/OnboardingDialog.tsx",
       "../components/DesktopTitleBar.tsx",
       "../components/UpdateNotifier.tsx",

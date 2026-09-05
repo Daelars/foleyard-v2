@@ -1,11 +1,34 @@
 import {
   createYardUiIntent,
+  defineYardCommandInputSchema,
   YardCommandValidationError,
   type YardExtensionContext,
 } from "yard-core";
 
 import { createService } from "./service";
 import type { GatherOptions } from "./types";
+
+export const gatherInputSchema =
+  defineYardCommandInputSchema(validateGatherInput);
+
+export function validateGatherInput(input: unknown): string | null {
+  if (input === undefined) {
+    return null;
+  }
+
+  const candidate = input as Partial<GatherOptions>;
+  if (
+    !Array.isArray(candidate.sourceDirectories) ||
+    candidate.sourceDirectories.length === 0
+  ) {
+    return "sourceDirectories array is required";
+  }
+  if (!candidate.destinationDirectory) {
+    return "destinationDirectory is required";
+  }
+
+  return null;
+}
 
 function getGatherOptions(context: YardExtensionContext): GatherOptions | null {
   if (context.input === undefined) {
@@ -44,6 +67,7 @@ export function registerCommands(context: YardExtensionContext) {
     title: "Preview Library Gather",
     description: "Preview sounds that would be gathered into the main library.",
     scope: "global",
+    inputSchema: gatherInputSchema,
     handler: () => {
       const options = getGatherOptions(context);
       return options ? createService(context).preview(options) : openGatherIntent();
@@ -55,6 +79,7 @@ export function registerCommands(context: YardExtensionContext) {
     title: "Gather Library",
     description: "Copy sounds from multiple folders into one library folder.",
     scope: "global",
+    inputSchema: gatherInputSchema,
     handler: () => {
       const options = getGatherOptions(context);
       return options ? createService(context).gather(options) : openGatherIntent();

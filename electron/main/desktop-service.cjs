@@ -38,20 +38,25 @@ async function resolveIndexedFile(fileId) {
 async function prepareDropRulesFile(fileId) {
   try {
     const response = await fetch(
-      `${getDesktopServerUrl()}/api/extensions/drop-rules/prepare-drag`,
+      `${getDesktopServerUrl()}/api/extensions/execute`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileId }),
+        body: JSON.stringify({
+          extensionId: "drop-rules",
+          commandId: "drop-rules.prepare-drag",
+          selection: { fileIds: [fileId] },
+          input: { fileId },
+        }),
       },
     );
     const data = await response.json();
 
-    if (!response.ok || !data.file) {
-      return { ok: false, error: data.error ?? "Drop Rules did not prepare a file" };
+    if (!response.ok || !data.value?.file) {
+      return { ok: false, error: data.error ?? data.message ?? "Drop Rules did not prepare a file" };
     }
 
-    return { ok: true, file: data.file };
+    return { ok: true, file: data.value.file };
   } catch (error) {
     return {
       ok: false,

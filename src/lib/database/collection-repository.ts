@@ -1,4 +1,4 @@
-import { and, asc, count, eq, like, sql } from "drizzle-orm";
+import { and, asc, count, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { v4 as uuid } from "uuid";
 
@@ -6,9 +6,51 @@ import type { CollectionRepository } from "@yard-core";
 import type { Collection } from "@yard-core";
 
 import { sqlite as defaultSqlite } from "./connection";
+import { escapeLikePattern } from "./sql-parameters";
 import * as schema from "@/lib/schema";
 
 import type Database from "better-sqlite3";
+
+export interface GetAllCollectionsOptions {
+  /**
+   * Skip the per-smart-collection COUNT(*) scan (the default). Smart counts
+   * are resolved lazily per collection via getSmartCollectionCount, so the
+   * list endpoint stays a single grouped join.
+   */
+  includeSmartCounts?: boolean;
+}
+
+/** LIKE predicate on the filename with `%`/`_`/`\` treated literally. */
+function filenameLike(query: string) {
+  return sql`${schema.files.filename} LIKE ${`%${escapeLikePattern(query)}%`} ESCAPE '\\'`;
+}
+
+function countFilesMatchingQuery(
+  db: ReturnType<typeof drizzle<typeof schema>>,
+  query: string,
+): number {
+  const result = db
+    .select({ count: count() })
+    .from(schema.files)
+    .where(and(sql`${schema.files.removedAt} IS NULL`, filenameLike(query)))
+    .get() as { count: number } | undefined;
+  return result?.count ?? 0;
+}
+
+function extractSmartQuery(filter: string | null): string | null {
+  if (!filter) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(filter) as { q?: unknown };
+    if (typeof parsed.q === "string" && parsed.q.trim()) {
+      return parsed.q.trim();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export class SqliteCollectionRepository implements CollectionRepository {
   private sqlite: Database;
@@ -19,7 +61,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
     this.db = drizzle(sqlite, { schema });
   }
 
-  getAllCollections(): Collection[] {
+  getAllCollections(options?: GetAllCollectionsOptions): Collection[] {
     const collections = this.db
       .select({
         id: schema.collections.id,
@@ -38,29 +80,39 @@ export class SqliteCollectionRepository implements CollectionRepository {
       .all() as unknown as Collection[];
 
     for (const c of collections) {
-      if (c.isSmart && c.filter) {
-        try {
-          const parsed = JSON.parse(c.filter) as { q?: string };
-          if (parsed.q) {
-            const result = this.db
-              .select({ count: count() })
-              .from(schema.files)
-              .where(
-                and(
-                  sql`${schema.files.removedAt} IS NULL`,
-                  like(schema.files.filename, `%${parsed.q}%`),
-                ),
-              )
-              .get() as { count: number } | undefined;
-            c.fileCount = result?.count ?? 0;
-          }
-        } catch {
-          // Invalid filter JSON, leave fileCount as-is
+      if (options?.includeSmartCounts && c.isSmart && c.filter) {
+        const query = extractSmartQuery(c.filter);
+        if (query) {
+          c.fileCount = countFilesMatchingQuery(this.db, query);
         }
       }
     }
 
     return collections;
+  }
+
+  /**
+   * Lazy count for one smart collection, resolved on open. Returns null
+   * when the collection is regular, has no query, or has an invalid
+   * filter.
+   */
+  getSmartCollectionCount(collectionId: string): number | null {
+    const row = this.db
+      .select({
+        isSmart: schema.collections.isSmart,
+        filter: schema.collections.filter,
+      })
+      .from(schema.collections)
+      .where(eq(schema.collections.id, collectionId))
+      .get() as { isSmart: number | boolean; filter: string | null } | undefined;
+    if (!row || !row.isSmart) {
+      return null;
+    }
+    const query = extractSmartQuery(row.filter);
+    if (!query) {
+      return null;
+    }
+    return countFilesMatchingQuery(this.db, query);
   }
 
   createCollection(name: string, isSmart?: boolean, filter?: string): string {
@@ -117,32 +169,26 @@ export class SqliteCollectionRepository implements CollectionRepository {
       .where(eq(schema.collections.id, collectionId))
       .get() as { filter: string | null } | undefined;
 
-    if (collection?.filter) {
-      try {
-        const parsed = JSON.parse(collection.filter) as { q?: string };
-        if (parsed.q) {
-          const files = this.db
-            .select({ id: schema.files.id })
-            .from(schema.files)
-            .where(
-              and(
-                sql`${schema.files.removedAt} IS NULL`,
-                like(schema.files.filename, `%${parsed.q}%`),
-              ),
-            )
-            .all() as { id: string }[];
+    const query = extractSmartQuery(collection?.filter ?? null);
+    if (query) {
+      const files = this.db
+        .select({ id: schema.files.id })
+        .from(schema.files)
+        .where(
+          and(
+            sql`${schema.files.removedAt} IS NULL`,
+            filenameLike(query),
+          ),
+        )
+        .all() as { id: string }[];
 
-          const insertValues = files.map((f) => ({
-            fileId: f.id,
-            collectionId,
-          }));
+      const insertValues = files.map((f) => ({
+        fileId: f.id,
+        collectionId,
+      }));
 
-          if (insertValues.length > 0) {
-            this.db.insert(schema.fileCollections).values(insertValues).onConflictDoNothing().run();
-          }
-        }
-      } catch {
-        // Invalid filter JSON, skip file attachment
+      if (insertValues.length > 0) {
+        this.db.insert(schema.fileCollections).values(insertValues).onConflictDoNothing().run();
       }
     }
 
@@ -162,7 +208,8 @@ function getCollectionRepo(): SqliteCollectionRepository {
   return _collectionRepo;
 }
 
-export const getAllCollections = () => getCollectionRepo().getAllCollections();
+export const getAllCollections = (options?: GetAllCollectionsOptions) => getCollectionRepo().getAllCollections(options);
+export const getSmartCollectionCount = (collectionId: string) => getCollectionRepo().getSmartCollectionCount(collectionId);
 export const createCollection = (name: string, isSmart?: boolean, filter?: string) => getCollectionRepo().createCollection(name, isSmart, filter);
 export const createSmartCollection = (name: string, filter: string) => getCollectionRepo().createSmartCollection(name, filter);
 export const renameCollection = (id: string, name: string) => getCollectionRepo().renameCollection(id, name);

@@ -32,7 +32,7 @@ export class SqliteBrowseRepository {
 
   getUniqueDirectories(): string[] {
     const rows = this.db
-      .select({ directory: schema.files.directory })
+      .selectDistinct({ directory: schema.files.directory })
       .from(schema.files)
       .where(and(isNotNull(schema.files.directory), isNull(schema.files.removedAt)))
       .all();
@@ -43,7 +43,7 @@ export class SqliteBrowseRepository {
 
   getDirectoriesForRoot(libraryRoot: string): string[] {
     const rows = this.db
-      .select({ directory: schema.files.directory })
+      .selectDistinct({ directory: schema.files.directory })
       .from(schema.files)
       .where(
         and(
@@ -57,9 +57,6 @@ export class SqliteBrowseRepository {
     return [...new Set(rows.map((row) => row.directory).filter(Boolean) as string[])].sort();
   }
 
-  getSubdirectories(parentDir: string | null): string[] { return immediateSubdirectories(this.getUniqueDirectories(), parentDir); }
-
-
   getSubdirectoriesForRoot(libraryRoot: string, parentDir: string | null): string[] { return immediateSubdirectories(this.getDirectoriesForRoot(libraryRoot), parentDir); }
 }
 
@@ -72,6 +69,5 @@ function getBrowseRepo(): SqliteBrowseRepository {
 }
 
 export const getUniqueDirectories = () => getBrowseRepo().getUniqueDirectories();
-export const getSubdirectories = (parentDir: string | null) => getBrowseRepo().getSubdirectories(parentDir);
 export const getSubdirectoriesForRoot = (libraryRoot: string, parentDir: string | null) =>
   getBrowseRepo().getSubdirectoriesForRoot(libraryRoot, parentDir);

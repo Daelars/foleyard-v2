@@ -1,5 +1,5 @@
 export { manifest } from "./manifest";
-export { registerCommands } from "./commands";
+export { registerCommands, janitorScanInputSchema, deleteFoldersInputSchema, validateJanitorScanInput, validateDeleteFoldersInput } from "./commands";
 export { createService, FolderJanitorService } from "./service";
 export { permissions } from "./permissions";
 export { settings } from "./settings";

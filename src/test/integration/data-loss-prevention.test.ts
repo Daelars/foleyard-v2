@@ -230,7 +230,9 @@ describe("data-loss prevention", () => {
       } catch {
         return null;
       }
-      const relative = path.relative(fs.realpathSync(root), resolved);
+      // Same async canonicalization on both sides: sync and async realpath
+      // disagree on short-name tmpdirs on some Windows runners.
+      const relative = path.relative(await fs.promises.realpath(root), resolved);
       if (
         relative === ".." ||
         relative.startsWith(`..${path.sep}`) ||

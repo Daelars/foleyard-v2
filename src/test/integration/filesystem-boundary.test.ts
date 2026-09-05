@@ -132,7 +132,9 @@ describe("filesystem grant boundary", () => {
     const file = path.join(root, "hit.wav");
 
     await expect(resolveExistingPathWithinRoots(file, [root])).resolves.toBe(
-      fs.realpathSync(file),
+      // Same canonicalization call the implementation uses: sync and async
+      // realpath disagree on short-name tmpdirs on some Windows runners.
+      await fs.promises.realpath(file),
     );
 
     // ../ out of the root

@@ -57,9 +57,10 @@ describe("test collection", () => {
 
   it("finds test files to check", () => {
     // Guards the guard: a walk that silently returns nothing would pass everything below.
-    // Floor lowered from 50 by #138: the integration rebuild (#135–#142) deletes
-    // test files on purpose, so the count falls batch to batch by design.
-    expect(testFiles.length).toBeGreaterThan(10);
+    // Floor lowered from 50 by the integration rebuild (#135–#142), which
+    // deletes test files on purpose: the end state is ~10 files, so the
+    // floor only proves the walk itself works.
+    expect(testFiles.length).toBeGreaterThan(5);
   });
 
   it("collects every test file on disk, or declares why not", () => {

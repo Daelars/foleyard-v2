@@ -22,6 +22,7 @@
     "release:prepare": "node scripts/prepare-release.cjs",
     "postinstall": "node scripts/postinstall.cjs",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "npx vitest run",
     "test:watch": "npx vitest"
   },

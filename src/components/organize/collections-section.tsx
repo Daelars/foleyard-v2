@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, Pencil, Plus, Trash2, X } from "lucide-react";
 
-import { ITEM_COLOR_PRESETS, onColorText } from "@/lib/item-colors";
+import { ITEM_COLOR_PRESETS, onColorText, resolveItemColor } from "@/lib/item-colors";
 
 import { NameColorComposer, isComposerNameValid } from "./name-color-composer";
 import { Swatches } from "./swatches";
@@ -79,7 +79,7 @@ export function CollectionsSection({
     <>
       <div className="mt-3 space-y-2">
         {collections.map((collection, i) => {
-          const color = collection.color ?? "#f0503c";
+          const color = resolveItemColor(collection.name, collection.color);
           const open = expanded === collection.id;
           const renaming = renamingId === collection.id;
           const confirming = confirmDeleteId === collection.id;

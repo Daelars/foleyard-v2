@@ -20,3 +20,4 @@ jobs:
       - run: bun run test
       - run: bun run test:coverage
       - run: bun run build
+      - run: node scripts/check-expected-failures.cjs

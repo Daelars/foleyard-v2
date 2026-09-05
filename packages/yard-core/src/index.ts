@@ -18,8 +18,6 @@ export * from "./repositories/collection-repository";
 export * from "./repositories/favorite-repository";
 export * from "./repositories/settings-repository";
 export * from "./repositories/tag-repository";
-export * from "./services/commands/command-registry";
-export * from "./services/commands/command-types";
 export * from "./services/library/library-service";
 export * from "./services/library/scan-types";
 export * from "./services/library/scanner-service";

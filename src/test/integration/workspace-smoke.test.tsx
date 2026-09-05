@@ -101,18 +101,21 @@ vi.mock("@tanstack/react-virtual", () => ({
 
 let sqlite: TestDatabase;
 
+// jsdom has no layout engine, so a per-test observer stub leaves a gap
+// where leftover async waveform work crashes. Stubbed once at module scope,
+// it is never down. (fetch is still stubbed per test by stubFetch below.)
+vi.stubGlobal(
+  "ResizeObserver",
+  class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  },
+);
+
 beforeEach(() => {
   sqlite = createTestDatabase();
   state.files = new SqliteAudioFileRepository(sqlite);
-  // jsdom has no layout engine: the waveform view observes container size.
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    },
-  );
   state.tags = new SqliteTagRepository(sqlite);
   state.collections = new SqliteCollectionRepository(sqlite);
   state.settings = new SqliteSettingsRepository(sqlite);
@@ -129,7 +132,6 @@ beforeEach(() => {
 afterEach(() => {
   sqlite.close();
   vi.restoreAllMocks();
-  vi.unstubAllGlobals();
   delete (window as unknown as { desktopBridge?: unknown }).desktopBridge;
 });
 

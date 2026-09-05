@@ -12,6 +12,37 @@ export default defineConfig({
     environment: "node",
     include: ["**/*.test.{ts,tsx}"],
     exclude: [...configDefaults.exclude, "docs/**", "dist-electron/**"],
+    coverage: {
+      provider: "v8",
+      // Everything matching `include` is reported, executed or not. Files no
+      // test ever loads must appear as 0%, not be absent — their absence is how
+      // 410 passing tests read as health while a third of the source was never
+      // executed. Vitest 4 does this by default; do not narrow `include` to
+      // only what tests touch.
+      include: ["src/**/*.{ts,tsx}", "packages/**/src/**/*.{ts,tsx}"],
+      exclude: [
+        "**/*.test.{ts,tsx}",
+        "**/*.d.ts",
+        // Generated shadcn primitives: vendored, not our behaviour to assert.
+        "src/components/ui/**",
+        // Throwaway prototypes, deleted when their design question is answered.
+        "src/app/prototype/**",
+        // Next.js framework entrypoints with no logic of their own.
+        "src/app/{layout,globals}.{ts,tsx}",
+        "**/index.ts",
+      ],
+      reporter: ["text-summary", "json-summary", "html"],
+      reportsDirectory: "coverage",
+      // Measured 2026-09-05 and recorded in docs/test-coverage-baseline.md,
+      // rounded down a point so ordinary churn does not fail the run. Raise
+      // these as coverage rises; never lower them to make a run pass.
+      thresholds: {
+        lines: 37.5,
+        branches: 31,
+        functions: 34,
+        statements: 36.5,
+      },
+    },
   },
   resolve: {
     alias: {

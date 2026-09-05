@@ -24,7 +24,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "npx vitest run",
-    "test:watch": "npx vitest"
+    "test:watch": "npx vitest",
+    "test:coverage": "npx vitest run --coverage"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -53,6 +54,7 @@
     "@types/node": "^20",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "@vitest/coverage-v8": "4.1.5",
     "concurrently": "^9.2.1",
     "drizzle-kit": "^0.31.10",
     "electron": "^41.3.0",

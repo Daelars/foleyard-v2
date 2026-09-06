@@ -16,7 +16,7 @@ import type { FileSystemSeam, MetadataSeam, ExistingFileRecord, MetadataUpdateRe
 export type { FileSystemSeam, MetadataSeam } from "./types";
 import { createMetadataQueue } from "./metadata-queue";
 
-const METADATA_CONCURRENCY = 8;
+const METADATA_CONCURRENCY = 16;
 const METADATA_WRITE_BATCH_SIZE = 250;
 
 export class ScanRunner implements ScannerService {

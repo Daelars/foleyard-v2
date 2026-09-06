@@ -3,11 +3,11 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-// A test that is never collected passes by not existing. The suite named three
-// tree roots and only *.test.ts, so electron/ and scripts/ had nowhere to put a
-// test that would run, and the Electron main hardening test had to be parked in
-// src/lib to be seen at all. This guard walks the repo and holds every test file
-// on disk to the one include pattern in vitest.config.ts.
+// A test that is never collected passes by not existing. The suite used to
+// name three tree roots and only *.test.ts, so electron/ and scripts/ had
+// nowhere to put a test that would run. This guard walks the repo and holds
+// every test file on disk to the one include pattern in vitest.config.ts.
+// All test files live under src/test/ so there is exactly one place to look.
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 

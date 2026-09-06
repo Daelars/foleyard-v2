@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createExtensionMatcher, isSupportedAudioFile } from "../services/library/scan-types";
-import { makeUniqueFilename } from "./filename";
+import { createExtensionMatcher, isSupportedAudioFile, makeUniqueFilename } from "yard-core";
 
 describe("canonical extension matching", () => {
   it.each([

@@ -1,4 +1,4 @@
-import { sanitizeFilename } from "yard-core";
+import { makeUniqueFilename, sanitizeFilename } from "yard-core";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -62,8 +62,12 @@ export class MakePackService {
         continue;
       }
 
-      const outputName = makeUniqueFilename(file.filename, outputNames);
-      outputNames.add(outputName);
+      const cleanName = sanitizeFilename(path.basename(file.filename)) || "sound";
+      const outputName = makeUniqueFilename(
+        outputNames,
+        (name) => fs.existsSync(path.join(packDirectory, name)),
+        cleanName,
+      );
       items.push({
         fileId: file.id,
         filename: file.filename,
@@ -194,18 +198,4 @@ function sanitizePackName(packName: string | undefined) {
   }
 
   return sanitizeFilename(trimmed).slice(0, 80).trim();
-}
-
-function makeUniqueFilename(filename: string, usedNames: Set<string>) {
-  const cleanName = sanitizeFilename(path.basename(filename));
-  const parsed = path.parse(cleanName);
-  let candidate = cleanName || "sound";
-  let index = 2;
-
-  while (usedNames.has(candidate)) {
-    candidate = `${parsed.name || "sound"} ${index}${parsed.ext}`;
-    index += 1;
-  }
-
-  return candidate;
 }

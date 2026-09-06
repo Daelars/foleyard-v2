@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import type { YardExtensionContext } from "yard-core";
+import { createExtensionMatcher, makeUniqueFilename } from "yard-core";
 
 import type { GatherOptions, GatherResult, GatheredFile } from "./types";
 
@@ -68,14 +69,10 @@ export class LibraryGathererService {
     const destinationDirectory = path.resolve(options.destinationDirectory);
     const preserveFolderNames = options.preserveFolderNames ?? true;
     const skipDuplicates = options.skipDuplicates ?? true;
-    const audioExtensions = new Set(
-      (options.audioExtensions ?? defaultAudioExtensions).map((extension) =>
-        extension.startsWith(".") ? extension.toLowerCase() : `.${extension.toLowerCase()}`,
-      ),
-    );
+    const matchesAudio = createExtensionMatcher(options.audioExtensions ?? defaultAudioExtensions);
     if (this.context.services.filesystem && !await this.context.services.filesystem.resolveWritablePath(path.join(destinationDirectory, "foleyard-gather-report.json"))) throw new Error("Report is outside the granted directory");
     const existingKeys = skipDuplicates
-      ? await collectExistingKeys(destinationDirectory, audioExtensions)
+      ? await collectExistingKeys(destinationDirectory, matchesAudio)
       : new Set<string>();
     const plannedNames = new Set<string>();
     const files: GatheredFile[] = [];
@@ -93,7 +90,7 @@ export class LibraryGathererService {
         continue;
       }
 
-      for (const sourcePath of await findAudioFiles(sourceRoot, audioExtensions)) {
+      for (const sourcePath of await findAudioFiles(sourceRoot, matchesAudio)) {
         if (this.context.services.filesystem && !await this.context.services.filesystem.resolveReadablePath(sourcePath)) throw new Error("Source is outside the configured Library roots");
         const stats = await fs.promises.stat(sourcePath);
         const sourceFolderName = path.basename(sourceRoot);
@@ -131,7 +128,7 @@ export class LibraryGathererService {
   }
 }
 
-async function findAudioFiles(root: string, audioExtensions: Set<string>) {
+async function findAudioFiles(root: string, matchesAudio: (fileName: string) => boolean) {
   const results: string[] = [];
 
   async function visit(directory: string) {
@@ -140,7 +137,7 @@ async function findAudioFiles(root: string, audioExtensions: Set<string>) {
       const entryPath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         await visit(entryPath);
-      } else if (entry.isFile() && audioExtensions.has(path.extname(entry.name).toLowerCase())) {
+      } else if (entry.isFile() && matchesAudio(entry.name)) {
         results.push(entryPath);
       }
     }
@@ -152,14 +149,14 @@ async function findAudioFiles(root: string, audioExtensions: Set<string>) {
 
 async function collectExistingKeys(
   destinationDirectory: string,
-  audioExtensions: Set<string>,
+  matchesAudio: (fileName: string) => boolean,
 ) {
   const keys = new Set<string>();
   if (!fs.existsSync(destinationDirectory)) {
     return keys;
   }
 
-  for (const filePath of await findAudioFiles(destinationDirectory, audioExtensions)) {
+  for (const filePath of await findAudioFiles(destinationDirectory, matchesAudio)) {
     const stats = await fs.promises.stat(filePath);
     keys.add(`${path.basename(filePath).toLowerCase()}::${stats.size}`);
   }
@@ -172,15 +169,12 @@ function makeUniqueOutputPath(
   relativeName: string,
   plannedNames: Set<string>,
 ) {
-  const parsed = path.parse(relativeName);
-  let candidate = relativeName;
-  let index = 2;
-
-  while (plannedNames.has(candidate.toLowerCase())) {
-    candidate = path.join(parsed.dir, `${parsed.name} ${index}${parsed.ext}`);
-    index += 1;
-  }
-
-  plannedNames.add(candidate.toLowerCase());
-  return path.join(destinationDirectory, candidate);
+  const directory = path.dirname(relativeName);
+  const base = path.basename(relativeName);
+  const uniqueBase = makeUniqueFilename(
+    plannedNames,
+    (name) => fs.existsSync(path.join(destinationDirectory, directory, name)),
+    base,
+  );
+  return path.join(destinationDirectory, directory, uniqueBase);
 }

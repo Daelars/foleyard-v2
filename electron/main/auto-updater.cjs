@@ -1,5 +1,7 @@
 const { autoUpdater } = require("electron-updater");
 
+const { CHANNELS } = require("./ipc-channels.cjs");
+
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
 let mainWindow = null;
@@ -17,7 +19,7 @@ function initAutoUpdater() {
   }
   autoUpdater.on("update-available", (info) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("desktop:update-available", {
+      mainWindow.webContents.send(CHANNELS["desktop:update-available"], {
         version: info.version,
         releaseDate: info.releaseDate,
       });
@@ -26,13 +28,13 @@ function initAutoUpdater() {
 
   autoUpdater.on("update-not-available", () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("desktop:update-not-available");
+      mainWindow.webContents.send(CHANNELS["desktop:update-not-available"]);
     }
   });
 
   autoUpdater.on("download-progress", (progress) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("desktop:update-download-progress", {
+      mainWindow.webContents.send(CHANNELS["desktop:update-download-progress"], {
         percent: progress.percent,
         bytesPerSecond: progress.bytesPerSecond,
         transferred: progress.transferred,
@@ -43,7 +45,7 @@ function initAutoUpdater() {
 
   autoUpdater.on("update-downloaded", (info) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("desktop:update-ready", {
+      mainWindow.webContents.send(CHANNELS["desktop:update-ready"], {
         version: info.version,
         releaseDate: info.releaseDate,
       });
@@ -53,13 +55,13 @@ function initAutoUpdater() {
   autoUpdater.on("error", (error) => {
     if (isNoPublishedReleaseError(error)) {
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("desktop:update-not-available");
+        mainWindow.webContents.send(CHANNELS["desktop:update-not-available"]);
       }
       return;
     }
 
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("desktop:update-error", {
+      mainWindow.webContents.send(CHANNELS["desktop:update-error"], {
         message: error.message,
       });
     }
@@ -100,7 +102,7 @@ function simulateUpdate() {
     return;
   }
 
-  mainWindow.webContents.send("desktop:update-available", {
+  mainWindow.webContents.send(CHANNELS["desktop:update-available"], {
     version: "0.2.0-dev",
     releaseDate: new Date().toISOString(),
   });
@@ -109,7 +111,7 @@ function simulateUpdate() {
     if (!mainWindow || mainWindow.isDestroyed()) {
       return;
     }
-    mainWindow.webContents.send("desktop:update-download-progress", {
+    mainWindow.webContents.send(CHANNELS["desktop:update-download-progress"], {
       percent: 25,
       bytesPerSecond: 1024000,
       transferred: 256000,
@@ -121,7 +123,7 @@ function simulateUpdate() {
     if (!mainWindow || mainWindow.isDestroyed()) {
       return;
     }
-    mainWindow.webContents.send("desktop:update-download-progress", {
+    mainWindow.webContents.send(CHANNELS["desktop:update-download-progress"], {
       percent: 60,
       bytesPerSecond: 1024000,
       transferred: 614400,
@@ -133,7 +135,7 @@ function simulateUpdate() {
     if (!mainWindow || mainWindow.isDestroyed()) {
       return;
     }
-    mainWindow.webContents.send("desktop:update-download-progress", {
+    mainWindow.webContents.send(CHANNELS["desktop:update-download-progress"], {
       percent: 100,
       bytesPerSecond: 1024000,
       transferred: 1024000,
@@ -145,7 +147,7 @@ function simulateUpdate() {
     if (!mainWindow || mainWindow.isDestroyed()) {
       return;
     }
-    mainWindow.webContents.send("desktop:update-ready", {
+    mainWindow.webContents.send(CHANNELS["desktop:update-ready"], {
       version: "0.2.0-dev",
       releaseDate: new Date().toISOString(),
     });

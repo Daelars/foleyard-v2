@@ -4,6 +4,7 @@ const path = require("path");
 const { dialog } = require("electron");
 
 const { getDesktopUserDataDir } = require("./database.cjs");
+const { CHANNELS } = require("./ipc-channels.cjs");
 
 let mainWindow = null;
 let errorDialogShown = false;
@@ -53,7 +54,7 @@ function reportMainProcessError(error, options = {}) {
 
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("desktop:action-error", message);
+      mainWindow.webContents.send(CHANNELS["desktop:action-error"], message);
     }
   } catch {}
 

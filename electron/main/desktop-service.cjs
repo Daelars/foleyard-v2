@@ -1,5 +1,7 @@
 const { clipboard, nativeImage, shell } = require("electron");
 
+const { CHANNELS } = require("./ipc-channels.cjs");
+
 const { randomBytes } = require("node:crypto");
 const { getDesktopServerUrl } = require("./server-url.cjs");
 
@@ -88,7 +90,7 @@ async function startDragFile(event, payload) {
     : [];
 
   if (fileIds.length === 0) {
-    event.sender.send("desktop:action-error", "Missing file ids");
+    event.sender.send(CHANNELS["desktop:action-error"], "Missing file ids");
     return;
   }
 
@@ -97,7 +99,7 @@ async function startDragFile(event, payload) {
     const prepared = await prepareDropRulesFile(fileId);
     const resolved = prepared.ok ? prepared : await resolveIndexedFile(fileId);
     if (!resolved.ok) {
-      event.sender.send("desktop:action-error", resolved.error);
+      event.sender.send(CHANNELS["desktop:action-error"], resolved.error);
       return;
     }
     files.push(resolved.file.path);

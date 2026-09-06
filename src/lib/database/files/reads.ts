@@ -244,8 +244,7 @@ export function getFileByPath(context: FileRepositoryContext, filePath: string):
     return (context.db.select().from(schema.files).where(eq(schema.files.path, filePath)).get() ?? null) as IndexedAudioFile | null;
   }
 
-export function getFilesByPaths(context: FileRepositoryContext, paths: string[]): IndexedAudioFile[] {
-    if (paths.length === 0) {
+export function getFilesByPaths(context: FileRepositoryContext, paths: string[]): IndexedAudioFile[] {    if (paths.length === 0) {
       return [];
     }
 
@@ -257,6 +256,27 @@ export function getFilesByPaths(context: FileRepositoryContext, paths: string[])
         .select()
         .from(schema.files)
         .where(inArray(schema.files.path, chunk))
+        .all() as IndexedAudioFile[];
+
+      results.push(...rows);
+    }
+
+    return results;
+  }
+
+export function getFilesByIds(context: FileRepositoryContext, ids: string[]): IndexedAudioFile[] {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const results: IndexedAudioFile[] = [];
+    const chunkSize = Math.max(1, SQLITE_MAX_VARIABLES - 1);
+
+    for (const chunk of chunkArray(ids, chunkSize)) {
+      const rows = context.db
+        .select()
+        .from(schema.files)
+        .where(inArray(schema.files.id, chunk))
         .all() as IndexedAudioFile[];
 
       results.push(...rows);

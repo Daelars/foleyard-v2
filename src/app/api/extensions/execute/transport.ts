@@ -7,6 +7,7 @@ import {
   getAllFilesIncludingRemoved,
   getFileById,
   getFiles,
+  getFilesByIds,
   getLibraryRoots,
   getTagsForFiles,
 } from "@/lib/db";
@@ -141,6 +142,7 @@ async function resolveMakePack(
 
 function hydrateFiles(fileIds: string[]): MakePackFile[] {
   const seen = new Set<string>();
+  const byId = new Map(getFilesByIds([...new Set(fileIds)]).map((file) => [file.id, file]));
   const files: MakePackFile[] = [];
 
   for (const fileId of fileIds) {
@@ -149,7 +151,7 @@ function hydrateFiles(fileIds: string[]): MakePackFile[] {
     }
 
     seen.add(fileId);
-    const file = getFileById(fileId);
+    const file = byId.get(fileId);
     if (!file || file.removedAt) {
       continue;
     }
@@ -437,8 +439,9 @@ async function shapeShelfList(value: unknown): Promise<unknown> {
     return { items: [], error: "Shelf contents were invalid" };
   }
   const fileIds = value as string[];
+  const byId = new Map(getFilesByIds(fileIds).map((file) => [file.id, file]));
   const files = fileIds
-    .map((fileId) => getFileById(fileId))
+    .map((fileId) => byId.get(fileId) ?? null)
     .filter(
       (file): file is IndexedAudioFile =>
         file !== null && file.removedAt === null,

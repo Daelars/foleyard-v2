@@ -23,6 +23,7 @@ export {
   getAllFilesIncludingRemoved,
   getFileById,
   getFileByPath,
+  getFilesByIds,
   getFilesByPaths,
   getFileCount,
   getFiles,
@@ -121,11 +122,9 @@ export function createExtensionServices(): Omit<
     files: {
       markRemoved: (fileIds) => {
         const removedAt = new Date().toISOString();
-        for (const fileId of fileIds) {
-          const file = services.fileRepository.getFileById(fileId);
-          if (file) {
-            services.fileRepository.markFileRemoved(file.path, removedAt);
-          }
+        const paths = services.fileRepository.getFilesByIds(fileIds).map((file) => file.path);
+        if (paths.length > 0) {
+          services.fileRepository.batchMarkRemoved(paths, removedAt, removedAt);
         }
       },
     },

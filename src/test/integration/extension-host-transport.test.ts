@@ -83,6 +83,7 @@ vi.mock("@/lib/db", () => ({
   getFiles: (...args: never[]) => state.files!.getFiles(...args),
   getFileCount: (...args: never[]) => state.files!.getFileCount(...args),
   getFileById: (id: string) => state.files!.getFileById(id),
+  getFilesByIds: (ids: string[]) => state.files!.getFilesByIds(ids),
   getAllFilesIncludingRemoved: () => state.files!.getAllFilesIncludingRemoved(),
   getTagsForFiles: (ids: string[]) => state.tags!.getTagsForFiles(ids),
   getLibraryRoots: () => state.settings!.getLibraryRoots(),

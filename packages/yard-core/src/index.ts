@@ -26,5 +26,5 @@ export * from "./services/organization/favorite-service";
 export * from "./services/organization/tag-service";
 export * from "./services/search/filter-service";
 
-export { sanitizeFilename } from "./domain/filename";
+export { sanitizeFilename, makeUniqueFilename } from "./domain/filename";
 export { mapConcurrent } from "./async/map-concurrent";

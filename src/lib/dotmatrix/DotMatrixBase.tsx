@@ -2,8 +2,6 @@
 
 import type { CSSProperties } from "react";
 import "@/components/dotmatrix-loader.css";
-import { useDotMatrixPhases, usePrefersReducedMotion } from "@/lib/dotmatrix-hooks";
-import { createPathWaveResolver, type NormFn } from "./resolvers";
 import { cx, type DotMatrixCommonProps, type DotMatrixPhase, type DotAnimationResolver } from "./types";
 import { getPatternIndexes } from "./patterns";
 import { MATRIX_SIZE, indexToCoord, distanceFromCenter, polarAngle, normalizedRadius, manhattanDistance } from "./geometry";
@@ -174,41 +172,4 @@ export function DotMatrixBase({
       <div className="dmx-grid" style={{ gap }}>{dots}</div>
     </div>
   );
-}
-
-type PathWaveComponentProps = DotMatrixCommonProps;
-
-export function createPathWaveComponent(displayName: string, getPathNorm: NormFn) {
-  const resolve = createPathWaveResolver(getPathNorm);
-
-  function PathWaveComponent({
-    pattern = "full",
-    animated = true,
-    hoverAnimated = false,
-    speed = 1,
-    ...rest
-  }: PathWaveComponentProps) {
-    const reducedMotion = usePrefersReducedMotion();
-    const { phase: matrixPhase, onMouseEnter, onMouseLeave } = useDotMatrixPhases({
-      animated: Boolean(animated && !reducedMotion),
-      hoverAnimated: Boolean(hoverAnimated && !reducedMotion),
-      speed
-    });
-    return (
-      <DotMatrixBase
-        {...rest}
-        speed={speed}
-        pattern={pattern}
-        animated={animated}
-        phase={matrixPhase}
-        reducedMotion={reducedMotion}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-        animationResolver={resolve}
-      />
-    );
-  }
-
-  PathWaveComponent.displayName = displayName;
-  return PathWaveComponent;
 }

@@ -1,14 +1,9 @@
 import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { AudioFile, IndexedAudioFile, FileSearchQuery } from "@yard-core";
 import { normalizeDirectoryPath } from "@yard-core";
-import { chunkArray, escapeLikePattern, SQLITE_MAX_VARIABLES } from "../sql-parameters";
+import { chunkArray, filenameLike, SQLITE_MAX_VARIABLES } from "../sql-parameters";
 import * as schema from "@/lib/schema";
 import type { FileRepositoryContext } from "./context";
-
-/** LIKE predicate on the Audio file filename with `%`/`_`/`\` treated literally. */
-function filenameLike(query: string) {
-  return sql`${schema.files.filename} LIKE ${`%${escapeLikePattern(query)}%`} ESCAPE '\\'`;
-}
 
 function tagIdSubselect(context: FileRepositoryContext, tagId: string) {
   return inArray(

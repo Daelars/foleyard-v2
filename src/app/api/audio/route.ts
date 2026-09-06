@@ -1,7 +1,6 @@
 import { errorResponse } from "@/lib/api/errors";
 import fs from "node:fs";
 import path from "node:path";
-import { Readable } from "node:stream";
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -57,10 +56,48 @@ function streamResponse(
   range?: ByteRange,
 ) {
   const file = fs.createReadStream(filePath, range);
-  const abort = () => file.destroy();
-  request.signal.addEventListener("abort", abort, { once: true });
-  file.once("close", () => request.signal.removeEventListener("abort", abort));
-  return new NextResponse(Readable.toWeb(file) as ReadableStream, {
+  const chunks = file[Symbol.asyncIterator]();
+  let stopped = false;
+  let abort: () => void;
+  const stop = () => {
+    stopped = true;
+    request.signal.removeEventListener("abort", abort);
+    file.destroy();
+  };
+  // Readable.toWeb can enqueue buffered data after cancellation when a
+  // Node stream resume is already scheduled. Pull one chunk at a time and
+  // check cancellation again after each pending read completes.
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      abort = () => {
+        if (stopped) return;
+        stop();
+        controller.close();
+      };
+      if (request.signal.aborted) abort();
+      else request.signal.addEventListener("abort", abort, { once: true });
+    },
+    async pull(controller) {
+      try {
+        const { value, done } = await chunks.next();
+        if (stopped) return;
+        if (done) {
+          stop();
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        if (stopped) return;
+        stop();
+        controller.error(error);
+      }
+    },
+    cancel() {
+      stop();
+    },
+  });
+  return new NextResponse(body, {
     status: range ? 206 : 200,
     headers,
   });

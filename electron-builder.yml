@@ -27,6 +27,7 @@ files:
   - package.json
 asarUnpack:
   - "**/*.node"
+  - "**/ffmpeg-static/**"
 win:
   icon: icon.ico
   target: nsis

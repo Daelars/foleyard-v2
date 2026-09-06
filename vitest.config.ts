@@ -59,6 +59,30 @@ export default defineConfig({
         __dirname,
         "packages/yard-tools/make-pack/src/index.ts",
       ),
+      "@foleyard/make-pack-v2": path.resolve(
+        __dirname,
+        "packages/yard-tools/make-pack-v2/src/index.ts",
+      ),
+      "@foleyard/sound-shelf-v2": path.resolve(
+        __dirname,
+        "packages/yard-tools/sound-shelf-v2/src/index.ts",
+      ),
+      "@foleyard/smart-collections-v2": path.resolve(
+        __dirname,
+        "packages/yard-tools/smart-collections-v2/src/index.ts",
+      ),
+      "@foleyard/folder-janitor-v2": path.resolve(
+        __dirname,
+        "packages/yard-tools/folder-janitor-v2/src/index.ts",
+      ),
+      "@foleyard/library-gatherer-v2": path.resolve(
+        __dirname,
+        "packages/yard-tools/library-gatherer-v2/src/index.ts",
+      ),
+      "@foleyard/drop-rules-v2": path.resolve(
+        __dirname,
+        "packages/yard-tools/drop-rules-v2/src/index.ts",
+      ),
       "@foleyard/drop-rules": path.resolve(
         __dirname,
         "packages/yard-tools/drop-rules/src/index.ts",

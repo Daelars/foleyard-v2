@@ -27,7 +27,7 @@ export async function withGenerationSlot<T>(work: () => Promise<T>): Promise<T> 
 /** One persistent entry per canonical path; identity includes size and modification time. */
 export async function getWaveformPeaks(filePath: string, cacheDirectory = path.join(path.dirname(getDatabasePath()), ".waveform-cache")): Promise<WaveformPeaks> {
   const source = await stat(filePath);
-  const identity = `1:${source.mtimeMs}:${source.size}`;
+  const identity = `2:${source.mtimeMs}:${source.size}`;
   const key = createHash("sha256").update(filePath).digest("hex");
   const cachePath = path.join(cacheDirectory, `${key}.json`);
   const taskKey = `${cachePath}:${identity}`;

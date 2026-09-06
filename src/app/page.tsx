@@ -191,22 +191,28 @@ function HomeContent() {
   // collection rename costs one collections round-trip with no extension
   // re-registration. The shelf count resolves after the extension list, since
   // only an enabled sound-shelf reports items.
+  const { loadSettingsScan } = settingsScan;
+  const { loadExtensions } = catalog;
+  const { loadOrganization } = org;
+  const { clearShelfState } = shelf;
+  // Hook result objects change on every render. Depend on their stable
+  // loaders so startup responses cannot schedule another workspace load.
   const loadInitialData = useCallback(async () => {
     const [, loadedExtensions] = await Promise.all([
-      settingsScan.loadSettingsScan(),
-      catalog.loadExtensions(),
-      org.loadOrganization(),
+      loadSettingsScan(),
+      loadExtensions(),
+      loadOrganization(),
     ]);
     if (
       loadedExtensions?.some(
         (extension) => extension.id === "sound-shelf" && extension.enabled,
       )
     ) {
-      void shelf.loadShelfCount();
+      void loadSoundShelfCount();
     } else {
-      shelf.clearShelfState();
+      clearShelfState();
     }
-  }, [settingsScan, catalog, org, shelf]);
+  }, [loadSettingsScan, loadExtensions, loadOrganization, loadSoundShelfCount, clearShelfState]);
 
   // Targeted post-scan refetch driven by the per-mutation refetch map:
   // files plus collection counts, nothing else.

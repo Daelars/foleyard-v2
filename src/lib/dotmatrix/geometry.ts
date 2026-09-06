@@ -18,11 +18,6 @@ export function distanceFromCenter(index: number): number {
   return Math.hypot(row - CENTER, col - CENTER);
 }
 
-export function rowDistance(index: number): number {
-  const { row } = indexToCoord(index);
-  return Math.abs(row - CENTER);
-}
-
 export function polarAngle(index: number): number {
   const { row, col } = indexToCoord(index);
   return Math.atan2(row - CENTER, col - CENTER);

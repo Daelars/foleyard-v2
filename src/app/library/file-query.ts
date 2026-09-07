@@ -13,7 +13,8 @@ export type LibraryView =
   | "collection"
   | "directory"
   | "shelf"
-  | "organize";
+  | "organize"
+  | "auto-tag";
 
 export interface FilesQueryInput {
   view: LibraryView;
@@ -46,7 +47,7 @@ export function describeFilesQuery(input: FilesQueryInput): FilesQuery {
   if (input.view === "shelf") {
     return { kind: "shelf" };
   }
-  if (input.view === "extensions") {
+  if (input.view === "extensions" || input.view === "auto-tag") {
     return { kind: "empty" };
   }
 

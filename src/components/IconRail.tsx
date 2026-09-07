@@ -1,10 +1,10 @@
 "use client";
 
-import { Layers, Library, ListMusic, Settings, Shapes, Star } from "lucide-react";
+import { Layers, Library, ListMusic, Settings, Shapes, Star, Tags } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-export type RailView = "library" | "favorites" | "shelf" | "extensions" | "organize";
+export type RailView = "library" | "favorites" | "shelf" | "extensions" | "organize" | "auto-tag";
 
 export function IconRail({
   activeView,
@@ -15,6 +15,8 @@ export function IconRail({
   onSelectShelf,
   onSelectExtensions,
   onSelectOrganize,
+  onSelectAutoTag,
+  showAutoTag = false,
   onOpenSettings,
   settingsActive = false,
   className,
@@ -27,6 +29,8 @@ export function IconRail({
   onSelectShelf: () => void;
   onSelectExtensions: () => void;
   onSelectOrganize: () => void;
+  onSelectAutoTag?: () => void;
+  showAutoTag?: boolean;
   onOpenSettings: () => void;
   settingsActive?: boolean;
   className?: string;
@@ -84,6 +88,17 @@ export function IconRail({
       active: activeView === "organize",
       onSelect: onSelectOrganize,
     },
+    ...(showAutoTag && onSelectAutoTag
+      ? [
+          {
+            id: "auto-tag",
+            label: "Auto tag",
+            icon: <Tags className="size-5" />,
+            active: activeView === "auto-tag",
+            onSelect: onSelectAutoTag,
+          },
+        ]
+      : []),
     {
       id: "extensions",
       label: "Extensions",

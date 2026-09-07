@@ -62,11 +62,13 @@ export interface PaletteInput {
   selectedFile: FileRecord | null;
   canStepQueue: boolean;
   shelfEnabled: boolean;
+  autoTagEnabled: boolean;
   showLibrary: () => void;
   showFavorites: () => void;
   showShelf: () => void;
   showExtensions: () => void;
   showOrganize: () => void;
+  showAutoTag: () => void;
   openSettings: () => void;
   togglePlayback: () => void;
   stepNext: () => void;
@@ -182,6 +184,7 @@ export function usePalette(input: PaletteInput) {
         canStepQueue: input.canStepQueue,
         isFavorite: input.selectedFile?.isFavorite ?? false,
         shelfEnabled: input.shelfEnabled,
+        autoTagEnabled: input.autoTagEnabled,
         toolCommands: paletteToolCommands,
         v2ToolCommands: input.v2ToolCommands ?? [],
         sounds: paletteSounds,
@@ -193,6 +196,7 @@ export function usePalette(input: PaletteInput) {
       input.selectedFile,
       input.canStepQueue,
       input.shelfEnabled,
+      input.autoTagEnabled,
       paletteToolCommands,
       input.v2ToolCommands,
       paletteSounds,
@@ -213,6 +217,7 @@ export function usePalette(input: PaletteInput) {
           else if (rest === "shelf") actions.showShelf();
           else if (rest === "tools") actions.showExtensions();
           else if (rest === "organize") actions.showOrganize();
+          else if (rest === "auto-tag") actions.showAutoTag();
           else if (rest === "settings") actions.openSettings();
           break;
         }

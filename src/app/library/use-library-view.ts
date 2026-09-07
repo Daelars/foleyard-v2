@@ -67,6 +67,10 @@ export function applyShowOrganize(state: LibraryViewState): LibraryViewState {
   return { ...clearedSelection(state), currentView: "organize" };
 }
 
+export function applyShowAutoTag(state: LibraryViewState): LibraryViewState {
+  return { ...clearedSelection(state), currentView: "auto-tag" };
+}
+
 export function applyFilterTag(
   state: LibraryViewState,
   id: string | null,
@@ -149,6 +153,9 @@ export function deriveRailView(view: LibraryView): RailView | null {
   if (view === "organize") {
     return "organize";
   }
+  if (view === "auto-tag") {
+    return "auto-tag";
+  }
   return null;
 }
 
@@ -221,6 +228,11 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
     notifyNavigated();
   }, [notifyNavigated]);
 
+  const showAutoTag = useCallback(() => {
+    setViewState((prev) => applyShowAutoTag(prev));
+    notifyNavigated();
+  }, [notifyNavigated]);
+
   const handleFilterTag = useCallback((id: string | null) => {
     setViewState((prev) => applyFilterTag(prev, id));
   }, []);
@@ -285,6 +297,7 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
     showExtensions,
     showShelf,
     showOrganize,
+    showAutoTag,
     handleFilterTag,
     handleFilterTagOrigin,
     showCollection,

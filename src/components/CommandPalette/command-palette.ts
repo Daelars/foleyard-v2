@@ -30,6 +30,7 @@ export interface PaletteBuildInput {
   canStepQueue: boolean;
   isFavorite: boolean;
   shelfEnabled: boolean;
+  autoTagEnabled: boolean;
   toolCommands: PaletteToolCommand[];
   /** v2 extension entries (R6): same shape, `v2tool:` IDs, v1 IDs untouched. */
   v2ToolCommands?: PaletteToolCommand[];
@@ -118,6 +119,11 @@ export function buildPaletteEntries(input: PaletteBuildInput): PaletteEntry[] {
     { id: "view:tools", label: "Go to Extensions", section: "view", hint: "view" },
     ["Go to Extensions", "Extensions", "Go to Tools", "Tools"],
     true,
+  );
+  push(
+    { id: "view:auto-tag", label: "Go to Auto tag", section: "view", hint: "view" },
+    ["Go to Auto tag", "Auto tag", "Auto-tag", "Tagging"],
+    input.autoTagEnabled,
   );
   push(
     {

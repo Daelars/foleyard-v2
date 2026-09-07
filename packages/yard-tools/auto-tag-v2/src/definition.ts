@@ -335,6 +335,18 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         type: "command-palette",
         commandId: AUTO_TAG_V2_TAG_SEMANTIC,
       },
+      {
+        id: "auto-tag-v2.side-status",
+        type: "sidebar",
+        commandId: AUTO_TAG_V2_CLAP_STATUS,
+        title: "Model status",
+      },
+      {
+        id: "auto-tag-v2.side-candidates",
+        type: "sidebar",
+        commandId: AUTO_TAG_V2_LIST_CANDIDATES,
+        title: "Review candidates",
+      },
     ],
   };
 }

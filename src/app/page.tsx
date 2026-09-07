@@ -12,9 +12,12 @@ import { V2LibraryDropZone } from "@/components/extensions-v2/drop-zone";
 import { V2SelectionActions } from "@/components/extensions-v2/menus";
 import { V2ExtensionsSection } from "@/components/extensions-v2/settings-section";
 import { V2ToolsCards } from "@/components/extensions-v2/tools-cards";
+import { V2ExtensionSidebarPanels } from "@/components/extensions-v2/sidebar-panels";
+import { AutoTagBoard } from "@/components/AutoTagBoard/board";
 import { useV2PaletteBridge } from "@/components/extensions-v2/use-v2-palette";
 import { MakePackV2Dialog } from "@/components/extensions/make-pack-v2/MakePackV2Dialog";
 import { MAKE_PACK_V2_ID, type MakePackV2Source } from "@/components/extensions/make-pack-v2/use-make-pack-v2";
+import { AUTO_TAG_V2_ID } from "@foleyard/auto-tag-v2";
 import {
   invokeV2Command,
   resolveV2UiPoint,
@@ -100,6 +103,7 @@ function HomeContent() {
     showFavorites,
     showShelf,
     showOrganize,
+    showAutoTag,
     handleFilterTag,
     handleFilterTagOrigin,
     navigateDirectory,
@@ -370,6 +374,10 @@ function HomeContent() {
     () => v2Catalog.extensions.some((entry) => entry.id === MAKE_PACK_V2_ID && entry.enabled),
     [v2Catalog.extensions],
   );
+  const autoTagEnabled = useMemo(
+    () => v2Catalog.extensions.some((entry) => entry.id === AUTO_TAG_V2_ID && entry.enabled),
+    [v2Catalog.extensions],
+  );
   const openPackV2 = useCallback((source: MakePackV2Source, fileIds: string[]) => {
     setPackV2({ source, fileIds });
   }, []);
@@ -422,11 +430,13 @@ function HomeContent() {
     shelfEnabled: extensions.some(
       (extension) => extension.id === "sound-shelf" && extension.enabled,
     ),
+    autoTagEnabled,
     showLibrary,
     showFavorites,
     showShelf,
     showExtensions: handleShowExtensions,
     showOrganize,
+    showAutoTag,
     openSettings: settingsScan.openSettings,
     togglePlayback: () => audioPlayerRef.current?.togglePlayback(),
     stepNext: () =>
@@ -490,7 +500,8 @@ function HomeContent() {
   const showExtensionsView = currentView === "extensions";
   const showShelfView = currentView === "shelf";
   const showOrganizeView = currentView === "organize";
-  const hideHeaderActions = showExtensionsView || showShelfView || showOrganizeView;
+  const showAutoTagView = currentView === "auto-tag";
+  const hideHeaderActions = showExtensionsView || showShelfView || showOrganizeView || showAutoTagView;
 
   const railView = view.railView;
 
@@ -503,6 +514,8 @@ function HomeContent() {
           ? "Shelf"
           : currentView === "organize"
             ? "Organize"
+            : currentView === "auto-tag"
+              ? "Auto tag"
             : currentView === "collection"
               ? (selectedCollectionName ?? "Library")
               : currentView === "directory"
@@ -551,6 +564,8 @@ function HomeContent() {
         onSelectShelf={showShelf}
         onSelectExtensions={handleShowExtensions}
         onSelectOrganize={showOrganize}
+        showAutoTag={autoTagEnabled}
+        onSelectAutoTag={showAutoTag}
         onOpenSettings={settingsScan.openSettings}
         settingsActive={settingsScan.showSettings}
       />
@@ -583,6 +598,11 @@ function HomeContent() {
             }}
             onSelectOrganize={() => {
               showOrganize();
+              view.closeMobileSidebar();
+            }}
+            showAutoTag={autoTagEnabled}
+            onSelectAutoTag={() => {
+              showAutoTag();
               view.closeMobileSidebar();
             }}
             onOpenSettings={() => {
@@ -682,7 +702,7 @@ function HomeContent() {
               {viewHeading}
             </h1>
             <span className="flex-1" />
-            {!showExtensionsView && !showShelfView && !showOrganizeView ? (
+            {!showExtensionsView && !showShelfView && !showOrganizeView && !showAutoTagView ? (
               <div
                 className="flex items-center gap-1"
                 role="group"
@@ -780,27 +800,38 @@ function HomeContent() {
               </div>
             ) : null}
           </div>
-          {showExtensionsView || showShelfView || showOrganizeView ? (
+          {showExtensionsView || showShelfView || showOrganizeView || showAutoTagView ? (
             <p className="mt-1.5 text-sm font-medium text-zinc-400">
               {showExtensionsView
                 ? "Optional workflows. Flip one on and it joins the workspace."
                 : showOrganizeView
                   ? "Collections and tags in one place."
-                  : "Sounds under review."}
+                  : showAutoTagView
+                    ? "Automatic tagging coverage, candidates, and similar sounds."
+                    : "Sounds under review."}
             </p>
           ) : null}
         </div>
 
         {showExtensionsView ? (
-          <ExtensionGrid
-            extensions={extensions}
-            isLoading={catalog.isLoadingExtensions}
-            onOpenDetails={extUi.setSelectedExtension}
-            onToggleEnabled={catalog.handleToggleExtensionEnabled}
-            onRunCommand={extUi.handleRunCommand}
-            pendingExtensionId={catalog.pendingExtensionId}
-            trailing={<V2ToolsCards onRunPack={() => openPackV2("recent", [])} />}
-          />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <ExtensionGrid
+              extensions={extensions}
+              isLoading={catalog.isLoadingExtensions}
+              onOpenDetails={extUi.setSelectedExtension}
+              onToggleEnabled={catalog.handleToggleExtensionEnabled}
+              onRunCommand={extUi.handleRunCommand}
+              pendingExtensionId={catalog.pendingExtensionId}
+              trailing={<V2ToolsCards onRunPack={() => openPackV2("recent", [])} />}
+            />
+            <div className="px-4 pb-4 md:px-5">
+              <V2ExtensionSidebarPanels
+                catalog={v2Catalog.catalog}
+                uiState={v2UiState}
+                onInvoke={(item) => invokeV2RowCommand(item, [])}
+              />
+            </div>
+          </div>
         ) : showOrganizeView ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <OrganizeView
@@ -820,6 +851,10 @@ function HomeContent() {
               onUpdateTagColor={org.updateTagColor}
               onSelectTag={handleFilterTag}
             />
+          </div>
+        ) : showAutoTagView ? (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5">
+            <AutoTagBoard enabled={autoTagEnabled} />
           </div>
         ) : (
           <>

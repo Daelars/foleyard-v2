@@ -571,6 +571,26 @@ describe("auto-tag-v2 find-similar", () => {
       },
     ]);
   });
+
+  it("declares sidebar contributions for status and candidates", () => {
+    const w = world();
+    expect(
+      w.definition.contributions?.filter((entry) => entry.type === "sidebar"),
+    ).toEqual([
+      {
+        id: "auto-tag-v2.side-status",
+        type: "sidebar",
+        commandId: AUTO_TAG_V2_CLAP_STATUS,
+        title: "Model status",
+      },
+      {
+        id: "auto-tag-v2.side-candidates",
+        type: "sidebar",
+        commandId: AUTO_TAG_V2_LIST_CANDIDATES,
+        title: "Review candidates",
+      },
+    ]);
+  });
 });
 
 describe("auto-tag-v2 clap", () => {

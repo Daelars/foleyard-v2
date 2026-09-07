@@ -83,6 +83,10 @@ export default defineConfig({
         __dirname,
         "packages/yard-tools/drop-rules-v2/src/index.ts",
       ),
+      "@foleyard/auto-tag-v2": path.resolve(
+        __dirname,
+        "packages/yard-tools/auto-tag-v2/src/index.ts",
+      ),
       "@foleyard/drop-rules": path.resolve(
         __dirname,
         "packages/yard-tools/drop-rules/src/index.ts",

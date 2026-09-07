@@ -1,6 +1,6 @@
 import {
   attachFileToCollection,
-  attachTagToFile,
+  attachTagToFileWithOrigin,
   createSmartCollection,
   createTag,
   deleteCollection,
@@ -11,7 +11,7 @@ import {
   getTagsForFile,
   updateCollectionFilter,
 } from "@/lib/db";
-import type { Collection, Tag, V2CollectionPorts, V2TagPorts } from "@yard-core";
+import type { Collection, Tag, TagOrigin, V2CollectionPorts, V2TagPorts } from "@yard-core";
 import { extractSmartQuery } from "@/lib/smart-collection-filter";
 
 import { getV2Events } from "./events";
@@ -110,9 +110,9 @@ export function createV2TagPorts(deps: V2OrganizationDeps = {}): V2TagPorts {
       notify();
       return id;
     },
-    attach: (fileId, tagId) => {
-      if (ports) ports.attach(fileId, tagId);
-      else attachTagToFile(fileId, tagId);
+    attach: (fileId, tagId, origin?: TagOrigin) => {
+      if (ports) ports.attach(fileId, tagId, origin);
+      else attachTagToFileWithOrigin(fileId, tagId, origin ?? "manual");
       notify();
     },
     detach: (fileId, tagId) => {

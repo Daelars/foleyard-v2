@@ -176,5 +176,11 @@ export const createTag = (name: string) => getTagRepo().createTag(name);
 export const renameTag = (tagId: string, name: string) => getTagRepo().renameTag(tagId, name);
 export const updateTagColor = (tagId: string, color: string | null) => getTagRepo().updateTagColor(tagId, color);
 export const attachTagToFile = (fileId: string, tagId: string) => getTagRepo().attachTagToFile(fileId, tagId);
+export const attachTagToFileWithOrigin = (
+  fileId: string,
+  tagId: string,
+  origin: TagOrigin,
+  confidence: number | null = null,
+) => getTagRepo().attachTagToFileWithOrigin(fileId, tagId, origin, confidence);
 export const detachTagFromFile = (fileId: string, tagId: string) => getTagRepo().detachTagFromFile(fileId, tagId);
 export const deleteTag = (tagId: string) => getTagRepo().deleteTag(tagId);

@@ -1,5 +1,5 @@
 import type { Collection } from "../domain/collection";
-import type { Tag } from "../domain/tag";
+import type { Tag, TagOrigin } from "../domain/tag";
 
 import type { ExtensionV2Permission } from "./definition";
 import { V2OperationError } from "./operations";
@@ -43,7 +43,7 @@ export type V2TagPorts = {
   list(): Tag[];
   tagsForFile(fileId: string): Tag[];
   create(name: string): string;
-  attach(fileId: string, tagId: string): void;
+  attach(fileId: string, tagId: string, origin?: TagOrigin): void;
   detach(fileId: string, tagId: string): void;
 };
 
@@ -61,7 +61,7 @@ export type V2TagOperations = {
   list(): Tag[];
   tagsForFile(fileId: string): Tag[];
   create(name: string): { id: string };
-  attach(fileId: string, tagId: string): void;
+  attach(fileId: string, tagId: string, origin?: TagOrigin): void;
   detach(fileId: string, tagId: string): void;
 };
 
@@ -256,10 +256,10 @@ export function createV2TagOperations(args: V2OrganizationFactoryArgs): V2TagOpe
       args.notify?.("tags");
       return { id };
     },
-    attach(fileId: string, tagId: string): void {
+    attach(fileId: string, tagId: string, origin?: TagOrigin): void {
       require("tags:write");
       liveTarget(fileId);
-      ports().attach(checkId(fileId, "Sound ID"), checkId(tagId, "Tag ID"));
+      ports().attach(checkId(fileId, "Sound ID"), checkId(tagId, "Tag ID"), origin);
       args.notify?.("tags");
     },
     detach(fileId: string, tagId: string): void {

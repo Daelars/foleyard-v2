@@ -35,7 +35,7 @@ through v2, and a v2 failure never falls back to v1.
 
 ### What runs on v2 today
 
-Six bundled internal ports, each disabled by default with its own
+Seven bundled internal ports, each disabled by default with its own
 settings namespace and no auto-migration from v1 (parity tables live
 in each package README):
 
@@ -52,6 +52,9 @@ in each package README):
 - Drop Rules v2 (`drop-rules-v2`): preview, apply, prepare-drag,
   open-settings through destination/staging grants with rename
   patterns and a used-sounds report.
+- Auto Tag v2 (`auto-tag-v2`): preview and tag-files with
+  deterministic filename rules; every write marked deterministic
+  (parity notes in its package README).
 
 Two dev-only conformance fixtures (`fixture-surface`,
 `fixture-worker`) prove the remaining contribution points, jobs,

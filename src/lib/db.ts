@@ -51,6 +51,7 @@ export {
 } from "@/lib/database/settings-repository";
 export {
   attachTagToFile,
+  attachTagToFileWithOrigin,
   createTag,
   deleteTag,
   detachTagFromFile,

@@ -26,6 +26,8 @@ export const AUTO_TAG_V2_FIND_SIMILAR = "auto-tag-v2.find-similar";
 export const AUTO_TAG_V2_CLAP_STATUS = "auto-tag-v2.clap-status";
 export const AUTO_TAG_V2_DOWNLOAD_MODEL = "auto-tag-v2.download-model";
 export const AUTO_TAG_V2_TAG_SEMANTIC = "auto-tag-v2.tag-semantic";
+export const AUTO_TAG_V2_COVERAGE_HISTORY = "auto-tag-v2.coverage-history";
+export const AUTO_TAG_V2_RECORD_COVERAGE = "auto-tag-v2.record-coverage";
 
 function fileIdsInput(): ExtensionV2ValueSchema {
   return {
@@ -157,6 +159,27 @@ function tagSemanticResultSchema(): ExtensionV2ValueSchema {
   };
 }
 
+function coverageHistoryResultSchema(): ExtensionV2ValueSchema {
+  return {
+    kind: "object",
+    properties: {
+      entries: { kind: "string-array" },
+    },
+    required: ["entries"],
+  };
+}
+
+function recordCoverageResultSchema(): ExtensionV2ValueSchema {
+  return {
+    kind: "object",
+    properties: {
+      recorded: { kind: "boolean" },
+      entriesCount: { kind: "number", integer: true, min: 0 },
+    },
+    required: ["recorded", "entriesCount"],
+  };
+}
+
 export function createAutoTagV2Definition(): ExtensionV2Definition {
   return {
     id: AUTO_TAG_V2_ID,
@@ -285,6 +308,32 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         scope: "global",
         input: fileIdsInput(),
         result: tagSemanticResultSchema(),
+        docsId: "commands",
+      },
+      {
+        id: AUTO_TAG_V2_COVERAGE_HISTORY,
+        title: "Coverage history",
+        description: "Read recorded coverage snapshots, oldest first.",
+        scope: "global",
+        input: { kind: "object", properties: {} },
+        result: coverageHistoryResultSchema(),
+        docsId: "commands",
+      },
+      {
+        id: AUTO_TAG_V2_RECORD_COVERAGE,
+        title: "Record coverage",
+        description: "Append a coverage snapshot for trend charts.",
+        scope: "global",
+        input: {
+          kind: "object",
+          properties: {
+            tagged: { kind: "number", integer: true, min: 0 },
+            total: { kind: "number", integer: true, min: 0 },
+            tags: { kind: "string-array" },
+          },
+          required: ["tagged", "total", "tags"],
+        },
+        result: recordCoverageResultSchema(),
         docsId: "commands",
       },
     ],

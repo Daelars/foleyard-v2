@@ -149,6 +149,7 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
           mtimeMs: schema.files.mtimeMs,
           isFavorite: schema.files.isFavorite,
           removedAt: schema.files.removedAt,
+          createdAt: schema.files.createdAt,
         })
         .from(schema.fileCollections)
         .innerJoin(schema.files, eq(schema.fileCollections.fileId, schema.files.id))
@@ -188,6 +189,7 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
         mtimeMs: schema.files.mtimeMs,
         isFavorite: schema.files.isFavorite,
         removedAt: schema.files.removedAt,
+        createdAt: schema.files.createdAt,
       })
       .from(schema.files)
       .where(filters.length ? and(...filters) : undefined)

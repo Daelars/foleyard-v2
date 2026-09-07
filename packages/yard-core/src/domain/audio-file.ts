@@ -14,6 +14,8 @@ export interface AudioFile {
   removedAt?: string | null;
   lastScannedAt?: string | null;
   mtimeMs?: number | null;
+  /** Row creation time: null for rows predating the column. */
+  createdAt?: string | null;
 }
 
 export interface IndexedAudioFile extends AudioFile {

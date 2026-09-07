@@ -18,6 +18,7 @@ import {
 
 import {
   AUTO_TAG_V2_CLAP_STATUS,
+  AUTO_TAG_V2_COVERAGE_HISTORY,
   AUTO_TAG_V2_DISMISS_CANDIDATE,
   AUTO_TAG_V2_DOWNLOAD_MODEL,
   AUTO_TAG_V2_FIND_SIMILAR,
@@ -25,19 +26,23 @@ import {
   AUTO_TAG_V2_LIST_CANDIDATES,
   AUTO_TAG_V2_PREVIEW,
   AUTO_TAG_V2_PROMOTE_CANDIDATE,
+  AUTO_TAG_V2_RECORD_COVERAGE,
   AUTO_TAG_V2_TAG_FILES,
   AUTO_TAG_V2_TAG_SEMANTIC,
   createAutoTagV2Definition,
   registerAutoTagV2Handlers,
   type AutoTagV2ClapStatusResult,
+  type AutoTagV2CoverageHistoryResult,
   type AutoTagV2DismissCandidateResult,
   type AutoTagV2DownloadModelResult,
   type AutoTagV2FindSimilarResult,
   type AutoTagV2ListCandidatesResult,
   type AutoTagV2PreviewResult,
   type AutoTagV2PromoteCandidateResult,
+  type AutoTagV2RecordCoverageResult,
   type AutoTagV2TagFilesResult,
   type AutoTagV2TagSemanticResult,
+  type CoverageSnapshot,
 } from "./index";
 
 // Area: auto-tag v2 (#190). Handlers through the real host preflight with
@@ -680,5 +685,60 @@ describe("auto-tag-v2 clap", () => {
     });
     expect((empty as { ok: boolean }).ok).toBe(false);
     expect(noVocab.attachments).toEqual([]);
+  });
+});
+
+describe("auto-tag-v2 coverage history", () => {
+  async function record(
+    w: World,
+    tagged: number,
+    total: number,
+    tags: string[],
+  ): Promise<AutoTagV2RecordCoverageResult> {
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_RECORD_COVERAGE,
+      input: { tagged, total, tags },
+      selection: { fileIds: [] },
+    });
+    return immediateValue<AutoTagV2RecordCoverageResult>(result);
+  }
+
+  async function history(w: World): Promise<CoverageSnapshot[]> {
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_COVERAGE_HISTORY,
+      input: {},
+      selection: { fileIds: [] },
+    });
+    const value = immediateValue<AutoTagV2CoverageHistoryResult>(result);
+    return value.entries.map((entry) => JSON.parse(entry) as CoverageSnapshot);
+  }
+
+  it("records snapshots and reads them back oldest first", async () => {
+    const w = world();
+    expect(await history(w)).toEqual([]);
+    const recorded = await record(w, 2, 3, ["thunder:2", "rain:1", "bogus", "zero:-1"]);
+    expect(recorded.recorded).toBe(true);
+    expect(recorded.entriesCount).toBe(1);
+    expect(await history(w)).toEqual([
+      {
+        at: expect.any(String),
+        tagged: 2,
+        total: 3,
+        tags: { thunder: 2, rain: 1 },
+      },
+    ]);
+  });
+
+  it("caps history at thirty snapshots", async () => {
+    const w = world();
+    for (let index = 0; index < 32; index += 1) {
+      await record(w, index, 32, []);
+    }
+    const entries = await history(w);
+    expect(entries).toHaveLength(30);
+    expect(entries[0]!.tagged).toBe(2);
+    expect(entries[29]!.tagged).toBe(31);
   });
 });

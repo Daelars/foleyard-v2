@@ -10,6 +10,7 @@ import {
 
 import {
   AUTO_TAG_V2_CLAP_STATUS,
+  AUTO_TAG_V2_COVERAGE_HISTORY,
   AUTO_TAG_V2_DISMISS_CANDIDATE,
   AUTO_TAG_V2_DOWNLOAD_MODEL,
   AUTO_TAG_V2_FIND_SIMILAR,
@@ -17,6 +18,7 @@ import {
   AUTO_TAG_V2_LIST_CANDIDATES,
   AUTO_TAG_V2_PREVIEW,
   AUTO_TAG_V2_PROMOTE_CANDIDATE,
+  AUTO_TAG_V2_RECORD_COVERAGE,
   AUTO_TAG_V2_TAG_FILES,
   AUTO_TAG_V2_TAG_SEMANTIC,
 } from "./definition";
@@ -554,6 +556,90 @@ export type AutoTagV2TagSemanticResult = {
   failedReasons: string[];
 };
 
+export type AutoTagV2CoverageHistoryResult = {
+  entries: string[];
+};
+
+export type AutoTagV2RecordCoverageResult = {
+  recorded: boolean;
+  entriesCount: number;
+};
+
+export type CoverageSnapshot = {
+  at: string;
+  tagged: number;
+  total: number;
+  tags: Record<string, number>;
+};
+
+/** Snapshots live in extension state, oldest first, bounded. */
+export const COVERAGE_HISTORY_KEY = "coverage-history";
+export const MAX_COVERAGE_SNAPSHOTS = 30;
+
+function readSnapshots(ctx: V2HandlerContext): CoverageSnapshot[] {
+  const raw: unknown = ctx.operations.state.read(COVERAGE_HISTORY_KEY);
+  if (!Array.isArray(raw)) return [];
+  const out: CoverageSnapshot[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    if (typeof record.at !== "string") continue;
+    const tags: Record<string, number> = {};
+    if (record.tags && typeof record.tags === "object") {
+      for (const [name, count] of Object.entries(record.tags as Record<string, unknown>)) {
+        if (typeof count === "number" && Number.isInteger(count) && count >= 0) {
+          tags[name] = count;
+        }
+      }
+    }
+    out.push({
+      at: record.at,
+      tagged: typeof record.tagged === "number" ? Math.max(0, Math.floor(record.tagged)) : 0,
+      total: typeof record.total === "number" ? Math.max(0, Math.floor(record.total)) : 0,
+      tags,
+    });
+  }
+  return out;
+}
+
+export function runCoverageHistory(ctx: V2HandlerContext) {
+  return immediateV2Result({
+    entries: readSnapshots(ctx).map((entry) => JSON.stringify(entry)),
+  } satisfies AutoTagV2CoverageHistoryResult);
+}
+
+export function runRecordCoverage(ctx: V2HandlerContext) {
+  const raw =
+    typeof ctx.invocation.input === "object" && ctx.invocation.input !== null
+      ? (ctx.invocation.input as Record<string, unknown>)
+      : {};
+  const tagged =
+    typeof raw.tagged === "number" && Number.isInteger(raw.tagged) && raw.tagged >= 0
+      ? raw.tagged
+      : 0;
+  const total =
+    typeof raw.total === "number" && Number.isInteger(raw.total) && raw.total >= 0 ? raw.total : 0;
+  const tags: Record<string, number> = {};
+  if (Array.isArray(raw.tags)) {
+    for (const line of raw.tags) {
+      if (typeof line !== "string") continue;
+      const split = line.lastIndexOf(":");
+      if (split === -1) continue;
+      const count = Number(line.slice(split + 1));
+      if (!Number.isInteger(count) || count < 0) continue;
+      tags[line.slice(0, split)] = count;
+    }
+  }
+  const snapshots = readSnapshots(ctx);
+  snapshots.push({ at: new Date().toISOString(), tagged, total, tags });
+  while (snapshots.length > MAX_COVERAGE_SNAPSHOTS) snapshots.shift();
+  ctx.operations.state.write(COVERAGE_HISTORY_KEY, snapshots);
+  return immediateV2Result({
+    recorded: true,
+    entriesCount: snapshots.length,
+  } satisfies AutoTagV2RecordCoverageResult);
+}
+
 /** Register every auto-tag command on a v2 host. */
 export function registerAutoTagV2Handlers(host: ExtensionV2Host): void {
   host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_PREVIEW, runPreview);
@@ -569,4 +655,6 @@ export function registerAutoTagV2Handlers(host: ExtensionV2Host): void {
     runDownloadModel(ctx),
   );
   host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_TAG_SEMANTIC, (ctx) => runTagSemantic(ctx));
+  host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_COVERAGE_HISTORY, runCoverageHistory);
+  host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_RECORD_COVERAGE, runRecordCoverage);
 }

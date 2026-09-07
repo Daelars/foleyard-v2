@@ -15,12 +15,18 @@ import {
 } from "yard-core";
 
 import {
+  AUTO_TAG_V2_DISMISS_CANDIDATE,
   AUTO_TAG_V2_ID,
+  AUTO_TAG_V2_LIST_CANDIDATES,
   AUTO_TAG_V2_PREVIEW,
+  AUTO_TAG_V2_PROMOTE_CANDIDATE,
   AUTO_TAG_V2_TAG_FILES,
   createAutoTagV2Definition,
   registerAutoTagV2Handlers,
+  type AutoTagV2DismissCandidateResult,
+  type AutoTagV2ListCandidatesResult,
   type AutoTagV2PreviewResult,
+  type AutoTagV2PromoteCandidateResult,
   type AutoTagV2TagFilesResult,
 } from "./index";
 
@@ -82,11 +88,16 @@ function world(overrides?: { granted?: string[] }): World {
   const library: V2LibraryReadPorts = {
     getFileById: (id) => byId.get(id) ?? null,
     getFilesByIds: (ids) => ids.flatMap((id) => (byId.get(id) ? [byId.get(id)!] : [])),
-    listPage: () => ({ files, nextCursor: null }),
+    listPage: (cursor) => {
+      const start = cursor ? Number.parseInt(cursor, 10) || 0 : 0;
+      const slice = files.slice(start, start + 2);
+      return { files: slice, nextCursor: start + 2 < files.length ? String(start + 2) : null };
+    },
   };
   const tagsByName = new Map<string, string>();
   const attachments: Attachment[] = [];
   const created: string[] = [];
+  const stateStore = new Map<string, unknown>();
   let seq = 0;
   const tagPorts: V2TagPorts = {
     list: () => [...tagsByName.entries()].map(([name, id]) => ({ id, name })),
@@ -134,7 +145,13 @@ function world(overrides?: { granted?: string[] }): World {
         },
         archive: { createZipArchive: async () => ({ bytesWritten: 0 }) },
         settings: { readRaw: () => undefined, writeRaw: () => {} },
-        extensionState: { readAll: () => ({}), writeAll: () => {} },
+        extensionState: {
+          readAll: () => Object.fromEntries(stateStore),
+          writeAll: (_extensionId, state) => {
+            stateStore.clear();
+            for (const [key, value] of Object.entries(state)) stateStore.set(key, value);
+          },
+        },
         jobs: binding.reporter
           ? {
               reportProgress: (completed: number, total: number) => {
@@ -284,5 +301,106 @@ describe("auto-tag-v2 tag-files", () => {
     expect(value.tagged).toBe(2);
     expect(value.attached).toBe(4);
     expect(w.progress.calls).toBeGreaterThan(0);
+  });
+});
+
+describe("auto-tag-v2 candidates", () => {
+  async function listCandidates(w: World) {
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_LIST_CANDIDATES,
+      input: {},
+      selection: { fileIds: [] },
+    });
+    return immediateValue<AutoTagV2ListCandidatesResult>(result);
+  }
+
+  it("lists uncovered words with examples and writes nothing", async () => {
+    const w = world();
+    const value = await listCandidates(w);
+    expect(value.words).toContain("paper");
+    expect(value.words).not.toContain("thunder");
+    expect(value.lines.some((line) => line.startsWith("paper —"))).toBe(true);
+    expect(value.truncated).toBe(false);
+    expect(value.totalFiles).toBe(3);
+    // The queue never creates tags: listing twice changes nothing.
+    expect(w.created).toEqual([]);
+    expect(w.attachments).toEqual([]);
+    const command = w.definition.commands.find(
+      (entry) => entry.id === AUTO_TAG_V2_LIST_CANDIDATES,
+    )!;
+    expect(validateV2Value(command.result!, value, "result")).toBeNull();
+  });
+
+  it("dismissed words stay out of later listings", async () => {
+    const w = world();
+    const dismissed = immediateValue<AutoTagV2DismissCandidateResult>(
+      await w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_DISMISS_CANDIDATE,
+        input: { word: "paper" },
+        selection: { fileIds: [] },
+      }),
+    );
+    expect(dismissed.word).toBe("paper");
+    expect(dismissed.dismissedCount).toBe(1);
+    expect((await listCandidates(w)).words).not.toContain("paper");
+  });
+
+  it("promoting creates the tag once and attaches manual", async () => {
+    const w = world();
+    await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_DISMISS_CANDIDATE,
+      input: { word: "paper" },
+      selection: { fileIds: [] },
+    });
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_PROMOTE_CANDIDATE,
+      input: { word: " paper " },
+      selection: { fileIds: [] },
+    });
+    const value = immediateValue<AutoTagV2PromoteCandidateResult>(result);
+    expect(value.tag).toBe("paper");
+    expect(value.attached).toBe(1);
+    expect(value.missing).toEqual([]);
+    expect(w.created).toEqual(["paper"]);
+    expect(w.attachments).toEqual([
+      { fileId: "f3", tagId: w.tagsByName.get("paper"), origin: "manual" },
+    ]);
+    // Promoting overrides the earlier dismiss.
+    expect((await listCandidates(w)).words).not.toContain("paper");
+    const command = w.definition.commands.find(
+      (entry) => entry.id === AUTO_TAG_V2_PROMOTE_CANDIDATE,
+    )!;
+    expect(validateV2Value(command.result!, value, "result")).toBeNull();
+  });
+
+  it("promoting explicit IDs attaches only those and reports missing", async () => {
+    const w = world();
+    const value = immediateValue<AutoTagV2PromoteCandidateResult>(
+      await w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_PROMOTE_CANDIDATE,
+        input: { word: "paper", fileIds: ["f3", "gone"] },
+        selection: { fileIds: ["f3"] },
+      }),
+    );
+    expect(value.attached).toBe(1);
+    expect(value.missing).toEqual(["gone"]);
+    expect(w.attachments.map((entry) => entry.fileId)).toEqual(["f3"]);
+  });
+
+  it("rejects unusable words with a reason", async () => {
+    const w = world();
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_PROMOTE_CANDIDATE,
+      input: { word: "ab" },
+      selection: { fileIds: [] },
+    });
+    expect((result as { ok: boolean }).ok).toBe(false);
+    expect(w.created).toEqual([]);
   });
 });

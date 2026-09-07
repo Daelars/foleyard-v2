@@ -19,6 +19,9 @@ export const AUTO_TAG_V2_ID = "auto-tag-v2";
 
 export const AUTO_TAG_V2_TAG_FILES = "auto-tag-v2.tag-files";
 export const AUTO_TAG_V2_PREVIEW = "auto-tag-v2.preview";
+export const AUTO_TAG_V2_LIST_CANDIDATES = "auto-tag-v2.list-candidates";
+export const AUTO_TAG_V2_PROMOTE_CANDIDATE = "auto-tag-v2.promote-candidate";
+export const AUTO_TAG_V2_DISMISS_CANDIDATE = "auto-tag-v2.dismiss-candidate";
 
 function fileIdsInput(): ExtensionV2ValueSchema {
   return {
@@ -59,6 +62,43 @@ function tagFilesResultSchema(): ExtensionV2ValueSchema {
   };
 }
 
+function listCandidatesResultSchema(): ExtensionV2ValueSchema {
+  return {
+    kind: "object",
+    properties: {
+      words: { kind: "string-array" },
+      lines: { kind: "string-array" },
+      truncated: { kind: "boolean" },
+      totalFiles: { kind: "number", integer: true, min: 0 },
+    },
+    required: ["words", "lines", "truncated", "totalFiles"],
+  };
+}
+
+function promoteCandidateResultSchema(): ExtensionV2ValueSchema {
+  return {
+    kind: "object",
+    properties: {
+      tag: { kind: "string" },
+      tagId: { kind: "string" },
+      attached: { kind: "number", integer: true, min: 0 },
+      missing: { kind: "string-array" },
+    },
+    required: ["tag", "tagId", "attached", "missing"],
+  };
+}
+
+function dismissCandidateResultSchema(): ExtensionV2ValueSchema {
+  return {
+    kind: "object",
+    properties: {
+      word: { kind: "string" },
+      dismissedCount: { kind: "number", integer: true, min: 0 },
+    },
+    required: ["word", "dismissedCount"],
+  };
+}
+
 export function createAutoTagV2Definition(): ExtensionV2Definition {
   return {
     id: AUTO_TAG_V2_ID,
@@ -93,6 +133,51 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         result: previewResultSchema(),
         docsId: "commands",
       },
+      {
+        id: AUTO_TAG_V2_LIST_CANDIDATES,
+        title: "List tag candidates",
+        description: "List uncovered words across the library with example files. Nothing is created.",
+        scope: "global",
+        input: {
+          kind: "object",
+          properties: {
+            limit: { kind: "number", integer: true, min: 1 },
+          },
+        },
+        result: listCandidatesResultSchema(),
+        docsId: "commands",
+      },
+      {
+        id: AUTO_TAG_V2_PROMOTE_CANDIDATE,
+        title: "Promote tag candidate",
+        description: "Turn an uncovered word into a real tag and attach it to the matching sounds.",
+        scope: "global",
+        input: {
+          kind: "object",
+          properties: {
+            word: { kind: "string", minLength: 1 },
+            fileIds: { kind: "string-array" },
+          },
+          required: ["word"],
+        },
+        result: promoteCandidateResultSchema(),
+        docsId: "commands",
+      },
+      {
+        id: AUTO_TAG_V2_DISMISS_CANDIDATE,
+        title: "Dismiss tag candidate",
+        description: "Remove an uncovered word from the candidate queue.",
+        scope: "global",
+        input: {
+          kind: "object",
+          properties: {
+            word: { kind: "string", minLength: 1 },
+          },
+          required: ["word"],
+        },
+        result: dismissCandidateResultSchema(),
+        docsId: "commands",
+      },
     ],
     contributions: [
       {
@@ -104,6 +189,21 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         id: "auto-tag-v2.palette-preview",
         type: "command-palette",
         commandId: AUTO_TAG_V2_PREVIEW,
+      },
+      {
+        id: "auto-tag-v2.palette-list-candidates",
+        type: "command-palette",
+        commandId: AUTO_TAG_V2_LIST_CANDIDATES,
+      },
+      {
+        id: "auto-tag-v2.palette-promote-candidate",
+        type: "command-palette",
+        commandId: AUTO_TAG_V2_PROMOTE_CANDIDATE,
+      },
+      {
+        id: "auto-tag-v2.palette-dismiss-candidate",
+        type: "command-palette",
+        commandId: AUTO_TAG_V2_DISMISS_CANDIDATE,
       },
     ],
   };

@@ -32,6 +32,12 @@ export const SEED_RULES: TagRule[] = [
 /** Per-invocation bound so one call cannot walk the whole library. */
 export const MAX_TAG_FILES = 500;
 
+/** How many files the candidate walk scans before reporting truncated. */
+export const MAX_QUEUE_FILES = 2000;
+
+/** How many candidates one listing returns at most. */
+export const MAX_CANDIDATES = 100;
+
 export function filenameMatchesToken(filename: string, tok: string): boolean {
   const clean = tok.trim().toLowerCase();
   if (!clean) return false;
@@ -63,4 +69,52 @@ export function unmatchedTokens(filename: string, rules: TagRule[] = SEED_RULES)
     out.push(word);
   }
   return out;
+}
+
+/** One uncovered word with an example file and a file count. */
+export type CandidateEntry = {
+  word: string;
+  exampleFileId: string;
+  exampleFilename: string;
+  fileCount: number;
+};
+
+/**
+ * Aggregate uncovered words across files in first-seen order, skipping
+ * dismissed words. Pure: the handler supplies the file window and the
+ * persisted dismissed set.
+ */
+export function collectCandidates(
+  files: Array<{ id: string; filename: string }>,
+  rules: TagRule[] = SEED_RULES,
+  dismissed: ReadonlySet<string> = new Set(),
+  maxCandidates: number = MAX_CANDIDATES,
+): CandidateEntry[] {
+  const byWord = new Map<string, CandidateEntry>();
+  for (const file of files) {
+    for (const word of unmatchedTokens(file.filename, rules)) {
+      if (dismissed.has(word)) continue;
+      const entry = byWord.get(word);
+      if (entry) {
+        entry.fileCount += 1;
+        continue;
+      }
+      if (byWord.size >= maxCandidates) continue;
+      byWord.set(word, {
+        word,
+        exampleFileId: file.id,
+        exampleFilename: file.filename,
+        fileCount: 1,
+      });
+    }
+  }
+  return [...byWord.values()];
+}
+
+/** Normalize a candidate word from input; null when it cannot be one. */
+export function cleanCandidateWord(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const word = value.trim().toLowerCase();
+  if (!word || word.length < 3 || /^\d+$/.test(word)) return null;
+  return word;
 }

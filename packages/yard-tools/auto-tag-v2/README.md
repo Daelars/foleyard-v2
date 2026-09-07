@@ -12,19 +12,24 @@ background, every write marked deterministic.
 
 ## Layout
 
-- `src/definition.ts` — v2 definition: id `auto-tag-v2`, two
-  commands (`.tag-files`, `.preview`, both global scope), no
-  settings, two contributions (palette ×2). Permissions:
+- `src/definition.ts` — v2 definition: id `auto-tag-v2`, five
+  commands (`.tag-files`, `.preview`, `.list-candidates`,
+  `.promote-candidate`, `.dismiss-candidate`, all global scope), no
+  settings, five contributions (palette ×5). Permissions:
   `library:read`, `files:read`, `tags:read`, `tags:write`,
   `settings:read`. No `requiredCapabilities`.
 - `src/rules.ts` — pure vocabulary: twelve seed token rules, the
-  `MAX_TAG_FILES` (500) bound, case-insensitive matching, and the
-  uncovered-word extraction feeding the candidate queue (#191).
+  `MAX_TAG_FILES` (500) bound, case-insensitive matching,
+  uncovered-word extraction, queue aggregation with examples and
+  counts, and input cleaning. Caps: `MAX_QUEUE_FILES` (2000) files
+  walked, `MAX_CANDIDATES` (100) entries per listing.
 - `src/handlers.ts` — preview (immediate, no side effects),
   tag-files (immediate in `direct` mode; progress plus cancellation
-  in `job` mode). Tags are found or created by name, then attached
-  with the deterministic origin. No v1 imports, no direct filesystem
-  access.
+  in `job` mode), list-candidates (immediate paged walk, no writes),
+  promote-candidate (find-or-create by name, attach as manual),
+  dismiss-candidate (persisted dismissed set in extension state).
+  Rule tags attach with the deterministic origin. No v1 imports, no
+  direct filesystem access.
 
 ## Run-mode contract
 

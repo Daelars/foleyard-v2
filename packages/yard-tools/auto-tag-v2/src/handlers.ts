@@ -7,8 +7,24 @@ import {
   type V2HandlerContext,
 } from "yard-core";
 
-import { AUTO_TAG_V2_ID, AUTO_TAG_V2_PREVIEW, AUTO_TAG_V2_TAG_FILES } from "./definition";
-import { MAX_TAG_FILES, tagsForFilename, unmatchedTokens } from "./rules";
+import {
+  AUTO_TAG_V2_DISMISS_CANDIDATE,
+  AUTO_TAG_V2_ID,
+  AUTO_TAG_V2_LIST_CANDIDATES,
+  AUTO_TAG_V2_PREVIEW,
+  AUTO_TAG_V2_PROMOTE_CANDIDATE,
+  AUTO_TAG_V2_TAG_FILES,
+} from "./definition";
+import {
+  MAX_CANDIDATES,
+  MAX_QUEUE_FILES,
+  MAX_TAG_FILES,
+  cleanCandidateWord,
+  collectCandidates,
+  filenameMatchesToken,
+  tagsForFilename,
+  unmatchedTokens,
+} from "./rules";
 
 /**
  * Auto Tag v2 command handlers (Yard Tools context, #190).
@@ -174,8 +190,174 @@ export async function runTagFiles(ctx: V2HandlerContext) {
   } satisfies AutoTagV2TagFilesResult);
 }
 
-/** Register both auto-tag commands on a v2 host. */
+export type AutoTagV2ListCandidatesResult = {
+  words: string[];
+  lines: string[];
+  truncated: boolean;
+  totalFiles: number;
+};
+
+export type AutoTagV2PromoteCandidateResult = {
+  tag: string;
+  tagId: string;
+  attached: number;
+  missing: string[];
+};
+
+export type AutoTagV2DismissCandidateResult = {
+  word: string;
+  dismissedCount: number;
+};
+
+const DISMISSED_KEY = "dismissed-candidates";
+
+function readDismissed(ctx: V2HandlerContext): Set<string> {
+  const raw: unknown = ctx.operations.state.read(DISMISSED_KEY);
+  return new Set(
+    Array.isArray(raw) ? raw.filter((word): word is string => typeof word === "string") : [],
+  );
+}
+
+function writeDismissed(ctx: V2HandlerContext, dismissed: Set<string>): void {
+  ctx.operations.state.write(DISMISSED_KEY, [...dismissed].sort());
+}
+
+function readCandidateWord(ctx: V2HandlerContext): string {
+  const raw =
+    typeof ctx.invocation.input === "object" && ctx.invocation.input !== null
+      ? (ctx.invocation.input as Record<string, unknown>)
+      : {};
+  const word = cleanCandidateWord(raw.word);
+  if (!word) {
+    throw new V2OperationError(
+      "input-invalid",
+      "No usable word was provided; pass a word of at least 3 letters and retry.",
+    );
+  }
+  return word;
+}
+
+export function runListCandidates(ctx: V2HandlerContext) {
+  const raw =
+    typeof ctx.invocation.input === "object" && ctx.invocation.input !== null
+      ? (ctx.invocation.input as Record<string, unknown>)
+      : {};
+  const limit = Math.max(
+    1,
+    Math.min(
+      MAX_QUEUE_FILES,
+      typeof raw.limit === "number" && Number.isInteger(raw.limit) ? raw.limit : MAX_QUEUE_FILES,
+    ),
+  );
+  const dismissed = readDismissed(ctx);
+  const { tags } = extendedOperationsOf(ctx);
+  // Words that already exist as tags are handled: the queue only holds
+  // uncovered, untagged words, so a promoted word never nags again.
+  const handled = new Set([...dismissed, ...tags.list().map((tag) => tag.name.toLowerCase())]);
+  const seen: Array<{ id: string; filename: string }> = [];
+  let cursor: string | null = null;
+  let exhausted = false;
+  while (seen.length < limit) {
+    const page = ctx.operations.library.listPage(cursor, Math.min(500, limit - seen.length));
+    for (const file of page.files) {
+      if (file.removedAt !== null) continue;
+      seen.push({ id: file.id, filename: file.filename || `${file.id}.bin` });
+      if (seen.length >= limit) break;
+    }
+    if (!page.nextCursor) {
+      exhausted = true;
+      break;
+    }
+    cursor = page.nextCursor;
+  }
+  const entries = collectCandidates(seen, undefined, handled, MAX_CANDIDATES);
+  return immediateV2Result({
+    words: entries.map((entry) => entry.word),
+    lines: entries.map(
+      (entry) =>
+        `${entry.word} — ${entry.fileCount} file${entry.fileCount === 1 ? "" : "s"}, e.g. ${entry.exampleFilename}`,
+    ),
+    truncated: !exhausted,
+    totalFiles: seen.length,
+  } satisfies AutoTagV2ListCandidatesResult);
+}
+
+export async function runPromoteCandidate(ctx: V2HandlerContext) {
+  const word = readCandidateWord(ctx);
+  const raw =
+    typeof ctx.invocation.input === "object" && ctx.invocation.input !== null
+      ? (ctx.invocation.input as Record<string, unknown>)
+      : {};
+  const explicitIds = Array.isArray(raw.fileIds)
+    ? raw.fileIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+    : [];
+  const { tags } = extendedOperationsOf(ctx);
+
+  const targets: LiveTagFile[] = [];
+  const missing: string[] = [];
+  if (explicitIds.length > 0) {
+    const resolved = resolveLiveFiles(ctx, explicitIds);
+    targets.push(...resolved.live);
+    missing.push(...resolved.missing);
+  } else {
+    let cursor: string | null = null;
+    while (targets.length < MAX_TAG_FILES) {
+      const page = ctx.operations.library.listPage(cursor, 500);
+      for (const file of page.files) {
+        if (file.removedAt !== null) continue;
+        const filename = file.filename || `${file.id}.bin`;
+        if (filenameMatchesToken(filename, word)) {
+          targets.push({ fileId: file.id, filename });
+          if (targets.length >= MAX_TAG_FILES) break;
+        }
+      }
+      if (!page.nextCursor) break;
+      cursor = page.nextCursor;
+    }
+  }
+
+  const known = new Map(tags.list().map((tag) => [tag.name, tag.id]));
+  let tagId = known.get(word);
+  if (!tagId) {
+    tagId = tags.create(word).id;
+    known.set(word, tagId);
+  }
+  let attached = 0;
+  for (const file of targets) {
+    // Promoted words are user-approved, so they attach as manual.
+    tags.attach(file.fileId, tagId, "manual");
+    attached += 1;
+  }
+
+  const dismissed = readDismissed(ctx);
+  if (dismissed.delete(word)) writeDismissed(ctx, dismissed);
+
+  return immediateV2Result({
+    tag: word,
+    tagId,
+    attached,
+    missing,
+  } satisfies AutoTagV2PromoteCandidateResult);
+}
+
+export function runDismissCandidate(ctx: V2HandlerContext) {
+  const word = readCandidateWord(ctx);
+  const dismissed = readDismissed(ctx);
+  dismissed.add(word);
+  writeDismissed(ctx, dismissed);
+  return immediateV2Result({
+    word,
+    dismissedCount: dismissed.size,
+  } satisfies AutoTagV2DismissCandidateResult);
+}
+
+/** Register every auto-tag command on a v2 host. */
 export function registerAutoTagV2Handlers(host: ExtensionV2Host): void {
   host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_PREVIEW, runPreview);
   host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_TAG_FILES, (ctx) => runTagFiles(ctx));
+  host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_LIST_CANDIDATES, runListCandidates);
+  host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_PROMOTE_CANDIDATE, (ctx) =>
+    runPromoteCandidate(ctx),
+  );
+  host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_DISMISS_CANDIDATE, runDismissCandidate);
 }

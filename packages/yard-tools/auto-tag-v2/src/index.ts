@@ -1,21 +1,35 @@
 export {
+  AUTO_TAG_V2_DISMISS_CANDIDATE,
   AUTO_TAG_V2_ID,
+  AUTO_TAG_V2_LIST_CANDIDATES,
   AUTO_TAG_V2_PREVIEW,
+  AUTO_TAG_V2_PROMOTE_CANDIDATE,
   AUTO_TAG_V2_TAG_FILES,
   createAutoTagV2Definition,
 } from "./definition";
 export {
   registerAutoTagV2Handlers,
+  runDismissCandidate,
+  runListCandidates,
   runPreview,
+  runPromoteCandidate,
   runTagFiles,
+  type AutoTagV2DismissCandidateResult,
+  type AutoTagV2ListCandidatesResult,
   type AutoTagV2PreviewResult,
+  type AutoTagV2PromoteCandidateResult,
   type AutoTagV2TagFilesResult,
 } from "./handlers";
 export {
+  MAX_CANDIDATES,
+  MAX_QUEUE_FILES,
   MAX_TAG_FILES,
   SEED_RULES,
+  cleanCandidateWord,
+  collectCandidates,
   filenameMatchesToken,
   tagsForFilename,
   unmatchedTokens,
+  type CandidateEntry,
   type TagRule,
 } from "./rules";

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { blob, index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
@@ -40,8 +40,33 @@ export const fileTags = sqliteTable(
   {
     fileId: text('file_id').notNull().references(() => files.id),
     tagId: text('tag_id').notNull().references(() => tags.id),
+    origin: text('origin').notNull().default('manual'),
+    confidence: real('confidence'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [primaryKey({ columns: [table.fileId, table.tagId] }), index('idx_file_tags_tag_id').on(table.tagId)],
+);
+
+export const tagAliases = sqliteTable(
+  'tag_aliases',
+  {
+    alias: text('alias').primaryKey(),
+    tagId: text('tag_id').notNull().references(() => tags.id),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index('idx_tag_aliases_tag_id').on(table.tagId)],
+);
+
+export const fileEmbeddings = sqliteTable(
+  'file_embeddings',
+  {
+    fileId: text('file_id').notNull().references(() => files.id),
+    model: text('model').notNull(),
+    dim: integer('dim').notNull(),
+    vec: blob('vec', { mode: 'buffer' }).notNull(),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [primaryKey({ columns: [table.fileId, table.model] })],
 );
 
 export const collections = sqliteTable('collections', {

@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { v4 as uuid } from "uuid";
 
 import type { TagRepository } from "@yard-core";
-import type { Tag } from "@yard-core";
+import type { FileTagAttachment, Tag, TagOrigin } from "@yard-core";
 
 import { sqlite as defaultSqlite } from "./connection";
 import { chunkArray, SQLITE_MAX_VARIABLES } from "./sql-parameters";
@@ -51,10 +51,51 @@ export class SqliteTagRepository implements TagRepository {
   }
 
   attachTagToFile(fileId: string, tagId: string): void {
-    this.db.insert(schema.fileTags)
-      .values({ fileId, tagId })
-      .onConflictDoNothing()
+    this.attachTagToFileWithOrigin(fileId, tagId, "manual");
+  }
+
+  attachTagToFileWithOrigin(
+    fileId: string,
+    tagId: string,
+    origin: TagOrigin,
+    confidence: number | null = null,
+  ): void {
+    // Manual wins without a read: an incoming manual upgrades the row, an
+    // incoming automatic never downgrades a stored manual.
+    this.sqlite
+      .prepare(
+        `INSERT INTO file_tags (file_id, tag_id, origin, confidence)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT (file_id, tag_id) DO UPDATE SET
+           origin = CASE WHEN excluded.origin = 'manual' THEN 'manual' ELSE file_tags.origin END,
+           confidence = CASE
+             WHEN excluded.origin = 'manual' AND file_tags.origin != 'manual' THEN excluded.confidence
+             ELSE file_tags.confidence
+           END`,
+      )
+      .run(fileId, tagId, origin, confidence);
+  }
+
+  getAttachmentsForFile(fileId: string): FileTagAttachment[] {
+    return this.db
+      .select({
+        fileId: schema.fileTags.fileId,
+        tagId: schema.fileTags.tagId,
+        origin: schema.fileTags.origin,
+        confidence: schema.fileTags.confidence,
+      })
+      .from(schema.fileTags)
+      .where(eq(schema.fileTags.fileId, fileId))
+      .orderBy(asc(schema.fileTags.tagId))
+      .all() as FileTagAttachment[];
+  }
+
+  detachAttachmentsByOrigin(origin: TagOrigin): number {
+    const result = this.db
+      .delete(schema.fileTags)
+      .where(eq(schema.fileTags.origin, origin))
       .run();
+    return result.changes ?? 0;
   }
 
   detachTagFromFile(fileId: string, tagId: string): void {
@@ -92,9 +133,29 @@ export class SqliteTagRepository implements TagRepository {
     return map;
   }
 
+  addTagAlias(tagId: string, alias: string): void {
+    const clean = alias.trim().toLowerCase();
+    if (!clean) throw new Error("Alias must not be blank");
+    this.db
+      .insert(schema.tagAliases)
+      .values({ tagId, alias: clean })
+      .onConflictDoNothing()
+      .run();
+  }
+
+  resolveTagAlias(alias: string): string | null {
+    const row = this.db
+      .select({ tagId: schema.tagAliases.tagId })
+      .from(schema.tagAliases)
+      .where(eq(schema.tagAliases.alias, alias.trim().toLowerCase()))
+      .get();
+    return row?.tagId ?? null;
+  }
+
   deleteTag(tagId: string) {
     this.sqlite.transaction(() => {
       this.db.delete(schema.fileTags).where(eq(schema.fileTags.tagId, tagId)).run();
+      this.db.delete(schema.tagAliases).where(eq(schema.tagAliases.tagId, tagId)).run();
       this.db.delete(schema.tags).where(eq(schema.tags.id, tagId)).run();
     })();
   }

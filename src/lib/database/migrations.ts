@@ -68,7 +68,7 @@ function backfillLibraryRoots(sqlite: Database.Database) {
   apply();
 }
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export type DatabaseVersionInfo = {
   state: "ready" | "not-initialized" | "unavailable";
@@ -152,9 +152,29 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
     CREATE TABLE IF NOT EXISTS file_tags (
       file_id TEXT NOT NULL,
       tag_id TEXT NOT NULL,
+      origin TEXT NOT NULL DEFAULT 'manual',
+      confidence REAL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (file_id, tag_id),
       FOREIGN KEY (file_id) REFERENCES files(id),
       FOREIGN KEY (tag_id) REFERENCES tags(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS tag_aliases (
+      alias TEXT PRIMARY KEY,
+      tag_id TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tag_id) REFERENCES tags(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS file_embeddings (
+      file_id TEXT NOT NULL,
+      model TEXT NOT NULL,
+      dim INTEGER NOT NULL,
+      vec BLOB NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (file_id, model),
+      FOREIGN KEY (file_id) REFERENCES files(id)
     );
 
     CREATE TABLE IF NOT EXISTS collections (
@@ -184,6 +204,9 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   ensureColumn(sqlite, "collections", "filter", "filter TEXT");
   ensureColumn(sqlite, "collections", "color", "color TEXT");
   ensureColumn(sqlite, "tags", "color", "color TEXT");
+  ensureColumn(sqlite, "file_tags", "origin", "origin TEXT NOT NULL DEFAULT 'manual'");
+  ensureColumn(sqlite, "file_tags", "confidence", "confidence REAL");
+  ensureColumn(sqlite, "file_tags", "created_at", "created_at TEXT");
 
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_filename ON files(filename)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_removed_at ON files(removed_at)`);
@@ -192,6 +215,8 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_library_root ON files(library_root)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_last_scanned_at ON files(last_scanned_at)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_tags_tag_id ON file_tags(tag_id)`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_tags_origin ON file_tags(origin)`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_tag_aliases_tag_id ON tag_aliases(tag_id)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_collections_collection_id ON file_collections(collection_id)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_collections_file_id ON file_collections(file_id)`);
 

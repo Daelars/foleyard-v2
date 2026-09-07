@@ -2,6 +2,7 @@ import {
   extendedOperationsOf,
   immediateV2Result,
   isV2JobCancellation,
+  STUB_EMBEDDING_MODEL,
   V2OperationError,
   type ExtensionV2Host,
   type V2HandlerContext,
@@ -9,6 +10,7 @@ import {
 
 import {
   AUTO_TAG_V2_DISMISS_CANDIDATE,
+  AUTO_TAG_V2_FIND_SIMILAR,
   AUTO_TAG_V2_ID,
   AUTO_TAG_V2_LIST_CANDIDATES,
   AUTO_TAG_V2_PREVIEW,
@@ -351,6 +353,69 @@ export function runDismissCandidate(ctx: V2HandlerContext) {
   } satisfies AutoTagV2DismissCandidateResult);
 }
 
+export function runFindSimilar(ctx: V2HandlerContext) {
+  const raw =
+    typeof ctx.invocation.input === "object" && ctx.invocation.input !== null
+      ? (ctx.invocation.input as Record<string, unknown>)
+      : {};
+  const inputId = typeof raw.fileId === "string" && raw.fileId.length > 0 ? raw.fileId : null;
+  const selectionIds = ctx.invocation.selection.fileIds.filter((id) => id.length > 0);
+  const targetId = inputId ?? (selectionIds.length === 1 ? selectionIds[0]! : null);
+  if (!targetId) {
+    throw new V2OperationError(
+      "input-invalid",
+      "Select one sound to compare from, or pass its fileId.",
+    );
+  }
+  const topN = Math.max(
+    1,
+    Math.min(
+      50,
+      typeof raw.topN === "number" && Number.isInteger(raw.topN) ? raw.topN : 10,
+    ),
+  );
+  const target = ctx.operations.library.getFile(targetId);
+  if (!target) {
+    throw new V2OperationError(
+      "input-invalid",
+      `Sound ${JSON.stringify(targetId)} is not in the Library index; refresh the selection and retry.`,
+    );
+  }
+  const { embeddings } = extendedOperationsOf(ctx);
+  if (!embeddings.get(target.id, STUB_EMBEDDING_MODEL)) {
+    return immediateV2Result({
+      targetFileId: target.id,
+      targetFilename: target.filename || `${target.id}.bin`,
+      similarFileIds: [],
+      similarFilenames: [],
+      reason: "No embeddings stored yet, so there is nothing to compare. Similarity starts working once vectors land.",
+    } satisfies AutoTagV2FindSimilarResult);
+  }
+  const ranked = embeddings.findSimilar(target.id, { topN });
+  const similarFileIds: string[] = [];
+  const similarFilenames: string[] = [];
+  for (const entry of ranked) {
+    const record = ctx.operations.library.getFile(entry.fileId);
+    if (!record) continue;
+    similarFileIds.push(record.id);
+    similarFilenames.push(record.filename || `${record.id}.bin`);
+  }
+  return immediateV2Result({
+    targetFileId: target.id,
+    targetFilename: target.filename || `${target.id}.bin`,
+    similarFileIds,
+    similarFilenames,
+  } satisfies AutoTagV2FindSimilarResult);
+}
+
+export type AutoTagV2FindSimilarResult = {
+  targetFileId: string;
+  targetFilename: string;
+  similarFileIds: string[];
+  similarFilenames: string[];
+  reason?: string;
+};
+
 /** Register every auto-tag command on a v2 host. */
 export function registerAutoTagV2Handlers(host: ExtensionV2Host): void {
   host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_PREVIEW, runPreview);
@@ -360,4 +425,5 @@ export function registerAutoTagV2Handlers(host: ExtensionV2Host): void {
     runPromoteCandidate(ctx),
   );
   host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_DISMISS_CANDIDATE, runDismissCandidate);
+  host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_FIND_SIMILAR, runFindSimilar);
 }

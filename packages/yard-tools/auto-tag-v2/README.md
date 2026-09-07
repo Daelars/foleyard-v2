@@ -12,12 +12,13 @@ background, every write marked deterministic.
 
 ## Layout
 
-- `src/definition.ts` — v2 definition: id `auto-tag-v2`, five
+- `src/definition.ts` — v2 definition: id `auto-tag-v2`, six
   commands (`.tag-files`, `.preview`, `.list-candidates`,
-  `.promote-candidate`, `.dismiss-candidate`, all global scope), no
-  settings, five contributions (palette ×5). Permissions:
+  `.promote-candidate`, `.dismiss-candidate`, `.find-similar`; the
+  last is selection scope), no settings, six contributions
+  (palette ×5, file-context-menu ×1). Permissions:
   `library:read`, `files:read`, `tags:read`, `tags:write`,
-  `settings:read`. No `requiredCapabilities`.
+  `settings:read`, `embeddings:read`. No `requiredCapabilities`.
 - `src/rules.ts` — pure vocabulary: twelve seed token rules, the
   `MAX_TAG_FILES` (500) bound, case-insensitive matching,
   uncovered-word extraction, queue aggregation with examples and
@@ -41,6 +42,10 @@ background, every write marked deterministic.
   cancellation. Unknown IDs report as missing and per-file failures
   carry reasons; neither fails the whole run. Shared tag names are
   created once per run.
+- **find-similar** — ranks stored vectors by cosine and returns the
+  closest sounds. With no vectors for the target it reports
+  unavailable with a reason instead of failing. Removed sounds never
+  rank, and at most 50 results return.
 
 ## Policies
 

@@ -98,7 +98,7 @@ describe("createV2ExtendedOperations", () => {
   it("exposes every gap group alongside the base services", () => {
     const services = createV2ExtendedOperations(extendedArgs());
     expect(Object.keys(services).sort()).toEqual(
-      ["collections", "folders", "libraryMutations", "shelf", "tags"],
+      ["collections", "embeddings", "folders", "libraryMutations", "shelf", "tags"],
     );
     expect(services.shelf.add(["a"])).toEqual({ added: 1, total: 1 });
     expect(services.shelf.list()).toEqual({ ids: ["a"], repaired: [] });
@@ -128,9 +128,10 @@ describe("createV2ExtendedOperations", () => {
     expect(() => denied.libraryMutations.markRemoved(["a"])).toThrowError(V2OperationError);
     expect(() => denied.collections.list()).toThrowError(V2OperationError);
     expect(() => denied.tags.list()).toThrowError(V2OperationError);
+    expect(() => denied.embeddings.findSimilar("a")).toThrowError(V2OperationError);
     expect(() => denied.shelf.list()).toThrowError(V2OperationError);
     expect(Object.keys(denied)).toEqual(
-      expect.arrayContaining(["library", "libraryMutations", "collections", "tags", "shelf", "folders"]),
+      expect.arrayContaining(["library", "libraryMutations", "collections", "tags", "embeddings", "shelf", "folders"]),
     );
   });
 });

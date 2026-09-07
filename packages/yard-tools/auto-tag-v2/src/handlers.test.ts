@@ -10,12 +10,14 @@ import {
   type IndexedAudioFile,
   type TagOrigin,
   type V2HostServices,
+  type V2EmbeddingPorts,
   type V2LibraryReadPorts,
   type V2TagPorts,
 } from "yard-core";
 
 import {
   AUTO_TAG_V2_DISMISS_CANDIDATE,
+  AUTO_TAG_V2_FIND_SIMILAR,
   AUTO_TAG_V2_ID,
   AUTO_TAG_V2_LIST_CANDIDATES,
   AUTO_TAG_V2_PREVIEW,
@@ -24,6 +26,7 @@ import {
   createAutoTagV2Definition,
   registerAutoTagV2Handlers,
   type AutoTagV2DismissCandidateResult,
+  type AutoTagV2FindSimilarResult,
   type AutoTagV2ListCandidatesResult,
   type AutoTagV2PreviewResult,
   type AutoTagV2PromoteCandidateResult,
@@ -41,6 +44,7 @@ const FULL_PERMISSIONS = [
   "tags:read",
   "tags:write",
   "settings:read",
+  "embeddings:read",
 ];
 
 function record(id: string, filename: string): IndexedAudioFile {
@@ -70,6 +74,7 @@ type World = {
   attachments: Attachment[];
   created: string[];
   tagsByName: Map<string, string>;
+  vectors: Map<string, { dim: number; vec: Uint8Array }>;
   progress: { calls: number };
   definition: ExtensionV2Definition;
 };
@@ -98,6 +103,23 @@ function world(overrides?: { granted?: string[] }): World {
   const attachments: Attachment[] = [];
   const created: string[] = [];
   const stateStore = new Map<string, unknown>();
+  const vectors = new Map<string, { dim: number; vec: Uint8Array }>();
+  const vkey = (fileId: string, model: string) => `${model}:${fileId}`;
+  const embeddingPorts: V2EmbeddingPorts = {
+    upsert: (fileId, model, dim, vec) => {
+      vectors.set(vkey(fileId, model), { dim, vec });
+    },
+    get: (fileId, model) => vectors.get(vkey(fileId, model)) ?? null,
+    listIds: (model) =>
+      [...vectors.keys()]
+        .filter((entry) => entry.startsWith(`${model}:`))
+        .map((entry) => entry.slice(model.length + 1)),
+    removeFile: (fileId) => {
+      for (const entry of [...vectors.keys()]) {
+        if (entry.endsWith(`:${fileId}`)) vectors.delete(entry);
+      }
+    },
+  };
   let seq = 0;
   const tagPorts: V2TagPorts = {
     list: () => [...tagsByName.entries()].map(([name, id]) => ({ id, name })),
@@ -169,6 +191,7 @@ function world(overrides?: { granted?: string[] }): World {
         effectivePermissions: binding.effectivePermissions,
         library,
         tags: tagPorts,
+        embeddings: embeddingPorts,
       }),
     }),
   };
@@ -179,6 +202,7 @@ function world(overrides?: { granted?: string[] }): World {
     attachments,
     created,
     tagsByName,
+    vectors,
     progress,
     definition,
   };
@@ -402,5 +426,96 @@ describe("auto-tag-v2 candidates", () => {
     });
     expect((result as { ok: boolean }).ok).toBe(false);
     expect(w.created).toEqual([]);
+  });
+});
+
+function stubVec(values: number[]): Uint8Array {
+  const buffer = new ArrayBuffer(values.length * 4);
+  const view = new DataView(buffer);
+  values.forEach((value, index) => view.setFloat32(index * 4, value, true));
+  return new Uint8Array(buffer);
+}
+
+describe("auto-tag-v2 find-similar", () => {
+  function seeded(): World {
+    const w = world();
+    w.vectors.set("audio-stub-v1:f1", { dim: 2, vec: stubVec([1, 0]) });
+    w.vectors.set("audio-stub-v1:f2", { dim: 2, vec: stubVec([0.9, 0.1]) });
+    w.vectors.set("audio-stub-v1:f3", { dim: 2, vec: stubVec([0, 1]) });
+    return w;
+  }
+
+  it("ranks seeded vectors closest first", async () => {
+    const w = seeded();
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_FIND_SIMILAR,
+      input: {},
+      selection: { fileIds: ["f1"] },
+    });
+    const value = immediateValue<AutoTagV2FindSimilarResult>(result);
+    expect(value.targetFileId).toBe("f1");
+    expect(value.targetFilename).toBe("thunder-close_take01.wav");
+    expect(value.similarFileIds).toEqual(["f2", "f3"]);
+    expect(value.similarFilenames).toEqual([
+      "rain-gutter_drip_metal.wav",
+      "paper-bag_crumple_fast.wav",
+    ]);
+    expect(value.reason).toBeUndefined();
+    const command = w.definition.commands.find(
+      (entry) => entry.id === AUTO_TAG_V2_FIND_SIMILAR,
+    )!;
+    expect(validateV2Value(command.result!, value, "result")).toBeNull();
+  });
+
+  it("reports unavailable instead of failing with no vectors", async () => {
+    const w = world();
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_FIND_SIMILAR,
+      input: {},
+      selection: { fileIds: ["f1"] },
+    });
+    const value = immediateValue<AutoTagV2FindSimilarResult>(result);
+    expect(value.similarFileIds).toEqual([]);
+    expect(value.reason).toMatch(/No embeddings/);
+  });
+
+  it("fails unknown targets with a reason", async () => {
+    const w = seeded();
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_FIND_SIMILAR,
+      input: { fileId: "gone" },
+      selection: { fileIds: [] },
+    });
+    expect((result as { ok: boolean }).ok).toBe(false);
+  });
+
+  it("denies execution when embeddings:read is not approved", async () => {
+    const w = world({
+      granted: ["library:read", "files:read", "tags:read", "tags:write", "settings:read"],
+    });
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_FIND_SIMILAR,
+      input: { fileId: "f1" },
+      selection: { fileIds: ["f1"] },
+    });
+    expect((result as { ok: boolean }).ok).toBe(false);
+  });
+
+  it("declares the row menu contribution", () => {
+    const w = world();
+    expect(
+      w.definition.contributions?.filter((entry) => entry.type === "file-context-menu"),
+    ).toEqual([
+      {
+        id: "auto-tag-v2.row-similar",
+        type: "file-context-menu",
+        commandId: AUTO_TAG_V2_FIND_SIMILAR,
+        title: "Find similar",
+      },
+    ]);
   });
 });

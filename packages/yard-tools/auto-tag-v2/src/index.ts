@@ -1,5 +1,6 @@
 export {
   AUTO_TAG_V2_DISMISS_CANDIDATE,
+  AUTO_TAG_V2_FIND_SIMILAR,
   AUTO_TAG_V2_ID,
   AUTO_TAG_V2_LIST_CANDIDATES,
   AUTO_TAG_V2_PREVIEW,
@@ -10,11 +11,13 @@ export {
 export {
   registerAutoTagV2Handlers,
   runDismissCandidate,
+  runFindSimilar,
   runListCandidates,
   runPreview,
   runPromoteCandidate,
   runTagFiles,
   type AutoTagV2DismissCandidateResult,
+  type AutoTagV2FindSimilarResult,
   type AutoTagV2ListCandidatesResult,
   type AutoTagV2PreviewResult,
   type AutoTagV2PromoteCandidateResult,

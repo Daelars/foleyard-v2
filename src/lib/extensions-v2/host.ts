@@ -17,6 +17,7 @@ import { createV2LibraryPorts } from "./library-ports";
 import { createV2LibraryMutationPorts } from "./library-mutations";
 import { createV2FolderScanPorts } from "./maintenance";
 import { createV2CollectionPorts, createV2TagPorts } from "./organization";
+import { createV2EmbeddingPorts } from "./embeddings";
 import { createV2ShelfPorts } from "./shelf";
 import { getV2SourceGrantStore } from "./source-grants";
 import { ensureMakePackV2Registered } from "./make-pack-v2";
@@ -126,6 +127,7 @@ function createOperations(binding: {
       mutations: createV2LibraryMutationPorts(),
       collections: createV2CollectionPorts(),
       tags: createV2TagPorts(),
+      embeddings: createV2EmbeddingPorts(),
       shelf: createV2ShelfPorts(),
       folders: createV2FolderScanPorts(),
       sources: getV2SourceGrantStore(),

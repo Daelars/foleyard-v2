@@ -22,6 +22,7 @@ export const AUTO_TAG_V2_PREVIEW = "auto-tag-v2.preview";
 export const AUTO_TAG_V2_LIST_CANDIDATES = "auto-tag-v2.list-candidates";
 export const AUTO_TAG_V2_PROMOTE_CANDIDATE = "auto-tag-v2.promote-candidate";
 export const AUTO_TAG_V2_DISMISS_CANDIDATE = "auto-tag-v2.dismiss-candidate";
+export const AUTO_TAG_V2_FIND_SIMILAR = "auto-tag-v2.find-similar";
 
 function fileIdsInput(): ExtensionV2ValueSchema {
   return {
@@ -99,6 +100,20 @@ function dismissCandidateResultSchema(): ExtensionV2ValueSchema {
   };
 }
 
+function findSimilarResultSchema(): ExtensionV2ValueSchema {
+  return {
+    kind: "object",
+    properties: {
+      targetFileId: { kind: "string" },
+      targetFilename: { kind: "string" },
+      similarFileIds: { kind: "string-array" },
+      similarFilenames: { kind: "string-array" },
+      reason: { kind: "string" },
+    },
+    required: ["targetFileId", "targetFilename", "similarFileIds", "similarFilenames"],
+  };
+}
+
 export function createAutoTagV2Definition(): ExtensionV2Definition {
   return {
     id: AUTO_TAG_V2_ID,
@@ -113,6 +128,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
       "tags:read",
       "tags:write",
       "settings:read",
+      "embeddings:read",
     ],
     commands: [
       {
@@ -178,6 +194,22 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         result: dismissCandidateResultSchema(),
         docsId: "commands",
       },
+      {
+        id: AUTO_TAG_V2_FIND_SIMILAR,
+        title: "Find similar",
+        description: "List the sounds closest to one sound by stored embeddings.",
+        scope: "selection",
+        requiresSelection: true,
+        input: {
+          kind: "object",
+          properties: {
+            fileId: { kind: "string", minLength: 1 },
+            topN: { kind: "number", integer: true, min: 1 },
+          },
+        },
+        result: findSimilarResultSchema(),
+        docsId: "commands",
+      },
     ],
     contributions: [
       {
@@ -204,6 +236,12 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         id: "auto-tag-v2.palette-dismiss-candidate",
         type: "command-palette",
         commandId: AUTO_TAG_V2_DISMISS_CANDIDATE,
+      },
+      {
+        id: "auto-tag-v2.row-similar",
+        type: "file-context-menu",
+        commandId: AUTO_TAG_V2_FIND_SIMILAR,
+        title: "Find similar",
       },
     ],
   };

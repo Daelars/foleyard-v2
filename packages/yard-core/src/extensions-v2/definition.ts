@@ -26,7 +26,9 @@ export type ExtensionV2Permission =
   | "drop:read"
   | "drop:modify"
   | "settings:read"
-  | "settings:write";
+  | "settings:write"
+  | "embeddings:read"
+  | "embeddings:write";
 
 /** Every permission string the v2 registry recognizes. */
 export const KNOWN_V2_PERMISSIONS: readonly ExtensionV2Permission[] = [
@@ -49,6 +51,8 @@ export const KNOWN_V2_PERMISSIONS: readonly ExtensionV2Permission[] = [
   "drop:modify",
   "settings:read",
   "settings:write",
+  "embeddings:read",
+  "embeddings:write",
 ];
 
 export function isKnownV2Permission(

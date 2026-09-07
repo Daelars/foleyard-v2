@@ -133,6 +133,37 @@ export class SqliteTagRepository implements TagRepository {
     return map;
   }
 
+  getAttachmentsForFiles(fileIds: string[]): Map<string, FileTagAttachment[]> {
+    if (fileIds.length === 0) return new Map();
+
+    const rows: FileTagAttachment[] = [];
+    const chunkSize = Math.max(1, SQLITE_MAX_VARIABLES - 1);
+
+    for (const chunk of chunkArray(fileIds, chunkSize)) {
+      rows.push(
+        ...(this.db
+          .select({
+            fileId: schema.fileTags.fileId,
+            tagId: schema.fileTags.tagId,
+            origin: schema.fileTags.origin,
+            confidence: schema.fileTags.confidence,
+          })
+          .from(schema.fileTags)
+          .where(inArray(schema.fileTags.fileId, chunk))
+          .orderBy(asc(schema.fileTags.tagId))
+          .all() as FileTagAttachment[]),
+      );
+    }
+
+    const map = new Map<string, FileTagAttachment[]>();
+    for (const row of rows) {
+      const attachments = map.get(row.fileId) ?? [];
+      attachments.push(row);
+      map.set(row.fileId, attachments);
+    }
+    return map;
+  }
+
   addTagAlias(tagId: string, alias: string): void {
     const clean = alias.trim().toLowerCase();
     if (!clean) throw new Error("Alias must not be blank");
@@ -172,6 +203,8 @@ function getTagRepo(): SqliteTagRepository {
 export const getAllTags = () => getTagRepo().getAllTags();
 export const getTagsForFile = (fileId: string) => getTagRepo().getTagsForFile(fileId);
 export const getTagsForFiles = (fileIds: string[]) => getTagRepo().getTagsForFiles(fileIds);
+export const getAttachmentsForFiles = (fileIds: string[]) =>
+  getTagRepo().getAttachmentsForFiles(fileIds);
 export const createTag = (name: string) => getTagRepo().createTag(name);
 export const renameTag = (tagId: string, name: string) => getTagRepo().renameTag(tagId, name);
 export const updateTagColor = (tagId: string, color: string | null) => getTagRepo().updateTagColor(tagId, color);

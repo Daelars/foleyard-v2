@@ -4,7 +4,7 @@ import { mutationError } from "@/lib/api/errors";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, parsePageInteger } from "@/lib/api/pagination";
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteFiles } from '@/lib/files/delete-files';
-import { attachTagToFile, detachTagFromFile, getFileCount, getFiles, getTagsForFiles, setFavorites, setFileTagBatch, toggleFavorite } from '@/lib/db';
+import { attachTagToFile, detachTagFromFile, getAttachmentsForFiles, getFileCount, getFiles, getTagsForFiles, setFavorites, setFileTagBatch, toggleFavorite } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
   const libraryRoot = searchParams.get('libraryRoot');
   const atLibraryRoot = searchParams.get('atLibraryRoot') === 'true';
   const tagId = searchParams.get('tagId');
+  const origin = searchParams.get('origin');
   const showRemoved = searchParams.get('showRemoved') === 'true';
   const sortKey = searchParams.get('sortKey') ?? 'filename';
   const sortDir = searchParams.get('sortDir') ?? 'asc';
@@ -36,6 +37,10 @@ export async function GET(request: NextRequest) {
     return errorResponse('sortDir must be asc or desc', 400);
   }
 
+  if (origin !== null && origin !== 'manual' && origin !== 'deterministic' && origin !== 'semantic_ai') {
+    return errorResponse('origin must be manual, deterministic, or semantic_ai', 400);
+  }
+
   const files = getFiles({
     query: query ?? undefined,
     favorites: favorites === 'true',
@@ -44,6 +49,7 @@ export async function GET(request: NextRequest) {
     libraryRoot,
     atLibraryRoot,
     tagId,
+    tagOrigin: origin,
     showRemoved,
     limit,
     offset,
@@ -53,11 +59,22 @@ export async function GET(request: NextRequest) {
 
   const fileIds = files.map((f) => f.id);
   const tagsByFile = getTagsForFiles(fileIds);
+  const attachmentsByFile = getAttachmentsForFiles(fileIds);
 
-  const filesWithTags = files.map((file) => ({
-    ...file,
-    tags: tagsByFile.get(file.id) ?? [],
-  }));
+  const filesWithTags = files.map((file) => {
+    const origins = new Map(
+      (attachmentsByFile.get(file.id) ?? []).map((entry) => [entry.tagId, entry]),
+    );
+    return {
+      ...file,
+      tags: (tagsByFile.get(file.id) ?? []).map((tag) => {
+        const attachment = origins.get(tag.id);
+        return attachment
+          ? { ...tag, origin: attachment.origin, confidence: attachment.confidence }
+          : tag;
+      }),
+    };
+  });
 
   return NextResponse.json({
     files: filesWithTags,

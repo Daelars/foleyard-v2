@@ -91,6 +91,7 @@ function HomeContent() {
     currentView,
     selectedCollection,
     selectedTagId,
+    tagOrigin,
     selectedDirectory,
     searchQuery,
     setSearchQuery,
@@ -100,6 +101,7 @@ function HomeContent() {
     showShelf,
     showOrganize,
     handleFilterTag,
+    handleFilterTagOrigin,
     navigateDirectory,
   } = view;
   useEffect(() => {
@@ -139,6 +141,7 @@ function HomeContent() {
     search: debouncedSearchQuery,
     collectionId: selectedCollection,
     tagId: selectedTagId,
+    tagOrigin,
     directory: selectedDirectory,
     getTags: () => org.tags,
     getSelectedFile: () => selectionApiRef.current.get(),
@@ -679,6 +682,36 @@ function HomeContent() {
               {viewHeading}
             </h1>
             <span className="flex-1" />
+            {!showExtensionsView && !showShelfView && !showOrganizeView ? (
+              <div
+                className="flex items-center gap-1"
+                role="group"
+                aria-label="Filter by tag origin"
+              >
+                {(
+                  [
+                    { value: null, label: "All" },
+                    { value: "manual", label: "Manual" },
+                    { value: "deterministic", label: "Rules" },
+                    { value: "semantic_ai", label: "AI" },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    onClick={() => handleFilterTagOrigin(option.value)}
+                    aria-pressed={tagOrigin === option.value}
+                    className={
+                      tagOrigin === option.value
+                        ? "rounded-md bg-white/10 px-2 py-1 font-mono text-[11px] font-bold text-zinc-100"
+                        : "rounded-md px-2 py-1 font-mono text-[11px] text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-100"
+                    }
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {showShelfView ? (
               <div className="flex flex-wrap items-center gap-2">
                 {makePackEnabled && files.length > 0 ? (

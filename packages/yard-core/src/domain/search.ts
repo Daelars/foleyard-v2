@@ -1,3 +1,5 @@
+import type { TagOrigin } from "./tag";
+
 export type FileSortKey = "filename" | "duration";
 export type FileSortDirection = "asc" | "desc";
 
@@ -9,6 +11,8 @@ export interface FileSearchQuery {
   libraryRoot?: string | null;
   atLibraryRoot?: boolean;
   tagId?: string | null;
+  /** Keep only files with at least one attachment of this origin. */
+  tagOrigin?: TagOrigin | null;
   showRemoved?: boolean;
   limit?: number;
   offset?: number;

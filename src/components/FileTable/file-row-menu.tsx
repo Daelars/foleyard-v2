@@ -24,6 +24,7 @@ import type {
 import type { ContextMenuCommandContribution } from "@/lib/extensions/ui-contributions";
 import type { V2ResolvedContribution } from "@yard-core";
 import { V2ContextMenuItems } from "@/components/extensions-v2/menus";
+import { TagOriginMark } from "./tag-origin-mark";
 
 export function FileRowMenu({
   file,
@@ -62,6 +63,7 @@ export function FileRowMenu({
   v2Items?: V2ResolvedContribution[];
   onV2Command?: (item: V2ResolvedContribution) => void;
 }) {
+  const attachmentsByTagId = new Map(file.tags.map((item) => [item.id, item]));
   return (
     <ContextMenuContent className="w-60">
       <ContextMenuLabel
@@ -116,6 +118,10 @@ export function FileRowMenu({
               style={{ backgroundColor: tag.color ?? "var(--accent-fill)" }}
             />
             <span className="min-w-0 flex-1 truncate">{tag.name}</span>
+            <TagOriginMark
+              origin={attachmentsByTagId.get(tag.id)?.origin}
+              confidence={attachmentsByTagId.get(tag.id)?.confidence}
+            />
           </ContextMenuCheckboxItem>
         ))
       ) : (

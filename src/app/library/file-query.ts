@@ -1,6 +1,6 @@
 "use client";
 
-import type { FileSortKey } from "@yard-core";
+import type { FileSortKey, TagOrigin } from "@yard-core";
 import type { FileRecord, TagRecord } from "./types";
 
 export type { FileSortKey };
@@ -21,6 +21,8 @@ export interface FilesQueryInput {
   search: string;
   collectionId: string | null;
   tagId: string | null;
+  /** Keep only files with an attachment of this origin. */
+  tagOrigin: TagOrigin | null;
   directory: { libraryRoot: string; directory: string | null } | null;
   libraryRoots: string[];
   /** Server-side ordering; the server pages in this order. */
@@ -76,6 +78,9 @@ export function describeFilesQuery(input: FilesQueryInput): FilesQuery {
   }
   if (input.tagId) {
     params.set("tagId", input.tagId);
+  }
+  if (input.tagOrigin) {
+    params.set("origin", input.tagOrigin);
   }
 
   params.set("sortKey", input.sort.key);
@@ -157,7 +162,9 @@ export function applyBulkTag(
     }
     const hasTag = file.tags.some((tag) => tag.id === tagId);
     if (attached && !hasTag) {
-      return { ...file, tags: [...file.tags, known ?? { id: tagId, name: "" }] };
+      // Hand toggles attach as manual on the server too, so stamp the
+      // origin optimistically instead of waiting for a refetch.
+      return { ...file, tags: [...file.tags, { ...(known ?? { id: tagId, name: "" }), origin: "manual" as const }] };
     }
     if (!attached && hasTag) {
       return { ...file, tags: file.tags.filter((tag) => tag.id !== tagId) };

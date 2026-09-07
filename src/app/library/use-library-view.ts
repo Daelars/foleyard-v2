@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { FileTableDirectory } from "@/components/FileTable/types";
 import type { RailView } from "@/components/IconRail";
+import type { TagOrigin } from "@yard-core";
 import type { LibraryView } from "./file-query";
 import type { CollectionRecord } from "./types";
 
@@ -13,6 +14,7 @@ export interface LibraryViewState {
   currentView: LibraryView;
   selectedCollection: string | null;
   selectedTagId: string | null;
+  tagOrigin: TagOrigin | null;
   selectedDirectory: FileTableDirectory | null;
   searchQuery: string;
 }
@@ -21,6 +23,7 @@ export const initialLibraryViewState: LibraryViewState = {
   currentView: "all",
   selectedCollection: null,
   selectedTagId: null,
+  tagOrigin: null,
   selectedDirectory: null,
   searchQuery: "",
 };
@@ -31,6 +34,7 @@ function clearedSelection(state: LibraryViewState): LibraryViewState {
     selectedCollection: null,
     selectedDirectory: null,
     selectedTagId: null,
+    tagOrigin: null,
     searchQuery: "",
   };
 }
@@ -68,6 +72,13 @@ export function applyFilterTag(
   id: string | null,
 ): LibraryViewState {
   return { ...state, selectedTagId: id };
+}
+
+export function applyFilterTagOrigin(
+  state: LibraryViewState,
+  origin: TagOrigin | null,
+): LibraryViewState {
+  return { ...state, tagOrigin: origin };
 }
 
 export function applyNavigateDirectory(
@@ -161,7 +172,7 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
-  const { currentView, selectedCollection, selectedTagId, selectedDirectory } =
+  const { currentView, selectedCollection, selectedTagId, tagOrigin, selectedDirectory } =
     viewState;
   const searchQuery = viewState.searchQuery;
   const setSearchQuery = useCallback((query: string) => {
@@ -214,6 +225,10 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
     setViewState((prev) => applyFilterTag(prev, id));
   }, []);
 
+  const handleFilterTagOrigin = useCallback((origin: TagOrigin | null) => {
+    setViewState((prev) => applyFilterTagOrigin(prev, origin));
+  }, []);
+
   const showCollection = useCallback(
     (
       collectionId: string,
@@ -260,6 +275,7 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
     currentView,
     selectedCollection,
     selectedTagId,
+    tagOrigin,
     selectedDirectory,
     searchQuery,
     setSearchQuery,
@@ -270,6 +286,7 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
     showShelf,
     showOrganize,
     handleFilterTag,
+    handleFilterTagOrigin,
     showCollection,
     navigateDirectory,
     clearCollectionSelection,

@@ -56,6 +56,7 @@ export {
   deleteTag,
   detachTagFromFile,
   getAllTags,
+  getAttachmentsForFiles,
   getTagsForFile,
   getTagsForFiles,
   renameTag,

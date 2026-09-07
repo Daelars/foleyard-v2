@@ -1,4 +1,4 @@
-import type { FileSortKey, V2ResolvedContribution } from "@yard-core";
+import type { FileSortKey, TagOrigin, V2ResolvedContribution } from "@yard-core";
 
 export interface FileTableFileRecord {
   id: string;
@@ -10,7 +10,7 @@ export interface FileTableFileRecord {
   fileSize: number | null;
   mtimeMs?: number | null;
   isFavorite: boolean;
-  tags: { id: string; name: string }[];
+  tags: { id: string; name: string; origin?: TagOrigin; confidence?: number | null }[];
 }
 
 export interface FileTableDirectory {

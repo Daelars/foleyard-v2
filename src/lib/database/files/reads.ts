@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import type { AudioFile, IndexedAudioFile, FileSearchQuery, TagOrigin } from "@yard-core";
 import { normalizeDirectoryPath } from "@yard-core";
 import { chunkArray, filenameLike, SQLITE_MAX_VARIABLES } from "../sql-parameters";
@@ -248,8 +248,22 @@ export function getAllFilesIncludingRemoved(context: FileRepositoryContext): Ind
   }
 
 export function getFileById(context: FileRepositoryContext, id: string): IndexedAudioFile | null {
-    return (context.db.select().from(schema.files).where(eq(schema.files.id, id)).get() ?? null) as IndexedAudioFile | null;
-  }
+  return (context.db.select().from(schema.files).where(eq(schema.files.id, id)).get() ?? null) as IndexedAudioFile | null;
+}
+
+/**
+ * Live files touched by the scan that started at `sinceIso`: the
+ * post-scan auto-tag trigger's arrival list. Removed files never qualify.
+ */
+export function getFileIdsScannedSince(context: FileRepositoryContext, sinceIso: string): string[] {
+  return context.db
+    .select({ id: schema.files.id })
+    .from(schema.files)
+    .where(and(gte(schema.files.lastScannedAt, sinceIso), isNull(schema.files.removedAt)))
+    .orderBy(asc(schema.files.id))
+    .all()
+    .map((row) => row.id);
+}
 
 export function getFileByPath(context: FileRepositoryContext, filePath: string): IndexedAudioFile | null {
     return (context.db.select().from(schema.files).where(eq(schema.files.path, filePath)).get() ?? null) as IndexedAudioFile | null;

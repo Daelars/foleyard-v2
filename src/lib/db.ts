@@ -24,6 +24,7 @@ export {
   getAllFilesIncludingRemoved,
   getFileById,
   getFileByPath,
+  getFileIdsScannedSince,
   getFilesByIds,
   getFilesByPaths,
   getFileCount,

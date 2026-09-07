@@ -64,6 +64,7 @@ background, every write marked deterministic.
 
 1. Settings → Extensions → **Auto Tag v2** → enable.
 2. Approve the declared permissions.
-3. Run Preview auto-tag from the palette, then Auto-tag files —
-   or wait for the post-scan trigger (#194) to run it in the
-   background.
+3. Run Preview auto-tag from the palette, then Auto-tag files — or
+   just scan: every finished scan hands its arrivals to tag-files as
+   background jobs (#194), with progress and cancellation through the
+   job routes.

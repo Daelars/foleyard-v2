@@ -1,4 +1,4 @@
-import type { FileSortKey } from "@yard-core";
+import type { FileSortKey, V2ResolvedContribution } from "@yard-core";
 
 export interface FileTableFileRecord {
   id: string;
@@ -62,6 +62,9 @@ export interface FileTableProps {
   shelfFileIds?: string[];
   makePackEnabled?: boolean;
   onMakePackFile?: (file: FileTableFileRecord) => Promise<void>;
+  /** v2 file-context-menu items per row (R8): resolved live, invoked by stable key. */
+  resolveV2FileItems?: (fileId: string) => V2ResolvedContribution[];
+  onV2Command?: (item: V2ResolvedContribution, file: FileTableFileRecord) => void;
   onRemoveFile?: (file: FileTableFileRecord) => Promise<void>;
   folderJanitorEnabled?: boolean;
   onScanFolder?: (folderPath: string) => void;

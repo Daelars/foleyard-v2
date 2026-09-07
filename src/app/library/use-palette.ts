@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildPaletteEntries,
   type PaletteEntry,
+  type PaletteToolCommand,
 } from "@/components/CommandPalette/command-palette";
 import {
   DEFAULT_SHORTCUTS,
@@ -17,7 +18,11 @@ import {
   type ShortcutBindings,
 } from "@/components/Shortcuts/shortcuts";
 import type { ExtensionGridItem } from "@/lib/extensions/types";
+import { toolPaletteId } from "@/lib/commands";
 import type { FileRecord } from "./types";
+// App command descriptors (src/lib/commands.ts) map current palette IDs and
+// shortcut actions; tool entries below consume the same `tool:{ext}:{cmd}`
+// shape via toolPaletteId so palette, shortcuts and registry agree.
 
 /** Split a palette entry id into its kind and payload. */
 export function parsePaletteEntryId(id: string): {
@@ -70,6 +75,9 @@ export interface PaletteInput {
   toggleFavoriteCurrent: () => void;
   addCurrentToShelf: () => void;
   runCommand: (extensionId: string, commandId: string) => void;
+  /** v2 palette entries (R6): resolved by the v2 bridge, dispatched via runV2Command. */
+  v2ToolCommands?: PaletteToolCommand[];
+  runV2Command?: (extensionId: string, commandId: string) => void;
   playSound: (fileId: string) => void;
   moveNext: () => void;
   movePrev: () => void;
@@ -139,11 +147,13 @@ export function usePalette(input: PaletteInput) {
               extensionName: extension.name,
               commandId: command.id,
               title: command.title,
+              paletteId: toolPaletteId(extension.id, command.id),
             })) as Array<{
               extensionId: string;
               extensionName: string;
               commandId: string;
               title: string;
+              paletteId: string;
             }>)
           : [],
       ),
@@ -173,6 +183,7 @@ export function usePalette(input: PaletteInput) {
         isFavorite: input.selectedFile?.isFavorite ?? false,
         shelfEnabled: input.shelfEnabled,
         toolCommands: paletteToolCommands,
+        v2ToolCommands: input.v2ToolCommands ?? [],
         sounds: paletteSounds,
       }),
     [
@@ -183,6 +194,7 @@ export function usePalette(input: PaletteInput) {
       input.canStepQueue,
       input.shelfEnabled,
       paletteToolCommands,
+      input.v2ToolCommands,
       paletteSounds,
     ],
   );
@@ -223,6 +235,13 @@ export function usePalette(input: PaletteInput) {
           const split = rest.indexOf(":");
           if (split !== -1) {
             actions.runCommand(rest.slice(0, split), rest.slice(split + 1));
+          }
+          break;
+        }
+        case "v2tool": {
+          const split = rest.indexOf(":");
+          if (split !== -1) {
+            actions.runV2Command?.(rest.slice(0, split), rest.slice(split + 1));
           }
           break;
         }

@@ -3,6 +3,7 @@ import {
   YardCommandValidationError,
   type YardExtensionContext,
 } from "yard-core";
+import { COMMAND_DEFINITIONS } from "./command-definitions";
 
 import { createService } from "./service";
 import type { SmartCollectionFilter } from "./types";
@@ -24,11 +25,9 @@ export function validateSaveSearchInput(input: unknown): string | null {
 }
 
 export function registerCommands(context: YardExtensionContext) {
+  const def = (id: string) => COMMAND_DEFINITIONS.find((c) => c.id === id)!;
   context.services.commands.register({
-    id: "smart-collections.save-search",
-    title: "Save Search as Smart Collection",
-    description: "Save the current search query as a smart collection.",
-    scope: "global",
+    ...def("smart-collections.save-search"),
     inputSchema: saveSearchInputSchema,
     handler: () => {
       const input = context.input as

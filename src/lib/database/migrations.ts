@@ -68,6 +68,51 @@ function backfillLibraryRoots(sqlite: Database.Database) {
   apply();
 }
 
+export const CURRENT_SCHEMA_VERSION = 1;
+
+export type DatabaseVersionInfo = {
+  state: "ready" | "not-initialized" | "unavailable";
+  migration: "unversioned" | "versioned";
+  appliedVersion?: number;
+};
+
+/**
+ * Read-only version probe. Never initializes or migrates; absence of the
+ * ledger means unversioned (pre-ledger) rather than version 0.
+ */
+export function getDatabaseVersionInfo(sqlite?: Database.Database): DatabaseVersionInfo {
+  if (!sqlite) {
+    try {
+      // Only inspect an already-initialized owner; do not open the DB here.
+      // The server route supplies no handle when unavailable.
+      return { state: "not-initialized", migration: "unversioned" };
+    } catch {
+      return { state: "unavailable", migration: "unversioned" };
+    }
+  }
+  try {
+    const tables = sqlite
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'")
+      .all() as Array<{ name: string }>;
+    if (tables.length === 0) return { state: "ready", migration: "unversioned" };
+    const rows = sqlite.prepare("SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1").all() as Array<{ version: number }>;
+    if (rows.length === 0) return { state: "ready", migration: "unversioned" };
+    return { state: "ready", migration: "versioned", appliedVersion: rows[0].version };
+  } catch {
+    return { state: "unavailable", migration: "unversioned" };
+  }
+}
+
+function recordSchemaVersion(sqlite: Database.Database, version: number) {
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY,
+      applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  sqlite.prepare("INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)").run(version);
+}
+
 export function initializeDatabaseSchema(sqlite: Database.Database) {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS settings (
@@ -151,4 +196,15 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_collections_file_id ON file_collections(file_id)`);
 
   backfillLibraryRoots(sqlite);
+
+  // Record successful application transactionally; existing schemas are
+  // safely baselined to CURRENT_SCHEMA_VERSION without data loss.
+  try {
+    const apply = sqlite.transaction(() => {
+      recordSchemaVersion(sqlite, CURRENT_SCHEMA_VERSION);
+    });
+    apply();
+  } catch {
+    // Version recording is diagnostic; schema itself is already applied.
+  }
 }

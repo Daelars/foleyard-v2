@@ -8,6 +8,7 @@ import {
   YardCommandValidationError,
   type YardExtensionContext,
 } from "yard-core";
+import { COMMAND_DEFINITIONS } from "./command-definitions";
 
 import { createService } from "./service";
 import type { DropRuleOptions, PrepareDragOptions } from "./types";
@@ -94,40 +95,26 @@ async function getPrepareDragOptions(
 }
 
 export function registerCommands(context: YardExtensionContext) {
+  const def = (id: string) => COMMAND_DEFINITIONS.find((c) => c.id === id)!;
   context.services.commands.register({
-    id: "drop-rules.open-settings",
-    title: "Configure Drop Rules",
-    description: "Open the Drop Rules settings.",
-    scope: "global",
+    ...def("drop-rules.open-settings"),
     handler: () => createYardUiIntent("drop-rules.open-settings", {}),
   });
 
   context.services.commands.register({
-    id: "drop-rules.preview",
-    title: "Preview Drop Rules",
-    description: "Preview the file actions that Drop Rules would perform.",
-    scope: "drop",
-    requiresSelection: true,
+    ...def("drop-rules.preview"),
     inputSchema: dropRuleInputSchema,
     handler: () => createService(context).preview(getRuleOptions(context)),
   });
 
   context.services.commands.register({
-    id: "drop-rules.apply",
-    title: "Apply Drop Rules",
-    description: "Copy and rename dropped sounds using the configured rules.",
-    scope: "drop",
-    requiresSelection: true,
+    ...def("drop-rules.apply"),
     inputSchema: dropRuleInputSchema,
     handler: () => createService(context).apply(getRuleOptions(context)),
   });
 
   context.services.commands.register({
-    id: "drop-rules.prepare-drag",
-    title: "Prepare Drag",
-    description: "Prepare one sound for drag-out using the configured rules.",
-    scope: "drop",
-    requiresSelection: true,
+    ...def("drop-rules.prepare-drag"),
     inputSchema: prepareDragInputSchema,
     handler: async () =>
       createService(context).prepareDrag(await getPrepareDragOptions(context)),

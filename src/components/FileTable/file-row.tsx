@@ -18,6 +18,7 @@ import { formatDuration } from "@/lib/format";
 
 import { FileRowMenu } from "./file-row-menu";
 import { useShelfToggle } from "./use-shelf-toggle";
+import type { V2ResolvedContribution } from "@yard-core";
 
 import { highlightMatch } from "./highlight-match";
 import { fileTableGridClass } from "./layout";
@@ -37,6 +38,8 @@ export const FileTableFileRow = memo(function FileTableFileRow({
   onSelect,
   onToggleFavorite,
   onMakePackFile,
+  resolveV2FileItems,
+  onV2Command,
   searchQuery,
   showDesktopActions,
   makePackEnabled,
@@ -68,6 +71,8 @@ export const FileTableFileRow = memo(function FileTableFileRow({
   ) => void;
   onToggleFavorite: (id: string) => Promise<void>;
   onMakePackFile?: (file: FileTableFileRecord) => Promise<void>;
+  resolveV2FileItems?: (fileId: string) => V2ResolvedContribution[];
+  onV2Command?: (item: V2ResolvedContribution, file: FileTableFileRecord) => void;
   searchQuery: string;
   showDesktopActions: boolean;
   makePackEnabled: boolean;
@@ -240,6 +245,8 @@ export const FileTableFileRow = memo(function FileTableFileRow({
         onToggleFavorite={onToggleFavorite}
         makePackEnabled={makePackEnabled}
         onMakePackFile={onMakePackFile}
+        v2Items={resolveV2FileItems?.(file.id) ?? []}
+        onV2Command={onV2Command ? (item) => onV2Command(item, file) : undefined}
         soundShelfEnabled={soundShelfEnabled}
         inShelf={inShelf}
         onToggleShelf={() => void toggleShelf()}

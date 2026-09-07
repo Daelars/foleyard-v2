@@ -81,6 +81,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getWindowState() {
     return ipcRenderer.invoke(CHANNELS["desktop:get-window-state"]);
   },
+  getRuntimeInfo() {
+    return ipcRenderer.invoke(CHANNELS["desktop:get-runtime-info"]);
+  },
   onActionError(listener) {
     const wrapped = (_event, message) => listener(message);
     ipcRenderer.on(CHANNELS["desktop:action-error"], wrapped);

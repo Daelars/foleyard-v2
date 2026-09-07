@@ -7,6 +7,7 @@ export {
   attachFileToCollection,
   convertToRegularCollection,
   createCollection,
+  createSmartCollection,
   deleteCollection,
   detachFileFromCollection,
   getAllCollections,

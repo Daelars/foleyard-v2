@@ -20,6 +20,25 @@ export type YardCommandScope =
   | "collection"
   | "drop";
 
+export type YardContractStanding =
+  | "internal"
+  | "public-experimental"
+  | "public-stable";
+
+export type YardFeatureStatus = "shipped" | "experimental" | "proposed";
+
+/**
+ * Version of the intentional extension-host contract (not app version).
+ * Contract: internal. Bundled tools are version-matched to the checkout;
+ * there is no external compatibility promise yet.
+ */
+export const YARD_EXTENSION_API_VERSION = 1;
+
+/** API standing of the bundled extension contract. */
+export const YARD_EXTENSION_API_STANDING: YardContractStanding = "internal";
+
+export type YardCommandExecutionOwner = "extension-host" | "renderer" | "desktop";
+
 export type YardCommand = {
   id: string;
   title: string;
@@ -28,7 +47,72 @@ export type YardCommand = {
   destructive?: boolean;
   requiresSelection?: boolean;
   inputSchema?: YardCommandInputSchema;
+  /** Which runtime owns execution. Defaults to extension-host. */
+  executionOwner?: YardCommandExecutionOwner;
+  /** Semantic capability IDs required for availability (not permissions). */
+  requiredCapabilities?: string[];
+  /** Documented input reference; validators are functions and never serialized. */
+  inputRef?: string;
+  resultRef?: string;
+  docsId?: string;
 };
+
+/** Serializable command metadata. No functions, handlers or validators. */
+export type YardCommandDescription = {
+  id: string;
+  title: string;
+  description: string;
+  scope: YardCommandScope;
+  destructive: boolean;
+  requiresSelection: boolean;
+  executionOwner: YardCommandExecutionOwner;
+  requiredCapabilities: string[];
+  input: { kind: "none" | "documented"; ref?: string };
+  resultRef?: string;
+  docsId: string;
+};
+
+/**
+ * Define one shared command metadata object consumed by both the manifest
+ * declaration and handler registration. Keeps a single source of truth.
+ */
+export function defineYardCommand(def: YardCommand): YardCommand {
+  return { ...def, requiredCapabilities: def.requiredCapabilities ? [...def.requiredCapabilities] : undefined };
+}
+
+/** Strip functions from a command into a JSON-safe description. */
+export function describeYardCommand(
+  command: YardCommand | RegisteredYardCommand,
+): YardCommandDescription {
+  return {
+    id: command.id,
+    title: command.title,
+    description: command.description,
+    scope: command.scope,
+    destructive: command.destructive ?? false,
+    requiresSelection: command.requiresSelection ?? false,
+    executionOwner: command.executionOwner ?? "extension-host",
+    requiredCapabilities: command.requiredCapabilities ? [...command.requiredCapabilities] : [],
+    input: command.inputSchema
+      ? { kind: "documented", ref: command.inputRef }
+      : command.inputRef
+        ? { kind: "documented", ref: command.inputRef }
+        : { kind: "none" },
+    ...(command.resultRef ? { resultRef: command.resultRef } : {}),
+    docsId: command.docsId ?? "commands",
+  };
+}
+
+/** Serializable manifest projection (manifests are already plain data). */
+export function describeYardManifest(manifest: YardExtensionManifest): YardExtensionManifest {
+  return {
+    ...manifest,
+    permissions: [...manifest.permissions],
+    commands: manifest.commands.map((c) => ({ ...c, inputSchema: undefined, requiredCapabilities: c.requiredCapabilities ? [...c.requiredCapabilities] : undefined })),
+    settings: manifest.settings?.map((s) => ({ ...s, options: s.options?.map((o) => ({ ...o })) })),
+    surfaces: manifest.surfaces ? [...manifest.surfaces] : undefined,
+  };
+}
 
 export type YardCommandInputSchema = {
   validate(input: unknown): string | null;

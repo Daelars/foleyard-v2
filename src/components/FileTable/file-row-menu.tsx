@@ -21,6 +21,9 @@ import type {
   FileTableFileRecord,
   FileTableFileTag,
 } from "./types";
+import type { ContextMenuCommandContribution } from "@/lib/extensions/ui-contributions";
+import type { V2ResolvedContribution } from "@yard-core";
+import { V2ContextMenuItems } from "@/components/extensions-v2/menus";
 
 export function FileRowMenu({
   file,
@@ -35,6 +38,10 @@ export function FileRowMenu({
   allTags,
   onToggleFileTag,
   onRemoveFile,
+  contributedItems,
+  onContributedCommand,
+  v2Items,
+  onV2Command,
 }: {
   file: FileTableFileRecord;
   menuFilename: string;
@@ -48,6 +55,12 @@ export function FileRowMenu({
   allTags?: FileTableFileTag[];
   onToggleFileTag?: (fileId: string, tagId: string) => void;
   onRemoveFile?: (file: FileTableFileRecord) => Promise<void>;
+  /** Minimal context-menu command contributions for the selected file. */
+  contributedItems?: ContextMenuCommandContribution[];
+  onContributedCommand?: (contrib: ContextMenuCommandContribution, file: FileTableFileRecord) => void;
+  /** v2 file-context-menu items (R6): resolved data, invoked by stable key. */
+  v2Items?: V2ResolvedContribution[];
+  onV2Command?: (item: V2ResolvedContribution) => void;
 }) {
   return (
     <ContextMenuContent className="w-60">
@@ -121,6 +134,23 @@ export function FileRowMenu({
             Remove from library
           </ContextMenuItem>
         </>
+      ) : null}
+      {contributedItems && contributedItems.length > 0 ? (
+        <>
+          <ContextMenuSeparator />
+          {contributedItems.map((contrib) => (
+            <ContextMenuItem
+              key={contrib.id}
+              onClick={() => onContributedCommand?.(contrib, file)}
+            >
+              <Puzzle className="text-zinc-500" />
+              {contrib.label}
+            </ContextMenuItem>
+          ))}
+        </>
+      ) : null}
+      {v2Items && v2Items.length > 0 && onV2Command ? (
+        <V2ContextMenuItems items={v2Items} onInvoke={onV2Command} />
       ) : null}
     </ContextMenuContent>
   );

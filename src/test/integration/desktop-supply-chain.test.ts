@@ -139,6 +139,7 @@ const PACKAGED_HANDLERS = [
   "desktop:window-toggle-maximize",
   "desktop:window-close",
   "desktop:get-window-state",
+  "desktop:get-runtime-info",
   "desktop:check-for-updates",
   "desktop:install-update",
 ];

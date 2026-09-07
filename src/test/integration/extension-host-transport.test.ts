@@ -203,7 +203,7 @@ describe("extension host and transport", () => {
           "drop:read",
           "drop:modify",
         ],
-        adapted: ["drop-rules.prepare-drag"],
+        adapted: ["drop-rules.prepare-drag", "drop-rules.preview", "drop-rules.apply"],
       },
       {
         id: "folder-janitor",
@@ -575,7 +575,7 @@ describe("extension host and transport", () => {
     }
   });
 
-  it.fails("answers null, malformed and mistyped envelopes with controlled client errors (B08)", async () => {
+  it("answers null, malformed and mistyped envelopes with controlled client errors", async () => {
     // A null envelope never reaches an adapter: JSON "null" parses, then the
     // unguarded property access throws out of the handler as a 500.
     const nulled = await postExecute(null, "null");
@@ -597,7 +597,7 @@ describe("extension host and transport", () => {
     expect(mistyped.status).toBeLessThan(500);
   });
 
-  it.fails("refuses a write-capable service to an extension with no write grant (E01)", async () => {
+  it("refuses a write-capable service to an extension with no write grant", async () => {
     const [row] = seed(["/lib/victim.wav"]);
 
     // This extension cooperates with nothing: it calls the file service

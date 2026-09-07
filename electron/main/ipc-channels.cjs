@@ -31,6 +31,7 @@ const CHANNEL_SPECS = {
   "desktop:window-toggle-maximize": { kind: "invoke", payload: [] },
   "desktop:window-close": { kind: "invoke", payload: [] },
   "desktop:get-window-state": { kind: "invoke", payload: [] },
+  "desktop:get-runtime-info": { kind: "invoke", payload: [] },
   "desktop:start-drag-file": { kind: "send", payload: ["fileIds"] },
   "desktop:update-available": { kind: "event", payload: ["version"] },
   "desktop:update-ready": { kind: "event", payload: ["version"] },

@@ -1,3 +1,5 @@
+> **Historical audit evidence — dated findings, not current setup.** See `docs/index.md` for current guides. Do not run preview/cleanup instructions as setup.
+
 # Implementation handoff
 
 Start here. The user requested a repository audit, an interactive proposal and a plan for another agent. They explicitly said not to commit code. This session changed no production behavior and made no commits, pushes, issues or PRs.

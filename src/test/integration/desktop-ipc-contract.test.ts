@@ -24,6 +24,7 @@ const EXPECTED_CHANNELS = [
   "desktop:window-toggle-maximize",
   "desktop:window-close",
   "desktop:get-window-state",
+  "desktop:get-runtime-info",
   "desktop:start-drag-file",
   "desktop:update-available",
   "desktop:update-ready",

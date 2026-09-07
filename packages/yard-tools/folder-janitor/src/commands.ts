@@ -4,6 +4,7 @@ import {
   YardCommandValidationError,
   type YardExtensionContext,
 } from "yard-core";
+import { COMMAND_DEFINITIONS } from "./command-definitions";
 
 import { createService } from "./service";
 import type { JanitorFile, JanitorScanOptions } from "./types";
@@ -72,11 +73,9 @@ function getScanOptions(
 }
 
 export function registerCommands(context: YardExtensionContext) {
+  const def = (id: string) => COMMAND_DEFINITIONS.find((c) => c.id === id)!;
   context.services.commands.register({
-    id: "folder-janitor.scan-library",
-    title: "Scan Library Mess",
-    description: "Create a cleanup report for the current sound library.",
-    scope: "global",
+    ...def("folder-janitor.scan-library"),
     inputSchema: janitorScanInputSchema,
     handler: () => {
       const scanOptions = getScanOptions(context);
@@ -89,10 +88,7 @@ export function registerCommands(context: YardExtensionContext) {
   });
 
   context.services.commands.register({
-    id: "folder-janitor.scan-folder",
-    title: "Scan Folder Mess",
-    description: "Create a cleanup report for the current folder.",
-    scope: "folder",
+    ...def("folder-janitor.scan-folder"),
     inputSchema: janitorScanInputSchema,
     handler: () => {
       const scanOptions = getScanOptions(context);
@@ -106,20 +102,12 @@ export function registerCommands(context: YardExtensionContext) {
   });
 
   context.services.commands.register({
-    id: "folder-janitor.remove-files",
-    title: "Remove Files from Index",
-    description: "Mark selected files as removed from the library index.",
-    scope: "selection",
-    requiresSelection: true,
+    ...def("folder-janitor.remove-files"),
     handler: () => createService(context).removeFiles(context.selection.fileIds),
   });
 
   context.services.commands.register({
-    id: "folder-janitor.delete-folders",
-    title: "Delete Empty Folders",
-    description: "Delete the supplied empty folders.",
-    scope: "global",
-    destructive: true,
+    ...def("folder-janitor.delete-folders"),
     inputSchema: deleteFoldersInputSchema,
     handler: () => {
       const input = context.input as

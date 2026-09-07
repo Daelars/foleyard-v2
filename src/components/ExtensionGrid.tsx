@@ -2,6 +2,7 @@
 
 import type { ExtensionGridItem } from "../lib/extensions/types";
 import { useCallback, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { ArrowUpRight, Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,8 @@ type ExtensionGridProps = {
   onOpenDetails?: (extension: ExtensionGridItem) => void;
   onRunCommand?: (extensionId: string, commandId: string) => void;
   pendingExtensionId?: string | null;
+  /** Extra cards (e.g. v2 extensions) rendered inside the same grid. */
+  trailing?: ReactNode;
 };
 
 const skeletonCount = 6;
@@ -156,6 +159,7 @@ export function ExtensionGrid({
   onToggleEnabled,
   onRunCommand,
   pendingExtensionId = null,
+  trailing,
 }: ExtensionGridProps) {
   const showEmptyState = !isLoading && extensions.length === 0;
 
@@ -219,6 +223,7 @@ export function ExtensionGrid({
                   onRunCommand={onRunCommand}
                 />
               ))}
+          {trailing}
         </div>
       )}
       </div>

@@ -1,12 +1,27 @@
 "use client";
 
 import type { FileRecord } from "./library/types";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PackagePlus, PanelLeft, Save, Search, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { AudioPlayer, type AudioPlayerRef } from "@/components/AudioPlayer";
 import { CommandPalette } from "@/components/CommandPalette/CommandPalette";
 import { SelectionBulkBar } from "@/components/FileTable/bulk-bar";
+import { V2LibraryDropZone } from "@/components/extensions-v2/drop-zone";
+import { V2SelectionActions } from "@/components/extensions-v2/menus";
+import { V2ExtensionsSection } from "@/components/extensions-v2/settings-section";
+import { V2ToolsCards } from "@/components/extensions-v2/tools-cards";
+import { useV2PaletteBridge } from "@/components/extensions-v2/use-v2-palette";
+import { MakePackV2Dialog } from "@/components/extensions/make-pack-v2/MakePackV2Dialog";
+import { MAKE_PACK_V2_ID, type MakePackV2Source } from "@/components/extensions/make-pack-v2/use-make-pack-v2";
+import {
+  invokeV2Command,
+  resolveV2UiPoint,
+  useV2Catalog,
+  type V2UiState,
+} from "@/lib/extensions-v2/contributions";
+import type { V2ResolvedContribution } from "@yard-core";
 import { DesktopTitleBar } from "@/components/DesktopTitleBar";
 import { ExtensionGrid } from "@/components/ExtensionGrid";
 import { FolderJanitorDialog } from "@/components/extensions/folder-janitor/FolderJanitorDialog";
@@ -331,10 +346,73 @@ function HomeContent() {
     extensions,
   });
 
+  // v2 palette bridge (R6): resolved palette-point contributions for the
+  // current selection; v1 entries and shortcuts keep working untouched.
+  const v2Palette = useV2PaletteBridge(selectedIds);
+
+  // v2 entry points (R8): live catalog for row/bulk/settings adapters plus
+  // the Make Pack v2 dialog. Renderer-owned routing: Make Pack v2 commands
+  // open its dialog (preview → destination → job); every other v2 command
+  // invokes through the single execution path with a toast outcome.
+  const v2Catalog = useV2Catalog();
+  const [packV2, setPackV2] = useState<{ source: MakePackV2Source; fileIds: string[] } | null>(null);
+  const v2UiState: V2UiState = useMemo(
+    () => ({
+      enabled: new Set(v2Catalog.extensions.filter((entry) => entry.enabled).map((entry) => entry.id)),
+      capabilities: {},
+    }),
+    [v2Catalog.extensions],
+  );
+  const makePackV2Enabled = useMemo(
+    () => v2Catalog.extensions.some((entry) => entry.id === MAKE_PACK_V2_ID && entry.enabled),
+    [v2Catalog.extensions],
+  );
+  const openPackV2 = useCallback((source: MakePackV2Source, fileIds: string[]) => {
+    setPackV2({ source, fileIds });
+  }, []);
+  const invokeV2RowCommand = useCallback(
+    (item: V2ResolvedContribution, fileIds: string[]) => {
+      if (item.extensionId === MAKE_PACK_V2_ID) {
+        openPackV2("selection", fileIds);
+        return;
+      }
+      void invokeV2Command({
+        extensionId: item.extensionId,
+        commandId: item.commandId,
+        fileIds,
+      }).then((result) => {
+        if (!result.ok) {
+          toast.error(result.message);
+          return;
+        }
+        const body = result.body as { ok?: boolean; error?: { message?: string } };
+        if (!body?.ok) {
+          toast.error(body?.error?.message ?? "Extension command failed.");
+          return;
+        }
+        toast.success("Extension command completed.");
+      });
+    },
+    [openPackV2],
+  );
+  const resolveV2FileItems = useCallback(
+    (fileId: string) =>
+      resolveV2UiPoint(v2Catalog.catalog, "context-menu", { fileIds: [fileId] }, v2UiState),
+    [v2Catalog.catalog, v2UiState],
+  );
+  const bulkV2Items = useMemo(
+    () =>
+      selectedIds.length > 0
+        ? resolveV2UiPoint(v2Catalog.catalog, "selection-actions", { fileIds: selectedIds }, v2UiState)
+        : [],
+    [v2Catalog.catalog, selectedIds, v2UiState],
+  );
+
   const palette = usePalette({
     extensions,
     orderedFiles,
-    isPlaying: transport.isPlayerPlaying,
+    v2ToolCommands: v2Palette.v2ToolCommands,
+    runV2Command: v2Palette.runV2Command,    isPlaying: transport.isPlayerPlaying,
     autoplay: transport.autoplay,
     selectedFile,
     canStepQueue: transport.queueState.queue.length > 1,
@@ -615,6 +693,18 @@ function HomeContent() {
                     Pack Shelf
                   </Button>
                 ) : null}
+                {makePackV2Enabled && files.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 gap-2 rounded-xl px-3 text-xs"
+                    onClick={() => openPackV2("shelf", [])}
+                  >
+                    <PackagePlus className="size-4" />
+                    Pack Shelf v2
+                  </Button>
+                ) : null}
                 {files.length > 0 ? (
                   shelf.confirmClearShelf ? (
                     <>
@@ -676,6 +766,7 @@ function HomeContent() {
             onToggleEnabled={catalog.handleToggleExtensionEnabled}
             onRunCommand={extUi.handleRunCommand}
             pendingExtensionId={catalog.pendingExtensionId}
+            trailing={<V2ToolsCards onRunPack={() => openPackV2("recent", [])} />}
           />
         ) : showOrganizeView ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -718,10 +809,34 @@ function HomeContent() {
                     onConfirmRemove={() => void executeBulkRemove()}
                     onCancelRemove={() => setConfirmBulkRemove(null)}
                     onClear={handleClearSelection}
+                    v2Actions={
+                      <>
+                        {bulkV2Items.length > 0 ? (
+                          <V2SelectionActions
+                            items={bulkV2Items}
+                            selectionCount={selectedIds.length}
+                            onInvoke={(item) => invokeV2RowCommand(item, selectedIds)}
+                          />
+                        ) : null}
+                        {makePackV2Enabled ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            className="gap-1.5"
+                            onClick={() => openPackV2("selection", selectedIds)}
+                          >
+                            <PackagePlus className="size-3.5" />
+                            Pack v2…
+                          </Button>
+                        ) : null}
+                      </>
+                    }
                   />
               </div>
             ) : null}
             <div className="flex min-h-0 flex-1">
+              <V2LibraryDropZone>
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <FileTable
                 files={orderedFiles}
@@ -744,6 +859,13 @@ function HomeContent() {
                 shelfFileIds={shelf.soundShelfFileIds}
                 makePackEnabled={makePackEnabled}
                 onMakePackFile={extUi.handleMakePackFile}
+                resolveV2FileItems={resolveV2FileItems}
+                onV2Command={(item, file) =>
+                  invokeV2RowCommand(
+                    item,
+                    selectedIds.includes(file.id) && selectedIds.length > 0 ? selectedIds : [file.id],
+                  )
+                }
                 onRemoveFile={handleRemoveFileFromLibrary}
                 folderJanitorEnabled={folderJanitorEnabled}
                 onScanFolder={extUi.handleScanFolder}
@@ -754,6 +876,7 @@ function HomeContent() {
                 onFlipSort={flipSort}
               />
               </div>
+              </V2LibraryDropZone>
             </div>
           </>
         )}
@@ -832,6 +955,7 @@ function HomeContent() {
         extensions={extensions}
         onToggleExtension={catalog.handleToggleExtensionEnabled}
         onUpdateExtensionSetting={catalog.handleUpdateExtensionSetting}
+        v2Settings={<V2ExtensionsSection />}
         zoom={settingsScan.zoom}
         onUpdateZoom={settingsScan.handleUpdateZoom}
         shortcutBindings={shortcutBindings}
@@ -875,6 +999,15 @@ function HomeContent() {
         initialSource={extUi.packSource ?? "selection"}
         initialFileIds={extUi.packFileIds}
         initialOutputFormat={extUi.makePackDefaultFormat}
+      />
+
+      <MakePackV2Dialog
+        open={packV2 !== null}
+        onOpenChange={(open) => {
+          if (!open) setPackV2(null);
+        }}
+        initialSource={packV2?.source ?? "selection"}
+        initialFileIds={packV2?.fileIds ?? []}
       />
 
       <SaveSearchDialog

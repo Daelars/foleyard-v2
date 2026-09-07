@@ -72,6 +72,10 @@ function registerIpcHandlers() {
       isMaximized: window?.isMaximized() ?? false,
     };
   });
+  ipcMain.handle(CHANNELS["desktop:get-runtime-info"], async () => {
+    const { getDesktopIdentity } = require("./runtime-info.cjs");
+    return getDesktopIdentity();
+  });
   ipcMain.handle(CHANNELS["desktop:check-for-updates"], async () => {
     checkForUpdates();
     return { ok: true };

@@ -12,7 +12,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { FileTableFileTag } from "./types";
-
 export type BulkRemoveStage =
   | { stage: "choose" }
   | { stage: "confirm"; choice: "library" | "disk" };
@@ -32,6 +31,8 @@ export function SelectionBulkBar({
   onConfirmRemove,
   onCancelRemove,
   onClear,
+  /** v2 selection-actions slot (R6): generic adapter content, rendered before Clear. */
+  v2Actions,
 }: {
   count: number;
   tags: FileTableFileTag[];
@@ -47,6 +48,7 @@ export function SelectionBulkBar({
   onConfirmRemove: () => void;
   onCancelRemove: () => void;
   onClear: () => void;
+  v2Actions?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-accent-fill/40 bg-accent-fill/10 px-3 py-2 text-xs shadow-glow-accent">
@@ -198,6 +200,7 @@ export function SelectionBulkBar({
           </Button>
         </>
       )}
+      {v2Actions}
       <Button
         type="button"
         variant="ghost"

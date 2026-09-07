@@ -25,7 +25,13 @@
     "typecheck": "tsc --noEmit",
     "test": "npx vitest run",
     "test:watch": "npx vitest",
-    "test:coverage": "npx vitest run --coverage"
+    "test:coverage": "npx vitest run --coverage",
+    "example:selected-ids": "bun examples/extensions/selected-ids/run.ts",
+    "example:v2-minimal": "bun examples/extensions-v2/minimal/run.ts",
+    "example:query-library": "bun examples/core/query-library/run.ts",
+    "docs:prepare": "node scripts/prepare-docs.cjs",
+    "docs:check": "node scripts/check-docs.cjs",
+    "check:v2-boundaries": "node scripts/check-v2-boundaries.cjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

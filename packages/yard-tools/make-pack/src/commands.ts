@@ -4,6 +4,7 @@ import {
   YardCommandValidationError,
   type YardExtensionContext,
 } from "yard-core";
+import { COMMAND_DEFINITIONS } from "./command-definitions";
 
 import { createService } from "./service";
 import type { MakePackOptions, MakePackSource } from "./types";
@@ -67,30 +68,21 @@ function runMakePack(context: YardExtensionContext, source: MakePackSource) {
 }
 
 export function registerCommands(context: YardExtensionContext) {
+  const def = (id: string) => COMMAND_DEFINITIONS.find((c) => c.id === id)!;
   context.services.commands.register({
-    id: "make-pack.from-selection",
-    title: "Make Pack from Selection",
-    description: "Create a pack from the selected sounds.",
-    scope: "selection",
-    requiresSelection: true,
+    ...def("make-pack.from-selection"),
     inputSchema: makePackInputSchema,
     handler: () => runMakePack(context, "selection"),
   });
 
   context.services.commands.register({
-    id: "make-pack.from-shelf",
-    title: "Make Pack from Shelf",
-    description: "Create a pack from Sound Shelf items.",
-    scope: "global",
+    ...def("make-pack.from-shelf"),
     inputSchema: makePackInputSchema,
     handler: () => runMakePack(context, "shelf"),
   });
 
   context.services.commands.register({
-    id: "make-pack.from-recent",
-    title: "Make Pack from Recent Sounds",
-    description: "Create a pack from recently previewed sounds.",
-    scope: "global",
+    ...def("make-pack.from-recent"),
     inputSchema: makePackInputSchema,
     handler: () => runMakePack(context, "recent"),
   });

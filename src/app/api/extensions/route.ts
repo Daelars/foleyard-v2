@@ -10,7 +10,19 @@ import { setExtensionSettingValue } from "@/lib/extensions/settings-store";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const view = request.nextUrl.searchParams.get("view");
+  if (view === "catalog") {
+    const { registerAllExtensions } = await import("@/lib/extensions/registry");
+    const { extensionRegistry } = await import("@/lib/extensions/runtime");
+    const { projectCatalogEntry } = await import("@/lib/extensions/catalog");
+    const { isExtensionEnabled } = await import("@/lib/extensions/registry");
+    registerAllExtensions();
+    const entries = extensionRegistry
+      .listManifests()
+      .map((m) => projectCatalogEntry(m, { enabled: isExtensionEnabled(m.id), permissionModel: "host-enforced" }));
+    return NextResponse.json({ extensions: entries });
+  }
   return NextResponse.json({
     extensions: listRegisteredExtensionGridItems(),
   });
@@ -47,10 +59,20 @@ export async function PATCH(request: NextRequest) {
       return errorResponse("Extension setting not found", 404);
     }
 
+    const coerced = coerceSettingValue(setting.type, body.value, setting.defaultValue);
+    const { validateSettingValue } = await import("@/lib/settings-schema");
+    const invalid = validateSettingValue(
+      { type: setting.type, options: setting.options },
+      coerced,
+    );
+    if (invalid) {
+      return errorResponse(invalid, 400);
+    }
+
     setExtensionSettingValue(
       body.extensionId,
       body.settingId,
-      coerceSettingValue(setting.type, body.value, setting.defaultValue),
+      coerced,
     );
 
     return NextResponse.json({

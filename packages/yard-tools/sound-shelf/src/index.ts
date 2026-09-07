@@ -5,3 +5,4 @@ export { InMemorySoundShelfStore, type SoundShelfStore } from "./store";
 export { permissions } from "./permissions";
 export { settings } from "./settings";
 export type * from "./types";
+export { COMMAND_DEFINITIONS } from "./command-definitions";

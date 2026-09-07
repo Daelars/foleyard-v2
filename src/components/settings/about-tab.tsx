@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Database, Download, Loader2, Monitor, ExternalLink } from "lucide-react";
+import { Database, Download, Loader2, Monitor, ExternalLink, FileJson } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +98,30 @@ export function AboutTab() {
     }
   };
 
+  const handleExportRuntimeInfo = async () => {
+    try {
+      const res = await fetch("/api/runtime");
+      const snapshot = await res.json();
+      let desktop = null;
+      try {
+        desktop = await getDesktopBridge()?.getRuntimeInfo?.() ?? null;
+      } catch {
+        desktop = { error: "desktop info unavailable" };
+      }
+      const payload = { exportedAt: new Date().toISOString(), snapshot, desktop };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "foleyard-runtime-info.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Runtime info exported. See docs/runtime.md for docs IDs.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Export failed");
+    }
+  };
+
   return (
           <TabsContent value="about" className="m-0 flex-1 p-8 outline-none">
              <div className="mx-auto max-w-3xl space-y-8">
@@ -144,13 +168,20 @@ export function AboutTab() {
                    >
                       <ExternalLink className="size-4" /> Documentation
                    </Button>
-                   <Button
-                     variant="outline"
-                     className="h-10 gap-2 rounded-xl border-white/10 bg-white/5 px-4 text-zinc-200 hover:border-accent-fill/50 hover:text-zinc-100"
-                     onClick={() => window.open("https://github.com/Daelars/foleyard-v2", "_blank", "noopener,noreferrer")}
-                   >
-                      <Monitor className="size-4" /> GitHub
-                   </Button>
+                    <Button
+                      variant="outline"
+                      className="h-10 gap-2 rounded-xl border-white/10 bg-white/5 px-4 text-zinc-200 hover:border-accent-fill/50 hover:text-zinc-100"
+                      onClick={handleExportRuntimeInfo}
+                    >
+                       <FileJson className="size-4" /> Export runtime info
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-10 gap-2 rounded-xl border-white/10 bg-white/5 px-4 text-zinc-200 hover:border-accent-fill/50 hover:text-zinc-100"
+                      onClick={() => window.open("https://github.com/Daelars/foleyard-v2", "_blank", "noopener,noreferrer")}
+                    >
+                       <Monitor className="size-4" /> GitHub
+                    </Button>
                 </div>
 
                 <div className="space-y-1 border-t border-white/10 pt-4 font-mono text-[10px] text-zinc-600">

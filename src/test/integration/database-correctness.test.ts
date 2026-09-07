@@ -66,9 +66,12 @@ vi.mock("@/lib/db", () => ({
   detachFileFromCollection: (fileId: string, collectionId: string) =>
     state.collections!.detachFileFromCollection(fileId, collectionId),
   getFileById: (id: string) => state.files!.getFileById(id),
+  getFilesByIds: (ids: string[]) => state.files!.getFilesByIds(ids),
   getLibraryRoots: () => state.libraryRoots,
   markFileRemoved: (path: string, removedAt: string) =>
     state.files!.markFileRemoved(path, removedAt),
+  batchMarkRemoved: (paths: string[], removedAt: string, now: string) =>
+    state.files!.batchMarkRemoved(paths, removedAt, now),
 }));
 
 import {

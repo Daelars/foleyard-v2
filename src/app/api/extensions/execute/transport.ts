@@ -7,6 +7,7 @@ import {
   getAllFilesIncludingRemoved,
   getFileById,
   getFiles,
+  getFilesByIds,
   getLibraryRoots,
   getTagsForFiles,
 } from "@/lib/db";
@@ -141,6 +142,7 @@ async function resolveMakePack(
 
 function hydrateFiles(fileIds: string[]): MakePackFile[] {
   const seen = new Set<string>();
+  const byId = new Map(getFilesByIds([...new Set(fileIds)]).map((file) => [file.id, file]));
   const files: MakePackFile[] = [];
 
   for (const fileId of fileIds) {
@@ -149,7 +151,7 @@ function hydrateFiles(fileIds: string[]): MakePackFile[] {
     }
 
     seen.add(fileId);
-    const file = getFileById(fileId);
+    const file = byId.get(fileId);
     if (!file || file.removedAt) {
       continue;
     }
@@ -437,8 +439,9 @@ async function shapeShelfList(value: unknown): Promise<unknown> {
     return { items: [], error: "Shelf contents were invalid" };
   }
   const fileIds = value as string[];
+  const byId = new Map(getFilesByIds(fileIds).map((file) => [file.id, file]));
   const files = fileIds
-    .map((fileId) => getFileById(fileId))
+    .map((fileId) => byId.get(fileId) ?? null)
     .filter(
       (file): file is IndexedAudioFile =>
         file !== null && file.removedAt === null,
@@ -465,6 +468,75 @@ async function shapeShelfList(value: unknown): Promise<unknown> {
   };
 }
 
+async function resolveDropRuleCommand(
+  body: ExecuteTransportBody,
+  opts: { requireWritableGrant: boolean },
+): Promise<ResolvedCommandTransport> {
+  if (body.input === undefined) {
+    return passthrough();
+  }
+  const input = asRecord(body.input);
+  const targetDirectory =
+    typeof input.targetDirectory === "string" ? input.targetDirectory : "";
+  const rawFiles = Array.isArray(input.files) ? input.files : [];
+
+  if (!targetDirectory) {
+    return failure("targetDirectory is required", 400);
+  }
+  if (rawFiles.length === 0) {
+    return failure("files array is required", 400);
+  }
+
+  // Hydrate file entries and enforce readable authorization.
+  const hydrated: Array<{ fileId?: string; path: string; filename: string }> = [];
+  for (const entry of rawFiles) {
+    if (typeof entry !== "object" || entry === null) {
+      return failure("files entries must be objects", 400);
+    }
+    const rec = entry as Record<string, unknown>;
+    const candidatePath = typeof rec.path === "string" ? rec.path : "";
+    const filename = typeof rec.filename === "string" ? rec.filename : "";
+    if (!candidatePath || !filename) {
+      return failure("each file needs path and filename", 400);
+    }
+    const readable = await resolveReadablePath(candidatePath, getLibraryRoots());
+    if (!readable) {
+      return failure("Source is outside the configured Library roots", 403);
+    }
+    hydrated.push({
+      ...(typeof rec.fileId === "string" ? { fileId: rec.fileId } : {}),
+      path: readable,
+      filename,
+    });
+  }
+
+  // Destination grants remain scoped and opaque: apply requires a grant.
+  let destination = targetDirectory;
+  if (opts.requireWritableGrant || typeof body.destinationGrant === "string") {
+    if (typeof body.destinationGrant !== "string" || !body.destinationGrant) {
+      return failure(
+        "Destination is outside a granted directory. Choose it with the folder picker.",
+        403,
+      );
+    }
+    const resolved = await resolveWritablePath(targetDirectory, body.destinationGrant);
+    if (!resolved) {
+      return failure(
+        "Destination is outside a granted directory. Choose it with the folder picker.",
+        403,
+      );
+    }
+    destination = resolved;
+  }
+
+  return {
+    ok: true,
+    input: { targetDirectory: destination, files: hydrated },
+    inputProvided: true,
+    destinationGrant: body.destinationGrant,
+  };
+}
+
 const transportAdapters: Record<string, TransportAdapter> = {
   "make-pack make-pack.from-selection": (body) =>
     resolveMakePack(body, "selection"),
@@ -486,6 +558,10 @@ const transportAdapters: Record<string, TransportAdapter> = {
     resolveSaveSearch(body),
   "drop-rules drop-rules.prepare-drag": (body) =>
     resolvePrepareDrag(body),
+  "drop-rules drop-rules.preview": (body) =>
+    resolveDropRuleCommand(body, { requireWritableGrant: false }),
+  "drop-rules drop-rules.apply": (body) =>
+    resolveDropRuleCommand(body, { requireWritableGrant: true }),
   "sound-shelf sound-shelf.list": () =>
     Promise.resolve({
       ok: true,
@@ -493,6 +569,41 @@ const transportAdapters: Record<string, TransportAdapter> = {
       shapeResult: shapeShelfList,
     } as ResolvedCommandTransport),
 };
+
+export function validateTransportEnvelope(body: unknown): string | null {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return "request body must be an object";
+  }
+  const rec = body as Record<string, unknown>;
+  if (typeof rec.extensionId !== "string" || !rec.extensionId.trim()) {
+    return "extensionId must be a non-empty string";
+  }
+  if (typeof rec.commandId !== "string" || !rec.commandId.trim()) {
+    return "commandId must be a non-empty string";
+  }
+  if (rec.selection !== undefined) {
+    if (typeof rec.selection !== "object" || rec.selection === null || Array.isArray(rec.selection)) {
+      return "selection must be an object";
+    }
+    const sel = rec.selection as Record<string, unknown>;
+    for (const key of ["fileIds", "folderPath", "collectionId"] as const) {
+      void key;
+    }
+    if (sel.fileIds !== undefined && (!Array.isArray(sel.fileIds) || !sel.fileIds.every((v) => typeof v === "string"))) {
+      return "selection.fileIds must be an array of strings";
+    }
+    if (sel.folderPath !== undefined && typeof sel.folderPath !== "string") {
+      return "selection.folderPath must be a string";
+    }
+    if (sel.collectionId !== undefined && typeof sel.collectionId !== "string") {
+      return "selection.collectionId must be a string";
+    }
+  }
+  if (rec.destinationGrant !== undefined && typeof rec.destinationGrant !== "string") {
+    return "destinationGrant must be a string";
+  }
+  return null;
+}
 
 export function resolveCommandTransport(
   body: ExecuteTransportBody,

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { existsSync } from "node:fs";
-import { screen, fireEvent, render, waitFor, within } from "@testing-library/react";
+import { act, screen, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -35,6 +35,7 @@ vi.mock("@/lib/db", () => ({
   getFiles: (...args: never[]) => state.files!.getFiles(...args),
   getFileCount: (...args: never[]) => state.files!.getFileCount(...args),
   getFileById: (id: string) => state.files!.getFileById(id),
+  getFilesByIds: (ids: string[]) => state.files!.getFilesByIds(ids),
   getAllFilesIncludingRemoved: () => state.files!.getAllFilesIncludingRemoved(),
   getTagsForFiles: (ids: string[]) => state.tags!.getTagsForFiles(ids),
   getLibraryRoots: () => state.settings!.getLibraryRoots(),
@@ -350,7 +351,7 @@ describe("component and layout smoke", () => {
       );
       const indexed = state.files!.getFiles({ limit: 10 });
 
-      stubFetch(async (url: string) => {
+      const idleFetch = stubFetch(async (url: string) => {
         if (url === "/api/settings") {
           return { ok: true, json: async () => ({ libraryRoots: [scratch.root] }) };
         }
@@ -385,6 +386,18 @@ describe("component and layout smoke", () => {
       const { container } = render(<Home />);
       await screen.findByText("kick.wav", undefined, { timeout: 15000 });
 
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      });
+      const settledCalls = idleFetch.calls.length;
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      });
+      expect(idleFetch.calls.length, "idle workspace stops fetching after loading").toBe(settledCalls);
+      for (const url of ["/api/settings", "/api/scan", "/api/extensions", "/api/collections", "/api/tags"]) {
+        expect(idleFetch.calls.filter((call) => call.url === url), `${url} loads once`).toHaveLength(1);
+      }
+
       // Percentage heights are zoom-invariant by construction; viewport units
       // are not. At every zoom the workspace root must fill (h-full, never
       // h-screen) and the file list must scroll (its scroll region intact).
@@ -406,7 +419,26 @@ describe("component and layout smoke", () => {
       scratch.dispose();
     }
   });
+  it("does not retry failed startup requests on every render", async () => {
+    const fetchStub = stubFetch(async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: "Server unavailable" }),
+    }));
+    const workspace = render(<Home />);
+    await waitFor(() => {
+      expect(fetchStub.calls.some((call) => call.url === "/api/extensions")).toBe(true);
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    const settledCalls = fetchStub.calls.length;
+    workspace.rerender(<Home />);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    expect(fetchStub.calls).toHaveLength(settledCalls);
+    expect(fetchStub.calls.filter((call) => call.url === "/api/extensions")).toHaveLength(1);
+  });
 });
-
-
 

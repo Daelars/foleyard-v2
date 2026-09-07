@@ -19,7 +19,7 @@ import type { ExtensionGridItem } from "@/lib/extensions/types";
 import { getSettingPreview } from "@/lib/extensions/setting-previews";
 import type { ExtensionsTabProps } from "./types";
 
-export function ExtensionsTab({ extensions, onToggleExtension, onUpdateExtensionSetting }: ExtensionsTabProps) {
+export function ExtensionsTab({ extensions, onToggleExtension, onUpdateExtensionSetting, v2Settings }: ExtensionsTabProps & { v2Settings?: React.ReactNode }) {
   const [expandedExtensionId, setExpandedExtensionId] = useState<string | null>(null);
 
   return (
@@ -148,6 +148,7 @@ export function ExtensionsTab({ extensions, onToggleExtension, onUpdateExtension
                   })
                 )}
               </div>
+              {v2Settings}
             </div>
           </TabsContent>
   );

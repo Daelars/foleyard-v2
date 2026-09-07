@@ -49,6 +49,7 @@ function SettingsDialogBody({
   extensions = [],
   onToggleExtension,
   onUpdateExtensionSetting,
+  v2Settings,
   zoom = 100,
   onUpdateZoom,
   shortcutBindings,
@@ -150,7 +151,7 @@ function SettingsDialogBody({
           <MetadataTab collections={collections} tags={tags} onCreateCollection={onCreateCollection} onDeleteCollection={onDeleteCollection} onRenameCollection={onRenameCollection} onConvertToRegularCollection={onConvertToRegularCollection} onCreateTag={onCreateTag} onDeleteTag={onDeleteTag} />
 
           {/* EXTENSIONS TAB */}
-          <ExtensionsTab extensions={extensions} onToggleExtension={onToggleExtension} onUpdateExtensionSetting={onUpdateExtensionSetting} />
+          <ExtensionsTab extensions={extensions} onToggleExtension={onToggleExtension} onUpdateExtensionSetting={onUpdateExtensionSetting} v2Settings={v2Settings} />
 
           {/* APPEARANCE TAB */}
           <AppearanceTab zoom={zoom} onUpdateZoom={onUpdateZoom} />

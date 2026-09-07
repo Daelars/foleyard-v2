@@ -1,5 +1,7 @@
 import { open } from "node:fs/promises";
 import { setImmediate } from "node:timers/promises";
+import path from "node:path";
+import { decodeWaveform } from "./waveform-decoder";
 
 export const WAVEFORM_PEAK_COUNT = 512;
 export type WaveformPeaks = { peaks: number[]; supported: boolean };
@@ -7,6 +9,10 @@ const neutral = (): WaveformPeaks => ({ peaks: Array(WAVEFORM_PEAK_COUNT).fill(0
 
 /** Read bounded blocks, including every channel and the final partial peak bin. */
 export async function generateWaveform(filePath: string): Promise<WaveformPeaks> {
+  if ([".mp3", ".ogg", ".opus", ".flac", ".aif", ".aiff", ".aac", ".m4a", ".mp4"].includes(path.extname(filePath).toLowerCase())) {
+    const peaks = await decodeWaveform(filePath, WAVEFORM_PEAK_COUNT);
+    return peaks ? { peaks, supported: true } : neutral();
+  }
   const file = await open(filePath, "r");
   try {
     const size = (await file.stat()).size;

@@ -6,7 +6,8 @@ import type { CollectionRepository } from "@yard-core";
 import type { Collection } from "@yard-core";
 
 import { sqlite as defaultSqlite } from "./connection";
-import { escapeLikePattern } from "./sql-parameters";
+import { filenameLike } from "./sql-parameters";
+import { extractSmartQuery } from "@/lib/smart-collection-filter";
 import * as schema from "@/lib/schema";
 
 import type Database from "better-sqlite3";
@@ -20,11 +21,6 @@ export interface GetAllCollectionsOptions {
   includeSmartCounts?: boolean;
 }
 
-/** LIKE predicate on the filename with `%`/`_`/`\` treated literally. */
-function filenameLike(query: string) {
-  return sql`${schema.files.filename} LIKE ${`%${escapeLikePattern(query)}%`} ESCAPE '\\'`;
-}
-
 function countFilesMatchingQuery(
   db: ReturnType<typeof drizzle<typeof schema>>,
   query: string,
@@ -35,21 +31,6 @@ function countFilesMatchingQuery(
     .where(and(sql`${schema.files.removedAt} IS NULL`, filenameLike(query)))
     .get() as { count: number } | undefined;
   return result?.count ?? 0;
-}
-
-function extractSmartQuery(filter: string | null): string | null {
-  if (!filter) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(filter) as { q?: unknown };
-    if (typeof parsed.q === "string" && parsed.q.trim()) {
-      return parsed.q.trim();
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 export class SqliteCollectionRepository implements CollectionRepository {

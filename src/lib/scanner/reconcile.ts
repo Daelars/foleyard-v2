@@ -21,7 +21,7 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
     const upsertRecords: ScanFileRecord[] = [];
 
     filePaths.forEach((filePath) => seenPaths.add(filePath));
-    const statResults = await mapConcurrent(filePaths, 8, async (filePath) => {
+    const statResults = await mapConcurrent(filePaths, 32, async (filePath) => {
         try {
           const stats = await context.fs.stat(filePath);
           return { filePath, stats };
@@ -88,12 +88,17 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
     context.fileRepo.batchUpsertFiles(upsertRecords, lastScannedAt);
 
     for (const record of upsertRecords) {
+      // Unknown files escalate to a full parse in the same job when the
+      // header cannot see required fields (B05): header-first is preserved
+      // inside extractMetadata, so files with complete headers never pay
+      // for a full read. Known files keep the cheap header-only refresh.
+      const prior = existingByPath.get(record.path);
       metadataQueue.enqueue({
         filePath: record.path,
         fileSize: record.fileSize ?? 0,
         filename: record.filename,
         format: record.format,
-        fullParse: existingByPath.get(record.path)?.duration === null,
+        fullParse: !prior || prior.duration === null,
       });
     }
   }

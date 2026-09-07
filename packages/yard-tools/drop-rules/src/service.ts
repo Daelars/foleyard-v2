@@ -1,4 +1,4 @@
-import { sanitizeFilename } from "yard-core";
+import { makeUniqueFilename, sanitizeFilename } from "yard-core";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -138,8 +138,11 @@ export class DropRulesService {
             usedNames,
             targetDirectory,
           )
-        : makeUniqueFilename(path.basename(file.path), usedNames, targetDirectory);
-      usedNames.add(outputName);
+        : makeUniqueFilename(
+            usedNames,
+            (name) => fs.existsSync(path.join(targetDirectory, name)),
+            path.basename(file.path),
+          );
 
       const shouldPrepareFile = copyOnDrop || outputName !== path.basename(file.path);
 
@@ -235,28 +238,8 @@ function makeOutputName(
   const clean = sanitizeFilename(path.basename(base));
 
   return makeUniqueFilename(
-    clean || `${paddedIndex}-${parsed.name}${parsed.ext}`,
     usedNames,
-    targetDirectory,
+    (name) => fs.existsSync(path.join(targetDirectory, name)),
+    clean || `${paddedIndex}-${parsed.name}${parsed.ext}`,
   );
-}
-
-function makeUniqueFilename(
-  filename: string,
-  usedNames: Set<string>,
-  targetDirectory: string,
-) {
-  const parsed = path.parse(filename);
-  let candidate = filename;
-  let duplicateIndex = 2;
-
-  while (
-    usedNames.has(candidate) ||
-    fs.existsSync(path.join(targetDirectory, candidate))
-  ) {
-    candidate = `${parsed.name} ${duplicateIndex}${parsed.ext}`;
-    duplicateIndex += 1;
-  }
-
-  return candidate;
 }

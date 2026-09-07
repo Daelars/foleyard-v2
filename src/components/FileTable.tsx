@@ -37,6 +37,8 @@ export const FileTable = memo(function FileTable({
   shelfFileIds = [],
   makePackEnabled = false,
   onMakePackFile,
+  resolveV2FileItems,
+  onV2Command,
   onRemoveFile,
   folderJanitorEnabled = false,
   onScanFolder,
@@ -256,6 +258,8 @@ export const FileTable = memo(function FileTable({
                 onSelect={onSelect}
                 onToggleFavorite={onToggleFavorite}
                 onMakePackFile={onMakePackFile}
+                resolveV2FileItems={resolveV2FileItems}
+                onV2Command={onV2Command}
                 searchQuery={searchQuery}
                 showDesktopActions={showDesktopActions}
                 makePackEnabled={makePackEnabled}

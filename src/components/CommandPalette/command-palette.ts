@@ -31,6 +31,8 @@ export interface PaletteBuildInput {
   isFavorite: boolean;
   shelfEnabled: boolean;
   toolCommands: PaletteToolCommand[];
+  /** v2 extension entries (R6): same shape, `v2tool:` IDs, v1 IDs untouched. */
+  v2ToolCommands?: PaletteToolCommand[];
   sounds: PaletteSound[];
   soundLimit?: number;
 }
@@ -197,6 +199,19 @@ export function buildPaletteEntries(input: PaletteBuildInput): PaletteEntry[] {
     push(
       {
         id: `tool:${command.extensionId}:${command.commandId}`,
+        label: command.title,
+        section: "tool",
+        hint: "tool",
+      },
+      [command.title, command.extensionName, command.commandId],
+      true,
+    );
+  }
+
+  for (const command of input.v2ToolCommands ?? []) {
+    push(
+      {
+        id: `v2tool:${command.extensionId}:${command.commandId}`,
         label: command.title,
         section: "tool",
         hint: "tool",

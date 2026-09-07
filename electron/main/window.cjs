@@ -3,6 +3,7 @@ const path = require("path");
 const { app, BrowserWindow } = require("electron");
 
 const { DEV_SERVER_URL } = require("./constants.cjs");
+const { CHANNELS } = require("./ipc-channels.cjs");
 const { appendDesktopLog } = require("./errors.cjs");
 
 function readPackageMetadata() {
@@ -61,7 +62,7 @@ function createMainWindow(startUrl, onClosed) {
   });
 
   const emitWindowState = () => {
-    mainWindow.webContents.send("desktop:window-state", {
+    mainWindow.webContents.send(CHANNELS["desktop:window-state"], {
       isMaximized: mainWindow.isMaximized(),
     });
   };

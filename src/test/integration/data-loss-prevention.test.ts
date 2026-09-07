@@ -71,7 +71,7 @@ describe("data-loss prevention", () => {
     expect(fs.readFileSync(gathered.files[0].outputPath, "utf8")).toBe("sound");
   });
 
-  it.fails(
+  it(
     "leaves an existing destination file intact during a gather (B01)",
     async () => {
       const source = library.directory("source");

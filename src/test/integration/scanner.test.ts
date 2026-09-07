@@ -234,7 +234,7 @@ describe("scanner", () => {
     }
   });
 
-  it.fails("obtains metadata that needs a full parse on the first scan, not the second (B05)", async () => {
+  it("obtains metadata that needs a full parse on the first scan, not the second (B05)", async () => {
     // A contract-correct extractor: header-only parses cannot see past the
     // header, full parses can. The scanner must ask for the full parse while
     // the file is still unknown.

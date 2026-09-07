@@ -15,6 +15,8 @@ jobs:
           node-version: 22
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
+      - run: node scripts/prepare-docs.cjs --out staged-docs/foleyard-docs
+      - run: node scripts/check-docs.cjs --dir staged-docs/foleyard-docs
       - run: bun run release:build
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}

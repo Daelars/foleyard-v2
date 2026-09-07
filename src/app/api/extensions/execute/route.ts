@@ -6,13 +6,26 @@ import { createAppExtensionHost } from "@/lib/extensions/host";
 import { hostOutcomeStatus } from "../host-outcome";
 import {
   resolveCommandTransport,
+  validateTransportEnvelope,
   type ExecuteTransportBody,
 } from "./transport";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json()) as ExecuteTransportBody;
+  let parsed: unknown;
+  try {
+    parsed = await request.json();
+  } catch {
+    return errorResponse("request body must be valid JSON", 400);
+  }
+
+  const envelopeError = validateTransportEnvelope(parsed);
+  if (envelopeError) {
+    return errorResponse(envelopeError, 400);
+  }
+
+  const body = parsed as ExecuteTransportBody;
 
   if (!body.extensionId || !body.commandId) {
     return errorResponse("extensionId and commandId are required", 400);

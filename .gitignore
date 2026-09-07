@@ -37,6 +37,7 @@ redesign-plan.md
 
 # electron-builder output
 /dist-electron/
+/staged-docs/
 dev-app-update.yml
 
 # next.js

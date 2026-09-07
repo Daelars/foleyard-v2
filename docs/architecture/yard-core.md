@@ -1,117 +1,122 @@
-# `yard-core` Architecture
+# yard-core architecture
 
-## What `yard-core` is
+> Feature status: shipped
+> Contract: internal
+> Owner: `packages/yard-core/src/index.ts`
+> Applies to: docs manifest ID (`architecture/yard-core`); development checkout when unbuilt
 
-`yard-core` is the stable business-layer package for Foleyard.
+## What it does
 
-It defines:
+`yard-core` is the framework-agnostic business layer: domain models,
+repository/service contracts, scan types, filename helpers, async utilities,
+and two extension systems (v1 vocabulary/registries/context/host, and
+the v2 contracts/host/operations/jobs under `extensions-v2/`). It defines
+contracts; the app provides adapters (SQLite repositories, `ScanRunner`,
+filesystem boundary). It depends on nothing React/Next/Electron — no UI
+framework, no route handlers, no window objects. There is no public SDK and
+no external loading; both extension APIs (`YARD_EXTENSION_API_VERSION = 1`,
+`V2_EXTENSION_API_VERSION = 2`) are internal.
 
-- Domain models for audio files, libraries, tags, collections, playback, and search.
-- Service and repository interfaces for scanning, search, organization, and desktop actions.
-- Shared scan types and supported-audio detection.
-- A lightweight command registry and simple event primitives.
-- A constrained public API from `packages/yard-core/src/index.ts`.
+## Responsibilities and boundaries
 
-The application now depends on these contracts through the `@yard-core` path alias. `yard-core` does not import React, Next.js route handlers, Electron windows, or UI components.
+Contracts live here; adapters live in the app:
 
-## What belongs in core
+| Contract (yard-core) | Adapter (app) |
+| --- | --- |
+| `repositories/*` interfaces | `src/lib/database/*` SQLite repositories, wired in `src/lib/db.ts` |
+| `services/library/scanner-service` | `ScanRunner` in `src/lib/scanner/` |
+| `services/organization/*`, `services/search/*` | repository-backed services via `createExtensionServices` |
+| `extensions/*` vocabulary + host | `src/lib/extensions/{registry,host,catalog}` composition |
+| `extensions-v2/*` v2 contracts + host + operations + jobs | `src/lib/extensions-v2/*` adapters (host, ports, sources, policy, jobs, UI resolvers) |
+| `domain/*` models | constructed by scanner/repositories, read by routes/UI |
 
-Code belongs in `yard-core` when it represents stable business behavior or a reusable boundary:
+`yard-core` never imports the app, and tools import `yard-core` only.
 
-- Audio library concepts and records.
-- Scan phases, validation results, and supported file detection.
-- Search and browse contracts.
-- Tag, collection, and favorite service boundaries.
-- Desktop action interfaces.
-- Internal command and event primitives intended to support future tools.
+## Runtime behavior
 
-## What stays in the app layer
+Barrel (`src/index.ts`) re-exports: `domain/*`, extension vocabulary +
+registries + context + host, `errors/yard-core-error`, `repositories/*`,
+`services/library/*`, `services/organization/*`,
+`services/search/filter-service`, filename helpers (`sanitizeFilename`,
+`makeUniqueFilename`), and `mapConcurrent`.
 
-The app layer keeps framework and platform details:
+- `domain/` — `audio-file`, `collection`, `library`, `playback`, `search`,
+  `tag`, plus `filename` helpers used by drop/make-pack naming.
+- `repositories/` — `audio-file`, `collection`, `favorite`, `settings`, `tag`
+  interfaces the SQLite layer implements.
+- `services/library/` — `library-service`, `scanner-service`,
+  `scan-types` (phases, validation results, supported-audio detection).
+- `services/search/filter-service.ts` — `normalizeDirectoryPath`, shared by
+  browse and file queries.
+- `services/organization/` — collection/tag/favorite boundaries.
+- `extensions/` — `vocabulary` (manifest, commands, permissions, settings,
+  surfaces, UI intents, `YARD_EXTENSION_API_VERSION`), `extension-registry`,
+  `extension-command-registry` (`YardCommandRegistry`), `extension-context`,
+  `extension-host` (`YardExtensionHost` with `guardHostServices`).
+- `extensions-v2/` — framework-free v2 contracts: `version`
+  (`V2_EXTENSION_API_VERSION = 2`, standing internal), `definition`,
+  `registry`, `catalog` (serializable projection), `invocation`,
+  `selection`, `availability` (shared evaluator), `host`
+  (`ExtensionV2Host`, single path for HTTP and direct calls),
+  `transport` (routes, status map, envelopes), `permissions`
+  (declared∩approved), `grants`, `filesystem` (ADR guards),
+  `operations` (narrow services), `jobs` (lifecycle + polling),
+  `plans` (prepare/review/apply), `extension-data` (settings/state),
+  `events` (typed bus), `contributions` (point resolution).
+- `async/map-concurrent.ts` — bounded concurrency for scan/metadata work.
 
-- SQLite and Drizzle implementation details in `src/lib/database/*`.
-- Filesystem access and metadata extraction in `src/lib/scanner/*` and `src/lib/metadata.ts`.
-- Next.js route handlers in `src/app/api/**`.
-- React UI and hooks in `src/components/**`.
-- Electron startup, IPC registration, and shell integration in `electron/main/**`.
+There is no EventBus in `yard-core`: subscription-event references are stale;
+the real notification paths are IPC pushes, renderer-local events, and scan
+callbacks (see `docs/events.md`). There is no `services/commands/` module —
+the old `CommandRegistry`/`CommandDefinition` (predating
+`YardCommandRegistry`, never instantiated) and the caller-less
+`matchesDirectory` export were deleted in #130; `normalizeDirectoryPath` is
+the kept sibling.
 
-This keeps `yard-core` framework-agnostic while letting the app provide concrete adapters.
+## Contracts
 
-## How tools and extensions could hook in later
+- Internal contracts only: repository interfaces, service interfaces,
+  extension vocabulary, host outcome/reason types. Standing
+  `YARD_EXTENSION_API_STANDING = "internal"`.
+- `defineYardCommand` / `describeYardCommand` / `describeYardManifest` keep
+  metadata JSON-safe (functions never serialized).
 
-The command and event primitives in `yard-core` are intentionally lightweight.
+## Failure behavior and limitations
 
-Future internal tools or extensions could:
+- `YardPermissionError` (missing manifest permission) and
+  `YardCommandValidationError` (bad input) map to `permission-denied` /
+  `validation-failed` host outcomes; anything else is `execution-failed`.
+- Guarded services deny without the granted permission even when a handler
+  omits `require()` — but only for provided services, not direct Node
+  imports by trusted bundled code.
+- `yard-core` performs no I/O itself; misconfigured adapters (no roots, no
+  DB) fail at the adapter layer, not in contracts.
 
-- Register commands like `library.scan`, `library.search`, `favorite.toggle`, or `desktop.reveal`.
-- Depend on repository and service interfaces instead of importing app monoliths.
-- Subscribe to scan or library lifecycle events through the event bus abstraction.
+## Source map (real file paths)
 
-This is a foundation only. It is not yet a marketplace or plugin runtime.
+- `packages/yard-core/src/index.ts` — public barrel
+- `packages/yard-core/src/domain/{audio-file,collection,library,playback,search,tag,filename}.ts`
+- `packages/yard-core/src/repositories/{audio-file,collection,favorite,settings,tag}-repository.ts`
+- `packages/yard-core/src/services/library/{library-service,scanner-service,scan-types}.ts`
+- `packages/yard-core/src/services/organization/{collection,favorite,tag}-service.ts`
+- `packages/yard-core/src/services/search/filter-service.ts`
+- `packages/yard-core/src/extensions/{vocabulary,extension-registry,extension-command-registry,extension-context,extension-host,index}.ts`
+- `packages/yard-core/src/errors/yard-core-error.ts`
+- `packages/yard-core/src/async/map-concurrent.ts`
+- `packages/yard-core/CONTEXT.md` — context language (Library, Collection, …)
 
-## Files refactored
+## Examples
 
-The previous monoliths were split as follows:
+```ts
+import { defineYardCommand, YardExtensionHost, sanitizeFilename } from "yard-core";
 
-- `src/lib/db.ts`
-  - Now a compatibility facade over:
-  - `src/lib/database/connection.ts`
-  - `src/lib/database/migrations.ts`
-  - `src/lib/database/settings-repository.ts`
-  - `src/lib/database/file-repository.ts`
-  - `src/lib/database/tag-repository.ts`
-  - `src/lib/database/collection-repository.ts`
-  - `src/lib/database/browse-repository.ts`
+const def = defineYardCommand({ id: "x.y", title: "Y", description: "…", scope: "global" });
+sanitizeFilename("a/b:c?.wav"); // safe file name
+```
 
-- `src/lib/scanner.ts`
-  - Now a facade over:
-  - `src/lib/scanner/scan-state.ts`
-  - `src/lib/scanner/filesystem.ts`
-  - `src/lib/scanner/validation.ts`
-  - `src/lib/scanner/run-scan.ts`
+## Related documentation
 
-- `src/components/AudioPlayer.tsx`
-  - Split into:
-  - `src/components/AudioPlayer/use-audio-playback.ts`
-  - `src/components/AudioPlayer/player-shell.tsx`
-  - `src/components/AudioPlayer/volume-control.tsx`
-  - `src/components/AudioPlayer/favorite-button.tsx`
-  - `src/components/AudioPlayer/collection-menu.tsx`
-  - `src/components/AudioPlayer/format-time.ts`
-  - `src/components/AudioPlayer/types.ts`
-
-- `src/components/FileTable.tsx`
-  - Split into:
-  - `src/components/FileTable/desktop-actions.tsx`
-  - `src/components/FileTable/file-row.tsx`
-  - `src/components/FileTable/directory-row.tsx`
-  - `src/components/FileTable/breadcrumb-bar.tsx`
-  - `src/components/FileTable/empty-state.tsx`
-  - `src/components/FileTable/highlight-match.tsx`
-  - `src/components/FileTable/types.ts`
-
-- `electron/main.cjs`
-  - Split into:
-  - `electron/main/constants.cjs`
-  - `electron/main/database.cjs`
-  - `electron/main/errors.cjs`
-  - `electron/main/window.cjs`
-  - `electron/main/desktop-service.cjs`
-  - `electron/main/ipc.cjs`
-
-## Remaining modularity issues
-
-- Route handlers still call app facades directly instead of consuming composed services from a single composition root.
-- The scan runner still owns orchestration state in-process; moving that behind a dedicated service object would make testing easier.
-- `page.tsx` remains a large coordination component for fetching, polling, and cross-panel state.
-- Audio waveform data is still placeholder UI state rather than a separate waveform pipeline.
-- There is no automated test harness yet for the new boundaries.
-
-## Verification
-
-After the refactor:
-
-- `eslint` passes with one non-blocking React Compiler warning for `useVirtualizer`.
-- TypeScript passes with `tsc --noEmit`.
-
-The current structure is materially more modular while preserving the existing routes, desktop actions, playback entrypoint, and UI behavior.
+- `docs/architecture/extensions.md` — how the app executes on these contracts
+- `docs/commands.md` — command metadata and outcomes
+- `docs/extensions.md` — bundled tools built on the vocabulary
+- `CONTEXT-MAP.md` — context relationships

@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["ffmpeg-static"],
+  outputFileTracingIncludes: {
+    "/api/waveform": ["./node_modules/ffmpeg-static/**/*"],
+  },
   skipTrailingSlashRedirect: true,
   allowedDevOrigins: [
     "cognitehedron.tail0710d7.ts.net",

@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({
   getLibraryRoots: () => mocks.roots,
   getFileById: (id: string) => mocks.files.get(id),
+  getFilesByIds: (ids: string[]) => ids.map((id) => mocks.files.get(id)).filter((file) => file !== undefined),
 }));
 vi.mock("@/lib/extensions/host", () => ({
   createAppExtensionHost: () => ({ execute: mocks.execute }),

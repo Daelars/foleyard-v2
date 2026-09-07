@@ -8,8 +8,6 @@ export const SUPPORTED_AUDIO_EXTENSIONS = [
   ".aac",
 ] as const;
 
-const SUPPORTED_AUDIO_EXTENSION_SET = new Set<string>(SUPPORTED_AUDIO_EXTENSIONS);
-
 export type ScanPhase =
   | "idle"
   | "validating"
@@ -80,10 +78,25 @@ export interface ScanFileRecord {
 }
 
 export function isSupportedAudioFile(fileName: string) {
-  const lastDotIndex = fileName.lastIndexOf(".");
-  if (lastDotIndex < 0) {
-    return false;
-  }
+  return createExtensionMatcher(SUPPORTED_AUDIO_EXTENSIONS)(fileName);
+}
 
-  return SUPPORTED_AUDIO_EXTENSION_SET.has(fileName.slice(lastDotIndex).toLowerCase());
+/**
+ * Canonical extension matching over any list: dot-prefix and case are
+ * normalized, and the final extension wins (`a.b.c.FLAC` matches `.flac`).
+ * Tools keep their own default lists but share this comparison.
+ */
+export function createExtensionMatcher(extensions: Iterable<string>) {
+  const normalized = new Set<string>();
+  for (const extension of extensions) {
+    const lower = extension.toLowerCase();
+    normalized.add(lower.startsWith(".") ? lower : `.${lower}`);
+  }
+  return (fileName: string) => {
+    const lastDotIndex = fileName.lastIndexOf(".");
+    if (lastDotIndex < 0) {
+      return false;
+    }
+    return normalized.has(fileName.slice(lastDotIndex).toLowerCase());
+  };
 }

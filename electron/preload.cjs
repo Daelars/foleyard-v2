@@ -1,96 +1,101 @@
 const { contextBridge, ipcRenderer, webFrame } = require("electron");
 
+const { CHANNELS } = require("./main/ipc-channels.cjs");
+
 contextBridge.exposeInMainWorld("desktopBridge", {
   isDesktop: true,
   checkForUpdates() {
-    return ipcRenderer.invoke("desktop:check-for-updates");
+    return ipcRenderer.invoke(CHANNELS["desktop:check-for-updates"]);
   },
   onUpdateAvailable(listener) {
     const wrapped = (_event, info) => listener(info);
-    ipcRenderer.on("desktop:update-available", wrapped);
+    ipcRenderer.on(CHANNELS["desktop:update-available"], wrapped);
     return () => {
-      ipcRenderer.removeListener("desktop:update-available", wrapped);
+      ipcRenderer.removeListener(CHANNELS["desktop:update-available"], wrapped);
     };
   },
   onUpdateReady(listener) {
     const wrapped = (_event, info) => listener(info);
-    ipcRenderer.on("desktop:update-ready", wrapped);
+    ipcRenderer.on(CHANNELS["desktop:update-ready"], wrapped);
     return () => {
-      ipcRenderer.removeListener("desktop:update-ready", wrapped);
+      ipcRenderer.removeListener(CHANNELS["desktop:update-ready"], wrapped);
     };
   },
   onUpdateNotAvailable(listener) {
     const wrapped = () => listener();
-    ipcRenderer.on("desktop:update-not-available", wrapped);
+    ipcRenderer.on(CHANNELS["desktop:update-not-available"], wrapped);
     return () => {
-      ipcRenderer.removeListener("desktop:update-not-available", wrapped);
+      ipcRenderer.removeListener(CHANNELS["desktop:update-not-available"], wrapped);
     };
   },
   onUpdateError(listener) {
     const wrapped = (_event, info) => listener(info);
-    ipcRenderer.on("desktop:update-error", wrapped);
+    ipcRenderer.on(CHANNELS["desktop:update-error"], wrapped);
     return () => {
-      ipcRenderer.removeListener("desktop:update-error", wrapped);
+      ipcRenderer.removeListener(CHANNELS["desktop:update-error"], wrapped);
     };
   },
   onUpdateDownloadProgress(listener) {
     const wrapped = (_event, progress) => listener(progress);
-    ipcRenderer.on("desktop:update-download-progress", wrapped);
+    ipcRenderer.on(CHANNELS["desktop:update-download-progress"], wrapped);
     return () => {
-      ipcRenderer.removeListener("desktop:update-download-progress", wrapped);
+      ipcRenderer.removeListener(CHANNELS["desktop:update-download-progress"], wrapped);
     };
   },
   installUpdate() {
-    return ipcRenderer.invoke("desktop:install-update");
+    return ipcRenderer.invoke(CHANNELS["desktop:install-update"]);
   },
   simulateUpdate() {
-    return ipcRenderer.invoke("desktop:simulate-update");
+    return ipcRenderer.invoke(CHANNELS["desktop:simulate-update"]);
   },
   startDragFiles(fileIds) {
-    ipcRenderer.send("desktop:start-drag-file", { fileIds });
+    ipcRenderer.send(CHANNELS["desktop:start-drag-file"], { fileIds });
   },
   revealInExplorer(fileId) {
-    return ipcRenderer.invoke("desktop:reveal-in-explorer", fileId);
+    return ipcRenderer.invoke(CHANNELS["desktop:reveal-in-explorer"], fileId);
   },
   revealPath(path) {
-    return ipcRenderer.invoke("desktop:reveal-path", path);
+    return ipcRenderer.invoke(CHANNELS["desktop:reveal-path"], path);
   },
   openFileExternally(fileId) {
-    return ipcRenderer.invoke("desktop:open-file-externally", fileId);
+    return ipcRenderer.invoke(CHANNELS["desktop:open-file-externally"], fileId);
   },
   setZoomFactor(factor) {
     webFrame.setZoomFactor(factor);
   },
   copyFilePath(fileId) {
-    return ipcRenderer.invoke("desktop:copy-file-path", fileId);
+    return ipcRenderer.invoke(CHANNELS["desktop:copy-file-path"], fileId);
   },
   pickFolder() {
-    return ipcRenderer.invoke("desktop:pick-folder");
+    return ipcRenderer.invoke(CHANNELS["desktop:pick-folder"]);
   },
   minimizeWindow() {
-    return ipcRenderer.invoke("desktop:window-minimize");
+    return ipcRenderer.invoke(CHANNELS["desktop:window-minimize"]);
   },
   toggleMaximizeWindow() {
-    return ipcRenderer.invoke("desktop:window-toggle-maximize");
+    return ipcRenderer.invoke(CHANNELS["desktop:window-toggle-maximize"]);
   },
   closeWindow() {
-    return ipcRenderer.invoke("desktop:window-close");
+    return ipcRenderer.invoke(CHANNELS["desktop:window-close"]);
   },
   getWindowState() {
-    return ipcRenderer.invoke("desktop:get-window-state");
+    return ipcRenderer.invoke(CHANNELS["desktop:get-window-state"]);
+  },
+  getRuntimeInfo() {
+    return ipcRenderer.invoke(CHANNELS["desktop:get-runtime-info"]);
   },
   onActionError(listener) {
     const wrapped = (_event, message) => listener(message);
-    ipcRenderer.on("desktop:action-error", wrapped);
+    ipcRenderer.on(CHANNELS["desktop:action-error"], wrapped);
     return () => {
-      ipcRenderer.removeListener("desktop:action-error", wrapped);
+      ipcRenderer.removeListener(CHANNELS["desktop:action-error"], wrapped);
     };
   },
   onWindowState(listener) {
     const wrapped = (_event, state) => listener(state);
-    ipcRenderer.on("desktop:window-state", wrapped);
+    ipcRenderer.on(CHANNELS["desktop:window-state"], wrapped);
     return () => {
-      ipcRenderer.removeListener("desktop:window-state", wrapped);
+      ipcRenderer.removeListener(CHANNELS["desktop:window-state"], wrapped);
     };
   },
 });

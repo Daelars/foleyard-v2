@@ -1,74 +1,4 @@
-import { MATRIX_SIZE, indexToCoord } from "./geometry";
-
-export function harmonicPhase(row: number, col: number, a: number, b: number): number {
-  return Math.sin((row + 1) * a + (col + 1) * b);
-}
-
-export function lissajousOffset(
-  row: number,
-  col: number,
-  amplitude = 2.25
-): { x: number; y: number; phase: number } {
-  const x = Math.sin((row + 1) * 1.15 + (col + 1) * 2.2) * amplitude;
-  const y = Math.cos((row + 1) * 2.45 + (col + 1) * 0.95) * amplitude;
-  const phase = Math.abs(Math.sin((row + 1) * 0.7 + (col + 1) * 1.1));
-  return { x, y, phase };
-}
-
-export function spiralOffset(
-  angle: number,
-  radiusNormalizedValue: number,
-  amplitude = 2.8
-): { x: number; y: number; phase: number } {
-  const spin = angle + radiusNormalizedValue * Math.PI * 2.1;
-  const radius = radiusNormalizedValue * amplitude;
-  const x = Math.cos(spin) * radius;
-  const y = Math.sin(spin) * radius;
-  const phase = Math.abs(Math.sin(spin * 0.5));
-  return { x, y, phase };
-}
-
-export function isPrime(value: number): boolean {
-  if (value <= 1) {
-    return false;
-  }
-  if (value === 2) {
-    return true;
-  }
-  if (value % 2 === 0) {
-    return false;
-  }
-
-  const limit = Math.floor(Math.sqrt(value));
-  for (let divisor = 3; divisor <= limit; divisor += 2) {
-    if (value % divisor === 0) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-const N = MATRIX_SIZE;
-const MAX_TRBL = (N - 1) * 2;
-export function trBlPathNormFromIndex(index: number): number {
-  const { row, col } = indexToCoord(index);
-  return (row + (N - 1 - col)) / MAX_TRBL;
-}
-
-const CORNER_COORDS = new Set(["0,0", "0,4", "4,0", "4,4"]);
-
-export function isWithinCircularMask(row: number, col: number): boolean {
-  return !CORNER_COORDS.has(`${row},${col}`);
-}
-
-export function stylePx(n: number): string {
-  return `${n}px`;
-}
-
-export function styleOpacity(opacity: number): number {
-  return Math.round(opacity * 1e6) / 1e6;
-}
+import { MATRIX_SIZE } from "./geometry";
 
 const SOURCE_BASE_OPACITY = 0.08;
 const SOURCE_MID_OPACITY = 0.34;
@@ -171,4 +101,3 @@ export function clamp01Dmx(n: number | undefined) {
   }
   return Math.min(1, Math.max(0, n));
 }
-

@@ -1,3 +1,5 @@
+> **Historical audit evidence — dated findings, not current setup.** See `docs/index.md` for current guides. Do not run preview/cleanup instructions as setup.
+
 # Repository audit, 5 September 2026
 
 27 findings and proposals. The highest-priority work is filesystem writes, stable file identity and stale-request rollback. No production fixes were applied. See [IMPLEMENTATION.md](IMPLEMENTATION.md) for the ordered handoff and running preview.

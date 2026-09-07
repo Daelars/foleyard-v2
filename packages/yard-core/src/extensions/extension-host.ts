@@ -2,9 +2,87 @@ import type { YardExtensionContext } from "./extension-context";
 import { createYardExtensionContext } from "./extension-context";
 import { YardCommandRegistry } from "./extension-command-registry";
 import type { YardExtensionRegistry } from "./extension-registry";
-import { YardPermissionError } from "./vocabulary";
+import { YardPermissionError, type YardPermission } from "./vocabulary";
 import { isYardUiIntent, type YardUiIntent } from "./vocabulary";
 import { YardCommandValidationError } from "./vocabulary";
+
+/**
+ * Host-owned service enforcement. Even when an extension omits
+ * permissions.require(), protected operations deny without the granted
+ * manifest permission. Trusted bundled code is still not sandboxed
+ * against direct Node imports — this guards the provided services only.
+ */
+function guardHostServices(
+  services: YardExtensionHostOptions["services"],
+  granted: Set<YardPermission | string>,
+): YardExtensionHostOptions["services"] {
+  const guarded: YardExtensionHostOptions["services"] = { ...services };
+  const need = (permission: YardPermission) => {
+    if (!granted.has(permission)) throw new YardPermissionError(permission);
+  };
+
+  if (services?.filesystem) {
+    const fs = services.filesystem;
+    guarded.filesystem = {
+      resolveReadablePath: fs.resolveReadablePath,
+      resolveWritablePath: async (candidate: string) => {
+        if (!granted.has("files:write") && !granted.has("drop:modify")) {
+          throw new YardPermissionError("files:write");
+        }
+        return fs.resolveWritablePath(candidate);
+      },
+    };
+  }
+
+  if (services?.files) {
+    const files = services.files;
+    guarded.files = {
+      markRemoved: (fileIds: string[]) => {
+        if (!granted.has("files:write") && !granted.has("library:write")) {
+          throw new YardPermissionError("files:write");
+        }
+        return files.markRemoved(fileIds);
+      },
+    };
+  }
+
+  const guardMutations = <T extends object>(
+    svc: T | undefined,
+    readPattern: RegExp,
+    permission: YardPermission,
+  ): T | undefined => {
+    if (!svc) return svc;
+    return new Proxy(svc as object, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value !== "function") return value;
+        if (readPattern.test(String(prop))) return (value as (...a: unknown[]) => unknown).bind(target);
+        return (...args: unknown[]) => {
+          need(permission);
+          return (value as (...a: unknown[]) => unknown).apply(target, args);
+        };
+      },
+    }) as T;
+  };
+
+  guarded.library = guardMutations(
+    services?.library,
+    /^(get|list|find|search|count|status)/i,
+    "library:write",
+  );
+  guarded.collections = guardMutations(
+    services?.collections,
+    /^(get|list|find|read)/i,
+    "collections:write",
+  );
+  guarded.tags = guardMutations(services?.tags, /^(get|list|find|read)/i, "tags:write");
+  guarded.favorites = guardMutations(
+    services?.favorites,
+    /^(get|list|find|is|read)/i,
+    "favorites:write",
+  );
+  return guarded;
+}
 
 export type YardExtensionHostFailureReason =
   | "extension-not-found"
@@ -76,9 +154,13 @@ export class YardExtensionHost {
         setting.defaultValue,
       ]),
     );
+    const guardedServices = guardHostServices(
+      this.options.services,
+      new Set(extension.manifest.permissions),
+    );
     const context = createYardExtensionContext({
       services: {
-        ...this.options.services,
+        ...guardedServices,
         commands,
         settings: {
           get: <TValue = unknown>(settingId: string) => {

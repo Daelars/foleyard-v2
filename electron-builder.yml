@@ -27,6 +27,10 @@ files:
   - package.json
 asarUnpack:
   - "**/*.node"
+  - "**/ffmpeg-static/**"
+extraResources:
+  - from: ${projectDir}/staged-docs/foleyard-docs
+    to: foleyard-docs
 win:
   icon: icon.ico
   target: nsis

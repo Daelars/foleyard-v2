@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { getFileById, getLibraryRoots, markFileRemoved } from "@/lib/db";
+import { batchMarkRemoved, getFilesByIds, getLibraryRoots } from "@/lib/db";
 import { resolveReadablePath } from "@/lib/filesystem-boundary";
 
 export async function deleteFiles(fileIds: string[], permanent: boolean) {
@@ -7,13 +7,17 @@ export async function deleteFiles(fileIds: string[], permanent: boolean) {
     const failed: Array<{ id: string; error: string }> = [];
     const now = new Date().toISOString();
 
+    const byId = new Map(getFilesByIds(fileIds).map((record) => [record.id, record]));
+    const removedPaths: string[] = [];
+
     const ids = fileIds;
     const concurrency = 8;
+    type DeleteOutcome = { id: string; error: string } | { id: string; path: string };
     for (let start = 0; start < ids.length; start += concurrency) {
       const batch = ids.slice(start, start + concurrency);
-      const results = await Promise.all(
-        batch.map(async (id) => {
-          const record = getFileById(id);
+      const results: DeleteOutcome[] = await Promise.all(
+        batch.map(async (id): Promise<DeleteOutcome> => {
+          const record = byId.get(id);
           if (!record) {
             return { id, error: 'Not found' };
           }
@@ -33,20 +37,23 @@ export async function deleteFiles(fileIds: string[], permanent: boolean) {
             }
           }
 
-          markFileRemoved(record.path, now);
-          return { id };
+          return { id, path: record.path };
         }),
       );
 
       for (const result of results) {
-        if (result.error) {
+        if ("error" in result) {
           failed.push({ id: result.id, error: result.error });
         } else {
           removed.push(result.id);
+          removedPaths.push(result.path);
         }
       }
     }
 
+    if (removedPaths.length > 0) {
+      batchMarkRemoved(removedPaths, now, now);
+    }
 
   return { removed, failed };
 }

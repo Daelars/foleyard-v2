@@ -28,8 +28,7 @@ export type UpdateError = {
 };
 
 export interface DesktopBridge {
-  isDesktop: true;
-  startDragFiles: (fileIds: string[]) => void;
+  isDesktop: true;  startDragFiles: (fileIds: string[]) => void;
   revealInExplorer: (fileId: string) => Promise<DesktopActionResult>;
   revealPath: (path: string) => Promise<DesktopActionResult>;
   openFileExternally: (fileId: string) => Promise<DesktopActionResult>;
@@ -43,6 +42,16 @@ export interface DesktopBridge {
   }>;
   closeWindow: () => Promise<{ ok: boolean }>;
   getWindowState: () => Promise<DesktopWindowState>;
+  getRuntimeInfo: () => Promise<{
+    owner: string;
+    platform: string;
+    packaged: boolean;
+    version: string | null;
+    buildId: string | null;
+    resourcesPath: string | null;
+    docsRoot: string | null;
+    installedChannels: string[];
+  }>;
   onActionError: (listener: (message: string) => void) => () => void;
   onWindowState: (
     listener: (state: DesktopWindowState) => void,

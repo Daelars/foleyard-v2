@@ -40,6 +40,8 @@ export interface SettingsDialogProps {
   ) => void;
   zoom?: number;
   onUpdateZoom?: (zoom: number) => void;
+  /** v2 settings slot (R8): live v2 extension management renders here. */
+  v2Settings?: React.ReactNode;
   shortcutBindings?: ShortcutBindings;
   onRebindShortcut?: (action: ShortcutAction, key: string) => void;
   onResetShortcuts?: () => void;
@@ -65,6 +67,7 @@ export type SettingsDialogBodyProps = Pick<
   | "extensions"
   | "onToggleExtension"
   | "onUpdateExtensionSetting"
+  | "v2Settings"
   | "zoom"
   | "onUpdateZoom"
   | "shortcutBindings"

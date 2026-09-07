@@ -1,5 +1,6 @@
 import type { YardExtensionManifest } from "yard-core";
 
+import { COMMAND_DEFINITIONS } from "./command-definitions";
 import { permissions } from "./permissions";
 import { settings } from "./settings";
 
@@ -12,34 +13,7 @@ export const manifest: YardExtensionManifest = {
     "A temporary holding area for maybe sounds while searching. Not favorites, just a short-term scratchpad.",
   category: "utility",
   permissions,
-  commands: [
-    {
-      id: "sound-shelf.add-selected",
-      title: "Add to Shelf",
-      description: "Add the selected files to the Sound Shelf scratchpad.",
-      scope: "selection",
-      requiresSelection: true,
-    },
-    {
-      id: "sound-shelf.remove-selected",
-      title: "Remove from Shelf",
-      description: "Remove the selected files from the Sound Shelf scratchpad.",
-      scope: "selection",
-      requiresSelection: true,
-    },
-    {
-      id: "sound-shelf.clear",
-      title: "Clear Shelf",
-      description: "Remove all files from the Sound Shelf scratchpad.",
-      scope: "global",
-    },
-    {
-      id: "sound-shelf.list",
-      title: "List Shelf",
-      description: "List the files in the Sound Shelf scratchpad.",
-      scope: "global",
-    },
-  ],
+  commands: [...COMMAND_DEFINITIONS],
   settings,
   surfaces: ["context-menu", "sidebar"],
 };

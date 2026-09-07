@@ -1,14 +1,9 @@
 import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { AudioFile, IndexedAudioFile, FileSearchQuery } from "@yard-core";
 import { normalizeDirectoryPath } from "@yard-core";
-import { chunkArray, escapeLikePattern, SQLITE_MAX_VARIABLES } from "../sql-parameters";
+import { chunkArray, filenameLike, SQLITE_MAX_VARIABLES } from "../sql-parameters";
 import * as schema from "@/lib/schema";
 import type { FileRepositoryContext } from "./context";
-
-/** LIKE predicate on the Audio file filename with `%`/`_`/`\` treated literally. */
-function filenameLike(query: string) {
-  return sql`${schema.files.filename} LIKE ${`%${escapeLikePattern(query)}%`} ESCAPE '\\'`;
-}
 
 function tagIdSubselect(context: FileRepositoryContext, tagId: string) {
   return inArray(
@@ -244,8 +239,7 @@ export function getFileByPath(context: FileRepositoryContext, filePath: string):
     return (context.db.select().from(schema.files).where(eq(schema.files.path, filePath)).get() ?? null) as IndexedAudioFile | null;
   }
 
-export function getFilesByPaths(context: FileRepositoryContext, paths: string[]): IndexedAudioFile[] {
-    if (paths.length === 0) {
+export function getFilesByPaths(context: FileRepositoryContext, paths: string[]): IndexedAudioFile[] {    if (paths.length === 0) {
       return [];
     }
 
@@ -257,6 +251,27 @@ export function getFilesByPaths(context: FileRepositoryContext, paths: string[])
         .select()
         .from(schema.files)
         .where(inArray(schema.files.path, chunk))
+        .all() as IndexedAudioFile[];
+
+      results.push(...rows);
+    }
+
+    return results;
+  }
+
+export function getFilesByIds(context: FileRepositoryContext, ids: string[]): IndexedAudioFile[] {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const results: IndexedAudioFile[] = [];
+    const chunkSize = Math.max(1, SQLITE_MAX_VARIABLES - 1);
+
+    for (const chunk of chunkArray(ids, chunkSize)) {
+      const rows = context.db
+        .select()
+        .from(schema.files)
+        .where(inArray(schema.files.id, chunk))
         .all() as IndexedAudioFile[];
 
       results.push(...rows);

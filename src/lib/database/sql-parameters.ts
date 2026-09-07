@@ -1,3 +1,6 @@
+import { sql } from "drizzle-orm";
+import * as schema from "@/lib/schema";
+
 export const SQLITE_MAX_VARIABLES = 999;
 
 export function chunkArray<T>(values: T[], size: number) {
@@ -17,5 +20,10 @@ export function chunkArray<T>(values: T[], size: number) {
  */
 export function escapeLikePattern(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+/** LIKE predicate on the filename with `%`/`_`/`\` treated literally. */
+export function filenameLike(query: string) {
+  return sql`${schema.files.filename} LIKE ${`%${escapeLikePattern(query)}%`} ESCAPE '\\'`;
 }
 

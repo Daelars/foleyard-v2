@@ -25,7 +25,13 @@
     "typecheck": "tsc --noEmit",
     "test": "npx vitest run",
     "test:watch": "npx vitest",
-    "test:coverage": "npx vitest run --coverage"
+    "test:coverage": "npx vitest run --coverage",
+    "example:selected-ids": "bun examples/extensions/selected-ids/run.ts",
+    "example:v2-minimal": "bun examples/extensions-v2/minimal/run.ts",
+    "example:query-library": "bun examples/core/query-library/run.ts",
+    "docs:prepare": "node scripts/prepare-docs.cjs",
+    "docs:check": "node scripts/check-docs.cjs",
+    "check:v2-boundaries": "node scripts/check-v2-boundaries.cjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -35,6 +41,7 @@
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
     "electron-updater": "^6.8.3",
+    "ffmpeg-static": "5.3.0",
     "lucide-react": "^1.11.0",
     "music-metadata": "^11.12.3",
     "next": "16.2.6",
@@ -57,7 +64,6 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitest/coverage-v8": "4.1.5",
-    "concurrently": "^9.2.1",
     "drizzle-kit": "^0.31.10",
     "electron": "^41.3.0",
     "electron-builder": "^26.8.1",
@@ -75,6 +81,7 @@
   ],
   "trustedDependencies": [
     "electron",
+    "ffmpeg-static",
     "sharp",
     "unrs-resolver"
   ],

@@ -23,6 +23,9 @@ export const AUTO_TAG_V2_LIST_CANDIDATES = "auto-tag-v2.list-candidates";
 export const AUTO_TAG_V2_PROMOTE_CANDIDATE = "auto-tag-v2.promote-candidate";
 export const AUTO_TAG_V2_DISMISS_CANDIDATE = "auto-tag-v2.dismiss-candidate";
 export const AUTO_TAG_V2_FIND_SIMILAR = "auto-tag-v2.find-similar";
+export const AUTO_TAG_V2_CLAP_STATUS = "auto-tag-v2.clap-status";
+export const AUTO_TAG_V2_DOWNLOAD_MODEL = "auto-tag-v2.download-model";
+export const AUTO_TAG_V2_TAG_SEMANTIC = "auto-tag-v2.tag-semantic";
 
 function fileIdsInput(): ExtensionV2ValueSchema {
   return {
@@ -114,6 +117,46 @@ function findSimilarResultSchema(): ExtensionV2ValueSchema {
   };
 }
 
+function clapStatusResultSchema(): ExtensionV2ValueSchema {
+  return {
+    kind: "object",
+    properties: {
+      modelId: { kind: "string" },
+      state: { kind: "enum", values: ["ready", "not-downloaded", "downloading"] },
+      downloadedBytes: { kind: "number", integer: true, min: 0 },
+      totalBytes: { kind: "number", integer: true, min: 0 },
+      backendAvailable: { kind: "boolean" },
+    },
+    required: ["modelId", "state", "downloadedBytes", "totalBytes", "backendAvailable"],
+  };
+}
+
+function downloadModelResultSchema(): ExtensionV2ValueSchema {
+  return {
+    kind: "object",
+    properties: {
+      modelId: { kind: "string" },
+      bytes: { kind: "number", integer: true, min: 0 },
+    },
+    required: ["modelId", "bytes"],
+  };
+}
+
+function tagSemanticResultSchema(): ExtensionV2ValueSchema {
+  return {
+    kind: "object",
+    properties: {
+      tagged: { kind: "number", integer: true, min: 0 },
+      attached: { kind: "number", integer: true, min: 0 },
+      skipped: { kind: "string-array" },
+      missing: { kind: "string-array" },
+      failedFiles: { kind: "string-array" },
+      failedReasons: { kind: "string-array" },
+    },
+    required: ["tagged", "attached", "skipped", "missing", "failedFiles", "failedReasons"],
+  };
+}
+
 export function createAutoTagV2Definition(): ExtensionV2Definition {
   return {
     id: AUTO_TAG_V2_ID,
@@ -129,6 +172,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
       "tags:write",
       "settings:read",
       "embeddings:read",
+      "embeddings:write",
     ],
     commands: [
       {
@@ -210,6 +254,39 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         result: findSimilarResultSchema(),
         docsId: "commands",
       },
+      {
+        id: AUTO_TAG_V2_CLAP_STATUS,
+        title: "CLAP model status",
+        description: "Show whether the tagging model is downloaded and ready.",
+        scope: "global",
+        input: { kind: "object", properties: {} },
+        result: clapStatusResultSchema(),
+        docsId: "commands",
+      },
+      {
+        id: AUTO_TAG_V2_DOWNLOAD_MODEL,
+        title: "Download CLAP model",
+        description: "Download the tagging model with progress. Requires explicit confirmation.",
+        scope: "global",
+        input: {
+          kind: "object",
+          properties: {
+            confirm: { kind: "boolean" },
+          },
+          required: ["confirm"],
+        },
+        result: downloadModelResultSchema(),
+        docsId: "commands",
+      },
+      {
+        id: AUTO_TAG_V2_TAG_SEMANTIC,
+        title: "Tag with CLAP",
+        description: "Tag sounds with model suggestions over the approved vocabulary.",
+        scope: "global",
+        input: fileIdsInput(),
+        result: tagSemanticResultSchema(),
+        docsId: "commands",
+      },
     ],
     contributions: [
       {
@@ -242,6 +319,21 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         type: "file-context-menu",
         commandId: AUTO_TAG_V2_FIND_SIMILAR,
         title: "Find similar",
+      },
+      {
+        id: "auto-tag-v2.palette-clap-status",
+        type: "command-palette",
+        commandId: AUTO_TAG_V2_CLAP_STATUS,
+      },
+      {
+        id: "auto-tag-v2.palette-download-model",
+        type: "command-palette",
+        commandId: AUTO_TAG_V2_DOWNLOAD_MODEL,
+      },
+      {
+        id: "auto-tag-v2.palette-tag-semantic",
+        type: "command-palette",
+        commandId: AUTO_TAG_V2_TAG_SEMANTIC,
       },
     ],
   };

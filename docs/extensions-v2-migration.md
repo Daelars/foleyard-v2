@@ -53,9 +53,9 @@ in each package README):
   open-settings through destination/staging grants with rename
   patterns and a used-sounds report.
 - Auto Tag v2 (`auto-tag-v2`): preview and tag-files with
-  deterministic filename rules plus the candidate queue and a
-  vector-backed find-similar row entry; every rule write marked
-  deterministic (parity notes in its package README).
+  deterministic filename rules, the candidate queue, a vector-backed
+  find-similar row entry, and opt-in CLAP semantic tagging over the
+  approved vocabulary (parity notes in its package README).
 
 Two dev-only conformance fixtures (`fixture-surface`,
 `fixture-worker`) prove the remaining contribution points, jobs,

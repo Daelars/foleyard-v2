@@ -9,14 +9,18 @@ import {
 } from "yard-core";
 
 import {
+  AUTO_TAG_V2_CLAP_STATUS,
   AUTO_TAG_V2_DISMISS_CANDIDATE,
+  AUTO_TAG_V2_DOWNLOAD_MODEL,
   AUTO_TAG_V2_FIND_SIMILAR,
   AUTO_TAG_V2_ID,
   AUTO_TAG_V2_LIST_CANDIDATES,
   AUTO_TAG_V2_PREVIEW,
   AUTO_TAG_V2_PROMOTE_CANDIDATE,
   AUTO_TAG_V2_TAG_FILES,
+  AUTO_TAG_V2_TAG_SEMANTIC,
 } from "./definition";
+import { clapPrompt, CLAP_MODEL_ID, rankLabels } from "./semantic";
 import {
   MAX_CANDIDATES,
   MAX_QUEUE_FILES,
@@ -408,12 +412,146 @@ export function runFindSimilar(ctx: V2HandlerContext) {
   } satisfies AutoTagV2FindSimilarResult);
 }
 
+export function runClapStatus(ctx: V2HandlerContext) {
+  const { analysis } = extendedOperationsOf(ctx);
+  const status = analysis.modelStatus(CLAP_MODEL_ID);
+  return immediateV2Result({
+    modelId: status.modelId,
+    state: status.state,
+    downloadedBytes: status.downloadedBytes,
+    totalBytes: status.totalBytes,
+    backendAvailable: status.backendAvailable,
+  } satisfies AutoTagV2ClapStatusResult);
+}
+
+export async function runDownloadModel(ctx: V2HandlerContext) {
+  const raw =
+    typeof ctx.invocation.input === "object" && ctx.invocation.input !== null
+      ? (ctx.invocation.input as Record<string, unknown>)
+      : {};
+  if (raw.confirm !== true) {
+    const { analysis } = extendedOperationsOf(ctx);
+    const status = analysis.modelStatus(CLAP_MODEL_ID);
+    throw new V2OperationError(
+      "input-invalid",
+      `Downloading the tagging model fetches about ${Math.round(status.totalBytes / 1_000_000)} MB. Pass confirm true to proceed.`,
+    );
+  }
+  const { analysis } = extendedOperationsOf(ctx);
+  const jobs = ctx.operations.jobs;
+  const { bytes } = await analysis.downloadModel(CLAP_MODEL_ID, {
+    onProgress: (downloadedBytes, totalBytes) => {
+      jobs.reportProgress(downloadedBytes, Math.max(totalBytes, 1));
+    },
+    throwIfCancelled: () => {
+      jobs.throwIfCancelled();
+    },
+  });
+  return immediateV2Result({
+    modelId: CLAP_MODEL_ID,
+    bytes,
+  } satisfies AutoTagV2DownloadModelResult);
+}
+
+export async function runTagSemantic(ctx: V2HandlerContext) {
+  const { live, missing } = resolveLiveFiles(ctx, readFileIds(ctx));
+  const { tags, embeddings, analysis } = extendedOperationsOf(ctx);
+  if (!analysis.backendAvailable()) {
+    throw new V2OperationError(
+      "input-invalid",
+      "CLAP inference is not installed, so there is nothing to tag with. See the auto-tag-v2 README for the install step.",
+    );
+  }
+  const vocabulary = tags.list();
+  if (vocabulary.length === 0) {
+    throw new V2OperationError(
+      "input-invalid",
+      "There are no approved tags to classify against; promote a candidate first.",
+    );
+  }
+  const prompts = vocabulary.map((tag) => clapPrompt(tag.name));
+  const textVecs = await analysis.embedTexts(prompts);
+  const known = new Map(vocabulary.map((tag) => [tag.name, tag.id]));
+
+  const skipped: string[] = [];
+  const failedFiles: string[] = [];
+  const failedReasons: string[] = [];
+  let tagged = 0;
+  let attached = 0;
+  let done = 0;
+
+  for (const file of live) {
+    try {
+      ctx.operations.jobs.throwIfCancelled();
+    } catch (error) {
+      if (isV2JobCancellation(error)) throw error;
+      throw error;
+    }
+    try {
+      const audio = await analysis.embedAudio(file.fileId);
+      await embeddings.store(file.fileId, CLAP_MODEL_ID, audio.vec);
+      const ranked = rankLabels(audio.vec, vocabulary.map((tag) => tag.name), textVecs);
+      if (ranked.length === 0) {
+        skipped.push(file.filename);
+      } else {
+        let fileTagged = false;
+        for (const entry of ranked) {
+          const tagId = known.get(entry.label);
+          if (!tagId) continue;
+          tags.attach(file.fileId, tagId, "semantic_ai", entry.confidence);
+          attached += 1;
+          fileTagged = true;
+        }
+        if (fileTagged) tagged += 1;
+        else skipped.push(file.filename);
+      }
+    } catch (error) {
+      if (isV2JobCancellation(error)) throw error;
+      failedFiles.push(file.filename);
+      failedReasons.push(`"${file.filename}": ${error instanceof Error ? error.message : String(error)}`);
+    }
+    done += 1;
+    ctx.operations.jobs.reportProgress(done, live.length);
+  }
+
+  return immediateV2Result({
+    tagged,
+    attached,
+    skipped,
+    missing,
+    failedFiles,
+    failedReasons,
+  } satisfies AutoTagV2TagSemanticResult);
+}
+
 export type AutoTagV2FindSimilarResult = {
   targetFileId: string;
   targetFilename: string;
   similarFileIds: string[];
   similarFilenames: string[];
   reason?: string;
+};
+
+export type AutoTagV2ClapStatusResult = {
+  modelId: string;
+  state: "ready" | "not-downloaded" | "downloading";
+  downloadedBytes: number;
+  totalBytes: number;
+  backendAvailable: boolean;
+};
+
+export type AutoTagV2DownloadModelResult = {
+  modelId: string;
+  bytes: number;
+};
+
+export type AutoTagV2TagSemanticResult = {
+  tagged: number;
+  attached: number;
+  skipped: string[];
+  missing: string[];
+  failedFiles: string[];
+  failedReasons: string[];
 };
 
 /** Register every auto-tag command on a v2 host. */
@@ -426,4 +564,9 @@ export function registerAutoTagV2Handlers(host: ExtensionV2Host): void {
   );
   host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_DISMISS_CANDIDATE, runDismissCandidate);
   host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_FIND_SIMILAR, runFindSimilar);
+  host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_CLAP_STATUS, runClapStatus);
+  host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_DOWNLOAD_MODEL, (ctx) =>
+    runDownloadModel(ctx),
+  );
+  host.registerHandler(AUTO_TAG_V2_ID, AUTO_TAG_V2_TAG_SEMANTIC, (ctx) => runTagSemantic(ctx));
 }

@@ -8,17 +8,22 @@ no v1 auto-tag; the filename rules first appeared as the throwaway
 `prototype/auto-tag` mocks.
 
 Tag new arrivals with the seed rules. Preview plans first, tag in the
-background, every write marked deterministic.
+background, every write marked deterministic. Semantic suggestions
+arrive through CLAP over the approved vocabulary, every write marked
+semantic with its confidence.
 
 ## Layout
 
-- `src/definition.ts` — v2 definition: id `auto-tag-v2`, six
+- `src/definition.ts` — v2 definition: id `auto-tag-v2`, nine
   commands (`.tag-files`, `.preview`, `.list-candidates`,
-  `.promote-candidate`, `.dismiss-candidate`, `.find-similar`; the
-  last is selection scope), no settings, six contributions
-  (palette ×5, file-context-menu ×1). Permissions:
+  `.promote-candidate`, `.dismiss-candidate`, `.find-similar`,
+  `.clap-status`, `.download-model`, `.tag-semantic`). Permissions:
   `library:read`, `files:read`, `tags:read`, `tags:write`,
-  `settings:read`, `embeddings:read`. No `requiredCapabilities`.
+  `settings:read`, `embeddings:read`, `embeddings:write`.
+  No `requiredCapabilities`.
+- `src/semantic.ts` — pure zero-shot ranking: cosine over the
+  approved vocabulary, `SEMANTIC_THRESHOLD` (0.5) floor,
+  `SEMANTIC_TOP_K` (3) cap, CLAP prompt template.
 - `src/rules.ts` — pure vocabulary: twelve seed token rules, the
   `MAX_TAG_FILES` (500) bound, case-insensitive matching,
   uncovered-word extraction, queue aggregation with examples and
@@ -68,3 +73,29 @@ background, every write marked deterministic.
    just scan: every finished scan hands its arrivals to tag-files as
    background jobs (#194), with progress and cancellation through the
    job routes.
+
+## Semantic tagging (CLAP, opt-in)
+
+Three commands, one model, no bundled weights:
+
+- **CLAP model status** reports whether `Xenova/clap-htsat-unfused`
+  (quantized, about 400 MB from Hugging Face) is downloaded and
+  whether inference is installed. Safe to run any time, including
+  offline.
+- **Download CLAP model** fetches with progress and cancellation,
+  but only with explicit confirmation naming the size. Interrupted
+  downloads clean their sidecars; completed files skip, so retrying
+  resumes per file. First run offline simply finds nothing.
+- **Tag with CLAP** embeds each sound, ranks the approved tags by
+  cosine, and attaches matches at or above 0.5 (at most 3 per file)
+  with confidence, marked semantic. Vectors land in the embedding
+  store, so find-similar improves with every run. Nothing is
+  invented: with no approved tags the command refuses, and manual
+  tags stay untouchable.
+
+Inference itself is an injected seam (`setClapBackendFactory` in
+`src/lib/audio-analysis/clap.ts`): onnxruntime ships no
+Electron-ABI rebuild in this repo, so bundling it would break the
+packaged desktop build. Until a backend is installed, semantic
+commands fail naming this step instead of pretending. Audio reaches
+the backend as mono 48 kHz decoded through the existing ffmpeg path.

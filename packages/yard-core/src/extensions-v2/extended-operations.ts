@@ -16,6 +16,12 @@ import {
   type V2EmbeddingPorts,
 } from "./embeddings";
 import {
+  createV2AnalysisOperations,
+  denyV2AnalysisOperations,
+  type V2AnalysisOperations,
+  type V2AnalysisPorts,
+} from "./analysis";
+import {
   createV2FolderOperations,
   denyV2FolderOperations,
   type V2FolderFactoryArgs,
@@ -77,6 +83,7 @@ export type V2ExtendedOperationServices = V2OperationServices & {
   collections: V2CollectionOperations;
   tags: V2TagOperations;
   embeddings: V2EmbeddingOperations;
+  analysis: V2AnalysisOperations;
   shelf: V2ShelfOperations;
   folders: V2FolderOperations;
 };
@@ -90,6 +97,7 @@ export type V2ExtendedOperationFactoryArgs = {
   collections?: V2CollectionPorts;
   tags?: V2TagPorts;
   embeddings?: V2EmbeddingPorts;
+  analysis?: V2AnalysisPorts;
   shelf?: V2ShelfPorts;
   folders?: V2FolderScanPorts;
   /** Readable grants for folders outside the Library roots. */
@@ -149,6 +157,11 @@ export function createV2ExtendedOperations(
       ...(args.embeddings ? { embeddings: args.embeddings } : {}),
       isLiveFile: organizationArgs.isLiveFile,
     }),
+    analysis: createV2AnalysisOperations({
+      extensionId: args.extensionId,
+      effectivePermissions: args.effectivePermissions,
+      ...(args.analysis ? { analysis: args.analysis } : {}),
+    }),
     shelf: createV2ShelfOperations({
       extensionId: args.extensionId,
       effectivePermissions: args.effectivePermissions,
@@ -174,6 +187,7 @@ export function denyAllV2ExtendedOperations(extensionId: string): V2ExtendedOper
     collections: denied.collections,
     tags: denied.tags,
     embeddings: denyV2EmbeddingOperations(extensionId),
+    analysis: denyV2AnalysisOperations(extensionId),
     shelf: denyV2ShelfOperations(extensionId),
     folders: denyV2FolderOperations(extensionId),
   };

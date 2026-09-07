@@ -10,27 +10,34 @@ import {
   type IndexedAudioFile,
   type TagOrigin,
   type V2HostServices,
+  type V2AnalysisPorts,
   type V2EmbeddingPorts,
   type V2LibraryReadPorts,
   type V2TagPorts,
 } from "yard-core";
 
 import {
+  AUTO_TAG_V2_CLAP_STATUS,
   AUTO_TAG_V2_DISMISS_CANDIDATE,
+  AUTO_TAG_V2_DOWNLOAD_MODEL,
   AUTO_TAG_V2_FIND_SIMILAR,
   AUTO_TAG_V2_ID,
   AUTO_TAG_V2_LIST_CANDIDATES,
   AUTO_TAG_V2_PREVIEW,
   AUTO_TAG_V2_PROMOTE_CANDIDATE,
   AUTO_TAG_V2_TAG_FILES,
+  AUTO_TAG_V2_TAG_SEMANTIC,
   createAutoTagV2Definition,
   registerAutoTagV2Handlers,
+  type AutoTagV2ClapStatusResult,
   type AutoTagV2DismissCandidateResult,
+  type AutoTagV2DownloadModelResult,
   type AutoTagV2FindSimilarResult,
   type AutoTagV2ListCandidatesResult,
   type AutoTagV2PreviewResult,
   type AutoTagV2PromoteCandidateResult,
   type AutoTagV2TagFilesResult,
+  type AutoTagV2TagSemanticResult,
 } from "./index";
 
 // Area: auto-tag v2 (#190). Handlers through the real host preflight with
@@ -45,6 +52,7 @@ const FULL_PERMISSIONS = [
   "tags:write",
   "settings:read",
   "embeddings:read",
+  "embeddings:write",
 ];
 
 function record(id: string, filename: string): IndexedAudioFile {
@@ -67,7 +75,12 @@ function record(id: string, filename: string): IndexedAudioFile {
   };
 }
 
-type Attachment = { fileId: string; tagId: string; origin: TagOrigin | undefined };
+type Attachment = {
+  fileId: string;
+  tagId: string;
+  origin: TagOrigin | undefined;
+  confidence?: number | null;
+};
 
 type World = {
   host: ExtensionV2Host;
@@ -79,7 +92,11 @@ type World = {
   definition: ExtensionV2Definition;
 };
 
-function world(overrides?: { granted?: string[] }): World {
+function world(overrides?: {
+  granted?: string[];
+  backendAvailable?: boolean;
+  seedTags?: string[];
+}): World {
   const definition = createAutoTagV2Definition();
   const registry = new ExtensionV2Registry();
   registry.register(definition);
@@ -104,6 +121,32 @@ function world(overrides?: { granted?: string[] }): World {
   const created: string[] = [];
   const stateStore = new Map<string, unknown>();
   const vectors = new Map<string, { dim: number; vec: Uint8Array }>();
+  const modelState = {
+    modelId: "Xenova/clap-htsat-unfused",
+    state: "ready" as "ready" | "not-downloaded" | "downloading",
+    downloadedBytes: 400,
+    totalBytes: 400,
+    backendAvailable: true,
+  };
+  let tagSeq = 0;
+  for (const name of overrides?.seedTags ?? []) {
+    tagSeq += 1;
+    tagsByName.set(name, `t${tagSeq}`);
+  }
+  if (overrides?.backendAvailable === false) {
+    modelState.backendAvailable = false;
+  }
+  // Fake inference: thunder-like audio loves thunder, rain-like loves rain,
+  // and the third file loves nothing (both cosines negative).
+  const audioVecs: Record<string, number[]> = {
+    f1: [1, 0],
+    f2: [0, 1],
+    f3: [-1, -1],
+  };
+  const textVecs: Record<string, number[]> = {
+    "This is a sound of thunder": [1, 0],
+    "This is a sound of rain": [0, 1],
+  };
   const vkey = (fileId: string, model: string) => `${model}:${fileId}`;
   const embeddingPorts: V2EmbeddingPorts = {
     upsert: (fileId, model, dim, vec) => {
@@ -120,10 +163,9 @@ function world(overrides?: { granted?: string[] }): World {
       }
     },
   };
-  let seq = 0;
+  let seq = tagsByName.size;
   const tagPorts: V2TagPorts = {
-    list: () => [...tagsByName.entries()].map(([name, id]) => ({ id, name })),
-    tagsForFile: (fileId) =>
+    list: () => [...tagsByName.entries()].map(([name, id]) => ({ id, name })),    tagsForFile: (fileId) =>
       attachments
         .filter((entry) => entry.fileId === fileId)
         .flatMap((entry) => {
@@ -136,10 +178,20 @@ function world(overrides?: { granted?: string[] }): World {
       created.push(name);
       return id;
     },
-    attach: (fileId, tagId, origin) => {
-      attachments.push({ fileId, tagId, origin });
+    attach: (fileId, tagId, origin, confidence) => {
+      attachments.push({ fileId, tagId, origin, confidence });
     },
     detach: () => {},
+  };
+  const analysisPorts: V2AnalysisPorts = {
+    modelStatus: () => ({ ...modelState }),
+    downloadModel: async () => ({ bytes: modelState.totalBytes }),
+    embedAudio: async (fileId) => {
+      const vec = audioVecs[fileId] ?? [0, 0];
+      return { dim: vec.length, vec };
+    },
+    embedTexts: async (texts) => texts.map((text) => textVecs[text] ?? [0, 0]),
+    backendAvailable: () => modelState.backendAvailable,
   };
   const progress = { calls: 0 };  const services: V2HostServices = {
     registry,
@@ -192,6 +244,7 @@ function world(overrides?: { granted?: string[] }): World {
         library,
         tags: tagPorts,
         embeddings: embeddingPorts,
+        analysis: analysisPorts,
       }),
     }),
   };
@@ -391,7 +444,7 @@ describe("auto-tag-v2 candidates", () => {
     expect(value.missing).toEqual([]);
     expect(w.created).toEqual(["paper"]);
     expect(w.attachments).toEqual([
-      { fileId: "f3", tagId: w.tagsByName.get("paper"), origin: "manual" },
+      { fileId: "f3", tagId: w.tagsByName.get("paper"), origin: "manual", confidence: null },
     ]);
     // Promoting overrides the earlier dismiss.
     expect((await listCandidates(w)).words).not.toContain("paper");
@@ -517,5 +570,95 @@ describe("auto-tag-v2 find-similar", () => {
         title: "Find similar",
       },
     ]);
+  });
+});
+
+describe("auto-tag-v2 clap", () => {
+  it("reports model status without downloading", async () => {
+    const w = world();
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_CLAP_STATUS,
+      input: {},
+      selection: { fileIds: [] },
+    });
+    const value = immediateValue<AutoTagV2ClapStatusResult>(result);
+    expect(value.modelId).toBe("Xenova/clap-htsat-unfused");
+    expect(value.state).toBe("ready");
+    expect(value.backendAvailable).toBe(true);
+    const command = w.definition.commands.find(
+      (entry) => entry.id === AUTO_TAG_V2_CLAP_STATUS,
+    )!;
+    expect(validateV2Value(command.result!, value, "result")).toBeNull();
+  });
+
+  it("requires explicit confirmation naming the size before downloading", async () => {
+    const w = world();
+    const refused = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_DOWNLOAD_MODEL,
+      input: { confirm: false },
+      selection: { fileIds: [] },
+    });
+    expect((refused as { ok: boolean }).ok).toBe(false);
+
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_DOWNLOAD_MODEL,
+      input: { confirm: true },
+      selection: { fileIds: [] },
+    });
+    const value = immediateValue<AutoTagV2DownloadModelResult>(result);
+    expect(value.modelId).toBe("Xenova/clap-htsat-unfused");
+    expect(value.bytes).toBe(400);
+  });
+
+  it("attaches semantic tags with confidence over approved vocabulary", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_TAG_SEMANTIC,
+      input: { fileIds: ["f1", "f2", "f3"] },
+      selection: { fileIds: ["f1", "f2", "f3"] },
+    });
+    const value = immediateValue<AutoTagV2TagSemanticResult>(result);
+    expect(value.tagged).toBe(2);
+    expect(value.attached).toBe(2);
+    expect(value.skipped).toEqual(["paper-bag_crumple_fast.wav"]);
+    expect(value.missing).toEqual([]);
+    // Nothing invented: no new tags created, every write semantic with confidence.
+    expect(w.created).toEqual([]);
+    expect(w.attachments).toEqual([
+      { fileId: "f1", tagId: "t1", origin: "semantic_ai", confidence: 1 },
+      { fileId: "f2", tagId: "t2", origin: "semantic_ai", confidence: 1 },
+    ]);
+    // Vectors land in the store for find-similar.
+    expect(w.vectors.has("Xenova/clap-htsat-unfused:f1")).toBe(true);
+    const command = w.definition.commands.find(
+      (entry) => entry.id === AUTO_TAG_V2_TAG_SEMANTIC,
+    )!;
+    expect(validateV2Value(command.result!, value, "result")).toBeNull();
+  });
+
+  it("refuses without a backend and without approved tags", async () => {
+    const noBackend = world({ backendAvailable: false, seedTags: ["thunder"] });
+    const refused = await noBackend.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_TAG_SEMANTIC,
+      input: { fileIds: ["f1"] },
+      selection: { fileIds: ["f1"] },
+    });
+    expect((refused as { ok: boolean }).ok).toBe(false);
+    expect(noBackend.attachments).toEqual([]);
+
+    const noVocab = world();
+    const empty = await noVocab.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_TAG_SEMANTIC,
+      input: { fileIds: ["f1"] },
+      selection: { fileIds: ["f1"] },
+    });
+    expect((empty as { ok: boolean }).ok).toBe(false);
+    expect(noVocab.attachments).toEqual([]);
   });
 });

@@ -110,9 +110,9 @@ export function createV2TagPorts(deps: V2OrganizationDeps = {}): V2TagPorts {
       notify();
       return id;
     },
-    attach: (fileId, tagId, origin?: TagOrigin) => {
-      if (ports) ports.attach(fileId, tagId, origin);
-      else attachTagToFileWithOrigin(fileId, tagId, origin ?? "manual");
+    attach: (fileId, tagId, origin?: TagOrigin, confidence: number | null = null) => {
+      if (ports) ports.attach(fileId, tagId, origin, confidence);
+      else attachTagToFileWithOrigin(fileId, tagId, origin ?? "manual", confidence);
       notify();
     },
     detach: (fileId, tagId) => {

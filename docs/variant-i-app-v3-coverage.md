@@ -294,6 +294,40 @@ Observations and limitations from this pass:
 - Make Pack execution, CLAP inference, update notifications and first-run
   onboarding were not exercised in this pass.
 
+## Verification pass — native desktop paths, 10 September 2026
+
+Environment: Electron 41.3.0 with Next dev on port 3001, driven over the
+remote debugging protocol against the real window. Desktop database
+(`%APPDATA%\Foleyard\foleyard.sqlite`) holds the same 15,877-file library
+(1 tag, 0 embeddings, so the Auto tag rail is absent there). Ticket #201.
+
+Found and fixed: the sandboxed preload could not require
+`./main/ipc-channels.cjs`, so `window.desktopBridge` was never exposed and
+every native action was dead. This is a regression introduced after v0.1.8
+(which shipped `sandbox: false`). Fixed in PR #216 by mirroring the frozen
+channel names inside the preload and pinning the mirror in
+`desktop-ipc-contract.test.ts`, including a guard against relative requires
+in the preload.
+
+Verified after the fix:
+
+- Bridge exposed: `isDesktop: true` with 23 methods.
+- Runtime info: owner `desktop`, win32, unpackaged, version 0.1.8, build id,
+  resources path, and 14 installed invoke/send channels.
+- Window controls: maximize and restore round-trip with window state
+  changing to `isMaximized: true` and back.
+- Updates: `simulateUpdate()` delivered available and ready events to the
+  renderer and rendered visible toasts (available -> 25/60/100% -> ready,
+  v0.2.0-dev).
+- Copy path: `copyFilePath` resolved a real indexed file to its
+  `P:\SoundLibary\...` path and wrote it to the OS clipboard.
+- app-v3 in Electron: the route loads in the desktop window and renders the
+  native title-bar controls (minimize, maximize, close window).
+
+Still untested (require a human at the desktop): drag-out (native drag
+start), the folder picker dialog, reveal/open-in-OS actions, and update
+install/restart. These are recorded as untested rather than verified.
+
 ## Screenshot locations
 
 None committed: the preview capture tool failed during the session.

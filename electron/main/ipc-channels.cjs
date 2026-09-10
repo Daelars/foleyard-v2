@@ -1,8 +1,10 @@
 /**
- * Single registry for every Desktop bridge channel. The main process, the
- * preload bridge, and the renderer wrapper all reference these constants, so
- * a rename breaks loudly at require/import time instead of silently dropping
- * (e.g. drag start) at runtime.
+ * Single registry for every Desktop bridge channel. The main process and the
+ * renderer wrapper reference these constants directly. The sandboxed preload
+ * cannot require this file, so `electron/preload.cjs` mirrors the names; the
+ * contract test asserts the mirror equals this registry, so a rename still
+ * breaks loudly in CI instead of silently dropping (e.g. drag start) at
+ * runtime.
  *
  * kind: "invoke" (renderer calls, main answers), "send" (renderer fires,
  * main handles, no answer), "event" (main pushes, renderer listens).

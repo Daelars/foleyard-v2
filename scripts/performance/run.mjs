@@ -173,6 +173,19 @@ async function main() {
   const offset=sqlite.prepare(`SELECT ${columns} FROM files WHERE removed_at IS NULL ORDER BY filename,id LIMIT 100 OFFSET 90000`);
   report.queries.offsetSameProjection=await repeat(()=>offset.all());
   report.queries.keysetPlan=sqlite.prepare('EXPLAIN QUERY PLAN SELECT id,filename FROM files WHERE removed_at IS NULL AND (filename,id) > (?,?) ORDER BY filename,id LIMIT 100').all(cursor.filename,cursor.id);
+  // Extension library port sweeps (#228): the port read every row
+  // (showRemoved: true), which drops the active predicate and the partial
+  // index. Both options are measured over the same 100k fixture.
+  report.extensionLibrarySweep={};
+  for(const [name,extra] of [['active',{}],['includingRemoved',{showRemoved:true}]]){
+    const sweep=()=>{let offset=0;for(;;){const page=repository.getFiles({limit:500,offset,...extra});if(page.length<500)break;offset+=page.length;}return offset;};
+    assert.equal(sweep(),100000);
+    report.extensionLibrarySweep[name]=await repeat(sweep,3);
+  }
+  report.extensionLibrarySweep.plans={
+    active:sqlite.prepare('EXPLAIN QUERY PLAN SELECT id,filename FROM files WHERE removed_at IS NULL ORDER BY filename ASC,id ASC LIMIT 500').all(),
+    includingRemoved:sqlite.prepare('EXPLAIN QUERY PLAN SELECT id,filename FROM files ORDER BY filename ASC,id ASC LIMIT 500').all(),
+  };
   sqlite.close();await save();
   await writeFile('benchmarks/performance/latest.json',JSON.stringify(report,null,2));
   const supplemental=spawnSync(process.execPath,['scripts/performance/scan-scale.mjs'],{encoding:'utf8',windowsHide:true});

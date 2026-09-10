@@ -41,6 +41,15 @@ was refreshed by a run against the production code:
    full repository read. Queue invariants are pinned in
    `src/lib/scanner/metadata-queue.test.ts`.
 
+**Extension library paging (added with #228)** —
+`createV2LibraryPorts().listPage` reads active files only
+(`showRemoved: false`), so extension sweeps use
+`idx_files_active_filename_id` instead of scanning every row and
+temp-sorting. Pinned by
+`src/test/integration/extension-library-paging.test.ts`; the benchmark
+reports `extensionLibrarySweep` active versus including-removed over the
+100k fixture.
+
 Still deferred (item 5/6 of the original sequence): the duration index
 (write-cost tradeoff needs a realistic import benchmark), cursor
 pagination (indexed pages are now ~3 ms; contract/client change not
@@ -62,7 +71,7 @@ Keep TypeScript. Implement cache admission and PCM loop improvements first, then
 | Touch 10k unchanged rows, both indexes | 237.5 ms | 40.8 ms | 5.8× | Timestamp-only update; active rows with unchanged ownership |
 | Load 100k records for scan setup | 206.5 ms | 44.1 ms | 4.7× | Narrow raw projection; also removes Drizzle mapping overhead |
 
-Machine: AMD Ryzen 7 5700X 8-Core Processor, 16 logical CPUs, Node v24.14.0, win32. See [raw samples](../src/app/prototype/performance/benchmark-results.json) and [benchmark instructions](../scripts/performance/README.md). Fixtures and databases remain under the ignored benchmarks/performance directory. The normal library and its settings were never opened.
+Machine: AMD Ryzen 7 5700X 8-Core Processor, 16 logical CPUs, Node v24.14.0, win32. See [raw samples](../benchmarks/performance/benchmark-results.json) and [benchmark instructions](../scripts/performance/README.md). Fixtures and databases remain under the ignored benchmarks/performance directory. The normal library and its settings were never opened.
 
 Three scan rounds of 1,000 generated 0.1-second WAVs produced medians of 263.2 ms for a new index, 40.6 ms unchanged, and 44.7 ms with 1% modified. New index means empty SQLite, not cold storage. Metadata-only throughput was 201.0 ms at concurrency 16, 193.8 ms at 32, and 225.0 ms at 64. The small 16-to-32 difference is insufficient to change the default from 16.
 

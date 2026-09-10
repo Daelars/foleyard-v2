@@ -35,7 +35,7 @@ export function createV2LibraryPorts(): V2LibraryPorts & V2LibraryReadPorts {
     listPage: (cursor, limit) => {
       const offset = cursor ? Number.parseInt(cursor, 10) : 0;
       const start = Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
-      const page = getFiles({ limit, offset: start, showRemoved: true });
+      const page = getFiles({ limit, offset: start, showRemoved: false });
       const next = start + page.length;
       return {
         files: page.map(toIndexed),

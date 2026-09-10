@@ -221,6 +221,9 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_directory ON files(directory)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_library_root ON files(library_root)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_last_scanned_at ON files(last_scanned_at)`);
+  // Collection names are unique at the storage layer so create/rename
+  // checks cannot race (#252).
+  sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_collections_name ON collections(name)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_tags_tag_id ON file_tags(tag_id)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_tags_origin ON file_tags(origin)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_tag_aliases_tag_id ON tag_aliases(tag_id)`);

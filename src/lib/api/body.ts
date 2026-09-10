@@ -1,4 +1,4 @@
-import { getAllCollections, getAllTags, getFileById } from "@/lib/db";
+import { collectionExists, getAllTags, getFileById } from "@/lib/db";
 import { ApiError } from "./errors";
 
 export async function readMutationBody(request: Request, references = true) {
@@ -17,7 +17,7 @@ export async function readMutationBody(request: Request, references = true) {
   if (references) {
     for (const id of [body.id, body.fileId]) if (id && !getFileById(id)) throw new ApiError("File does not exist", 404);
     if (body.tagId && !getAllTags().some(tag => tag.id === body.tagId)) throw new ApiError("Tag does not exist", 404);
-    if (body.collectionId && !getAllCollections().some(collection => collection.id === body.collectionId)) throw new ApiError("Collection does not exist", 404);
+    if (body.collectionId && !collectionExists(body.collectionId)) throw new ApiError("Collection does not exist", 404);
   }
   return body;
 }

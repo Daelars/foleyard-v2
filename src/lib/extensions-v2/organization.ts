@@ -9,6 +9,7 @@ import {
   detachTagFromFile,
   getAllCollections,
   getAllTags,
+  getCollectionById,
   getAttachmentsWithTagsForFiles,
   getTagsForFile,
   mergeTags,
@@ -69,7 +70,7 @@ export function createV2CollectionPorts(deps: V2OrganizationDeps = {}): V2Collec
   const notify = deps.notify ?? defaultNotify;
   const ports = deps.collections;
   const find = (id: string): Collection | null =>
-    ports ? ports.get(id) : (getAllCollections().find((entry) => entry.id === id) ?? null);
+    ports ? ports.get(id) : getCollectionById(id);
   return {
     list: () => (ports ? ports.list() : getAllCollections()),
     get: (id) => find(id),

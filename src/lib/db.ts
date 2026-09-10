@@ -5,12 +5,15 @@ export {
 } from "@/lib/database/browse-repository";
 export {
   attachFileToCollection,
+  collectionExists,
+  collectionNameExists,
   convertToRegularCollection,
   createCollection,
   createSmartCollection,
   deleteCollection,
   detachFileFromCollection,
   getAllCollections,
+  getCollectionById,
   getSmartCollectionCount,
   renameCollection,
   updateCollectionColor,

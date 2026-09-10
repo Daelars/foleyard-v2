@@ -1,4 +1,4 @@
-import { and, asc, count, eq, sql } from "drizzle-orm";
+import { and, asc, count, eq, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { v4 as uuid } from "uuid";
 
@@ -40,6 +40,65 @@ export class SqliteCollectionRepository implements CollectionRepository {
   constructor(sqlite: Database) {
     this.sqlite = sqlite;
     this.db = drizzle(sqlite, { schema });
+  }
+
+  /** Indexed primary-key existence check; never touches membership rows. */
+  collectionExists(id: string): boolean {
+    const row = this.db
+      .select({ id: schema.collections.id })
+      .from(schema.collections)
+      .where(eq(schema.collections.id, id))
+      .get();
+    return row !== undefined;
+  }
+
+  /**
+   * Indexed name-uniqueness check. Pass `exceptId` to exclude the collection
+   * being renamed; memberships and counts are never read (#252).
+   */
+  collectionNameExists(name: string, exceptId?: string): boolean {
+    const row = this.db
+      .select({ id: schema.collections.id })
+      .from(schema.collections)
+      .where(
+        exceptId
+          ? and(eq(schema.collections.name, name), ne(schema.collections.id, exceptId))
+          : eq(schema.collections.name, name),
+      )
+      .get();
+    return row !== undefined;
+  }
+
+  /**
+   * Point fetch by id with a bounded membership count for that collection
+   * only — no whole-membership aggregate (#252).
+   */
+  getCollectionById(id: string): Collection | null {
+    const row = this.db
+      .select({
+        id: schema.collections.id,
+        name: schema.collections.name,
+        color: schema.collections.color,
+        createdAt: schema.collections.createdAt,
+        isSmart: schema.collections.isSmart,
+        filter: schema.collections.filter,
+      })
+      .from(schema.collections)
+      .where(eq(schema.collections.id, id))
+      .get();
+    if (!row) return null;
+    const counted = this.db
+      .select({ count: count() })
+      .from(schema.fileCollections)
+      .innerJoin(schema.files, eq(schema.files.id, schema.fileCollections.fileId))
+      .where(
+        and(
+          eq(schema.fileCollections.collectionId, id),
+          sql`${schema.files.removedAt} IS NULL`,
+        ),
+      )
+      .get() as { count: number } | undefined;
+    return { ...row, fileCount: counted?.count ?? 0 } as unknown as Collection;
   }
 
   getAllCollections(options?: GetAllCollectionsOptions): Collection[] {
@@ -190,6 +249,9 @@ function getCollectionRepo(): SqliteCollectionRepository {
 }
 
 export const getAllCollections = (options?: GetAllCollectionsOptions) => getCollectionRepo().getAllCollections(options);
+export const collectionExists = (id: string) => getCollectionRepo().collectionExists(id);
+export const collectionNameExists = (name: string, exceptId?: string) => getCollectionRepo().collectionNameExists(name, exceptId);
+export const getCollectionById = (id: string) => getCollectionRepo().getCollectionById(id);
 export const getSmartCollectionCount = (collectionId: string) => getCollectionRepo().getSmartCollectionCount(collectionId);
 export const createCollection = (name: string, isSmart?: boolean, filter?: string) => getCollectionRepo().createCollection(name, isSmart, filter);
 export const createSmartCollection = (name: string, filter: string) => getCollectionRepo().createSmartCollection(name, filter);

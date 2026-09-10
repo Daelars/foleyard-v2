@@ -56,6 +56,10 @@ vi.mock("@/lib/db", () => ({
   updateTagColor: (id: string, color: string | null) =>
     state.tags!.updateTagColor(id, color),
   getAllCollections: () => state.collections!.getAllCollections(),
+  collectionExists: (id: string) => state.collections!.collectionExists(id),
+  collectionNameExists: (name: string, exceptId?: string) =>
+    state.collections!.collectionNameExists(name, exceptId),
+  getCollectionById: (id: string) => state.collections!.getCollectionById(id),
   createCollection: (name: string) => state.collections!.createCollection(name),
   deleteCollection: (id: string) => state.collections!.deleteCollection(id),
   renameCollection: (id: string, name: string) =>
@@ -651,7 +655,7 @@ describe("database correctness", () => {
         url: "http://localhost/api/test",
         body: { name: "Impacts" },
       });
-      expect(created.status).toBe(200);
+      expect(created.status, JSON.stringify(created.body)).toBe(200);
 
       const duplicate = await callRoute<{ error: string }>(post, {
         url: "http://localhost/api/test",

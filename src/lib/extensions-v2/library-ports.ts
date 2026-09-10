@@ -1,5 +1,5 @@
 import {
-  getAllCollections,
+  collectionExists,
   getFileById,
   getFiles,
   getFilesByIds,
@@ -42,6 +42,6 @@ export function createV2LibraryPorts(): V2LibraryPorts & V2LibraryReadPorts {
         nextCursor: page.length < limit ? null : String(next),
       };
     },
-    collectionExists: (id) => getAllCollections().some((collection) => collection.id === id),
+    collectionExists: (id) => collectionExists(id),
   };
 }

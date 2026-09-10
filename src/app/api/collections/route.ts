@@ -4,6 +4,7 @@ import { ApiError, mutationError } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from 'next/server';
 import {
   attachFileToCollection,
+  collectionNameExists,
   convertToRegularCollection,
   createCollection,
   deleteCollection,
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     const trimmedName = typeof name === 'string' ? name.trim() : '';
 
     if (trimmedName) {
-      if (getAllCollections().some(collection => collection.name === trimmedName)) throw new ApiError("A collection with that name already exists", 409);
+      if (collectionNameExists(trimmedName)) throw new ApiError("A collection with that name already exists", 409);
       const id = createCollection(trimmedName, !!isSmart, filter ?? null);
       return NextResponse.json({ success: true, id });
     }
@@ -76,7 +77,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (action === 'rename' && typeof name === 'string' && name.trim()) {
-      if (getAllCollections().some(collection => collection.id !== collectionId && collection.name === name.trim())) throw new ApiError("A collection with that name already exists", 409);
+      if (collectionNameExists(name.trim(), collectionId)) throw new ApiError("A collection with that name already exists", 409);
       renameCollection(collectionId, name.trim());
       return NextResponse.json({ success: true });
     }

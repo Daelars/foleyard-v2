@@ -2,6 +2,10 @@ import type { Collection } from "../domain/collection";
 
 export interface CollectionRepository {
   getAllCollections(): Collection[];
+  /** Point lookups (#252): indexed existence and name-uniqueness checks. */
+  collectionExists(id: string): boolean;
+  collectionNameExists(name: string, exceptId?: string): boolean;
+  getCollectionById(id: string): Collection | null;
   createCollection(name: string, isSmart?: boolean, filter?: string): string;
   createSmartCollection(name: string, filter: string): string;
   renameCollection(id: string, name: string): void;

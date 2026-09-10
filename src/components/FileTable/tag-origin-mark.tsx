@@ -23,7 +23,7 @@ export function TagOriginMark({
     return (
       <span
         title="Added by hand"
-        className={cn("font-mono text-[10px] font-bold text-foreground", className)}
+        className={cn("font-mono text-[10px] font-bold text-zinc-100", className)}
       >
         M
       </span>

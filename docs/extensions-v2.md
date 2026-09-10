@@ -232,11 +232,10 @@ echo `"greeter: hello (runMode=direct)"`, disabled
 Prerequisites: dev server (`bun run dev`) plus
 `FOLEYARD_V2_DEV_FIXTURES=1` for fixture commands.
 
-Declare an object input schema on the command. The generic form
-(`src/components/extensions-v2/interaction.tsx`) builds fields via
-`inputFieldsForSchema`, shows validation errors, and posts to
-`POST /api/extensions-v2/execute`. Preview the same shape in the
-workbench at `/prototype/ext-v2-workbench` without writing app code.
+Declare an object input schema on the command. Command inputs are
+validated by the execution envelope and surfaced by the client adapter
+that invokes the command. Exercise the same catalog and execution path in
+the workbench at `/prototype/ext-v2-workbench` without writing app code.
 Expected: mistyped input returns 400 `input-invalid`; valid input
 reaches the handler. Provenance: API v2 input contracts.
 
@@ -245,12 +244,12 @@ reaches the handler. Provenance: API v2 input contracts.
 Prerequisites: same as 3.
 
 Declare a `sidebar` contribution pointing at a global command whose
-result is a string. The generic sidebar panel
-(`src/components/extensions-v2/sidebar.tsx`) renders loading, empty,
-error, and item-action states. Make Pack v2's `make-pack-v2.side-shelf`
-is the shipped reference; `fixture-surface` proves the adapter
-without product content. Expected: the panel appears when the
-extension is enabled and approved, and vanishes on disable.
+result is a string. The surface's sidebar panel
+(`src/app/(variant-i)/components/extensions/sidebar-panels.tsx`) renders
+loading, empty, error, and item-action states. Make Pack v2's
+`make-pack-v2.side-shelf` is the shipped reference; `fixture-surface`
+proves the adapter without product content. Expected: the panel appears
+when the extension is enabled and approved, and vanishes on disable.
 Provenance: API v2 contribution contracts.
 
 ### 5. Add a setting

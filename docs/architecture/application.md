@@ -32,16 +32,17 @@ no external loading.
   `use-extension-ui`, `use-settings-scan`.
 - Routes own HTTP semantics (method, envelope, status); adapters own
   hydration/authorization; repositories own SQL.
-- Components own presentation; `SettingsDialog` tabs and tool dialogs are
-  explicit mounts, not generic extension render targets.
+- Presentation comes from the Variant I library plus route-local
+  adapters in `src/app/(variant-i)/components/`; dialogs and tool flows
+  are explicit mounts, not generic extension render targets.
 
 ## Runtime behavior
 
-Hook composition (`page.tsx` → `src/app/library/`): selection refs break
-hook-order cycles; cross-hook side effects travel through explicit callbacks;
-scan polling (`use-scan-polling`, 2 s) drives refetch slices
-(`refetch-map.ts`); shelf changes propagate via the renderer-local
-`sound-shelf:changed` event.
+Hook composition (`src/app/(variant-i)/page.tsx` → `src/app/library/`):
+selection refs break hook-order cycles; cross-hook side effects travel
+through explicit callbacks; scan polling (`use-scan-polling`, 2 s) drives
+refetch slices (`refetch-map.ts`); shelf changes propagate via the
+renderer-local `sound-shelf:changed` event.
 
 HTTP routes — all internal, read/write over the local index (13 rows,
 desktop helpers grouped):
@@ -81,8 +82,8 @@ v1 adapters are untouched and never routed through v2.
 
 State ownership: one hook per slice (files, view, selection, organization,
 shelf, palette, transport, settings/scan). The page derives memos; dialogs
-(`dialogs.tsx`, tool dialogs, `SettingsDialog`) own their open/close state.
-No global store; no EventBus.
+(`components/dialogs.tsx`, the tool flows, the settings dialog) own their
+open/close state. No global store; no EventBus.
 
 ## Contracts
 

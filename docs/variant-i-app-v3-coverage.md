@@ -208,13 +208,13 @@ Verified:
 
 Unverified / blockers:
 - Pixel-perfect screenshot diffing: the preview tab's snapshot tool
-  failed (`PreviewAutomationExecutionError`/timeout) during this session;
-  comparison was done by computed-style signatures instead. Full
-  screenshot evidence (fixed viewport, aligned crops) remains to be
-  captured by a human or a working capture tool.
-- Hover/press/focus ring visual states, reduced-motion behavior, and
-  overlay clipping at viewport edges were not captured visually; the
-  relevant classes are ported verbatim from the specimen sources.
+  failed (`PreviewAutomationExecutionError`/timeout). Fixed-viewport
+  evidence is now committed through a CDP capture harness (see the
+  visual-evidence pass); automated diff scoring and human sign-off
+  remain.
+- Hover, focus, empty, overlay and reduced-motion states are captured in
+  the visual-evidence pass; press/active states and narrow-viewport
+  overlay clipping were not captured.
 - Real-file workflows were blocked at preparation time (the dev library
   held directories but no indexed files). The 10 September pass below
   exercised them against the real library; native desktop paths remain
@@ -328,9 +328,50 @@ Still untested (require a human at the desktop): drag-out (native drag
 start), the folder picker dialog, reveal/open-in-OS actions, and update
 install/restart. These are recorded as untested rather than verified.
 
+## Verification pass — visual evidence, 10 September 2026
+
+Environment: Electron 41.3.0 capture harness (fixed 1440x900 viewport,
+DPR 1, real desktop bridge) loading the dev server over the remote
+debugging protocol; reduced motion emulated with
+`prefers-reduced-motion: reduce`. Ticket #202.
+
+Thirteen captures are committed under `docs/variant-i-screenshots/`:
+
+| File | State |
+| --- | --- |
+| `01-old-app-library-root.png` | Current `/` baseline at the library root |
+| `02-app-v3-library-root.png` | app-v3 at the same state |
+| `03-app-v3-rail-hover-organize.png` | rail hover state |
+| `04-app-v3-search-focused.png` | search focus ring |
+| `05-app-v3-search-empty.png` | empty search state |
+| `06-app-v3-files-folder.png` | file table in `SFX/Alarm & Chime (SFX)` with waveforms |
+| `07-app-v3-row-context-menu.png` | row context menu with tag provenance and v2 actions |
+| `08-app-v3-command-palette.png` | command palette (31 commands) |
+| `09-app-v3-settings-dialog.png` | settings overlay |
+| `10-app-v3-reduced-motion.png` | same surface with reduced motion emulated |
+| `11-old-app-after-app-v3.png` | `/` after leaving app-v3 |
+| `12-variant-i-library.png` | Variant I specimen rebuilt from the library |
+| `13-component-library-i.png` | Original Variant I reference specimen |
+
+Programmatic checks recorded alongside the captures:
+
+- Settings overlay and tab panels: 0 of 12 panels overflow the 1440x900
+  viewport.
+- Style leakage on return to `/`: no variant-i attributes or classes in
+  the document, no variant-i toast host, no duplicate toaster.
+- Reduced motion: emulation confirmed active (`matchMedia` true) before
+  the capture.
+- Empty state renders "Nothing matches ..." with zero rows; the context
+  menu exposes 30 items including the folder-only disabled entry;
+  the palette reports 31 commands.
+
+Remaining gaps: automated pixel-diff scoring between the specimen and
+library pairs is not performed; press/active states and narrow-viewport
+overlay clipping were not captured; visual sign-off remains human
+(compare 01/02 and 12/13 by eye).
+
 ## Screenshot locations
 
-None committed: the preview capture tool failed during the session.
-Computed-style comparison data was captured live; re-capture is required
-to close the visual gap. See `docs/variant-i-screenshots/` (empty) for
-where they should land.
+All captures live in `docs/variant-i-screenshots/` as listed above.
+Earlier passes that reported this directory empty are superseded by the
+10 September visual-evidence capture.

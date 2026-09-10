@@ -21,7 +21,7 @@ export type AutoTagTriggerDeps = {
   isEnabled?: (extensionId: string) => boolean;
   granted?: (extensionId: string) => readonly string[];
   arrivalsSince?: (sinceIso: string) => string[];
-  submit?: (fileIds: string[], idempotencyKey: string) => Promise<unknown>;
+  submit?: (fileIds: string[], idempotencyKey: string, batchId: string) => Promise<unknown>;
 };
 
 export async function triggerAutoTagAfterScan(
@@ -38,11 +38,11 @@ export async function triggerAutoTagAfterScan(
 
   const submit =
     deps.submit ??
-    ((fileIds, idempotencyKey) =>
+    ((fileIds, idempotencyKey, batchId) =>
       getAppV2Host().submitJob({
         extensionId: AUTO_TAG_V2_ID,
         commandId: AUTO_TAG_V2_TAG_FILES,
-        input: { fileIds },
+        input: { fileIds, batchId, scanStartedAt: startedAtIso },
         idempotencyKey,
       }));
   let submitted = 0;
@@ -50,6 +50,7 @@ export async function triggerAutoTagAfterScan(
     await submit(
       arrivals.slice(index, index + MAX_TAG_FILES),
       `auto-tag-scan-${startedAtIso}-${index / MAX_TAG_FILES}`,
+      `scan:${startedAtIso}`,
     );
     submitted += 1;
   }

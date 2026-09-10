@@ -9,6 +9,7 @@ import type { LibraryView } from "./file-query";
 import type { CollectionRecord } from "./types";
 
 export type { LibraryView };
+export type AutoTagPage = "coverage" | "origins";
 
 export interface LibraryViewState {
   currentView: LibraryView;
@@ -17,6 +18,7 @@ export interface LibraryViewState {
   tagOrigin: TagOrigin | null;
   selectedDirectory: FileTableDirectory | null;
   searchQuery: string;
+  autoTagPage: AutoTagPage;
 }
 
 export const initialLibraryViewState: LibraryViewState = {
@@ -26,6 +28,7 @@ export const initialLibraryViewState: LibraryViewState = {
   tagOrigin: null,
   selectedDirectory: null,
   searchQuery: "",
+  autoTagPage: "coverage",
 };
 
 function clearedSelection(state: LibraryViewState): LibraryViewState {
@@ -182,6 +185,7 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
   const { currentView, selectedCollection, selectedTagId, tagOrigin, selectedDirectory } =
     viewState;
   const searchQuery = viewState.searchQuery;
+  const autoTagPage = viewState.autoTagPage;
   const setSearchQuery = useCallback((query: string) => {
     setViewState((prev) => ({ ...prev, searchQuery: query }));
   }, []);
@@ -232,6 +236,10 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
     setViewState((prev) => applyShowAutoTag(prev));
     notifyNavigated();
   }, [notifyNavigated]);
+
+  const setAutoTagPage = useCallback((page: AutoTagPage) => {
+    setViewState((prev) => ({ ...prev, autoTagPage: page }));
+  }, []);
 
   const handleFilterTag = useCallback((id: string | null) => {
     setViewState((prev) => applyFilterTag(prev, id));
@@ -298,6 +306,8 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
     showShelf,
     showOrganize,
     showAutoTag,
+    autoTagPage,
+    setAutoTagPage,
     handleFilterTag,
     handleFilterTagOrigin,
     showCollection,

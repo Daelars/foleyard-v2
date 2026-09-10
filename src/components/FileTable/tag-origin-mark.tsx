@@ -23,7 +23,7 @@ export function TagOriginMark({
     return (
       <span
         title="Added by hand"
-        className={cn("font-mono text-[10px] font-bold text-zinc-300", className)}
+        className={cn("font-mono text-[10px] font-bold text-foreground", className)}
       >
         M
       </span>
@@ -46,7 +46,7 @@ export function TagOriginMark({
           ? "Suggested automatically"
           : `Suggested automatically at ${confidence.toFixed(2)} confidence`
       }
-      className={cn("font-mono text-[10px] font-bold text-emerald-400", className)}
+      className={cn("font-mono text-[10px] font-bold text-chart-3", className)}
     >
       AI{confidence == null ? "" : ` ${confidence.toFixed(2)}`}
     </span>

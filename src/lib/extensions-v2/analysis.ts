@@ -1,13 +1,19 @@
 import { getFileById } from "@/lib/db";
-import { decodeToMono48k } from "@/lib/audio-analysis/decode";
 import {
   CLAP_MODEL_ID,
   clapManifest,
   isClapBackendAvailable,
   loadClapBackend,
+  setClapBackendFactory,
 } from "@/lib/audio-analysis/clap";
+import { createClapBackend } from "@/lib/audio-analysis/clap-backend";
 import { downloadModel, getModelsDir, modelDirFor, modelStatus } from "@/lib/audio-analysis/models";
 import type { V2AnalysisPorts, V2ModelStatus } from "@yard-core";
+
+// `decode.ts` pulls `ffmpeg-static` into the static import graph, so it
+// stays a dynamic import: catalog, availability, and status reads must
+// never pay the audio-decode native chain. Only `embedAudio` loads it,
+// on first inference.
 
 /**
  * Application analysis ports for v2 operations (#195). Only the CLAP
@@ -22,6 +28,10 @@ export type V2AnalysisDeps = {
 };
 
 const downloading = new Set<string>();
+
+// Composition owns the concrete runtime. Importing it does not load weights;
+// the factory opens the local, consent-downloaded model on first inference.
+setClapBackendFactory(createClapBackend);
 
 function requireClap(modelId: string): void {
   if (modelId !== CLAP_MODEL_ID) {
@@ -68,6 +78,7 @@ export function createV2AnalysisPorts(deps: V2AnalysisDeps = {}): V2AnalysisPort
       if (!record) {
         throw new Error(`Sound ${JSON.stringify(fileId)} is not in the Library index.`);
       }
+      const { decodeToMono48k } = await import("@/lib/audio-analysis/decode");
       const samples = await decodeToMono48k(record.path);
       const vec = await backend.embedAudio(samples, 48000);
       return { dim: vec.length, vec: [...vec] };

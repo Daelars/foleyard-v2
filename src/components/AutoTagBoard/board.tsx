@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Area,
@@ -17,12 +17,13 @@ import {
 import type { TagOrigin } from "@yard-core";
 import {
   SEED_RULES,
-  filenameMatchesToken,
-  unmatchedTokens,
 } from "@foleyard/auto-tag-v2";
-import { Badge } from "@/components/ui/badge";
-import { TagOriginMark } from "@/components/FileTable/tag-origin-mark";
+import { SoundTag, StatusBadge } from "@/components/ui/foleyard";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { TagOrigins } from "./origins";
+import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 
 /**
  * Auto-tag board with live data (#197). Faithful port of the
@@ -33,11 +34,11 @@ import { cn } from "@/lib/utils";
  * coverage snapshots, never mock series.
  */
 
-export const BOARD_FILE_CAP = 2000;
-const PAGE_SIZE = 500;
 const COVERAGE_GOAL = 5;
-const ARRIVAL_COUNT = 8;
-const SNAPSHOT_MAX_AGE_MS = 60 * 60 * 1000;
+
+const MEMBER_PAGE_SIZE = 50;
+
+const QUEUE_PAGE_SIZE = 20;
 
 const MONO = "font-mono";
 
@@ -53,6 +54,7 @@ type BoardFile = {
   filename: string;
   createdAt?: string | null;
   tags: BoardTag[];
+  firedRules?: Array<{ token: string; tags: string[] }>;
 };
 
 type Snapshot = {
@@ -62,7 +64,24 @@ type Snapshot = {
   tags: Record<string, number>;
 };
 
-type QueueState = { words: string[]; lines: string[] };
+type Candidate = {
+  id: string;
+  label: string;
+  source: "filename_token" | "clap_suggestion" | "similar_audio_cluster";
+  confidence: number | null;
+  exampleFileIds: string[];
+  occurrenceCount: number;
+};
+type QueueState = { words: string[]; lines: string[]; entries: Candidate[] };
+type LastRun = {
+  at: string;
+  command: "tag-files" | "tag-semantic";
+  tagged: number;
+  attached: number;
+  skipped: number;
+  missing: number;
+  failed: number;
+};
 type ModelState = {
   state: "ready" | "not-downloaded" | "downloading";
   downloadedBytes: number;
@@ -76,23 +95,27 @@ type TagRow = {
   count: number;
   toks: string[];
   delta: number;
+  real: boolean;
 };
 
-function buildTagRows(files: BoardFile[], snapshots: Snapshot[]): TagRow[] {
+function buildTagRows(
+  counts: Record<string, number>,
+  rules: Array<{ tok: string; tags: string[] }>,
+  snapshots: Snapshot[],
+  realTags: Set<string>,
+): TagRow[] {
   const byTag = new Map<string, { toks: Set<string>; count: number }>();
-  for (const rule of SEED_RULES) {
+  for (const rule of rules) {
     for (const tag of rule.tags) {
       const entry = byTag.get(tag) ?? { toks: new Set<string>(), count: 0 };
       entry.toks.add(rule.tok);
       byTag.set(tag, entry);
     }
   }
-  for (const file of files) {
-    for (const tag of file.tags) {
-      const entry = byTag.get(tag.name);
-      if (entry) entry.count += 1;
-      else byTag.set(tag.name, { toks: new Set(), count: 1 });
-    }
+  for (const [name, count] of Object.entries(counts)) {
+    const entry = byTag.get(name);
+    if (entry) entry.count = count;
+    else byTag.set(name, { toks: new Set(), count });
   }
   const [prev, last] = snapshots.slice(-2);
   return [...byTag.entries()]
@@ -101,6 +124,7 @@ function buildTagRows(files: BoardFile[], snapshots: Snapshot[]): TagRow[] {
       count,
       toks: [...toks],
       delta: prev && last ? (last.tags[tag] ?? 0) - (prev.tags[tag] ?? 0) : 0,
+      real: realTags.has(tag),
     }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
@@ -136,6 +160,14 @@ function shortLabel(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function shortTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${shortLabel(iso)} ${hours}:${minutes}`;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -208,24 +240,111 @@ async function submitJob(
   return { ok: true, jobId };
 }
 
-async function waitForJob(jobId: string): Promise<boolean> {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+type TerminalJob = {
+  state: string;
+  errorMessage: string | null;
+  succeeded: number;
+  failed: number;
+};
+
+async function waitForJob(
+  jobId: string,
+  onProgress: (state: string, completed: number | null, total: number | null) => void,
+  isCurrent: () => boolean,
+): Promise<TerminalJob | null> {
+  for (;;) {
     await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (!isCurrent()) return null;
+    let body: unknown;
     try {
-      const response = await fetch("/api/extensions-v2/jobs?limit=50");
-      const body = (await readJson(response)) as {
-        jobs?: Array<{ jobId?: string; id?: string; state?: string }>;
-      } | null;
-      const jobs = body?.jobs ?? [];
-      const job = jobs.find((entry) => entry.jobId === jobId || entry.id === jobId);
-      if (job && (job.state === "succeeded" || job.state === "failed" || job.state === "cancelled")) {
-        return job.state === "succeeded";
-      }
+      const response = await fetch(`/api/extensions-v2/jobs/${jobId}`);
+      body = await readJson(response);
     } catch {
-      return false;
+      continue;
+    }
+    const record = (body as {
+      job?: {
+        state?: unknown;
+        progress?: { completed?: unknown; total?: unknown };
+        error?: { message?: unknown };
+        partial?: { succeeded?: unknown; failed?: unknown };
+      };
+    } | null)?.job;
+    if (!record || typeof record.state !== "string") continue;
+    const completed = typeof record.progress?.completed === "number" ? record.progress.completed : null;
+    const total = typeof record.progress?.total === "number" ? record.progress.total : null;
+    onProgress(record.state, completed, total);
+    if (
+      record.state === "succeeded" ||
+      record.state === "failed" ||
+      record.state === "cancelled" ||
+      record.state === "interrupted"
+    ) {
+      return {
+        state: record.state,
+        errorMessage: typeof record.error?.message === "string" ? record.error.message : null,
+        succeeded: typeof record.partial?.succeeded === "number" ? record.partial.succeeded : 0,
+        failed: Array.isArray(record.partial?.failed) ? record.partial.failed.length : 0,
+      };
     }
   }
-  return false;
+}
+
+/** Turn a terminal job record into a line a person can act on. */
+function describeJobEnd(label: string, terminal: TerminalJob): { kind: "done" | "failed" | "stopped"; text: string } {
+  if (terminal.state === "succeeded") {
+    return { kind: "done", text: `${label} finished.` };
+  }
+  if (terminal.state === "failed") {
+    const reason = terminal.errorMessage ?? "Something went wrong while it ran.";
+    const counts = terminal.failed > 0 ? ` (${terminal.failed} files failed.)` : "";
+    return { kind: "failed", text: `${label} failed: ${reason}${counts}` };
+  }
+  if (terminal.state === "cancelled") {
+    return { kind: "stopped", text: `${label} cancelled. Anything already written stays.` };
+  }
+  return { kind: "stopped", text: `${label} stopped because the app restarted. Run it again.` };
+}
+
+function formatCount(value: number): string {
+  if (value >= 1_000_000) return `${Math.round(value / 1_000_000)}M`;
+  if (value >= 10_000) return `${Math.round(value / 1_000)}k`;
+  return String(value);
+}
+
+/** Page the origins listing for files carrying no tags at all. */
+async function collectUntaggedIds(
+  limit: number,
+  onProgress: (checked: number) => void,
+): Promise<{ ids: string[]; checked: number }> {
+  const ids: string[] = [];
+  let checked = 0;
+  let cursor = "";
+  let pages = 0;
+  for (;;) {
+    const result = await runCommand("auto-tag-v2.list-origins", { origin: "all", cursor, limit: 100 });
+    if (!result.ok) throw new Error(result.message);
+    const value = result.value as { entries?: unknown; nextCursor?: unknown };
+    const entries = Array.isArray(value.entries) ? value.entries : [];
+    for (const entry of entries) {
+      if (typeof entry !== "string") continue;
+      try {
+        const file = JSON.parse(entry) as { id?: unknown; tags?: unknown };
+        checked += 1;
+        if (typeof file.id === "string" && Array.isArray(file.tags) && file.tags.length === 0 && ids.length < limit) {
+          ids.push(file.id);
+        }
+      } catch {
+        continue;
+      }
+    }
+    pages += 1;
+    onProgress(checked);
+    const next = typeof value.nextCursor === "string" ? value.nextCursor : "";
+    if (!next || ids.length >= limit || pages >= 30) break;
+    cursor = next;
+  }
+  return { ids, checked };
 }
 
 /** Percent coverage over recorded snapshots plus the live point. */
@@ -239,7 +358,7 @@ function CoverageTrend({ snapshots, livePct }: { snapshots: Snapshot[]; livePct:
   ];
   return (
     <div className="w-full">
-      <ResponsiveContainer width="100%" height={110}>
+      <ChartContainer config={{ pct: { label: "Coverage", color: "var(--accent-fill)" } }} className="aspect-auto h-[110px]">
         <AreaChart data={points} margin={{ top: 12, right: 10, bottom: 20, left: 30 }}>
           <defs>
             <linearGradient id="covFill" x1="0" y1="0" x2="0" y2="1">
@@ -247,23 +366,16 @@ function CoverageTrend({ snapshots, livePct }: { snapshots: Snapshot[]; livePct:
               <stop offset="100%" stopColor="var(--accent-fill)" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <XAxis dataKey="label" tick={{ fontSize: 9, fill: "var(--color-zinc-600)" }} tickLine={false} axisLine={false} />
+          <XAxis dataKey="label" tick={{ fontSize: 9, fill: "var(--muted-foreground)" }} tickLine={false} axisLine={false} />
           <YAxis
             domain={[0, 100]}
             ticks={[0, 50, 100]}
-            tick={{ fontSize: 9, fill: "var(--color-zinc-600)" }}
+            tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
             tickLine={false}
             axisLine={false}
             width={28}
           />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: "#0b0b10",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 8,
-              fontSize: 11,
-            }}
-          />
+          <Tooltip content={<ChartTooltipContent />} />
           <Area
             type="monotone"
             dataKey="pct"
@@ -272,7 +384,7 @@ function CoverageTrend({ snapshots, livePct }: { snapshots: Snapshot[]; livePct:
             fill="url(#covFill)"
           />
         </AreaChart>
-      </ResponsiveContainer>
+      </ChartContainer>
       {snapshots.length === 0 && (
         <p className={cn(MONO, "mt-1 text-[10px] text-zinc-600")}>
           Trend builds as coverage snapshots record.
@@ -299,11 +411,11 @@ function TagSparkChart({
   return (
     <ResponsiveContainer width={96} height={28}>
       <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-        <ReferenceLine y={COVERAGE_GOAL} stroke="rgba(52,211,153,0.4)" strokeDasharray="2 2" />
+        <ReferenceLine y={COVERAGE_GOAL} stroke="var(--chart-3)" strokeOpacity={0.4} strokeDasharray="2 2" />
         <Line
           type="monotone"
           dataKey="value"
-          stroke={active ? "var(--accent-fill)" : "#52525b"}
+          stroke={active ? "var(--accent-fill)" : "var(--muted-foreground)"}
           strokeWidth={1.5}
           dot={false}
         />
@@ -339,7 +451,7 @@ function RailRow({
             #{row.tag}
           </span>
           {row.delta > 0 && (
-            <span className={cn(MONO, "shrink-0 text-[10px] tabular-nums text-emerald-400")}>
+            <span className={cn(MONO, "shrink-0 text-[10px] tabular-nums text-chart-3")}>
               +{row.delta}
             </span>
           )}
@@ -347,7 +459,7 @@ function RailRow({
             className={cn(
               MONO,
               "shrink-0 text-[12px] tabular-nums",
-              done ? "text-emerald-400" : empty ? "text-zinc-600" : "text-zinc-300",
+              done ? "text-chart-3" : empty ? "text-muted-foreground" : "text-foreground",
             )}
           >
             {row.count}
@@ -358,7 +470,7 @@ function RailRow({
           <span
             className={cn(
               "block h-full rounded-full transition-[width]",
-              done ? "bg-emerald-400" : empty ? "bg-transparent" : "bg-accent-fill",
+              done ? "bg-chart-3" : empty ? "bg-transparent" : "bg-accent-fill",
             )}
             style={{ width: `${pct * 100}%` }}
           />
@@ -368,107 +480,159 @@ function RailRow({
   );
 }
 
-export function AutoTagBoard({ enabled }: { enabled: boolean }) {
+export type AutoTagPage = "coverage" | "origins";
+
+export function AutoTagBoard({
+  enabled,
+  page = "coverage",
+  onPageChange,
+  onOpenExtensionControls,
+}: {
+  enabled: boolean;
+  page?: AutoTagPage;
+  onPageChange?: (page: AutoTagPage) => void;
+  onOpenExtensionControls?: () => void;
+}) {
   const [files, setFiles] = useState<BoardFile[]>([]);
-  const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [totalFiles, setTotalFiles] = useState(0);
+  const [taggedFiles, setTaggedFiles] = useState(0);
+  const [tagCounts, setTagCounts] = useState<Record<string, number>>({});
+  const [realTags, setRealTags] = useState<Set<string>>(new Set());
+  const [configuredRules, setConfiguredRules] = useState<Array<{ tok: string; tags: string[] }>>(SEED_RULES);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
-  const [queue, setQueue] = useState<QueueState>({ words: [], lines: [] });
+  const [queue, setQueue] = useState<QueueState>({ words: [], lines: [], entries: [] });
+  const [queuePage, setQueuePage] = useState(0);
+  const [futureRules, setFutureRules] = useState<Set<string>>(new Set());
   const [model, setModel] = useState<ModelState | null>(null);
   const [filter, setFilter] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [similar, setSimilar] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
   const [confirmDownload, setConfirmDownload] = useState(false);
+  const [job, setJob] = useState<{
+    label: string;
+    jobId: string;
+    state: string;
+    completed: number | null;
+    total: number | null;
+  } | null>(null);
+  const jobRef = useRef<string | null>(null);
+  const reloadTokenRef = useRef(0);
+  const [gathering, setGathering] = useState(false);
+  const [rulesNote, setRulesNote] = useState<string | null>(null);
+  const [rulesRunning, setRulesRunning] = useState(false);
+  const [gatherNote, setGatherNote] = useState<string | null>(null);
+  const [lastRun, setLastRun] = useState<LastRun | null>(null);
+  const [outcomeNote, setOutcomeNote] = useState<{ kind: "done" | "failed" | "stopped"; text: string } | null>(null);
 
-  const load = useCallback(async () => {
+  useEffect(() => () => {
+    jobRef.current = null;
+  }, []);
+
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) {
+      setLoading(true);
+    }
+    setLoadError(null);
     try {
-      const loaded: BoardFile[] = [];
-      let offset = 0;
-      let capped = false;
-      for (;;) {
-        const response = await fetch(`/api/files?limit=${PAGE_SIZE}&offset=${offset}`);
-        if (!response.ok) throw new Error(`Files request failed with ${response.status}.`);
-        const body = (await readJson(response)) as {
-          files?: BoardFile[];
-          hasMore?: boolean;
-        } | null;
-        const page = body?.files ?? [];
-        loaded.push(...page);
-        if (loaded.length >= BOARD_FILE_CAP) {
-          capped = true;
-          break;
-        }
-        if (!body?.hasMore || page.length === 0) break;
-        offset += page.length;
-      }
-      const windowed = loaded.slice(0, BOARD_FILE_CAP);
-      setFiles(windowed);
-      setTruncated(capped);
+      const coverage = await runCommand("auto-tag-v2.coverage-summary", {});
+      if (!coverage.ok) throw new Error(coverage.message);
+      const coverageValue = coverage.value as { summary?: unknown };
+      if (typeof coverageValue.summary !== "string") throw new Error("Coverage response was incomplete.");
+      const aggregate = JSON.parse(coverageValue.summary) as {
+        total: number; tagged: number; tags: Record<string, number>;
+        allTags?: unknown;
+        configuredRules?: Array<{ tok: string; tags: string[] }>;
+      };
+      setTotalFiles(aggregate.total);
+      setTaggedFiles(aggregate.tagged);
+      setTagCounts(aggregate.tags);
+      setRealTags(
+        new Set(
+          Array.isArray(aggregate.allTags)
+            ? aggregate.allTags.filter((name): name is string => typeof name === "string")
+            : [],
+        ),
+      );
+      setConfiguredRules(aggregate.configuredRules ?? []);
 
       const history = await runCommand("auto-tag-v2.coverage-history", {});
-      let stored: Snapshot[] = [];
-      if (history.ok) {
-        const value = history.value as { entries?: unknown };
-        stored = parseSnapshots(
-          Array.isArray(value.entries) ? value.entries.filter((e): e is string => typeof e === "string") : [],
-        );
-        setSnapshots(stored);
-      }
+      if (!history.ok) throw new Error(history.message);
+      const historyValue = history.value as { entries?: unknown };
+      setSnapshots(parseSnapshots(Array.isArray(historyValue.entries) ? historyValue.entries.filter((e): e is string => typeof e === "string") : []));
 
-      const tagged = windowed.filter((file) => file.tags.length > 0).length;
-      const tagCounts: Record<string, number> = {};
-      for (const file of windowed) {
-        for (const tag of file.tags) {
-          tagCounts[tag.name] = (tagCounts[tag.name] ?? 0) + 1;
-        }
-      }
-      const last = stored[stored.length - 1];
-      const stale =
-        !last ||
-        Date.now() - new Date(last.at).getTime() > SNAPSHOT_MAX_AGE_MS ||
-        last.tagged !== tagged ||
-        last.total !== windowed.length ||
-        JSON.stringify(last.tags) !== JSON.stringify(tagCounts);
-      if (stale) {
-        const recorded = await runCommand("auto-tag-v2.record-coverage", {
-          tagged,
-          total: windowed.length,
-          tags: Object.entries(tagCounts).map(([name, count]) => `${name}:${count}`),
-        });
-        if (recorded.ok) {
-          const refreshed = await runCommand("auto-tag-v2.coverage-history", {});
-          if (refreshed.ok) {
-            const value = refreshed.value as { entries?: unknown };
-            setSnapshots(
-              parseSnapshots(
-                Array.isArray(value.entries)
-                  ? value.entries.filter((e): e is string => typeof e === "string")
-                  : [],
-              ),
-            );
+      const arrivals = await runCommand("auto-tag-v2.latest-arrivals", {});
+      if (!arrivals.ok) throw new Error(arrivals.message);
+      const arrivalValue = arrivals.value as { hasData?: boolean; batch?: unknown; lastRun?: unknown };
+      if (arrivalValue.hasData && typeof arrivalValue.batch === "string") {
+        const batch = JSON.parse(arrivalValue.batch) as { files?: BoardFile[] };
+        setFiles(batch.files ?? []);
+      } else setFiles([]);
+      if (typeof arrivalValue.lastRun === "string" && arrivalValue.lastRun) {
+        try {
+          const parsed = JSON.parse(arrivalValue.lastRun) as LastRun;
+          if (typeof parsed.at === "string" && typeof parsed.tagged === "number") {
+            setLastRun(parsed);
           }
+        } catch {
+          setLastRun(null);
         }
       }
 
       const queued = await runCommand("auto-tag-v2.list-candidates", {});
-      if (queued.ok) {
-        const value = queued.value as Partial<QueueState>;
-        setQueue({
-          words: Array.isArray(value.words) ? value.words.filter((w): w is string => typeof w === "string") : [],
-          lines: Array.isArray(value.lines) ? value.lines.filter((l): l is string => typeof l === "string") : [],
-        });
-      }
+      if (!queued.ok) throw new Error(queued.message);
+      const value = queued.value as Partial<QueueState> & { entries?: unknown };
+      const entries = Array.isArray(value.entries)
+        ? value.entries.flatMap((entry) => {
+            if (typeof entry !== "string") return [];
+            try { return [JSON.parse(entry) as Candidate]; } catch { return []; }
+          })
+        : [];
+      setQueue({
+        words: Array.isArray(value.words) ? value.words.filter((w): w is string => typeof w === "string") : [],
+        lines: Array.isArray(value.lines) ? value.lines.filter((l): l is string => typeof l === "string") : [],
+        entries,
+      });
+      setQueuePage((page) => {
+        const pages = Math.max(
+          1,
+          Math.ceil(
+            (Array.isArray(value.words) ? value.words.length : 0) / QUEUE_PAGE_SIZE,
+          ),
+        );
+        return Math.min(page, pages - 1);
+      });
       const status = await runCommand("auto-tag-v2.clap-status", {});
-      if (status.ok) {
-        setModel(status.value as ModelState);
-      }
+      if (!status.ok) throw new Error(status.message);
+      setModel(status.value as ModelState);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Board failed to load.");
+      setLoadError(error instanceof Error ? error.message : "Board failed to load.");
     } finally {
       setLoading(false);
+      reloadTokenRef.current += 1;
+      setReloadToken(reloadTokenRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const refresh = () => {
+      if (document.hidden) return;
+      if (jobRef.current !== null) return;
+      void load(true);
+    };
+    const timer = window.setInterval(refresh, 15000);
+    const onVisible = () => {
+      if (!document.hidden) void load(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [enabled, load]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -477,34 +641,51 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
     })();
   }, [enabled, load]);
 
-  const rows = useMemo(() => buildTagRows(files, snapshots), [files, snapshots]);
+  const rows = useMemo(() => buildTagRows(tagCounts, configuredRules, snapshots, realTags), [tagCounts, configuredRules, snapshots, realTags]);
   const query = filter.trim().toLowerCase();
-  const visible = query
+  const matching = query
     ? rows.filter((row) => row.tag.includes(query) || row.toks.some((tok) => tok.includes(query)))
     : rows;
-  const current = visible.find((row) => row.tag === activeTag) ?? visible[0];
+  const realRows = matching.filter((row) => row.real);
+  const current = realRows.find((row) => row.tag === activeTag) ?? realRows[0];
 
-  const total = Math.max(files.length, 1);
-  const tagged = files.filter((file) => file.tags.length > 0).length;
-  const pct = Math.round((tagged / total) * 100);
-  const atGoal = rows.filter((row) => row.count >= COVERAGE_GOAL).length;
+  const pct = totalFiles === 0 ? 0 : Math.round((taggedFiles / totalFiles) * 100);
+  const atGoal = realRows.filter((row) => row.count >= COVERAGE_GOAL).length;
 
-  const members = current ? files.filter((file) => file.tags.some((tag) => tag.name === current.tag)) : [];
+  const [members, setMembers] = useState<BoardFile[]>([]);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [memberPage, setMemberPage] = useState(0);
+  const [memberTotal, setMemberTotal] = useState(0);
 
-  const arrivals = useMemo(
-    () =>
-      [...files]
-        .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
-        .slice(0, ARRIVAL_COUNT),
-    [files],
-  );
+  useEffect(() => {
+    setMemberPage(0);
+  }, [current?.tag]);
+
+  useEffect(() => {
+    if (!enabled || !current) { setMembers([]); setMemberTotal(0); return; }
+    const token = reloadTokenRef.current;
+    const tag = current.tag;
+    const page = memberPage;
+    void (async () => {
+      const result = await runCommand("auto-tag-v2.coverage-summary", { tag, cursor: String(page * MEMBER_PAGE_SIZE), limit: MEMBER_PAGE_SIZE });
+      if (token !== reloadTokenRef.current) return;
+      if (!result.ok) return setLoadError(result.message);
+      const value = result.value as { summary?: unknown };
+      if (typeof value.summary !== "string") return;
+      const summary = JSON.parse(value.summary) as { members?: string[]; tags?: Record<string, number> };
+      setMembers((summary.members ?? []).flatMap((entry) => { try { return [JSON.parse(entry) as BoardFile]; } catch { return []; } }));
+      const counts = summary.tags && typeof summary.tags === "object" ? summary.tags : {};
+      setMemberTotal(typeof counts[tag] === "number" ? counts[tag] : 0);
+    })();
+  }, [current?.tag, enabled, reloadToken, memberPage]);
+
+  const arrivals = files;
   const missed = arrivals.filter((file) => file.tags.length === 0);
   const landed = arrivals.filter((file) => file.tags.length > 0);
 
   const act = useCallback(
     async (label: string, work: () => Promise<{ ok: boolean; message?: string }>) => {
       setBusy(true);
-      setLoading(true);
       try {
         const result = await work();
         if (!result.ok) {
@@ -512,13 +693,129 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
           return;
         }
         toast.success(`${label} done.`);
-        await load();
+        await load(true);
       } finally {
         setBusy(false);
       }
     },
     [load],
   );
+
+  const trackJob = useCallback(
+    async (label: string, jobId: string) => {
+      jobRef.current = jobId;
+      setOutcomeNote(null);
+      setJob({ label, jobId, state: "queued", completed: null, total: null });
+      const terminal = await waitForJob(
+        jobId,
+        (state, completed, total) => {
+          if (jobRef.current === jobId) {
+            setJob({ label, jobId, state, completed, total });
+          }
+        },
+        () => jobRef.current === jobId,
+      );
+      if (terminal === null) return;
+      jobRef.current = null;
+      setJob(null);
+      const note = describeJobEnd(label, terminal);
+      setOutcomeNote(note);
+      if (note.kind === "done") {
+        toast.success(note.text);
+        await load(true);
+      } else if (note.kind === "failed") {
+        toast.error(note.text);
+      } else {
+        toast(note.text);
+      }
+    },
+    [load],
+  );
+
+  const cancelJob = useCallback(async () => {
+    const jobId = jobRef.current;
+    if (!jobId) return;
+    try {
+      await fetch(`/api/extensions-v2/jobs/${jobId}/cancel`, { method: "POST" });
+    } catch {
+      toast.error("Cancel request failed; the job may still be running.");
+    }
+  }, []);
+
+  const analyzeUntagged = useCallback(async () => {
+    if (job !== null || gathering) return;
+    setBusy(true);
+    setGathering(true);
+    setGatherNote("Looking for untagged files…");
+    try {
+      const { ids, checked } = await collectUntaggedIds(500, (count) =>
+        setGatherNote(`Checked ${formatCount(count)} files…`),
+      );
+      if (ids.length === 0) {
+        setGatherNote(
+          checked === 0
+            ? "No files found in the library."
+            : "Everything checked is already tagged.",
+        );
+        return;
+      }
+      setGatherNote(`Tagging ${formatCount(ids.length)} untagged files…`);
+      const submitted = await submitJob("auto-tag-v2.tag-semantic", { fileIds: ids });
+      if (!submitted.ok) {
+        toast.error(submitted.message);
+        setGatherNote(null);
+        return;
+      }
+      setGatherNote(null);
+      await trackJob("Semantic tagging", submitted.jobId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not gather untagged files.");
+      setGatherNote(null);
+    } finally {
+      setGathering(false);
+      setBusy(false);
+    }
+  }, [gathering, job, trackJob]);
+
+  const runRulesBulk = useCallback(async () => {
+    if (rulesRunning || busy || job !== null) return;
+    setBusy(true);
+    setRulesRunning(true);
+    setRulesNote("Looking for untagged files…");
+    try {
+      const { ids } = await collectUntaggedIds(2000, (count) =>
+        setRulesNote(`Checked ${formatCount(count)} files…`),
+      );
+      if (ids.length === 0) {
+        setRulesNote("Everything checked is already tagged.");
+        return;
+      }
+      let tagged = 0;
+      let attached = 0;
+      const chunks = Math.ceil(ids.length / 500);
+      for (let index = 0; index < ids.length; index += 500) {
+        setRulesNote(`Tagging with filename rules… batch ${index / 500 + 1} of ${chunks}`);
+        const result = await runCommand("auto-tag-v2.tag-files", { fileIds: ids.slice(index, index + 500) });
+        if (!result.ok) {
+          toast.error(result.message);
+          setRulesNote(null);
+          return;
+        }
+        const value = result.value as { tagged?: unknown; attached?: unknown };
+        if (typeof value.tagged === "number") tagged += value.tagged;
+        if (typeof value.attached === "number") attached += value.attached;
+      }
+      setRulesNote(`Tagged ${formatCount(tagged)} files with ${formatCount(attached)} tags.`);
+      toast.success(`Filename rules tagged ${formatCount(tagged)} files.`);
+      await load(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not run the filename rules.");
+      setRulesNote(null);
+    } finally {
+      setRulesRunning(false);
+      setBusy(false);
+    }
+  }, [busy, job, load, rulesRunning]);
 
   if (!enabled) {
     return (
@@ -528,6 +825,11 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
           Enable Auto Tag v2 in Settings → Extensions to see coverage, candidates, and similar
           sounds here.
         </p>
+        {onOpenExtensionControls && (
+          <Button className="mt-4" variant="outline" onClick={onOpenExtensionControls}>
+            Open extension controls
+          </Button>
+        )}
       </div>
     );
   }
@@ -535,13 +837,28 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
   if (loading) {
     return (
       <div className="rounded-xl border border-white/10 bg-white/[0.03] px-5 py-8 text-center text-[13px] text-zinc-500">
-        Loading board…
+        Loading Auto Tag…
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-5">
+        <p className="font-medium">Auto Tag could not load</p>
+        <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
+        <Button className="mt-3" variant="outline" onClick={() => void load()}>Try again</Button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <Tabs value={page} onValueChange={(value) => onPageChange?.(value as AutoTagPage)} className="space-y-3">
+      <TabsList variant="line" aria-label="Auto Tag workspace">
+        <TabsTrigger value="coverage">Coverage</TabsTrigger>
+        <TabsTrigger value="origins">Tag origins</TabsTrigger>
+      </TabsList>
+      <TabsContent value="coverage" className="space-y-3">
       <div
         className={cn(
           "grid grid-cols-1 gap-3 md:grid-cols-[260px_minmax(0,1fr)]",
@@ -558,20 +875,16 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
               className="w-full bg-transparent py-2.5 text-[13px] font-medium text-zinc-50 placeholder:font-normal placeholder:text-zinc-600 focus:outline-none"
             />
             {filter && (
-              <button
-                type="button"
-                onClick={() => setFilter("")}
-                className={cn(MONO, "shrink-0 rounded px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-100")}
-              >
+              <Button variant="ghost" size="xs" onClick={() => setFilter("")}>
                 Clear
-              </button>
+              </Button>
             )}
           </div>
           <p className={cn(MONO, "border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-widest text-zinc-500")}>
-            Tags · {atGoal}/{rows.length} at goal
+            Tags · {atGoal}/{realRows.length} at goal
           </p>
           <ul>
-            {visible.map((row) => (
+            {realRows.map((row) => (
               <RailRow
                 key={row.tag}
                 row={row}
@@ -579,8 +892,10 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
                 onSelect={() => setActiveTag(row.tag)}
               />
             ))}
-            {visible.length === 0 && (
-              <li className="px-4 py-3 text-[13px] text-zinc-500">No tags match “{filter}”.</li>
+            {realRows.length === 0 && (
+              <li className="px-4 py-3 text-[13px] text-zinc-500">
+                {query ? `No tags match “${filter}”.` : "No tags yet. Scan the library and the filename rules will create some, or promote words from the candidate queue."}
+              </li>
             )}
           </ul>
         </div>
@@ -593,8 +908,7 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
                 <span className="text-lg font-medium text-zinc-500">%</span>
               </p>
               <p className={cn(MONO, "mt-1 text-[11px] tabular-nums text-zinc-500")}>
-                {tagged}/{files.length} tagged · {files.length - tagged} to go
-                {truncated && ` · first ${BOARD_FILE_CAP} files`}
+                {taggedFiles}/{totalFiles} tagged · {totalFiles - taggedFiles} to go
               </p>
             </div>
             <div className="min-w-0">
@@ -602,62 +916,12 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
             </div>
           </div>
 
-          {current && (
-            <div className="border-t border-white/10 px-6 py-5">
-              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                <h2 className="text-2xl font-extrabold tracking-tight text-zinc-50">#{current.tag}</h2>
-                <span className={cn(MONO, "text-[13px] tabular-nums text-zinc-400")}>
-                  {current.count}
-                  <span className="text-zinc-600">/{COVERAGE_GOAL}</span>
-                </span>
-                {current.toks.length > 0 && (
-                  <span className={cn(MONO, "text-[11px] text-zinc-600")}>
-                    from {current.toks.map((tok) => `“${tok}”`).join(", ")}
-                  </span>
-                )}
-                <span className="flex-1" />
-                <TagSparkChart tag={current.tag} count={current.count} snapshots={snapshots} active />
-              </div>
-
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                <div
-                  className={cn(
-                    "h-full rounded-full transition-[width]",
-                    current.count >= COVERAGE_GOAL ? "bg-emerald-400" : "bg-accent-fill",
-                  )}
-                  style={{ width: `${Math.min(1, current.count / COVERAGE_GOAL) * 100}%` }}
-                />
-              </div>
-
-              <ul className="mt-4 space-y-1.5 border-t border-white/10 pt-3">
-                {members.map((file) => (
-                  <li key={file.id} className="flex flex-wrap items-center gap-2 text-[13px]">
-                    <span className="min-w-0 flex-1 truncate text-zinc-200">{file.filename}</span>
-                    {file.tags.map((tag) => (
-                      <Badge
-                        key={tag.id}
-                        variant={tag.name === current.tag ? "default" : "secondary"}
-                        className="flex h-4 items-center gap-1 px-1.5 text-[10px]"
-                      >
-                        #{tag.name}
-                        <TagOriginMark origin={tag.origin} confidence={tag.confidence} />
-                      </Badge>
-                    ))}
-                  </li>
-                ))}
-                {members.length === 0 && (
-                  <li className="text-[13px] text-zinc-500">Nothing carrying this tag yet.</li>
-                )}
-              </ul>
-            </div>
-          )}
-
           <div className="border-t border-white/10 px-6 py-4">
             <p className={cn(MONO, "text-[10px] uppercase tracking-widest text-zinc-500")}>
               All tags · history vs goal
             </p>
             <ul className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
-              {visible.map((row) => (
+              {realRows.map((row) => (
                 <li key={row.tag}>
                   <button
                     type="button"
@@ -686,6 +950,81 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
               ))}
             </ul>
           </div>
+
+          {current && (
+            <div className="border-t border-white/10 px-6 py-5">
+              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                <h2 className="text-2xl font-extrabold tracking-tight text-zinc-50">#{current.tag}</h2>
+                <span className={cn(MONO, "text-[13px] tabular-nums text-zinc-400")}>
+                  {current.count}
+                  <span className="text-zinc-600">/{COVERAGE_GOAL}</span>
+                </span>
+                {current.toks.length > 0 && (
+                  <span className={cn(MONO, "text-[11px] text-zinc-600")}>
+                    from {current.toks.map((tok) => `“${tok}”`).join(", ")}
+                  </span>
+                )}
+                <span className="flex-1" />
+                <TagSparkChart tag={current.tag} count={current.count} snapshots={snapshots} active />
+              </div>
+
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-[width]",
+                    current.count >= COVERAGE_GOAL ? "bg-chart-3" : "bg-accent-fill",
+                  )}
+                  style={{ width: `${Math.min(1, current.count / COVERAGE_GOAL) * 100}%` }}
+                />
+              </div>
+
+              <div className="mt-4 border-t border-white/10 pt-3">
+                <p className={cn(MONO, "text-[10px] uppercase tracking-widest text-zinc-500")}>
+                  Files · {memberTotal > 0 ? `${memberPage * MEMBER_PAGE_SIZE + 1}–${memberPage * MEMBER_PAGE_SIZE + members.length} of ${memberTotal}` : "none yet"}
+                </p>
+                <ul className="mt-1.5 space-y-1.5">
+                  {members.map((file) => (
+                    <li key={file.id} className="flex flex-wrap items-center gap-2 text-[13px]">
+                      <span className="min-w-0 flex-1 truncate text-zinc-200">{file.filename}</span>
+                      {file.tags.map((tag) => (
+                        <SoundTag
+                          key={tag.id}
+                          name={tag.name}
+                          selected={tag.name === current.tag}
+                          provenance={tag.origin}
+                          confidence={tag.confidence}
+                        />
+                      ))}
+                    </li>
+                  ))}
+                  {members.length === 0 && (
+                    <li className="text-[13px] text-zinc-500">Nothing carrying this tag yet.</li>
+                  )}
+                </ul>
+                {memberTotal > MEMBER_PAGE_SIZE && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="flex-1" />
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      disabled={memberPage === 0}
+                      onClick={() => setMemberPage((page) => Math.max(0, page - 1))}
+                    >
+                      Prev
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      disabled={memberPage * MEMBER_PAGE_SIZE + members.length >= memberTotal}
+                      onClick={() => setMemberPage((page) => page + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {arrivals.length > 0 && (
@@ -707,7 +1046,6 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
                   </p>
                   <ul className="mt-1 border-t border-white/10">
                     {missed.map((file) => {
-                      const unmatched = unmatchedTokens(file.filename)[0];
                       return (
                         <li
                           key={file.id}
@@ -715,25 +1053,21 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
                         >
                           <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
                           <span className="min-w-0 flex-1 truncate text-zinc-200">{file.filename}</span>
-                          {unmatched && (
-                            <span className={cn(MONO, "shrink-0 text-[11px] text-zinc-500")}>
-                              “{unmatched}”
-                            </span>
-                          )}
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
+                            size="xs"
                             disabled={busy}
                             onClick={() =>
                               void act("Tag", () =>
                                 runCommand("auto-tag-v2.tag-files", { fileIds: [file.id] }),
                               )
                             }
-                            className={cn(MONO, "shrink-0 rounded px-1.5 py-0.5 text-[10px] text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-100")}
                           >
                             Tag
-                          </button>
-                          <button
-                            type="button"
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="xs"
                             disabled={busy}
                             onClick={() =>
                               void (async () => {
@@ -755,10 +1089,9 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
                                 }));
                               })()
                             }
-                            className={cn(MONO, "shrink-0 rounded px-1.5 py-0.5 text-[10px] text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-100")}
                           >
                             Similar
-                          </button>
+                          </Button>
                           {similar[file.id] && (
                             <span className={cn(MONO, "w-full pl-4 text-[11px] text-zinc-600")}>
                               {similar[file.id]!.length > 0
@@ -766,6 +1099,9 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
                                 : "nothing close yet"}
                             </span>
                           )}
+                          <span className={cn(MONO, "w-full pl-4 text-[11px] text-zinc-600")}>
+                            no rule fired
+                          </span>
                         </li>
                       );
                     })}
@@ -779,31 +1115,27 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
                   </p>
                   <ul className="mt-1 border-t border-white/10">
                     {landed.map((file) => {
-                      const fired = SEED_RULES.filter((rule) =>
-                        filenameMatchesToken(file.filename, rule.tok),
-                      );
+                      const fired = file.firedRules ?? [];
                       return (
                         <li
                           key={file.id}
                           className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-white/5 py-2 text-[13px] last:border-0"
                         >
-                          <span className="size-1.5 shrink-0 rounded-full bg-emerald-400" />
+                          <span className="size-1.5 shrink-0 rounded-full bg-chart-3" />
                           <span className="min-w-0 flex-1 truncate text-zinc-200">{file.filename}</span>
                           <span className="flex shrink-0 gap-1">
                             {file.tags.map((tag) => (
-                              <Badge
+                              <SoundTag
                                 key={tag.id}
-                                variant="secondary"
-                                className="flex h-4 items-center gap-1 px-1.5 text-[10px]"
-                              >
-                                #{tag.name}
-                                <TagOriginMark origin={tag.origin} confidence={tag.confidence} />
-                              </Badge>
+                                name={tag.name}
+                                provenance={tag.origin}
+                                confidence={tag.confidence}
+                              />
                             ))}
                           </span>
                           {fired.length > 0 && (
                             <span className={cn(MONO, "w-full pl-4 text-[11px] text-zinc-600")}>
-                              fired {fired.map((rule) => `“${rule.tok}”`).join(", ")}
+                              fired {fired.map((rule) => `“${rule.token}”`).join(", ")}
                             </span>
                           )}
                         </li>
@@ -824,122 +1156,243 @@ export function AutoTagBoard({ enabled }: { enabled: boolean }) {
           <span className={cn(MONO, "text-[11px] text-zinc-500")}>explicit accept only</span>
         </div>
         <ul className="mt-1 border-t border-white/10">
-          {queue.lines.map((line, index) => (
-            <li
-              key={`${queue.words[index]}-${index}`}
-              className="flex flex-wrap items-center gap-2 border-b border-white/5 py-2 text-[13px] last:border-0"
-            >
-              <span className="min-w-0 flex-1 truncate text-zinc-200">{line}</span>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void act("Promote", () =>
-                    runCommand("auto-tag-v2.promote-candidate", {
-                      word: queue.words[index],
-                    }),
-                  )
-                }
-                className={cn(MONO, "shrink-0 rounded px-1.5 py-0.5 text-[10px] text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-100")}
+          {queue.lines.slice(queuePage * QUEUE_PAGE_SIZE, queuePage * QUEUE_PAGE_SIZE + QUEUE_PAGE_SIZE).map((line, sliceIndex) => {
+            const index = queuePage * QUEUE_PAGE_SIZE + sliceIndex;
+            return (
+              <li
+                key={`${queue.words[index]}-${index}`}
+                className="flex flex-wrap items-center gap-2 border-b border-white/5 py-2 text-[13px] last:border-0"
               >
-                Promote
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void act("Dismiss", () =>
-                    runCommand("auto-tag-v2.dismiss-candidate", {
-                      word: queue.words[index],
-                    }),
-                  )
-                }
-                className={cn(MONO, "shrink-0 rounded px-1.5 py-0.5 text-[10px] text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-100")}
-              >
-                Dismiss
-              </button>
-            </li>
-          ))}
+                <span className="min-w-0 flex-1 truncate text-zinc-200">{line}</span>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  disabled={busy}
+                  onClick={() =>
+                    void act("Promote", () =>
+                      runCommand("auto-tag-v2.promote-candidate", {
+                        word: queue.words[index],
+                      }),
+                    )
+                  }
+                >
+                  Promote
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  disabled={busy}
+                  onClick={() =>
+                    void act("Dismiss", () =>
+                      runCommand("auto-tag-v2.dismiss-candidate", {
+                        word: queue.words[index],
+                      }),
+                    )
+                  }
+                >
+                  Dismiss
+                </Button>
+              </li>
+            );
+          })}
           {queue.lines.length === 0 && (
-            <li className="py-2 text-[13px] text-zinc-500">Queue empty. Every word is covered.</li>
+            <li className="py-2 text-[13px] text-zinc-500">No candidates are awaiting review.</li>
           )}
         </ul>
+        {queue.lines.length > QUEUE_PAGE_SIZE && (
+          <div className="mt-2 flex items-center gap-2">
+            <span className={cn(MONO, "text-[11px] tabular-nums text-zinc-500")}>
+              Showing {queuePage * QUEUE_PAGE_SIZE + 1}–{Math.min(queue.lines.length, queuePage * QUEUE_PAGE_SIZE + QUEUE_PAGE_SIZE)} of {queue.lines.length}
+            </span>
+            <span className="flex-1" />
+            <Button
+              variant="ghost"
+              size="xs"
+              disabled={queuePage === 0}
+              onClick={() => setQueuePage((page) => Math.max(0, page - 1))}
+            >
+              Prev
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              disabled={(queuePage + 1) * QUEUE_PAGE_SIZE >= queue.lines.length}
+              onClick={() => setQueuePage((page) => page + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <h2 className="text-sm font-semibold text-zinc-100">Filename rules</h2>
+          <span className="flex-1" />
+          <span className={cn(MONO, "text-[11px] text-zinc-500")}>
+            deterministic · manual tags always win
+          </span>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={busy || rulesRunning || job !== null || totalFiles - taggedFiles === 0}
+            onClick={() => void runRulesBulk()}
+          >
+            Tag untagged files with filename rules
+          </Button>
+        </div>
+        {rulesNote && (
+          <p className={cn(MONO, "mt-1 text-[11px] text-zinc-400")}>{rulesNote}</p>
+        )}
       </div>
 
       <div className="rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4">
         <div className="flex flex-wrap items-baseline gap-2">
           <h2 className="text-sm font-semibold text-zinc-100">Semantic tagging</h2>
           <span className="flex-1" />
-          <span className={cn(MONO, "text-[11px] text-zinc-500")}>
-            {model ? `${model.state} · ${model.downloadedBytes}/${model.totalBytes} bytes` : "…"}
-          </span>
+          {!model ? (
+            <span className={cn(MONO, "text-[11px] text-zinc-500")}>…</span>
+          ) : model.state === "ready" ? (
+            <StatusBadge status="model ready" tone="ready" />
+          ) : model.state === "downloading" ? (
+            <StatusBadge
+              status={`downloading ${formatCount(model.downloadedBytes)}/${formatCount(model.totalBytes)}`}
+              tone="warning"
+            />
+          ) : (
+            <StatusBadge status="model not downloaded" tone="neutral" />
+          )}
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {!confirmDownload ? (
-            <button
-              type="button"
-              disabled={busy || model?.state === "ready"}
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={busy || job !== null || model?.state === "ready"}
               onClick={() => setConfirmDownload(true)}
-              className={cn(MONO, "rounded-md px-2 py-1 text-[11px] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-40")}
             >
               Download model
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
-              disabled={busy}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || job !== null}
               onClick={() => {
                 setConfirmDownload(false);
-                void act("Download", async () => {
-                  const submitted = await submitJob("auto-tag-v2.download-model", {
-                    confirm: true,
-                  });
-                  if (!submitted.ok) return submitted;
-                  const settled = await waitForJob(submitted.jobId);
-                  return settled
-                    ? { ok: true as const, value: null }
-                    : { ok: false as const, message: "Download job did not succeed." };
-                });
+                setBusy(true);
+                void (async () => {
+                  try {
+                    const submitted = await submitJob("auto-tag-v2.download-model", {
+                      confirm: true,
+                    });
+                    if (!submitted.ok) {
+                      toast.error(submitted.message);
+                      return;
+                    }
+                    await trackJob("Download", submitted.jobId);
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
               }}
-              className={cn(MONO, "rounded-md bg-white/10 px-2 py-1 text-[11px] font-bold text-zinc-100")}
             >
               Confirm ~400 MB download
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            disabled={busy || untaggedCount(files) === 0}
-            onClick={() =>
-              void act("Semantic tagging", async () => {
-                const ids = files
-                  .filter((file) => file.tags.length === 0)
-                  .slice(0, 500)
-                  .map((file) => file.id);
-                const submitted = await submitJob("auto-tag-v2.tag-semantic", {
-                  fileIds: ids,
-                });
-                if (!submitted.ok) return submitted;
-                const settled = await waitForJob(submitted.jobId);
-                return settled
-                  ? { ok: true as const, value: null }
-                  : { ok: false as const, message: "Tagging job did not succeed." };
-              })
-            }
-            className={cn(MONO, "rounded-md px-2 py-1 text-[11px] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-40")}
+          <Button
+            variant="default"
+            size="sm"
+            disabled={busy || gathering || job !== null || model?.state !== "ready" || totalFiles - taggedFiles === 0}
+            onClick={() => void analyzeUntagged()}
           >
-            Tag untagged with CLAP
-          </button>
+            Analyze untagged files with CLAP
+          </Button>
         </div>
+        <p className={cn(MONO, "mt-2 text-[11px] tabular-nums text-zinc-500")}>
+          {formatCount(Math.max(0, totalFiles - taggedFiles))} untagged of {formatCount(totalFiles)} in the library
+        </p>
+        {model && model.state !== "ready" && (
+          <p className={cn(MONO, "mt-1 text-[11px] text-zinc-600")}>
+            Download the model first, then analyzing unlocks.
+          </p>
+        )}
+        {model?.state === "ready" && totalFiles > 0 && totalFiles - taggedFiles === 0 && (
+          <p className={cn(MONO, "mt-1 text-[11px] text-zinc-600")}>
+            Everything is tagged. New scans will add to this count.
+          </p>
+        )}
+        {lastRun && (
+          <p className={cn(MONO, "mt-1 text-[11px] tabular-nums text-zinc-500")}>
+            Last run {shortTime(lastRun.at)} · {lastRun.command === "tag-semantic" ? "CLAP" : "rules"}:
+            tagged {formatCount(lastRun.tagged)}, attached {formatCount(lastRun.attached)},
+            skipped {formatCount(lastRun.skipped)}
+            {lastRun.failed > 0 && ` · ${lastRun.failed} failed`}
+          </p>
+        )}
+        {lastRun && lastRun.tagged === 0 && lastRun.skipped > 0 && (
+          <p className={cn(MONO, "mt-1 text-[11px] text-zinc-600")}>
+            Nothing cleared the bar. Promoting candidates from the queue grows the vocabulary it matches against.
+          </p>
+        )}
+        {gatherNote && (
+          <p className={cn(MONO, "mt-1 text-[11px] text-zinc-400")}>{gatherNote}</p>
+        )}
+        {!job && !gatherNote && outcomeNote && (
+          <p
+            role="status"
+            className={cn(
+              MONO,
+              "mt-1 text-[11px]",
+              outcomeNote.kind === "failed" ? "text-destructive" : "text-zinc-500",
+            )}
+          >
+            {outcomeNote.text}
+          </p>
+        )}
+        {job && (
+          <div className="mt-3 border-t border-white/10 pt-3">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <p className="text-[13px] text-zinc-200">
+                {job.label}… {job.state}
+                {job.completed !== null && job.total !== null && (
+                  <span className={cn(MONO, "text-[11px] tabular-nums text-zinc-500")}>
+                    {" "}{formatCount(job.completed)}/{formatCount(job.total)}
+                  </span>
+                )}
+              </p>
+              <span className="flex-1" />
+              <button
+                type="button"
+                onClick={() => void cancelJob()}
+                className={cn(MONO, "shrink-0 rounded px-1.5 py-0.5 text-[10px] text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-100")}
+              >
+                Cancel
+              </button>
+            </div>
+            {job.completed !== null && job.total !== null && job.total > 0 && (
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                  className="h-full rounded-full bg-accent-fill transition-[width]"
+                  style={{ width: `${Math.min(1, job.completed / job.total) * 100}%` }}
+                />
+              </div>
+            )}
+            <p className={cn(MONO, "mt-1 truncate text-[10px] text-zinc-600")}>{job.jobId}</p>
+          </div>
+        )}
         {!model?.backendAvailable && (
           <p className={cn(MONO, "mt-2 text-[11px] text-zinc-600")}>
             No inference runtime installed; semantic tagging reports it instead of pretending.
           </p>
         )}
       </div>
-    </div>
+      </TabsContent>
+      <TabsContent value="origins">
+        <TagOrigins />
+      </TabsContent>
+    </Tabs>
   );
-}
-
-function untaggedCount(files: BoardFile[]): number {
-  return files.filter((file) => file.tags.length === 0).length;
 }

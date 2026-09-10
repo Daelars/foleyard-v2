@@ -1,5 +1,5 @@
 import type { Collection } from "../domain/collection";
-import type { Tag, TagOrigin } from "../domain/tag";
+import type { FileTagAttachment, Tag, TagOrigin } from "../domain/tag";
 
 import type { ExtensionV2Permission } from "./definition";
 import { V2OperationError } from "./operations";
@@ -42,10 +42,17 @@ export type V2CollectionPorts = {
 export type V2TagPorts = {
   list(): Tag[];
   tagsForFile(fileId: string): Tag[];
+  attachmentsForFiles?(fileIds: string[]): V2TagAttachment[];
   create(name: string): string;
   attach(fileId: string, tagId: string, origin?: TagOrigin, confidence?: number | null): void;
   detach(fileId: string, tagId: string): void;
+  detachByOrigin?(origin: Exclude<TagOrigin, "manual">): number;
+  resolveAlias?(alias: string): string | null;
+  renamePreservingAlias?(tagId: string, name: string): void;
+  merge?(sourceTagId: string, targetTagId: string): { moved: number };
 };
+
+export type V2TagAttachment = FileTagAttachment & { tagName: string };
 
 export type V2CollectionOperations = {
   list(): Collection[];
@@ -60,9 +67,14 @@ export type V2CollectionOperations = {
 export type V2TagOperations = {
   list(): Tag[];
   tagsForFile(fileId: string): Tag[];
+  attachmentsForFiles(fileIds: string[]): V2TagAttachment[];
   create(name: string): { id: string };
   attach(fileId: string, tagId: string, origin?: TagOrigin, confidence?: number | null): void;
   detach(fileId: string, tagId: string): void;
+  detachByOrigin(origin: Exclude<TagOrigin, "manual">): number;
+  resolveAlias(alias: string): string | null;
+  renamePreservingAlias(tagId: string, name: string): void;
+  merge(sourceTagId: string, targetTagId: string): { moved: number };
 };
 
 export type V2OrganizationFactoryArgs = {
@@ -248,6 +260,11 @@ export function createV2TagOperations(args: V2OrganizationFactoryArgs): V2TagOpe
       require("tags:read");
       return ports().tagsForFile(checkId(fileId, "Sound ID"));
     },
+    attachmentsForFiles(fileIds: string[]): V2TagAttachment[] {
+      require("tags:read");
+      if (!ports().attachmentsForFiles) throw unsupported("Tag attachment reads", args.extensionId);
+      return ports().attachmentsForFiles!(fileIds.map((id) => checkId(id, "Sound ID")));
+    },
     create(name: string): { id: string } {
       require("tags:write");
       const cleanName = checkName(name, "Tag name", V2_MAX_TAG_NAME_LENGTH);
@@ -273,6 +290,34 @@ export function createV2TagOperations(args: V2OrganizationFactoryArgs): V2TagOpe
       ports().detach(checkId(fileId, "Sound ID"), checkId(tagId, "Tag ID"));
       args.notify?.("tags");
     },
+    detachByOrigin(origin: Exclude<TagOrigin, "manual">): number {
+      require("tags:write");
+      if (origin !== "deterministic" && origin !== "semantic_ai") {
+        throw new V2OperationError("input-invalid", "Only deterministic or semantic AI attachments can be removed here.");
+      }
+      if (!ports().detachByOrigin) throw unsupported("Origin rollback", args.extensionId);
+      const removed = ports().detachByOrigin!(origin);
+      args.notify?.("tags");
+      return removed;
+    },
+    resolveAlias(alias: string): string | null {
+      require("tags:read");
+      if (!ports().resolveAlias) throw unsupported("Tag aliases", args.extensionId);
+      return ports().resolveAlias!(checkName(alias, "Tag alias", V2_MAX_TAG_NAME_LENGTH));
+    },
+    renamePreservingAlias(tagId: string, name: string): void {
+      require("tags:write");
+      if (!ports().renamePreservingAlias) throw unsupported("Tag rename", args.extensionId);
+      ports().renamePreservingAlias!(checkId(tagId, "Tag ID"), checkName(name, "Tag name", V2_MAX_TAG_NAME_LENGTH));
+      args.notify?.("tags");
+    },
+    merge(sourceTagId: string, targetTagId: string): { moved: number } {
+      require("tags:write");
+      if (!ports().merge) throw unsupported("Tag merge", args.extensionId);
+      const result = ports().merge!(checkId(sourceTagId, "Source tag ID"), checkId(targetTagId, "Target tag ID"));
+      args.notify?.("tags");
+      return result;
+    },
   };
 }
 
@@ -297,9 +342,14 @@ export function denyV2OrganizationOperations(extensionId: string): {
   const tags: V2TagOperations = {
     list: () => deny(),
     tagsForFile: () => deny(),
+    attachmentsForFiles: () => deny(),
     create: () => denyAsync(),
     attach: () => deny(),
     detach: () => deny(),
+    detachByOrigin: () => deny(),
+    resolveAlias: () => deny(),
+    renamePreservingAlias: () => deny(),
+    merge: () => deny(),
   };
   return { collections, tags };
 }

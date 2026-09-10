@@ -1,0 +1,60 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<div class="eyebrow">Foleyard extensions &middot; what changed</div>
+<h1>What a tool can reach, before and after</h1>
+<p class="sub">The old system handed a tool a bag of services and trusted it. The new one gives it exactly what its
+manifest declared and you approved, out of twenty-one permissions the registry recognizes.</p>
+
+<div class="wrap">
+  <div class="band">
+    <div class="lbl">Before &mdash; the v1 context object, handed to every tool</div>
+    <div class="chips">
+      <span class="chip">library<span class="s">optional</span></span>
+      <span class="chip">tags<span class="s">optional</span></span>
+      <span class="chip">favorites<span class="s">optional</span></span>
+      <span class="chip">collections<span class="s">optional</span></span>
+      <span class="chip">settings<span class="s">optional</span></span>
+      <span class="chip">commands<span class="s">always present</span></span>
+      <span class="chip">filesystem<span class="s">optional, so skippable</span></span>
+      <span class="chip on">node:fs<span class="s">the fallback every tool took</span></span>
+    </div>
+  </div>
+  <div class="down">&darr;</div>
+  <div class="band">
+    <div class="lbl">After &mdash; Auto Tag v2 declares 7 of 21, and gets nothing else</div>
+    <div class="chips">
+      <span class="chip on">library:read</span>
+      <span class="chip on">files:read</span>
+      <span class="chip on">tags:read</span>
+      <span class="chip on">tags:write</span>
+      <span class="chip on">settings:read</span>
+      <span class="chip on">embeddings:read</span>
+      <span class="chip on">embeddings:write</span>
+      <span class="chip">library:write</span>
+      <span class="chip">files:write</span>
+      <span class="chip">files:copy</span>
+      <span class="chip">files:rename</span>
+      <span class="chip">files:delete</span>
+      <span class="chip">collections:read</span>
+      <span class="chip">collections:write</span>
+      <span class="chip">favorites:read</span>
+      <span class="chip">favorites:write</span>
+      <span class="chip">desktop:reveal</span>
+      <span class="chip">desktop:open</span>
+      <span class="chip">drop:read</span>
+      <span class="chip">drop:modify</span>
+      <span class="chip">settings:write</span>
+    </div>
+  </div>
+</div>
+
+<div class="legend"><span><i style="border-color:#f0503c"></i>granted to Auto Tag v2</span><span><i style="border-color:#3f3f46"></i>never requested, so never available</span></div>
+
+<div class="note">
+  <div class="card"><h4>The list is not advisory</h4>
+    <p>The manifest becomes a permission checker. A handler calling something it never declared throws, and the host
+    turns that into a plain <span class="mono">permission-denied</span> result instead of a crash or a silent write.</p></div>
+  <div class="card"><h4>Auto Tag can never delete a file</h4>
+    <p>It reads your library and writes tags. It cannot copy, rename, delete, or reveal anything on disk, because it
+    never asked for those and the host will not hand them over.</p></div>
+</div>
+<div class="foot">Source: ExtensionV2Permission in packages/yard-core/src/extensions-v2/definition.ts, and the Auto Tag v2 manifest in packages/yard-tools/auto-tag-v2/src/definition.ts.</div>

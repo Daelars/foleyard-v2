@@ -74,3 +74,12 @@ next-env.d.ts
 .idea/
 .vscode/
 Thumbs.db
+
+# release-chronicle research scratch (private conversation history)
+/blog-posts/.research/
+
+# local CLAP model weights (downloaded, too large for git)
+/foleyard-models/
+
+# generated benchmark output
+/src/app/prototype/performance/benchmark-results.json

@@ -1,0 +1,56 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<div class="eyebrow">Foleyard v2 &middot; the whole thing</div>
+<h1>How Foleyard is put together</h1>
+<p class="sub">A desktop app around a local folder of sound. Nothing leaves your machine. The four bands below are
+the whole system: the shell you launch, the interface you use, the core that does the work, and the things on
+your disk it reads and writes.</p>
+
+<div class="wrap">
+  <div class="band">
+    <div class="lbl">Desktop shell &mdash; Electron</div>
+    <div class="chips">
+      <span class="chip">Window and lifecycle<span class="s">electron/main</span></span>
+      <span class="chip">Folder grants<span class="s">you pick what it may read</span></span>
+      <span class="chip">Reveal and open<span class="s">hand a file to the OS</span></span>
+      <span class="chip">Native module checks<span class="s">verified downloads, ABI match</span></span>
+      <span class="chip">Auto update<span class="s">signed releases</span></span>
+    </div>
+  </div>
+  <div class="down">&darr;</div>
+  <div class="band">
+    <div class="lbl">Interface &mdash; Next.js renderer</div>
+    <div class="chips">
+      <span class="chip">Library<span class="s">browse, search, preview</span></span>
+      <span class="chip">Favorites and Shelf<span class="s">keep things close</span></span>
+      <span class="chip">Organize<span class="s">tags and collections</span></span>
+      <span class="chip on">Auto tag<span class="s">new in v2</span></span>
+      <span class="chip on">Tools<span class="s">seven v2 extensions</span></span>
+      <span class="chip">Settings<span class="s">library, scanning, tools</span></span>
+      <span class="chip">Waveform peaks<span class="s">decoded in the browser, cached in IndexedDB</span></span>
+    </div>
+  </div>
+  <div class="down">&darr; one typed channel registry, every payload validated at the send site &darr;</div>
+  <div class="band">
+    <div class="lbl">Core &mdash; yard-core</div>
+    <div class="chips">
+      <span class="chip">Repositories<span class="s">files, tags, collections, favorites</span></span>
+      <span class="chip">Scanner<span class="s">discovery, metadata queue, reconcile</span></span>
+      <span class="chip on">Tag origins<span class="s">manual, rules, AI, plus confidence</span></span>
+      <span class="chip on">Extensions v2 host<span class="s">registry, permissions, jobs</span></span>
+      <span class="chip on">Embedding store<span class="s">model-keyed vectors, cosine ranking</span></span>
+      <span class="chip">Filesystem adapter<span class="s">the only way to the disk</span></span>
+    </div>
+  </div>
+  <div class="down">&darr;</div>
+  <div class="band">
+    <div class="lbl">Your machine</div>
+    <div class="chips">
+      <span class="chip">Your audio folders<span class="s">read in place, never moved</span></span>
+      <span class="chip">foleyard.sqlite<span class="s">the index, one shared connection</span></span>
+      <span class="chip">Waveform cache<span class="s">peaks, browser side</span></span>
+      <span class="chip on">CLAP model files<span class="s">only if you ask for them</span></span>
+    </div>
+  </div>
+</div>
+
+<div class="foot">Highlighted boxes are new or rebuilt for v2. Everything runs locally; there is no Foleyard server in this picture.</div>

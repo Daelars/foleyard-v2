@@ -18,7 +18,7 @@ import { V3LibraryDropZone } from "./components/extensions/drop-zone";
 import { V3SelectionActions } from "./components/extensions/selection-actions";
 import { V3ExtensionsSection } from "./components/extensions/settings-section";
 import { V3ToolsCards } from "./components/extensions/tools-cards";
-import { V3AutoTagBoard } from "./components/auto-tag/auto-tag";
+import dynamic from "next/dynamic";
 import { useV2PaletteBridge } from "@/components/extensions-v2/use-v2-palette";
 import { V3MakePackV2Dialog } from "./components/ext-flows/make-pack-v2";
 import {
@@ -78,6 +78,24 @@ import {
   V3SimilarSoundsDialog,
 } from "./components/dialogs";
 import { SCAN_SETTLE_SLICES, type RefetchSlice } from "../library/refetch-map";
+
+// Auto Tag and its charting dependency only load once the user opens the
+// board, keeping Recharts out of the Library route's initial JavaScript
+// (#235).
+const V3AutoTagBoard = dynamic(
+  () =>
+    import("./components/auto-tag/auto-tag").then((mod) => mod.V3AutoTagBoard),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-xl border border-(--vi-edge) bg-white/[0.02] px-5 py-6">
+        <p className="font-mono text-[11px] text-zinc-500">
+          Loading Auto Tag…
+        </p>
+      </div>
+    ),
+  },
+);
 
 export default function AppV3() {
   return <AppV3Content />;

@@ -28,19 +28,24 @@ describe("v2 palette dialog routing", () => {
   });
 
   it("opens the janitor dialog for scans and deletes, headless otherwise", () => {
-    const onOpenJanitor = vi.fn();
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({ ok: true, outcome: { kind: "immediate", value: {} } }),
     }));
     vi.stubGlobal("fetch", fetchMock);
+    const ui = renderHook(() => useExtensionUi(callbacks));
+    const onOpenJanitor = vi.fn(ui.result.current.openJanitorLibrary);
     const { result } = renderHook(() =>
       useV2PaletteBridge([], null, emptyV2UiState(), { onOpenJanitor }),
     );
 
-    result.current.runV2Command("folder-janitor-v2", "folder-janitor-v2.scan-library");
-    result.current.runV2Command("folder-janitor-v2", "folder-janitor-v2.delete-folders");
+    act(() => {
+      result.current.runV2Command("folder-janitor-v2", "folder-janitor-v2.scan-library");
+      result.current.runV2Command("folder-janitor-v2", "folder-janitor-v2.delete-folders");
+    });
     expect(onOpenJanitor).toHaveBeenCalledTimes(2);
+    expect(ui.result.current.folderJanitorOpen).toBe(true);
+    expect(ui.result.current.folderJanitorTarget).toBe("library");
     expect(fetchMock).not.toHaveBeenCalled();
 
     result.current.runV2Command("folder-janitor-v2", "folder-janitor-v2.remove-files");
@@ -49,19 +54,24 @@ describe("v2 palette dialog routing", () => {
   });
 
   it("opens the gather dialog for gather commands", () => {
-    const onOpenGather = vi.fn();
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({ ok: true, outcome: { kind: "immediate", value: {} } }),
     }));
     vi.stubGlobal("fetch", fetchMock);
+    const ui = renderHook(() => useExtensionUi(callbacks));
+    expect(ui.result.current.gatherOpen).toBe(false);
+    const onOpenGather = vi.fn(ui.result.current.openGatherDialog);
     const { result } = renderHook(() =>
       useV2PaletteBridge([], null, emptyV2UiState(), { onOpenGather }),
     );
 
-    result.current.runV2Command("library-gatherer-v2", "library-gatherer-v2.preview-gather");
-    result.current.runV2Command("library-gatherer-v2", "library-gatherer-v2.gather");
+    act(() => {
+      result.current.runV2Command("library-gatherer-v2", "library-gatherer-v2.preview-gather");
+      result.current.runV2Command("library-gatherer-v2", "library-gatherer-v2.gather");
+    });
     expect(onOpenGather).toHaveBeenCalledTimes(2);
+    expect(ui.result.current.gatherOpen).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -77,25 +87,5 @@ describe("v2 palette dialog routing", () => {
 
     result.current.runV2Command("folder-janitor-v2", "folder-janitor-v2.scan-library");
     expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("extension ui v2 dialog openers", () => {
-  it("opens the janitor dialog on the library target", () => {
-    const { result } = renderHook(() => useExtensionUi(callbacks));
-    act(() => {
-      result.current.openJanitorLibrary();
-    });
-    expect(result.current.folderJanitorOpen).toBe(true);
-    expect(result.current.folderJanitorTarget).toBe("library");
-  });
-
-  it("opens the gather dialog", () => {
-    const { result } = renderHook(() => useExtensionUi(callbacks));
-    expect(result.current.gatherOpen).toBe(false);
-    act(() => {
-      result.current.openGatherDialog();
-    });
-    expect(result.current.gatherOpen).toBe(true);
   });
 });

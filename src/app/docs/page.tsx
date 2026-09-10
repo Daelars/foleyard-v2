@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { DesktopTitleBar } from "@/components/DesktopTitleBar";
 import { getDocumentationLocation, getDocumentationRegistry } from "@/lib/documentation";
-import { DocsBrowser, DocsHeader } from "./docs-browser";
+import { DocsBrowser, DocsHeader, DocsStatus } from "./docs-browser";
 
 export const metadata: Metadata = {
   title: "Documentation — Foleyard",
@@ -27,14 +27,12 @@ export default function DocsPage() {
             Every live guide in the version-matched set ({location.manifestId} v{location.productVersion}).
             Select a guide to read it; each has a shareable /docs link.
           </p>
+          <DocsStatus location={location} examples={location.examples} />
           <div className="mt-6">
             <DocsBrowser
               documents={documents}
-              location={{
-                manifestId: location.manifestId,
-                productVersion: location.productVersion,
-                matched: location.matched,
-              }}
+              location={location}
+              examples={location.examples}
               initialId={null}
             />
           </div>

@@ -6,12 +6,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, BookOpen, Search } from "lucide-react";
 
 import type { DocumentEntry } from "@/lib/documentation";
+import { Markdown } from "@/components/markdown";
+
+import { resolveDocHref } from "./resolve-doc-link";
 
 type DocsLocation = {
   manifestId: string;
   productVersion: string;
   matched: boolean;
+  matchState: "matched" | "mismatched" | "unversioned" | "missing-manifest";
+  mismatches: Array<{ field: string; expected: string; actual: string }>;
+  manifest: {
+    productVersion: string | null;
+    buildId: string | null;
+    sourceRevision: string | null;
+    sourceDirty: boolean | null;
+    documentCount: number;
+  } | null;
 };
+
+type DocsExample = { id: string };
 
 function docHref(id: string | null): string {
   return id === null ? "/docs" : `/docs/${id}`;
@@ -29,225 +43,16 @@ function groupFor(id: string): string {
 
 const GROUP_ORDER = ["Start here", "Guides", "Extensions", "Architecture", "Decisions"];
 
-// Minimal markdown renderer: headings, tables, lists, code fences,
-// blockquotes, bold, inline code, links. No dependencies.
-function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
-  const parts: React.ReactNode[] = [];
-  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g;
-  let last = 0;
-  let n = 0;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > last) parts.push(text.slice(last, match.index));
-    const token = match[0];
-    const key = `${keyPrefix}-${n++}`;
-    if (token.startsWith("`")) {
-      parts.push(
-        <code key={key} className="rounded bg-white/10 px-1 py-0.5 font-mono text-[12px] text-zinc-100">
-          {token.slice(1, -1)}
-        </code>,
-      );
-    } else if (token.startsWith("**")) {
-      parts.push(<strong key={key} className="font-semibold text-zinc-50">{token.slice(2, -2)}</strong>);
-    } else {
-      const link = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token);
-      if (link) {
-        const [, label, href] = link;
-        const external = /^https?:\/\//.test(href);
-        parts.push(
-          <a
-            key={key}
-            href={href}
-            {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
-            className="text-accent-text underline decoration-accent-fill/50 underline-offset-2 hover:decoration-accent-fill"
-          >
-            {label}
-          </a>,
-        );
-      } else {
-        parts.push(token);
-      }
-    }
-    last = match.index + token.length;
-  }
-  if (last < text.length) parts.push(text.slice(last));
-  return parts;
-}
-
-function Markdown({ text }: { text: string }) {
-  const blocks = useMemo(() => {
-    const lines = text.split("\n");
-    const out: React.ReactNode[] = [];
-    let i = 0;
-    let key = 0;
-    const pushKey = () => `md-${key++}`;
-
-    while (i < lines.length) {
-      const line = lines[i];
-
-      // Fenced code block
-      if (line.trimStart().startsWith("```")) {
-        const fence = pushKey();
-        const lang = line.trim().slice(3).trim();
-        const body: string[] = [];
-        i++;
-        while (i < lines.length && !lines[i].trimStart().startsWith("```")) {
-          body.push(lines[i]);
-          i++;
-        }
-        i++; // closing fence
-        out.push(
-          <pre key={fence} className="overflow-x-auto rounded-xl border border-white/10 bg-black/50 p-4 font-mono text-[12px] leading-relaxed text-zinc-200">
-            {lang ? <div className="mb-2 font-mono text-[11px] text-zinc-500">{lang}</div> : null}
-            <code>{body.join("\n")}</code>
-          </pre>,
-        );
-        continue;
-      }
-
-      // Table
-      if (line.trimStart().startsWith("|") && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
-        const fence = pushKey();
-        const header = line.split("|").map((c) => c.trim()).filter(Boolean);
-        i += 2;
-        const rows: string[][] = [];
-        while (i < lines.length && lines[i].trimStart().startsWith("|")) {
-          rows.push(lines[i].split("|").map((c) => c.trim()).filter(Boolean));
-          i++;
-        }
-        out.push(
-          <div key={fence} className="overflow-x-auto rounded-xl border border-white/10">
-            <table className="w-full border-collapse text-left text-[13px]">
-              <thead>
-                <tr className="bg-white/[0.05]">
-                  {header.map((cell, ci) => (
-                    <th key={ci} className="border-b border-white/10 px-3 py-2 font-semibold text-zinc-100">
-                      {renderInline(cell, `${fence}-h${ci}`)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, ri) => (
-                  <tr key={ri} className="odd:bg-transparent even:bg-white/[0.02]">
-                    {row.map((cell, ci) => (
-                      <td key={ci} className="border-b border-white/5 px-3 py-2 text-zinc-300">
-                        {renderInline(cell, `${fence}-r${ri}c${ci}`)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>,
-        );
-        continue;
-      }
-
-      const heading = /^(#{1,4})\s+(.*)$/.exec(line);
-      if (heading) {
-        const level = heading[1].length;
-        const body = heading[2];
-        const k = pushKey();
-        const cls =
-          level === 1
-            ? "text-3xl font-extrabold tracking-tight text-zinc-50"
-            : level === 2
-              ? "mt-2 border-b border-white/10 pb-2 text-xl font-bold tracking-tight text-zinc-50"
-              : "text-base font-bold text-zinc-100";
-        const Tag = level === 1 ? "h1" : level === 2 ? "h2" : level === 3 ? "h3" : "h4";
-        out.push(<Tag key={k} className={cls}>{renderInline(body, k)}</Tag>);
-        i++;
-        continue;
-      }
-
-      if (/^---+\s*$/.test(line.trim())) {
-        out.push(<hr key={pushKey()} className="border-white/10" />);
-        i++;
-        continue;
-      }
-
-      if (/^>\s?/.test(line)) {
-        const k = pushKey();
-        const quote: string[] = [];
-        while (i < lines.length && /^>\s?/.test(lines[i])) {
-          quote.push(lines[i].replace(/^>\s?/, ""));
-          i++;
-        }
-        out.push(
-          <blockquote key={k} className="space-y-1 rounded-r-xl border-l-2 border-accent-fill/60 bg-white/[0.03] px-4 py-3 text-sm text-zinc-300">
-            {quote.map((q, qi) => (
-              <p key={qi}>{renderInline(q, `${k}-q${qi}`)}</p>
-            ))}
-          </blockquote>,
-        );
-        continue;
-      }
-
-      if (/^\s*([-*]|\d+\.)\s+/.test(line)) {
-        const k = pushKey();
-        const ordered = /^\s*\d+\.\s+/.test(line);
-        const items: string[] = [];
-        while (i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i])) {
-          items.push(lines[i].replace(/^\s*([-*]|\d+\.)\s+/, ""));
-          i++;
-        }
-        const ListTag = ordered ? "ol" : "ul";
-        out.push(
-          <ListTag key={k} className={ordered ? "list-decimal space-y-1 pl-6 text-sm leading-relaxed text-zinc-300" : "list-disc space-y-1 pl-6 text-sm leading-relaxed text-zinc-300"}>
-            {items.map((item, ii) => (
-              <li key={ii}>{renderInline(item, `${k}-li${ii}`)}</li>
-            ))}
-          </ListTag>,
-        );
-        continue;
-      }
-
-      if (/^\s*$/.test(line)) {
-        i++;
-        continue;
-      }
-
-      // Paragraph: gather until blank or block start
-      const k = pushKey();
-      const para: string[] = [line];
-      i++;
-      while (
-        i < lines.length &&
-        !/^\s*$/.test(lines[i]) &&
-        !lines[i].trimStart().startsWith("```") &&
-        !/^(#{1,4})\s+/.test(lines[i]) &&
-        !/^\s*([-*]|\d+\.)\s+/.test(lines[i]) &&
-        !/^>\s?/.test(lines[i]) &&
-        !lines[i].trimStart().startsWith("|")
-      ) {
-        para.push(lines[i]);
-        i++;
-      }
-      out.push(
-        <p key={k} className="text-sm leading-relaxed text-zinc-300">
-          {para.map((pl, pi) => (
-            <span key={pi}>
-              {pi > 0 ? " " : null}
-              {renderInline(pl, `${k}-p${pi}`)}
-            </span>
-          ))}
-        </p>,
-      );
-    }
-    return out;
-  }, [text]);
-
-  return <div className="space-y-4">{blocks}</div>;
-}
 
 export function DocsBrowser({
   documents,
   location,
+  examples,
   initialId,
 }: {
   documents: DocumentEntry[];
   location: DocsLocation;
+  examples: DocsExample[];
   initialId: string | null;
 }) {
   const router = useRouter();
@@ -317,6 +122,16 @@ export function DocsBrowser({
 
   const selected = selectedId ? documents.find((d) => d.id === selectedId) : undefined;
   const content = selected ? contents[selected.id] : undefined;
+
+  const docIdByPath = useMemo(
+    () => new Map(documents.map((doc) => [doc.relativePath, doc.id])),
+    [documents],
+  );
+  const linkFor = useCallback(
+    (href: string) =>
+      selected ? resolveDocHref(selected.relativePath, href, docIdByPath) : null,
+    [selected, docIdByPath],
+  );
 
   const select = (id: string | null) => {
     setSelectedId(id);
@@ -455,10 +270,50 @@ export function DocsBrowser({
               {error}
             </p>
           ) : content ? (
-            <Markdown text={content} />
+            <Markdown text={content} linkFor={linkFor} />
           ) : null}
         </div>
       </article>
+    </div>
+  );
+}
+
+/** Match verdict, mismatches and the derived example list (#240/#249/#250). */
+export function DocsStatus({
+  location,
+  examples,
+}: {
+  location: DocsLocation;
+  examples: DocsExample[];
+}) {
+  return (
+    <div className="mt-3 grid gap-1.5 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-xs text-zinc-400">
+      <p>
+        <span className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
+          Docs match
+        </span>{" "}
+        {location.matched ? (
+          <span className="text-emerald-400">
+            matched · {location.manifestId} v{location.productVersion}
+          </span>
+        ) : (
+          <span className="text-amber-400">{location.matchState}</span>
+        )}
+      </p>
+      {location.mismatches.map((mismatch) => (
+        <p
+          key={`${mismatch.field}:${mismatch.expected}`}
+          className="font-mono text-[11px] text-amber-300/90"
+        >
+          {mismatch.field}: expected {mismatch.expected}, actual {mismatch.actual}
+        </p>
+      ))}
+      <p>
+        <span className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
+          Examples
+        </span>{" "}
+        {examples.length > 0 ? examples.map((example) => example.id).join(", ") : "none"}
+      </p>
     </div>
   );
 }

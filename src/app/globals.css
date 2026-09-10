@@ -58,14 +58,110 @@
   --accent-fill: #f0503c;
   --accent-fill-hover: #ff5a44;
   --accent-text: #ff7a66;
+  --surface-control: rgba(255, 255, 255, 0.055);
+  --surface-control-hover: rgba(255, 255, 255, 0.09);
+  --surface-control-active: rgba(240, 80, 60, 0.14);
+  --surface-border: rgba(255, 255, 255, 0.13);
+  --surface-border-strong: rgba(255, 255, 255, 0.2);
+  --surface-inset: rgba(255, 255, 255, 0.06);
   /* Accent glow. Ratified glow policy (#16): survives only on the play button,
      the active rail item, and the selected-row bar. Kept here so surfaces read
      the accent rgba from the theme layer instead of hard-coding it. */
   --shadow-glow-accent: 0 0 18px rgba(240, 80, 60, 0.25);
   --shadow-glow-accent-strong: 0 0 24px rgba(240, 80, 60, 0.45);
-  /* Wide overlay glow, taken verbatim from the prototype command palette.
-     Used only there, so the dialog matches the prototype exactly. */
-  --shadow-glow-overlay: 0 0 60px rgba(240, 80, 60, 0.25);
+  /* Restrained floating depth for command palette and other overlays. */
+  --shadow-glow-overlay: 0 12px 35px rgba(240, 80, 60, 0.18);
+
+  /* ---------------------------------------------------------------------
+     Material system (component library, second pass).
+
+     Five levels, deepest to highest. A control picks exactly one level and
+     inherits its fill, edge and elevation rather than inventing opacities;
+     that is what makes the controls read as one family. Values are tuned
+     against --canvas (#0b0b10), not the prototype kits' darker #0a0a0e.
+
+       1 workspace  the canvas itself; has no fill of its own.
+       2 inset      recessed wells: fields, switch and slider tracks, troughs.
+       3 control    raised interactive surfaces at rest: buttons, selects.
+       4 raised     panels and cards resting on the workspace.
+       5 floating   overlays that leave the plane: palette, menus, dialogs.
+
+     Elevation rule: shadow means physical stacking, glow means accent state.
+     Only levels 4 and 5 cast an outer shadow. Glow is the selection signal
+     and travels with the accent: the primary action, the active palette row,
+     a checked switch or checkbox, the active tab pill and a running progress
+     fill all carry it. It is part of the accent material rather than a halo
+     floating behind an opaque shape, which is what the earlier palette was
+     criticised for.
+     --------------------------------------------------------------------- */
+
+  /* Fills. Level 2 is darker than the canvas; 3 and up are lighter. The
+     control fill is a gradient, not a flat tint, so a control has a top and
+     a bottom and therefore an implied light source. */
+  --mat-inset: rgba(0, 0, 0, 0.42);
+  --mat-control: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.05),
+    rgba(255, 255, 255, 0.018)
+  );
+  --mat-control-hover: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.075),
+    rgba(255, 255, 255, 0.03)
+  );
+  --mat-raised: rgba(255, 255, 255, 0.02);
+  --mat-floating: rgba(18, 18, 24, 0.82);
+
+  /* Accent material. The primary action is the control gradient with accent
+     behind it, so primary and secondary differ structurally in what fills
+     them, not only in which colour a flat fill resolves to. */
+  --mat-accent: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--accent-fill) 36%, transparent),
+    color-mix(in oklab, var(--accent-fill) 20%, transparent)
+  );
+  --mat-accent-hover: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--accent-fill) 48%, transparent),
+    color-mix(in oklab, var(--accent-fill) 30%, transparent)
+  );
+
+  /* Edges. One hairline at rest, one lit for hover and open states. */
+  --edge: rgba(255, 255, 255, 0.09);
+  --edge-hover: rgba(255, 255, 255, 0.16);
+  --edge-accent: color-mix(in oklab, var(--accent-fill) 60%, transparent);
+  --edge-accent-hover: color-mix(in oklab, var(--accent-fill) 90%, transparent);
+  --edge-accent-soft: color-mix(in oklab, var(--accent-fill) 45%, transparent);
+  /* Destructive keeps the dark body and speaks through edge and label, so it
+     is never mistaken for the primary action, which is accent-filled. */
+  --mat-danger: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.03),
+    rgba(255, 255, 255, 0.008)
+  );
+
+  /* Elevation. Lift is a 1px top highlight over a close shadow, so a control
+     looks like it sits on the surface. Sink drops the highlight and pushes
+     the shadow inward, so pressed reads as travel rather than as a colour
+     change; that is the pressed state the previous button never had. */
+  --elev-lift: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --elev-sink: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+  --elev-well: inset 0 1px 3px rgba(0, 0, 0, 0.55);
+  --elev-raised: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 8px 28px rgba(0, 0, 0, 0.45);
+  --elev-floating: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 24px 60px rgba(0, 0, 0, 0.6);
+  --elev-accent: inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 4px 18px color-mix(in oklab, var(--accent-fill) 14%, transparent);
+  --elev-accent-hover: inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 4px 26px color-mix(in oklab, var(--accent-fill) 28%, transparent);
+
+  /* Radius: variant I uses the inherited --radius ramp rather than a second
+     scale — rounded-lg (8px) for buttons, fields, panels and menus,
+     rounded-md (6.4px) for tags, palette rows, kbd and tab pills. No new
+     radius tokens; the ramp above already says it. */
+
+  /* States, expressed through more than colour wherever the property allows. */
+  --state-disabled-opacity: 0.4;
+  --focus-ring: color-mix(in oklab, var(--accent-fill) 55%, transparent);
   --shadow-2xs: 0rem 0.25rem 0.5rem 0rem hsl(240 9.8039% 10% / 0.05);
   --shadow-xs: 0rem 0.25rem 0.5rem 0rem hsl(240 9.8039% 10% / 0.05);
   --shadow-sm:
@@ -159,9 +255,32 @@
   --color-accent-fill: var(--accent-fill);
   --color-accent-fill-hover: var(--accent-fill-hover);
   --color-accent-text: var(--accent-text);
+  --color-surface-control: var(--surface-control);
+  --color-surface-control-hover: var(--surface-control-hover);
+  --color-surface-control-active: var(--surface-control-active);
   --shadow-glow-accent: var(--shadow-glow-accent);
   --shadow-glow-accent-strong: var(--shadow-glow-accent-strong);
   --shadow-glow-overlay: var(--shadow-glow-overlay);
+
+  /* Material system registration. Colour-valued levels become bg-/border-/
+     text- utilities; the two gradient fills (--mat-control, --mat-accent and
+     their hover pairs) are not colours and are applied as
+     bg-[image:var(--mat-control)] at the call site. */
+  --color-mat-inset: var(--mat-inset);
+  --color-mat-raised: var(--mat-raised);
+  --color-mat-floating: var(--mat-floating);
+  --color-edge: var(--edge);
+  --color-edge-hover: var(--edge-hover);
+  --color-edge-accent: var(--edge-accent);
+  --color-edge-accent-hover: var(--edge-accent-hover);
+  --color-edge-accent-soft: var(--edge-accent-soft);
+  --shadow-elev-lift: var(--elev-lift);
+  --shadow-elev-sink: var(--elev-sink);
+  --shadow-elev-well: var(--elev-well);
+  --shadow-elev-raised: var(--elev-raised);
+  --shadow-elev-floating: var(--elev-floating);
+  --shadow-elev-accent: var(--elev-accent);
+  --shadow-elev-accent-hover: var(--elev-accent-hover);
 }
 
 body {
@@ -300,4 +419,24 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+/* Component-library motion. Element-level only: nothing page-level animates.
+   Every animated surface resolves to its end state under reduced motion. */
+@keyframes progress-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+/* Toast surface. Sonner renders outside the React tree, so its material is
+   set here rather than in the component: floating level, the library's
+   hairline edge, real depth instead of a flat slab. */
+.foleyard-toast {
+  box-shadow: var(--elev-floating) !important;
+  backdrop-filter: blur(24px);
+  font-size: 13px;
 }

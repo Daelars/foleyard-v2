@@ -4,15 +4,15 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-[13px] font-medium whitespace-nowrap transition-[background-color,border-color,color,box-shadow,opacity] duration-150 outline-none select-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-45 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-accent-fill text-white shadow-none hover:bg-accent-fill-hover [a]:hover:bg-accent-fill-hover",
+        default: "border-accent-fill/80 bg-accent-fill text-white shadow-sm hover:border-accent-fill hover:bg-accent-fill-hover [a]:hover:bg-accent-fill-hover",
         outline:
-          "border-white/10 bg-white/5 text-zinc-200 hover:border-white/15 hover:bg-white/[0.08] hover:text-zinc-100 aria-expanded:border-white/15 aria-expanded:bg-white/[0.08] aria-expanded:text-zinc-100",
+          "border-white/15 bg-surface-control text-zinc-200 shadow-[inset_0_1px_0_var(--surface-inset)] hover:border-white/25 hover:bg-surface-control-hover hover:text-zinc-100 aria-expanded:border-white/25 aria-expanded:bg-surface-control-hover aria-expanded:text-zinc-100",
         secondary:
-          "bg-white/5 text-zinc-200 hover:bg-white/[0.08] hover:text-zinc-100 aria-expanded:bg-white/[0.08] aria-expanded:text-zinc-100",
+          "border-white/10 bg-white/[0.035] text-zinc-200 hover:border-white/20 hover:bg-surface-control-hover hover:text-zinc-100 aria-expanded:bg-surface-control-hover aria-expanded:text-zinc-100",
         ghost:
           "text-zinc-400 hover:bg-white/5 hover:text-zinc-100 aria-expanded:bg-white/5 aria-expanded:text-zinc-100",
         destructive:

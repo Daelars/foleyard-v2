@@ -111,10 +111,16 @@ async function readJson(response: Response): Promise<unknown> {
 }
 
 /** Fetch the serializable v2 catalog (data only; never executes). */
-export async function fetchV2Catalog(): Promise<{
-  ok: true;
-  catalog: ExtensionV2Catalog;
-} | { ok: false; message: string }> {
+export type V2CatalogResult =
+  | { ok: true; catalog: ExtensionV2Catalog }
+  | { ok: false; message: string };
+
+/** Fetch enablement + effective permissions for the settings adapter. */
+export type V2ExtensionStatesResult =
+  | { ok: true; extensions: V2ExtensionState[] }
+  | { ok: false; message: string };
+
+export async function fetchV2Catalog(): Promise<V2CatalogResult> {
   let response: Response;
   try {
     response = await fetch("/api/extensions-v2");
@@ -139,10 +145,7 @@ export async function fetchV2Catalog(): Promise<{
 }
 
 /** Fetch enablement + effective permissions for the settings adapter. */
-export async function fetchV2ExtensionStates(): Promise<{
-  ok: true;
-  extensions: V2ExtensionState[];
-} | { ok: false; message: string }> {
+export async function fetchV2ExtensionStates(): Promise<V2ExtensionStatesResult> {
   let response: Response;
   try {
     response = await fetch("/api/extensions-v2/extensions");
@@ -164,6 +167,70 @@ export async function fetchV2ExtensionStates(): Promise<{
     };
   }
   return { ok: true, extensions: body.extensions };
+}
+
+/**
+ * Process-wide client cache for v2 catalog reads.
+ *
+ * Definitions, enablement, and approvals only change through explicit
+ * writes (enable PATCH, approvals, settings PUT/reset), and every one
+ * of those paths invalidates this cache — so repeat mounts (view
+ * switches, dialog opens, StrictMode remounts) serve the snapshot
+ * instantly with zero HTTP. In-flight requests are shared, so
+ * simultaneous mounts issue one request, not one each. Failures are
+ * never cached, so the next mount retries.
+ */
+let cachedCatalog: ExtensionV2Catalog | null = null;
+let catalogInflight: Promise<V2CatalogResult> | null = null;
+let cachedStates: V2ExtensionState[] | null = null;
+let statesInflight: Promise<V2ExtensionStatesResult> | null = null;
+
+export function fetchV2CatalogCached(): Promise<V2CatalogResult> {
+  if (cachedCatalog) {
+    return Promise.resolve({ ok: true, catalog: cachedCatalog });
+  }
+  if (!catalogInflight) {
+    catalogInflight = fetchV2Catalog().then((result) => {
+      catalogInflight = null;
+      if (result.ok) cachedCatalog = result.catalog;
+      return result;
+    });
+  }
+  return catalogInflight;
+}
+
+export function fetchV2ExtensionStatesCached(): Promise<V2ExtensionStatesResult> {
+  if (cachedStates) {
+    return Promise.resolve({ ok: true, extensions: cachedStates });
+  }
+  if (!statesInflight) {
+    statesInflight = fetchV2ExtensionStates().then((result) => {
+      statesInflight = null;
+      if (result.ok) cachedStates = result.extensions;
+      return result;
+    });
+  }
+  return statesInflight;
+}
+
+/** Instant hook init from the cache; null before the first load. */
+export function readV2CatalogSnapshot(): ExtensionV2Catalog | null {
+  return cachedCatalog;
+}
+
+/** Instant hook init from the cache; null before the first load. */
+export function readV2ExtensionStatesSnapshot(): V2ExtensionState[] | null {
+  return cachedStates;
+}
+
+/**
+ * Drop cached reads; the next read refetches. Called by every explicit
+ * v2 write path (the hooks below), never by renders or selection
+ * changes.
+ */
+export function invalidateV2ClientCaches(): void {
+  cachedCatalog = null;
+  cachedStates = null;
 }
 
 /** Enable or disable a v2 extension; the server emits `contributions-changed`. */
@@ -250,20 +317,30 @@ export type V2CatalogSnapshot = {
 };
 
 /**
- * Client catalog subscription. Fetches once on mount, refetches on
- * demand (after enable/disable writes) and when the tab becomes
- * visible again, and disposes in-flight requests on unmount — so dev
- * reloads never stack duplicate fetches or listeners.
+ * Client catalog subscription. Serves the cached snapshot instantly on
+ * repeat mounts and refetches on demand (after enable/disable writes),
+ * disposing in-flight requests on unmount — so dev reloads never stack
+ * duplicate fetches or listeners. Deliberately no refetch on tab
+ * visibility or selection change: the catalog only changes on explicit
+ * enable/approval writes, which refresh explicitly, so focus events
+ * only added load storms.
  */
 export function useV2Catalog(): V2CatalogSnapshot {
-  const [catalog, setCatalog] = useState<ExtensionV2Catalog | null>(null);
-  const [extensions, setExtensions] = useState<V2ExtensionState[]>([]);
+  const [catalog, setCatalog] = useState<ExtensionV2Catalog | null>(() =>
+    readV2CatalogSnapshot(),
+  );
+  const [extensions, setExtensions] = useState<V2ExtensionState[]>(
+    () => readV2ExtensionStatesSnapshot() ?? [],
+  );
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(
+    () => readV2CatalogSnapshot() === null || readV2ExtensionStatesSnapshot() === null,
+  );
   const [nonce, setNonce] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
   const refresh = useCallback(() => {
+    invalidateV2ClientCaches();
     setLoading(true);
     setNonce((value) => value + 1);
   }, []);
@@ -274,8 +351,8 @@ export function useV2Catalog(): V2CatalogSnapshot {
     abortRef.current = abort;
     void (async () => {
       const [catalogResult, statesResult] = await Promise.all([
-        fetchV2Catalog(),
-        fetchV2ExtensionStates(),
+        fetchV2CatalogCached(),
+        fetchV2ExtensionStatesCached(),
       ]);
       if (abort.signal.aborted) return;
       if (!catalogResult.ok) {
@@ -291,16 +368,6 @@ export function useV2Catalog(): V2CatalogSnapshot {
       abort.abort();
     };
   }, [nonce]);
-
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [refresh]);
 
   return { catalog, extensions, error, loading, refresh };
 }

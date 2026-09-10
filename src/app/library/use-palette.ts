@@ -97,6 +97,8 @@ export function usePalette(input: PaletteInput) {
   const [paletteIndex, setPaletteIndex] = useState(0);
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  /** Element that held focus before the palette opened; focus returns here on close. */
+  const restoreRef = useRef<HTMLElement | null>(null);
   const [shortcutBindings, setShortcutBindings] =
     useState<ShortcutBindings>(loadShortcutBindings);
 
@@ -106,6 +108,9 @@ export function usePalette(input: PaletteInput) {
   });
 
   const openPalette = useCallback(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      restoreRef.current = document.activeElement;
+    }
     setPaletteQuery("");
     setPaletteIndex(0);
     setPaletteOpen(true);
@@ -113,6 +118,7 @@ export function usePalette(input: PaletteInput) {
 
   const closePalette = useCallback(() => {
     setPaletteOpen(false);
+    restoreRef.current?.focus();
   }, []);
 
   const handlePaletteQueryChange = useCallback((query: string) => {
@@ -257,6 +263,7 @@ export function usePalette(input: PaletteInput) {
       }
 
       setPaletteOpen(false);
+      restoreRef.current?.focus();
     },
     [],
   );
@@ -272,11 +279,9 @@ export function usePalette(input: PaletteInput) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         if (paletteOpen) {
-          setPaletteOpen(false);
+          closePalette();
         } else {
-          setPaletteQuery("");
-          setPaletteIndex(0);
-          setPaletteOpen(true);
+          openPalette();
         }
         return;
       }
@@ -288,7 +293,7 @@ export function usePalette(input: PaletteInput) {
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
-        setPaletteOpen(false);
+        closePalette();
         return;
       }
 
@@ -324,7 +329,7 @@ export function usePalette(input: PaletteInput) {
 
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [paletteOpen, paletteEntries, activePaletteIndex, handlePaletteSelect]);
+  }, [paletteOpen, paletteEntries, activePaletteIndex, handlePaletteSelect, openPalette, closePalette]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

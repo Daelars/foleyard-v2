@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 import { Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { CommandItem } from "@/components/ui/foleyard";
 
 import type { PaletteEntry } from "./command-palette";
 
@@ -49,12 +51,12 @@ export function CommandPalette({
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="w-full max-w-lg overflow-hidden rounded-2xl border border-white/10 bg-shell/90 shadow-glow-accent backdrop-blur-2xl"
+        className="w-full max-w-lg overflow-hidden rounded-xl border border-white/15 bg-shell/95 shadow-glow-overlay backdrop-blur-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b border-white/10 px-5">
           <Search className="size-4 shrink-0 text-zinc-500" />
-          <input
+          <Input
             ref={inputRef}
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
@@ -64,7 +66,7 @@ export function CommandPalette({
             aria-activedescendant={
               activeIndex >= 0 ? `command-palette-entry-${activeIndex}` : undefined
             }
-            className="w-full bg-transparent py-4 text-[15px] text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+            className="h-12 rounded-none border-0 bg-transparent px-0 py-4 text-[14px] shadow-none focus-visible:border-0 focus-visible:bg-transparent focus-visible:ring-0"
           />
           <kbd className="shrink-0 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
             esc
@@ -82,7 +84,7 @@ export function CommandPalette({
             </p>
           ) : (
             entries.map((entry, index) => (
-              <button
+              <CommandItem
                 key={entry.id}
                 ref={(node) => {
                   entryRefs.current[index] = node;
@@ -90,26 +92,13 @@ export function CommandPalette({
                 id={`command-palette-entry-${index}`}
                 role="option"
                 aria-selected={index === activeIndex}
-                type="button"
+                active={index === activeIndex}
+                hint={entry.hint}
                 onClick={() => onSelectEntry(entry)}
                 onMouseEnter={() => onHoverEntry(index)}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
-                  index === activeIndex
-                    ? "bg-accent-fill/10 text-zinc-50 ring-1 ring-inset ring-accent-fill/30"
-                    : "text-zinc-300 hover:bg-white/[0.04]"
-                }`}
               >
-                <span className="min-w-0 flex-1 truncate">{entry.label}</span>
-                {index === activeIndex ? (
-                  <kbd className="shrink-0 rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
-                    ↵
-                  </kbd>
-                ) : (
-                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-zinc-600">
-                    {entry.hint}
-                  </span>
-                )}
-              </button>
+                {entry.label}
+              </CommandItem>
             ))
           )}
         </div>

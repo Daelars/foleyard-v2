@@ -17,10 +17,11 @@ import {
   type ShortcutAction,
   type ShortcutBindings,
 } from "@/components/Shortcuts/shortcuts";
+import { dispatchBuiltinCommand } from "@/lib/commands";
 import type { FileRecord } from "./types";
-// App command descriptors (src/lib/commands.ts) map current palette IDs and
-// shortcut actions; v2 tool entries below consume the `v2tool:{ext}:{cmd}`
-// shape so palette and shortcuts agree.
+// Built-in palette actions and their dispatch come from the single
+// descriptor table in src/lib/commands.ts (#242); v2 tool entries consume the
+// `v2tool:{ext}:{cmd}` shape so palette and shortcuts agree.
 
 /** Split a palette entry id into its kind and payload. */
 export function parsePaletteEntryId(id: string): {
@@ -198,44 +199,15 @@ export function usePalette(input: PaletteInput) {
   const handlePaletteSelect = useCallback(
     (entry: PaletteEntry) => {
       const actions = inputRef.current;
-      const { kind, rest } = parsePaletteEntryId(entry.id);
-
-      switch (kind) {
-        case "view": {
-          if (rest === "library") actions.showLibrary();
-          else if (rest === "favorites") actions.showFavorites();
-          else if (rest === "shelf") actions.showShelf();
-          else if (rest === "tools") actions.showExtensions();
-          else if (rest === "organize") actions.showOrganize();
-          else if (rest === "auto-tag") actions.showAutoTag();
-          else if (rest === "settings") actions.openSettings();
-          break;
-        }
-        case "transport": {
-          if (rest === "toggle-play") actions.togglePlayback();
-          else if (rest === "next") actions.stepNext();
-          else if (rest === "prev") actions.stepPrev();
-          else if (rest === "autoplay") actions.toggleAutoplay();
-          break;
-        }
-        case "file": {
-          if (rest === "toggle-favorite") {
-            actions.toggleFavoriteCurrent();
-          } else if (rest === "add-to-shelf") {
-            actions.addCurrentToShelf();
-          }
-          break;
-        }
-        case "v2tool": {
+      if (!dispatchBuiltinCommand(entry.id, actions)) {
+        const { kind, rest } = parsePaletteEntryId(entry.id);
+        if (kind === "v2tool") {
           const split = rest.indexOf(":");
           if (split !== -1) {
             actions.runV2Command?.(rest.slice(0, split), rest.slice(split + 1));
           }
-          break;
-        }
-        case "sound": {
+        } else if (kind === "sound") {
           actions.playSound(rest);
-          break;
         }
       }
 
@@ -324,7 +296,7 @@ export function usePalette(input: PaletteInput) {
         }
 
         event.preventDefault();
-        actions.togglePlayback();
+        dispatchBuiltinCommand("transport:toggle-play", actions);
         return;
       }
 
@@ -336,7 +308,7 @@ export function usePalette(input: PaletteInput) {
         event.preventDefault();
         searchInputRef.current?.focus();
       } else if (matchShortcutKey(event, shortcutBindings["toggle-favorite"])) {
-        actions.toggleFavoriteCurrent();
+        dispatchBuiltinCommand("file:toggle-favorite", actions);
       } else if (matchShortcutKey(event, shortcutBindings["move-next"])) {
         event.preventDefault();
         actions.moveNext();
@@ -345,7 +317,7 @@ export function usePalette(input: PaletteInput) {
         actions.movePrev();
       } else if (matchShortcutKey(event, shortcutBindings["open-settings"])) {
         event.preventDefault();
-        actions.openSettings();
+        dispatchBuiltinCommand("view:settings", actions);
       }
     };
 

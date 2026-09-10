@@ -1,3 +1,5 @@
+import { BUILTIN_COMMANDS } from "@/lib/commands";
+
 export type PaletteSection = "view" | "transport" | "file" | "tool" | "sound";
 
 export interface PaletteToolCommand {
@@ -89,116 +91,15 @@ export function buildPaletteEntries(input: PaletteBuildInput): PaletteEntry[] {
     entries.push(entry);
   };
 
-  push(
-    { id: "view:library", label: "Go to Library", section: "view", hint: "view" },
-    ["Go to Library"],
-    true,
-  );
-  push(
-    {
-      id: "view:favorites",
-      label: "Go to Favorites",
-      section: "view",
-      hint: "view",
-    },
-    ["Go to Favorites"],
-    true,
-  );
-  push(
-    { id: "view:shelf", label: "Go to Shelf", section: "view", hint: "view" },
-    ["Go to Shelf"],
-    input.shelfEnabled,
-  );
-  push(
-    { id: "view:organize", label: "Go to Organize", section: "view", hint: "view" },
-    ["Go to Organize", "Organize", "Collections", "Tags"],
-    true,
-  );
-  push(
-    { id: "view:tools", label: "Go to Extensions", section: "view", hint: "view" },
-    ["Go to Extensions", "Extensions", "Go to Tools", "Tools"],
-    true,
-  );
-  push(
-    { id: "view:auto-tag", label: "Go to Auto tag", section: "view", hint: "view" },
-    ["Go to Auto tag", "Auto tag", "Auto-tag", "Tagging"],
-    input.autoTagEnabled,
-  );
-  push(
-    {
-      id: "view:settings",
-      label: "Open settings",
-      section: "view",
-      hint: "view",
-    },
-    ["Open settings", "Settings"],
-    true,
-  );
-
-  const togglePlayLabel = input.isPlaying ? "Pause" : "Play";
-  push(
-    {
-      id: "transport:toggle-play",
-      label: togglePlayLabel,
-      section: "transport",
-      hint: "transport",
-    },
-    [togglePlayLabel],
-    input.hasCurrentFile,
-  );
-  push(
-    {
-      id: "transport:next",
-      label: "Next in queue",
-      section: "transport",
-      hint: "transport",
-    },
-    ["Next in queue"],
-    input.canStepQueue,
-  );
-  push(
-    {
-      id: "transport:prev",
-      label: "Previous in queue",
-      section: "transport",
-      hint: "transport",
-    },
-    ["Previous in queue"],
-    input.canStepQueue,
-  );
-  const autoplayLabel = `Autoplay ${input.autoplay ? "off" : "on"}`;
-  push(
-    {
-      id: "transport:autoplay",
-      label: autoplayLabel,
-      section: "transport",
-      hint: "transport",
-    },
-    [autoplayLabel, "Autoplay"],
-    true,
-  );
-
-  const favoriteLabel = input.isFavorite ? "Unsave current" : "Save current";
-  push(
-    {
-      id: "file:toggle-favorite",
-      label: favoriteLabel,
-      section: "file",
-      hint: "file",
-    },
-    [favoriteLabel, "Save", "Unsave", "Favorite"],
-    input.hasCurrentFile,
-  );
-  push(
-    {
-      id: "file:add-to-shelf",
-      label: "Add current file to shelf",
-      section: "file",
-      hint: "file",
-    },
-    ["Add current file to shelf", "Shelf"],
-    input.hasCurrentFile && input.shelfEnabled,
-  );
+  // Built-in actions render from the single descriptor table (#242).
+  for (const command of BUILTIN_COMMANDS) {
+    const label = command.title(input);
+    push(
+      { id: command.id, label, section: command.section, hint: command.hint },
+      [label, ...(command.keywords?.(input) ?? [])],
+      command.available ? command.available(input) : true,
+    );
+  }
 
   for (const command of input.v2ToolCommands ?? []) {
     push(

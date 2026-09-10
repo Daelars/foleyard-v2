@@ -204,6 +204,32 @@ async function main() {
     rows:directoryDistinct.all().length,
     ms:await repeat(()=>directoryDistinct.all()),
   };
+  // SQLite tuning (#254): commit-heavy cost under synchronous FULL vs NORMAL
+  // (WAL) on the tuned connection, and cached point-lookup throughput.
+  {
+    const tuning=createDatabaseConnection(path.join(root,'tuning.sqlite'));
+    tuning.sqlite.exec('DROP TABLE IF EXISTS tuning_rows; CREATE TABLE tuning_rows(id INTEGER PRIMARY KEY, value TEXT)');
+    const runCommits=()=>{const insert=tuning.sqlite.prepare('INSERT INTO tuning_rows(value) VALUES(?)');tuning.sqlite.exec('DELETE FROM tuning_rows');for(let i=0;i<2000;i++)insert.run(`v${i}`);};
+    runCommits();
+    tuning.sqlite.pragma('synchronous = FULL');
+    const full=await repeat(runCommits,3);
+    tuning.sqlite.pragma('synchronous = NORMAL');
+    const normal=await repeat(runCommits,3);
+    const point=tuning.sqlite.prepare('SELECT value FROM tuning_rows WHERE id = ?');
+    const lookups=()=>{for(let i=1;i<=5000;i++)point.get(i);};
+    report.sqliteTuning={
+      commitHeavy:{synchronousFull:full,synchronousNormal:normal},
+      pointLookups:await repeat(lookups,3),
+      pragmas:{
+        journal_mode:tuning.sqlite.pragma('journal_mode',{simple:true}),
+        synchronous:tuning.sqlite.pragma('synchronous',{simple:true}),
+        temp_store:tuning.sqlite.pragma('temp_store',{simple:true}),
+        cache_size:tuning.sqlite.pragma('cache_size',{simple:true}),
+        mmap_size:tuning.sqlite.pragma('mmap_size',{simple:true}),
+      },
+    };
+    tuning.sqlite.close();
+  }
   sqlite.close();await save();
   await writeFile('benchmarks/performance/latest.json',JSON.stringify(report,null,2));
   const supplemental=spawnSync(process.execPath,['scripts/performance/scan-scale.mjs'],{encoding:'utf8',windowsHide:true});

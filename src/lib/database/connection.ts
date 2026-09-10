@@ -9,6 +9,7 @@ import {
 import * as schema from "@/lib/schema";
 
 import { initializeDatabaseSchema } from "./migrations";
+import { createStatementCachingDatabase } from "./prepared-statements";
 
 type SqliteDatabase = Database;
 type DrizzleDatabase = ReturnType<typeof drizzle<typeof schema>>;
@@ -22,12 +23,24 @@ export function createDatabaseConnection(dbPath: string) {
   sqlite.pragma("busy_timeout = 5000");
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
+  // WAL with synchronous=NORMAL: commits no longer fsync on every write.
+  // A power loss can lose the last committed transactions but cannot
+  // corrupt the database, and a process crash loses nothing (see
+  // docs/database.md). temp_store/memory and bounded cache/mmap keep
+  // sorts and pages off disk.
+  sqlite.pragma("synchronous = NORMAL");
+  sqlite.pragma("temp_store = MEMORY");
+  sqlite.pragma("cache_size = -16384");
+  sqlite.pragma("mmap_size = 268435456");
 
-  initializeDatabaseSchema(sqlite);
+  // One statement cache for Drizzle and the raw repository paths (#254).
+  const cached = createStatementCachingDatabase(sqlite);
+
+  initializeDatabaseSchema(cached);
 
   return {
-    sqlite,
-    db: drizzle(sqlite, { schema }),
+    sqlite: cached,
+    db: drizzle(cached, { schema }),
   };
 }
 

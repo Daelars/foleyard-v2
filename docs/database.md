@@ -39,10 +39,20 @@ Tables in `src/lib/schema.ts` (mirrored by DDL in `migrations.ts`):
 | `file_embeddings` | per-file model vectors (`file_id`, `model`, `dim`, `vec` blob) for similarity search |
 | `collections` / `file_collections` | regular + smart Collections and membership |
 
-Connections set `busy_timeout = 5000`, `journal_mode = WAL`, and
-`foreign_keys = ON`. `db`/`sqlite` are lazy proxies: the first use resolves
-the path, ensures desktop initialization, and runs
-`initializeDatabaseSchema`. Migration applies `CREATE TABLE IF NOT EXISTS`
+Connections set `busy_timeout = 5000`, `journal_mode = WAL`,
+`foreign_keys = ON`, `synchronous = NORMAL`, `temp_store = MEMORY`, a
+16 MiB page cache (`cache_size = -16384`) and a 256 MiB mmap window.
+Durability tradeoff: with WAL, `synchronous = NORMAL` commits without an
+fsync; a power loss can lose the most recent transactions but cannot
+corrupt the database, and an application crash loses nothing. The pragmas
+and the bounded statement cache live in `src/lib/database/connection.ts`
+and `src/lib/database/prepared-statements.ts` (#254).
+
+`db`/`sqlite` are lazy proxies: the first use resolves the path, ensures
+desktop initialization, and runs `initializeDatabaseSchema`. Both proxies
+share one connection whose `prepare` memoizes statements by SQL text, so
+Drizzle queries and raw repository statements recompile only for SQL they
+have not run before. Migration applies `CREATE TABLE IF NOT EXISTS`
 plus `ensureColumn` backfills (`mtime_ms`, `removed_at`, `last_scanned_at`,
 `directory`, `library_root`, `codec`, `is_smart`, `filter`, `color`), creates
 indexes, backfills `library_root` ownership from configured roots, then
@@ -96,9 +106,10 @@ Database paths (`src/lib/database-path.ts`):
 ## Source map (real file paths)
 
 - `src/lib/schema.ts` — Drizzle table declarations
+- `src/lib/database/connection.ts` — pragmas, lazy `db`/`sqlite` proxies
+- `src/lib/database/prepared-statements.ts` — bounded statement cache
 - `src/lib/database/migrations.ts` — DDL, `CURRENT_SCHEMA_VERSION`,
   `getDatabaseVersionInfo`, `initializeDatabaseSchema`
-- `src/lib/database/connection.ts` — pragmas, lazy `db`/`sqlite` proxies
 - `src/lib/database-path.ts` — web/desktop/legacy path resolution
 - `electron/main/database.cjs` — packaged desktop DB ensure/reset
 - `src/lib/runtime-info.ts` — surfaces the version probe in snapshots

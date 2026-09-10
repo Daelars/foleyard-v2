@@ -77,9 +77,9 @@ the absolute path under the docs root, and reads it as UTF-8.
 | Filesystem | `filesystem` | current |
 | Settings | `settings` | current |
 | Database | `database` | current |
-| Bundled extensions | `extensions` | current |
+| Bundled extensions (retired v1 shape) | `extensions` | historical |
 | Extension authoring (v2 API) | `extensions-v2` | current |
-| Extension v1 to v2 migration | `extensions-v2-migration` | current |
+| Extension v1 retirement | `extensions-v2-migration` | current |
 | Make Pack v2 walkthrough | `extensions-v2-make-pack` | current |
 | Extension v2 troubleshooting | `extensions-v2-troubleshooting` | current |
 | Commands | `commands` | current |
@@ -97,8 +97,8 @@ the absolute path under the docs root, and reads it as UTF-8.
 
 | Status | Meaning | Members |
 | --- | --- | --- |
-| current | Live guide, describes shipped behavior | All rows above |
-| historical | Point-in-time audit, kept for reference, not current behavior | moved to `Daelars/foleyard-archive` (blog-posts research, `docs/audits/`, `docs/audit-2026-09/`, `docs/plans/`) |
+| current | Live guide, describes shipped behavior | All rows above except `extensions` |
+| historical | Point-in-time record, kept for reference, not current behavior | `extensions` (retired v1 shape); archived material in `Daelars/foleyard-archive` (blog-posts research, `docs/audits/`, `docs/audit-2026-09/`, `docs/plans/`) |
 | experimental | Throwaway prototype, deleted once its design question is answered | `src/app/prototype/**` (excluded from coverage; never executed by docs reads) |
 
 ## Examples

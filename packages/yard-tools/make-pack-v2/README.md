@@ -3,8 +3,10 @@
 Reference extension for the v2 extension engine (R8, issue #171).
 Displayed as **Make Pack v2**. Bundled internal example, disabled by
 default, explicit enable/disable, own settings namespace
-(`make-pack-v2.*`), no auto-migration from v1. The v1 Make Pack keeps
-its behavior, routes, and settings untouched.
+(`make-pack-v2.*`). The retired v1 Make Pack's enablement and approvals
+were adopted once onto this port, and its listed settings
+(`default-format`, `include-manifest`) were copied into this namespace
+before the v1 rows were deleted.
 
 ## Layout
 
@@ -83,7 +85,7 @@ handlers never branch on client input flags.
 | Folder output | Same files + `manifest.json` | Written flat into the picked destination (the destination **is** the pack folder); v1 nested `dest/packName/` |
 | ZIP output | Same archive + manifest entry | Stored (uncompressed) ZIP; manifest is an in-memory entry |
 | Pack name setting | Same, per-run + `pack-name` default | 80-char cap, OS-invalid sanitized, per-source fallback |
-| Default format setting | Same (`default-format` folder/zip) | Own namespace; no migration from v1 |
+| Default format setting | Same (`default-format` folder/zip) | Own namespace; adopted once from the retired v1 row |
 | Include-manifest setting | Same (`include-manifest` boolean) | Reserved against collisions |
 | Input validation | Same messages where sensible | `outputFormat`/`includeManifest` type-checked; 500-entry bound |
 | Preview | Richer: source table, rename/conflict notices, missing list | Generic plan-preview UI + dialog |
@@ -99,8 +101,8 @@ handlers never branch on client input flags.
 Explicitly unsupported: ZIP entry renaming (ZIP keeps Library filenames
 verbatim — use folder output for collision-heavy selections), ZIP64
 archives over 4 GiB, packing more than 500 sounds in one run, and
-silent v1→v2 settings migration (re-enter the three settings; the
-names match v1 on purpose).
+settings migration beyond the one-time adoption (`pack-name` starts
+from its declared default).
 
 ## Use it
 

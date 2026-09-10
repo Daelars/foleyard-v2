@@ -3,9 +3,10 @@
 Port of the Sound Shelf tool onto the v2 extension engine (S2, issue
 #177). Displayed as **Sound Shelf v2**. Bundled internal port, disabled
 by default, explicit enable/disable, own settings namespace
-(`sound-shelf-v2.*`), no auto-migration from v1. The v1 Sound Shelf
-keeps its behavior and its own record (`extension:sound-shelf:items`)
-untouched; the v2 store starts empty under `v2shelf:sound-shelf-v2`.
+(`sound-shelf-v2.*`). The retired v1 Sound Shelf's enablement and
+approvals were adopted once onto this port; its contents moved from
+`extension:sound-shelf:items` to `v2shelf:sound-shelf-v2` on first boot
+when the v2 shelf was empty, and the v1 row was deleted.
 
 A short-term scratchpad of Library sounds while searching — explicit
 add/remove/clear/list. Not favorites, not a smart Collection.
@@ -62,9 +63,7 @@ invocation; `clear`/`list` are global.
 | Contributions | context-menu + sidebar (v1 surfaces) plus palette + bulk bar | Resolved through the generic v2 contribution points |
 | Result shape | `{ added, removed, total }` / `{ ids, repaired, total }` | Validated against the command result schema |
 
-Explicitly unsupported: silent v1→v2 store migration (the v2 shelf
-starts empty on purpose; the v1 record is left intact), and shelving
-more than 2,000 sounds in one shelf.
+Explicitly unsupported: shelving more than 2,000 sounds in one shelf.
 
 ## Use it
 

@@ -3,8 +3,9 @@
 Port of the Drop Rules tool onto the v2 extension engine (D6, issue
 #181). Displayed as **Drop Rules v2**. Bundled internal port, disabled
 by default, explicit enable/disable, own settings namespace
-(`drop-rules-v2.*`), no auto-migration from v1. The v1 Drop Rules keeps
-its routes and behavior untouched.
+(`drop-rules-v2.*`). The retired v1 Drop Rules' enablement and approvals
+were adopted once onto this port, and its listed settings were copied
+into this namespace before the v1 rows were deleted.
 
 Control what happens when a sound leaves Foleyard: copy, rename, and
 mark sounds as used.

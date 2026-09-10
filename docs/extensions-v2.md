@@ -16,9 +16,10 @@ code loader, and no public stability promise. API version, extension
 package version, product version, and runtime schema version stay
 separate (see `packages/yard-core/src/extensions-v2/version.ts`).
 
-The v1 system (six tools, `YARD_EXTENSION_API_VERSION = 1`) keeps
-running untouched beside it. See `docs/extensions-v2-migration.md`
-for coexistence rules.
+Version 1 of the extension API was retired: its packages, routes,
+commands, settings and events are gone, and v2 is the only extension
+engine. See `docs/extensions-v2-migration.md` for the retirement
+record.
 
 ## Responsibilities and boundaries
 
@@ -28,8 +29,8 @@ for coexistence rules.
   settings/state stores, events, contributions, transport.
 - `src/lib/extensions-v2/` owns application adapters: host
   composition, Library ports over repository contracts, node file
-  ports, settings/state rows, archive codec, shelf/recent sources,
-  policy persistence, job wiring, UI resolvers, dev fixtures.
+  ports,   settings/state rows, archive codec, shelf/recent sources,
+  policy persistence, job wiring, UI resolvers.
 - `src/app/api/extensions-v2/` owns thin HTTP wrappers over the
   transport codec. One host execution path serves HTTP and direct
   invocation.
@@ -187,7 +188,6 @@ removes its UI and listeners.
 - `src/components/extensions-v2/` — generic renderers
 - `packages/yard-tools/make-pack-v2/` — reference extension
 - `scripts/scaffold-extension-v2.cjs` — scaffolding CLI
-- `src/app/prototype/ext-v2-workbench/` — development workbench (dev-only)
 - `examples/extensions-v2/minimal/` — minimal runnable example
 
 ## Author examples
@@ -229,13 +229,12 @@ echo `"greeter: hello (runMode=direct)"`, disabled
 
 ### 3. Render a standard form
 
-Prerequisites: dev server (`bun run dev`) plus
-`FOLEYARD_V2_DEV_FIXTURES=1` for fixture commands.
+Prerequisites: dev server (`bun run dev`).
 
 Declare an object input schema on the command. Command inputs are
 validated by the execution envelope and surfaced by the client adapter
-that invokes the command. Exercise the same catalog and execution path in
-the workbench at `/prototype/ext-v2-workbench` without writing app code.
+that invokes the command. Exercise the same catalog and execution path
+through the HTTP wrappers under `/api/extensions-v2`.
 Expected: mistyped input returns 400 `input-invalid`; valid input
 reaches the handler. Provenance: API v2 input contracts.
 
@@ -308,7 +307,7 @@ API v2 jobs, app `jobs.ts` with settings-table snapshot persistence.
 
 ### 8. Subscribe to events
 
-Prerequisites: renderer context or workbench session.
+Prerequisites: renderer context.
 
 ```ts
 import { getV2Events } from "@/lib/extensions-v2/events";
@@ -340,10 +339,9 @@ Legacy unversioned blobs read as version 0. Provenance: API v2
 
 ## Related documentation
 
-- `docs/extensions-v2-migration.md` — v1 preservation and cutover rules
+- `docs/extensions-v2-migration.md` — v1 retirement record
 - `docs/extensions-v2-make-pack.md` — reference extension walkthrough
 - `docs/extensions-v2-troubleshooting.md` — failure diagnosis
-- `docs/commands.md` — v1 commands beside these v2 contracts
-- `docs/runtime.md` — v1/v2 identity in the runtime snapshot
+- `docs/commands.md` — the full command inventory
+- `docs/runtime.md` — runtime identity and command inventory
 - `docs/architecture/extensions.md` — end-to-end execution traces
-- `public/extension-system-v2.html` — implementation diagrams

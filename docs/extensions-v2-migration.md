@@ -1,15 +1,16 @@
-# Extension v1 to v2 migration
+# Extension v1 retirement record
 
 > Feature status: internal (v2 bundled; all six v1 tools retired)
 > Contract: internal
-> Owner: `docs/adr/extension-v2-coexistence.md`
+> Owner: `src/lib/extensions-v2/enablement.ts`
 > Applies to: docs manifest ID (`extensions-v2-migration`); development checkout when unbuilt
 
 ## What it does
 
-States what stays, what moves, and what must happen before anything
-moves. All six v1 tools have retired to their v2 ports; every product
-workflow runs on v2 now. Retired pairs: Smart Collections
+Records the retirement: all six v1 tools became their v2 ports and every
+product workflow runs on v2 now. The v1 packages, routes, commands,
+settings and events are gone; nothing falls back to v1. Retired pairs:
+Smart Collections
 (save-search through `smart-collections-v2`), Make Pack (pack exports
 through `make-pack-v2`), Drop Rules (drop handling through
 `drop-rules-v2`), Library Gatherer (gathering through
@@ -47,28 +48,30 @@ The pattern, in `src/lib/extensions-v2/enablement.ts`:
    (`src/components/extensions/folder-janitor-v2/`), and the header
    gating in the page routes read the v2 tools now.
 
-Rollback of any single tool: re-register the v1 package and re-create
-the v1 settings rows; the shared collections table makes saved
-searches readable either way. The v1 shelf row is gone once adopted —
-restoring it needs the pre-retirement `{ fileIds }` payload.
+Rollback is v2-only: disable the port, or restore its defaults and
+re-approve. There is no v1 fallback — re-running a retired v1 command is
+not possible, and a v2 failure never falls back to v1.
 
 ## Responsibilities and boundaries
 
-- `docs/adr/extension-v2-coexistence.md` owns the coexistence rules.
-- `docs/adr/extension-v2-permissions-trust.md` owns the trust model
-  both systems share: bundled code, no sandbox.
+- `src/lib/extensions-v2/enablement.ts` owns persisted enablement and
+  the one-time adoption from retired v1 rows.
+- `docs/adr/extension-v2-coexistence.md` is superseded; it records why
+  v2 was built beside v1 before the retirement.
+- `docs/adr/extension-v2-permissions-trust.md` owns the trust model:
+  bundled code, no sandbox.
 - `docs/adr/extension-v2-jobs-recovery.md` owns job recovery and
   state-version decisions reused below.
-- This guide never changes v1 behavior. It points at it.
 
 ## Runtime behavior
 
-### What stays on v1
+### What the retirement removed
 
-Nothing stays on v1. The `packages/yard-tools/*` v1 packages are gone,
-the registration table is empty, and `POST /api/extensions/execute`
-fails closed on every id (404). Retired v1 command ids never route
-through v2, and a v2 failure never falls back to v1.
+The `packages/yard-tools/*` v1 packages are gone, the v1 registration
+table and routes are gone, and v1 command ids 404. Adopted enablement,
+approvals, listed settings and known data records moved once onto the
+v2 keys, and the corresponding v1 rows were deleted, so adoption cannot
+run twice. Unlisted v1 settings rows are never read again.
 
 ### What runs on v2 today
 
@@ -97,12 +100,6 @@ and janitor cleanup reports through them.
   find-similar row entry, and opt-in CLAP semantic tagging over the
   approved vocabulary (parity notes in its package README).
 
-Two dev-only conformance fixtures (`fixture-surface`,
-`fixture-worker`) prove the remaining contribution points, jobs,
-permissions, and state isolation. Fixtures register only with
-`FOLEYARD_V2_DEV_FIXTURES=1` in non-production runtimes and never
-enter production catalogs or packaged builds.
-
 ### Enable and approve (explicit, reversible)
 
 1. Settings, Extensions, enable Make Pack v2.
@@ -122,33 +119,32 @@ curl -X POST /api/extensions-v2/extensions/make-pack-v2/approvals \
 
 ### Settings and state
 
-Every v2 port starts in its own namespace (`<id>.*`). None copy or
-rewrite v1 settings. Re-enter the settings; the names match v1 on
-purpose. There is no silent migration and no automatic import. Any
-future replacement of v1 needs a separate compatibility and rollback
-plan.
+Every v2 port owns its namespace (`<id>.*`). Listed v1 settings were
+adopted once at retirement; anything unlisted starts from its declared
+default. There is no ongoing import and no re-migration. Each
+`packages/yard-tools/<id>-v2/README.md` records the port's parity and
+limitations.
 
-### Cutover and rollback conditions
+### Rollback conditions
 
-No tool migrates until its parity, data, and recovery checks pass in
-a separate change. A deployment chooses one active implementation
-per extension ID. Rollback to v1 is possible only while stored data
-stays compatible, and it never replays completed file operations.
-Each `packages/yard-tools/<id>/README.md` holds the parity table its
-migration must satisfy.
+Disabling a v2 port rejects new work, requests cancellation of live
+jobs and removes its UI after owned work settles; re-enabling restores
+it from persisted state. Rolling back to v1 is not supported and never
+replays completed file operations.
 
 ## Contracts
 
-- Internal only. v1 API version 1 and v2 API version 2 coexist;
-  neither implies compatibility with the other.
-- v1 settings keys (`extension:<id>:enabled`,
+- Internal only. Extension API version 2 is the current and only
+  engine; API version 1 is retired.
+- Retired v1 settings keys (`extension:<id>:enabled`,
   `extension:<id>:setting:<settingId>`) and v2 rows
-  (`v2:approvals`, `v2:jobs:snapshot`, `v2state:<id>`) share the
-  settings table without overlapping.
+  (`v2:enablement:<id>`, `v2:approvals`, `v2:jobs:snapshot`,
+  `v2state:<id>`) share the settings table without overlapping; the
+  listed v1 rows are deleted as they are adopted.
 
 ## Failure behavior and limitations
 
-- Enabling v2 changes nothing for v1 tools, data, or routes.
+- Retired v1 command ids are not routed anywhere; the request 404s.
 - Revoking approval returns the extension to deny-by-default;
   in-flight runs fail closed at their next permission check.
 - Restart expires destination grants and interrupts live jobs with
@@ -167,9 +163,10 @@ migration must satisfy.
 
 ## Source map (real file paths)
 
-- `docs/adr/extension-v2-coexistence.md` — coexistence rules
+- `docs/adr/extension-v2-coexistence.md` — superseded coexistence decision
 - `docs/adr/extension-v2-permissions-trust.md` — trust model
 - `docs/adr/extension-v2-jobs-recovery.md` — recovery rules
+- `src/lib/extensions-v2/enablement.ts` — persisted enablement and one-time adoption
 - `packages/yard-tools/make-pack-v2/README.md` — parity table
 - `packages/yard-tools/sound-shelf-v2/README.md` — parity table
 - `packages/yard-tools/smart-collections-v2/README.md` — parity table
@@ -177,11 +174,10 @@ migration must satisfy.
 - `packages/yard-tools/library-gatherer-v2/README.md` — parity table
 - `packages/yard-tools/drop-rules-v2/README.md` — parity table
 - `src/lib/extensions-v2/policy.ts` — approval persistence
-- `public/extension-system-v2.html` — coexistence and migration diagrams
 
 ## Related documentation
 
 - `docs/extensions-v2.md` — authoring on the v2 API
 - `docs/extensions-v2-make-pack.md` — reference walkthrough
-- `docs/extensions.md` — the six v1 tools
-- `docs/runtime.md` — v1/v2 identity side by side
+- `docs/extensions.md` — the retired v1 shape
+- `docs/runtime.md` — runtime identity and command inventory

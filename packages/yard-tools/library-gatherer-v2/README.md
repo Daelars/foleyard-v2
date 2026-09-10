@@ -3,8 +3,9 @@
 Port of the Library Gatherer tool onto the v2 extension engine (G5, issue
 #180). Displayed as **Library Gatherer v2**. Bundled internal port,
 disabled by default, explicit enable/disable, own settings namespace
-(`library-gatherer-v2.*`), no auto-migration from v1. The v1 Library
-Gatherer keeps its routes and behavior untouched.
+(`library-gatherer-v2.*`). The retired v1 Library Gatherer's enablement
+and approvals were adopted once onto this port, and its listed settings
+were copied into this namespace before the v1 rows were deleted.
 
 Pull sounds from scattered folders, drives, packs, and project folders
 into one main Foleyard library.

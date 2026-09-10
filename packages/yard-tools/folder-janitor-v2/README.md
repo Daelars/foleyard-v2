@@ -3,8 +3,9 @@
 Port of the Folder Janitor tool onto the v2 extension engine (J4, issue
 #179). Displayed as **Folder Janitor v2**. Bundled internal port,
 disabled by default, explicit enable/disable, own settings namespace
-(`folder-janitor-v2.*`), no auto-migration from v1. The v1 Folder
-Janitor keeps its routes and behavior untouched.
+(`folder-janitor-v2.*`). The retired v1 Folder Janitor's enablement and
+approvals were adopted once onto this port, and its listed settings
+were copied into this namespace before the v1 rows were deleted.
 
 Find duplicate sounds, empty files, empty folders, tiny junk files,
 unusual formats, and missing files, then clean up.

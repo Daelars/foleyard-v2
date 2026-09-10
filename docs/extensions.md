@@ -74,17 +74,17 @@ Intents are request/result protocol, not subscription events.
 
 ## The v2 system beside it
 
-A second extension system (API version 2, internal, bundled-only)
-replaces these six tools. Its seven ports (`sound-shelf-v2`,
-`folder-janitor-v2`, `smart-collections-v2`, `make-pack-v2`,
-`drop-rules-v2`, `library-gatherer-v2`, `auto-tag-v2`) each ship in
-their own namespace, disabled by default with explicit enable and
-permission approval. v1 commands never route through v2. Nothing
-here changes meaning: the table above stays the complete (retired)
-v1 catalog.
+The v2 extension system (API version 2, internal, bundled-only)
+replaced these six tools; v2 is the only engine. Its seven ports
+(`sound-shelf-v2`, `folder-janitor-v2`, `smart-collections-v2`,
+`make-pack-v2`, `drop-rules-v2`, `library-gatherer-v2`, `auto-tag-v2`)
+each ship in their own namespace, disabled by default with explicit
+enable and permission approval. v1 commands never route through v2.
+Nothing here changes meaning: the table above stays the complete
+(retired) v1 catalog.
 
 - `docs/extensions-v2.md` — authoring on the v2 API
-- `docs/extensions-v2-migration.md` — coexistence and cutover rules
+- `docs/extensions-v2-migration.md` — the v1 retirement record
 - `docs/extensions-v2-make-pack.md` — reference walkthrough
 - `docs/extensions-v2-troubleshooting.md` — v2 failure diagnosis
 

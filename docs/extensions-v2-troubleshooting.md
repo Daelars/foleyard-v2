@@ -2,7 +2,7 @@
 
 > Feature status: internal (bundled only)
 > Contract: internal, API version 2
-> Owner: `src/app/prototype/ext-v2-workbench/` + `src/lib/extensions-v2/`
+> Owner: `src/lib/extensions-v2/`
 > Applies to: docs manifest ID (`extensions-v2-troubleshooting`); development checkout when unbuilt
 
 ## What it does
@@ -15,14 +15,12 @@ redacted; local views may show more.
 
 ## Responsibilities and boundaries
 
-- The workbench inspector
-  (`src/app/prototype/ext-v2-workbench/inspector.tsx`) owns local
-  diagnosis: invocation/job IDs, transitions, availability reasons,
-  denied permission names, sanitized errors, run modes.
-- `src/app/prototype/ext-v2-workbench/redact.ts` owns export
-  redaction: paths, settings values, tokens, secrets, and raw stacks
-  are cut within 2000-char and 100-record bounds while `vinv_`,
-  `vjob_`, and `vplan_` IDs survive.
+- `src/lib/extensions-v2/` owns diagnosis: invocation/job IDs,
+  transitions, availability reasons, denied permission names,
+  sanitized errors, and run modes.
+- Diagnostic exports are redacted: paths, settings values, tokens,
+  secrets, and raw stacks are cut within 2000-char and 100-record
+  bounds while `vinv_`, `vjob_`, and `vplan_` IDs survive.
 - `GET /api/runtime` owns the read-only snapshot both sides check
   first. It never executes handlers and never creates the database.
 
@@ -38,8 +36,8 @@ redacted; local views may show more.
    `GET /api/extensions-v2/availability?extensionId=…&commandId=…`.
    The reason names the blocker (disabled, selection, capability,
    permission, context).
-3. Reproduce in the workbench (`/prototype/ext-v2-workbench`) with
-   `FOLEYARD_V2_DEV_FIXTURES=1` and read the inspector log.
+3. Reproduce through the HTTP wrappers (`/api/extensions-v2/…`) and
+   read the sanitized job records from `GET /api/extensions-v2/jobs`.
 
 ### Failure table
 
@@ -52,13 +50,13 @@ redacted; local views may show more.
 | plan rejected: altered/expired/replayed | TTL is 15 min default, 1 h max, single use | prepare a fresh plan; do not resend consumed IDs |
 | job interrupted after restart | job history keeps known outputs + recovery note | review outputs, resubmit with fresh authorization; effects never replay |
 | state migration disabled the extension | settings GET diagnosis names the failure; prior data is preserved | fix the stored shape or reset, then re-enable |
-| empty shelf/recent source | sources report store failure instead of empty | check the persisted record; the adapter never executes v1 commands |
+| empty shelf/recent source | sources report store failure instead of empty | check the persisted record; the adapter reads the v2 store directly |
 | catalog missing an extension | registry validation rejects with a diagnostic code | fix duplicate IDs, namespace ownership, unresolved command refs, or unknown permissions |
 
 ### Diagnostics hygiene
 
-Local inspector views show detail for the operator's own run.
-Exports (runtime info file, inspector JSON, job history) carry only
+Local views show detail for the operator's own run.
+Exports (runtime info file, job history) carry only
 redacted payloads: no grant tokens, settings values, private paths,
 or raw stacks. Job snapshots persist ownership metadata and owned
 output paths, never tokens. History is bounded (100 records, newest
@@ -84,8 +82,6 @@ output paths, never tokens. History is bounded (100 records, newest
 
 ## Source map (real file paths)
 
-- `src/app/prototype/ext-v2-workbench/{page,inspector,redact,fixture-handlers}.tsx`
-- `src/app/prototype/ext-v2-workbench/{history,reload}/route.ts`
 - `src/lib/extensions-v2/{host,policy,jobs,job-client}.ts`
 - `src/lib/runtime-info.ts` — read-only snapshot
 - `packages/yard-core/src/extensions-v2/{availability,transport,jobs,plans}.ts`
@@ -95,4 +91,4 @@ output paths, never tokens. History is bounded (100 records, newest
 - `docs/extensions-v2.md` — authoring contracts behind these errors
 - `docs/extensions-v2-migration.md` — enable/approve/revoke flow
 - `docs/runtime.md` — snapshot sections to check first
-- `docs/events.md` — v1 events beside the five v2 contracts
+- `docs/events.md` — the current event catalog

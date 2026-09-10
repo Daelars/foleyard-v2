@@ -3,8 +3,10 @@
 Port of the Smart Collections tool onto the v2 extension engine (C3,
 issue #178). Displayed as **Smart Collections v2**. Bundled internal
 port, disabled by default, explicit enable/disable, own settings
-namespace (`smart-collections-v2.*`), no auto-migration from v1. The v1
-Smart Collections keeps its routes and behavior untouched.
+namespace (`smart-collections-v2.*`). The retired v1 Smart Collections'
+enablement and approvals were adopted once onto this port; saved
+searches share the collections table, so adopted Collections read the
+same.
 
 Save any search as a live-updating Collection: files matching the query
 appear automatically.

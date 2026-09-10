@@ -1,6 +1,11 @@
 # Extension v2 coexistence with v1
 
-Date: 2026-09-06. Status: accepted. Context: extension-v2 implementation prompt, R10.
+Date: 2026-09-06. Status: **superseded** (2026-09-10).
+
+Superseded by the v1 retirement: the v1 packages, routes, commands,
+settings and events were deleted (PRs #220–#222), and the retirement
+record in `docs/extensions-v2-migration.md` now owns the semantics. The
+decision below is kept as history and no longer describes the product.
 
 ## Decision
 

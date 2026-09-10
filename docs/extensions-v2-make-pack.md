@@ -11,7 +11,7 @@ Walks the reference extension end to end: enable, approve, pick a
 source, preview, choose a destination, run as a job, and read the
 result. Make Pack v2 turns selected sounds, Sound Shelf items, or
 recently previewed sounds into a folder or ZIP pack through the v2
-engine only. It never executes v1 commands or calls v1 transport.
+engine only. The retired v1 Make Pack no longer runs.
 
 ## Responsibilities and boundaries
 
@@ -24,9 +24,9 @@ engine only. It never executes v1 commands or calls v1 transport.
   shelf/recent adapters over persisted records.
 - `src/components/extensions/make-pack-v2/` owns the dialog: preview,
   destination grant, cancellable job, capability-aware reveal.
-- The original Make Pack keeps its behavior, routes, and settings.
-  The parity table in `packages/yard-tools/make-pack-v2/README.md`
-  records every workflow, intentional improvement, and explicit gap.
+- The parity table in `packages/yard-tools/make-pack-v2/README.md`
+  records every workflow, intentional improvement, and explicit gap
+  against the retired v1 Make Pack.
 
 ## Runtime behavior
 
@@ -65,12 +65,11 @@ through the preview channel. Apply the plan or submit the same
 command to `/api/extensions-v2/jobs` for background export with
 progress and cancellation.
 
-### Policies that differ from v1
+### Policies
 
 - Never overwrite: existing destination files fail with a reason.
   The manifest travels as an in-memory archive entry, so no
-  dot-tmp sidecar exists to delete (the v1 B12 defect class stays
-  expected-to-fail on the v1 path only).
+  dot-tmp sidecar exists to delete.
 - Folder output sanitizes and dedupes case-insensitively and
   reserves `manifest.json` first. ZIP keeps Library filenames
   verbatim, so collision-heavy selections should use folder output.
@@ -100,7 +99,8 @@ progress and cancellation.
   (`selection-unresolvable`) before anything is written.
 - ZIP entry renaming is unsupported; ZIP64 over 4 GiB is
   unsupported; more than 500 sounds per run is rejected before any
-  write; v1 settings never migrate silently.
+  write; settings never migrate silently beyond the one-time
+  retirement adoption.
 - Reveal/open stays capability-aware and desktop-gated.
 
 ## Source map (real file paths)
@@ -114,6 +114,6 @@ progress and cancellation.
 ## Related documentation
 
 - `docs/extensions-v2.md` — authoring guide and runnable examples
-- `docs/extensions-v2-migration.md` — enable steps and v1 preservation
+- `docs/extensions-v2-migration.md` — enable steps and the retirement record
 - `docs/filesystem.md` — grants and safe output underneath
-- `docs/commands.md` — v1 pack commands beside these three
+- `docs/commands.md` — the full command inventory

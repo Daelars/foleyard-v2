@@ -17,7 +17,7 @@ appear automatically.
   command (`.save-search`, global scope), no settings, three
   contributions (palette, sidebar, settings). Permissions:
   `collections:read`, `collections:write`, `library:read` (matching
-  v1). No `requiredCapabilities`: the app host exposes no capabilities.
+  v1). No `requiredCapabilities`: the host exposes its derived capability set and these commands need none of the desktop-only ones.
 - `src/handlers.ts` — the save-search handler. It serializes the query
   into the v1 filter shape (`{"q": query}`) and creates the Collection
   through the v2 collections op (E1 #176). No v1 imports, no repository
@@ -61,7 +61,7 @@ Collection to undo), so no plan/grant/job machinery is involved.
 | Permissions | `collections:read/write`, `library:read` | Matches v1; enforced first |
 | Contributions | sidebar + settings (v1 surfaces) plus palette | Resolved through the generic v2 contribution points |
 | Result shape | `{ collectionId, name, query }` | Validated against the command result schema |
-| `collections.write` capability | Permission-only | Matches the make-pack-v2 precedent; the app host exposes no capabilities |
+| `collections.write` capability | Permission-only | Matches the make-pack-v2 precedent; the host exposes its derived capability set and these commands need none of the desktop-only ones |
 
 Explicitly unsupported: `update-search` as a command (v1 exposed only
 `save-search` as a command too), advanced filter shapes beyond the

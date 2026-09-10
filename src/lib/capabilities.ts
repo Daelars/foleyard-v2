@@ -48,6 +48,22 @@ export const CAPABILITIES: Omit<CapabilityDescription, "availability">[] = [
   { id: "desktop.native", owner: "desktop", title: "Native file reveal, open, drag and picker", featureStatus: "shipped", contract: "internal", requiredPermissions: ["desktop:reveal", "desktop:open"], docsId: "architecture/desktop" },
 ];
 
+/**
+ * Capability ids available under the actual composition. This is the set the
+ * v2 execution preflight, the availability route and the renderer's UI state
+ * pass to the shared availability evaluator (#244).
+ */
+export function getAvailableCapabilityIds(opts: {
+  hasServerServices: boolean;
+  desktopAvailable: boolean;
+}): Set<string> {
+  return new Set(
+    describeCapabilities(opts)
+      .filter((capability) => capability.availability.state === "available")
+      .map((capability) => capability.id),
+  );
+}
+
 export function describeCapabilities(opts: {
   hasServerServices: boolean;
   desktopAvailable: boolean;

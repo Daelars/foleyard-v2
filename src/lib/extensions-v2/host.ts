@@ -9,6 +9,8 @@ import {
   type V2OperationServices,
 } from "@yard-core";
 
+import { getAvailableCapabilityIds } from "@/lib/capabilities";
+
 import { createV2ArchivePorts } from "./archive";
 import { createV2FileContentPorts, getV2GrantStore } from "./filesystem";
 import { getV2Events } from "./events";
@@ -218,7 +220,10 @@ export function getAppV2Host(): ExtensionV2Host {
     appHost = new ExtensionV2Host({
       registry,
       isEnabled: isV2ExtensionEnabled,
-      capabilities: {},
+      capabilities: getAvailableCapabilityIds({
+        hasServerServices: true,
+        desktopAvailable: process.env.FOLEYARD_DESKTOP === "1",
+      }),
       grantedPermissions: (extensionId) => getV2GrantedPermissions(extensionId),
       ports: createV2LibraryPorts(),
       createOperations,

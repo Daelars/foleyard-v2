@@ -15,9 +15,8 @@ before the v1 rows were deleted.
   `.from-recent`), three settings (`make-pack-v2.pack-name`,
   `make-pack-v2.default-format`, `make-pack-v2.include-manifest`),
   seven contributions (palette ×3, file-context-menu, selection-actions,
-  sidebar, settings). No `requiredCapabilities`: the app host
-  exposes no capabilities, so any declared capability would deny every
-  command as unknown.
+  sidebar, settings). No `requiredCapabilities`: the host exposes server
+  capabilities and these commands need none of the desktop-only ones.
 - `src/policy.ts` — pure export policy: default/sanitized pack names,
   ID dedupe, folder output-name planning (OS-invalid sanitization,
   case-insensitive `name 2.ext` dedupe, `manifest.json` reservation),

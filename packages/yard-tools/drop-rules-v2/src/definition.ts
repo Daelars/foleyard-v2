@@ -16,8 +16,10 @@ import {
  * real application drop menu: the renderer validates an OS drop into a
  * drop context, and the drop payload (Library IDs + destination grant)
  * arrives as command input. `open-settings` is global and settles
- * immediately with the settings surface. No `requiredCapabilities`:
- * the app host exposes no capabilities.
+ * immediately with the settings surface. `prepare-drag` requires the
+ * `desktop.native` capability (a native drag target only exists in the
+ * desktop app); a web host denies it with a typed reason instead of
+ * staging a copy nothing can drag.
  */
 
 export const DROP_RULES_V2_ID = "drop-rules-v2";
@@ -152,6 +154,7 @@ export function createDropRulesV2Definition(): ExtensionV2Definition {
         title: "Prepare Drag",
         description: "Prepare one sound for drag-out using the configured rules.",
         scope: "drop",
+        requiredCapabilities: ["desktop.native"],
         input: {
           kind: "object",
           properties: {

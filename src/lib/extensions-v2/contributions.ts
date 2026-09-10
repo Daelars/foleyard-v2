@@ -42,7 +42,8 @@ export type V2UiContext = {
 export type V2UiState = {
   /** Enabled extension IDs. Missing entries count as disabled. */
   enabled: ReadonlySet<string> | readonly string[];
-  capabilities: Record<string, boolean>;
+  /** Available capability ids, in the evaluator's accepted shapes. */
+  capabilities: ReadonlySet<string> | readonly string[] | Record<string, boolean>;
 };
 
 export function emptyV2UiState(): V2UiState {

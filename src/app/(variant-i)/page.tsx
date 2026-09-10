@@ -19,6 +19,8 @@ import { V3SelectionActions } from "./components/extensions/selection-actions";
 import { V3ExtensionsSection } from "./components/extensions/settings-section";
 import { V3ToolsCards } from "./components/extensions/tools-cards";
 import { V3SearchField } from "./components/search-field";
+import { getAvailableCapabilityIds } from "@/lib/capabilities";
+import { useDesktopApp } from "@/lib/desktop";
 import dynamic from "next/dynamic";
 import { useV2PaletteBridge } from "@/components/extensions-v2/use-v2-palette";
 import { V3MakePackV2Dialog } from "./components/ext-flows/make-pack-v2";
@@ -374,6 +376,14 @@ function AppV3Content() {
     state: "unavailable" | "empty" | "ready";
     matches: Array<{ fileId: string; filename: string; score: number }>;
   }>(null);
+  // The renderer derives the same available-capability set the server passes
+  // to execution preflight; desktop.native follows the desktop bridge (#244).
+  const desktopAvailable = useDesktopApp();
+  const availableCapabilities = useMemo(
+    () =>
+      getAvailableCapabilityIds({ hasServerServices: true, desktopAvailable }),
+    [desktopAvailable],
+  );
   const v2UiState: V2UiState = useMemo(
     () => ({
       enabled: new Set(
@@ -381,9 +391,9 @@ function AppV3Content() {
           .filter((entry) => entry.enabled)
           .map((entry) => entry.id),
       ),
-      capabilities: {},
+      capabilities: availableCapabilities,
     }),
-    [v2Catalog.extensions],
+    [v2Catalog.extensions, availableCapabilities],
   );
 
   const v2Palette = useV2PaletteBridge(

@@ -158,7 +158,7 @@ function world(overrides?: {
   const services: V2HostServices = {
     registry,
     isEnabled: () => true,
-    capabilities: {},
+    capabilities: new Set(["desktop.native"]),
     grantedPermissions: () => [...granted],
     ports: library,
     authorizeGrant: (grantId, extensionId) => {
@@ -427,7 +427,7 @@ describe("drop-rules-v2 boundaries", () => {
     const catalog = buildEffectiveV2Catalog(registry, () => [...FULL_PERMISSIONS]);
     const ui = {
       isEnabled: () => true,
-      capabilities: {},
+      capabilities: new Set(["desktop.native"]),
       grantedPermissions: () => [...FULL_PERMISSIONS],
     };
     const items = resolveV2PointContributions(

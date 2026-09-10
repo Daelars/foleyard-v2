@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { handleV2HttpAvailability } from "@yard-core";
+import { getAvailableCapabilityIds } from "@/lib/capabilities";
 import { getV2Registry, isV2ExtensionEnabled } from "@/lib/extensions-v2/host";
 import { getV2GrantedPermissions } from "@/lib/extensions-v2/policy";
 
@@ -35,7 +36,10 @@ export async function GET(request: NextRequest) {
     getV2Registry(),
     {
       isEnabled: isV2ExtensionEnabled,
-      capabilities: {},
+      capabilities: getAvailableCapabilityIds({
+        hasServerServices: true,
+        desktopAvailable: process.env.FOLEYARD_DESKTOP === "1",
+      }),
       grantedPermissions: (id) => getV2GrantedPermissions(id),
     },
     {

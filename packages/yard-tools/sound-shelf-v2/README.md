@@ -17,7 +17,7 @@ add/remove/clear/list. Not favorites, not a smart Collection.
   commands (`.add-selected`, `.remove-selected`, `.clear`, `.list`), no
   settings, eight contributions (palette ×4, file-context-menu ×2,
   selection-actions, sidebar). One permission: `library:read` (matching
-  v1). No `requiredCapabilities`: the app host exposes no capabilities.
+  v1). No `requiredCapabilities`: the host exposes its derived capability set and these commands need none of the desktop-only ones.
 - `src/handlers.ts` — command handlers. Every effect runs through the
   v2 shelf op (E1 #176). No v1 imports, no direct storage access, no
   favorites and no Collections.
@@ -59,7 +59,7 @@ invocation; `clear`/`list` are global.
 | Clear Shelf | Same, via `clear` | Now behind `library:read` (v1 `clear` skipped the permission check — **fixed**) |
 | List Shelf | Same, via `list`, plus read-time repair | v1 returned raw IDs including dead entries; v2 prunes and reports them |
 | In-memory store | **Persisted** in the `settings` table (`v2shelf:sound-shelf-v2`) | v1 store was ephemeral per host instance and lost on reload — **fixed**; no new migration |
-| `shelf.read`/`shelf.write` capabilities | Permission-only (`library:read`) | Matches the make-pack-v2 precedent; the app host exposes no capabilities |
+| `shelf.read`/`shelf.write` capabilities | Permission-only (`library:read`) | Matches the make-pack-v2 precedent; the host exposes its derived capability set and these commands need none of the desktop-only ones |
 | Contributions | context-menu + sidebar (v1 surfaces) plus palette + bulk bar | Resolved through the generic v2 contribution points |
 | Result shape | `{ added, removed, total }` / `{ ids, repaired, total }` | Validated against the command result schema |
 

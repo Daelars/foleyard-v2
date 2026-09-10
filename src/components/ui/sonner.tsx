@@ -5,10 +5,9 @@ import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
-// The app-v3 prototype route renders its own I-styled Toaster and marks
+// The (variant-i) surface renders its own I-styled Toaster and marks
 // <body data-variant-i-toasts>; while that marker is present this global
-// toaster stands down so every toast renders exactly once. The original
-// `/` route never sets the marker, so its presentation is unchanged.
+// toaster stands down so every toast renders exactly once.
 // useLayoutEffect (not useEffect) is deliberate: layout effects run before
 // the child route's passive effect sets the marker, so the observer never
 // misses the initial mutation.

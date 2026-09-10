@@ -62,11 +62,11 @@ through the DOM). No Base UI portal wrappers are used by the library;
 app-v3 therefore needs no per-portal scope markers.
 
 Toasts are the one exception: the root layout mounts a global Sonner
-`Toaster`. app-v3 renders its own I-styled `Toaster` and suppresses the
-root one via a `data-variant-i-toasts` attribute on `<body>` (see
-`src/app/prototype/app-v3/layout.tsx` and the small guard in
-`src/components/ui/sonner.tsx`). On leaving app-v3 the attribute is
-removed and the original presentation resumes.
+`Toaster`. The (variant-i) surface renders its own I-styled `Toaster`
+and suppresses the root one via a `data-variant-i-toasts` attribute on
+`<body>` (see `src/app/(variant-i)/components/toasts.tsx` and the small
+guard in `src/components/ui/sonner.tsx`). On leaving the surface the
+attribute is removed and the original presentation resumes.
 
 ## Design notes
 

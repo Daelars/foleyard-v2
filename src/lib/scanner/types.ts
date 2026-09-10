@@ -70,6 +70,13 @@ export type MetadataTask = {
   format: string | null;
 };
 
+/** Narrow scan-cleanup projection consumed by removal reconciliation. */
+export type ScanCleanupRow = {
+  path: string;
+  libraryRoot: string | null;
+  removedAt: string | null;
+};
+
 
 export type ScanPhaseContext = {
   fileRepo: import("@yard-core").AudioFileRepository;

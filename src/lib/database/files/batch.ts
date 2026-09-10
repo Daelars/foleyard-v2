@@ -16,6 +16,26 @@ export function batchTouchFiles(context: FileRepositoryContext, entries: AudioFi
     txn(entries);
   }
 
+/**
+ * Timestamp-only touch for rows already known to be active with unchanged
+ * ownership (the scanner's unchanged branch, where removed_at is already
+ * NULL and library_root is unchanged). Touching fewer columns keeps the
+ * partial browse indexes out of the write path where possible.
+ */
+export function batchTouchActiveFiles(context: FileRepositoryContext, paths: string[], now: string): void {
+    if (paths.length === 0) return;
+    const stmt = context.sqlite.prepare(
+      "UPDATE files SET last_scanned_at = ?, updated_at = ? WHERE path = ?",
+    );
+    const txn = context.sqlite.transaction((batchPaths: string[]) => {
+      for (const filePath of batchPaths) {
+        stmt.run(now, now, filePath);
+      }
+    });
+
+    txn(paths);
+  }
+
 export function batchUpsertFiles(context: FileRepositoryContext, records: ScanFileRecord[], now: string): void {
     if (records.length === 0) return;
 

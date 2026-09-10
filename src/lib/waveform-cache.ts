@@ -33,15 +33,24 @@ export async function getWaveformPeaks(filePath: string, cacheDirectory = path.j
   const taskKey = `${cachePath}:${identity}`;
   const existing = pending.get(taskKey);
   if (existing) return existing;
+
+  // Valid cache hits bypass generation admission entirely: they never wait
+  // behind an uncached file that is holding one of the two generation
+  // slots. Corrupt or stale entries fall through to the miss path.
+  const cachedHit = await readValidCachedPeaks(cachePath, identity);
+  if (cachedHit) return cachedHit;
+  // A concurrent identical request may have created the miss task while
+  // this request was reading the cache; re-check before creating a second
+  // one (the re-check and the task creation below are one synchronous
+  // section, so at most one task exists per identity).
+  const existingAfterRead = pending.get(taskKey);
+  if (existingAfterRead) return existingAfterRead;
+
   const task = withGenerationSlot(async () => {
-    try {
-      const cached = JSON.parse(await readFile(cachePath, "utf8"));
-      if (cached.identity === identity && typeof cached.supported === "boolean" &&
-          Array.isArray(cached.peaks) && cached.peaks.length === WAVEFORM_PEAK_COUNT &&
-          cached.peaks.every((peak: unknown) => typeof peak === "number" && Number.isFinite(peak) && peak >= 0 && peak <= 1)) {
-        return { peaks: cached.peaks as number[], supported: cached.supported as boolean };
-      }
-    } catch { /* Missing or corrupt cache entries are recomputed. */ }
+    // Recheck inside the slot: an identical request may have generated and
+    // persisted the entry while this request waited for admission.
+    const rechecked = await readValidCachedPeaks(cachePath, identity);
+    if (rechecked) return rechecked;
     const result = await generateWaveform(filePath);
     const after = await stat(filePath);
     if (after.size !== source.size || after.mtimeMs !== source.mtimeMs) {
@@ -62,4 +71,19 @@ export async function getWaveformPeaks(filePath: string, cacheDirectory = path.j
   pending.set(taskKey, task);
   try { return await task; }
   finally { pending.delete(taskKey); }
+}
+
+async function readValidCachedPeaks(
+  cachePath: string,
+  identity: string,
+): Promise<WaveformPeaks | null> {
+  try {
+    const cached = JSON.parse(await readFile(cachePath, "utf8"));
+    if (cached.identity === identity && typeof cached.supported === "boolean" &&
+        Array.isArray(cached.peaks) && cached.peaks.length === WAVEFORM_PEAK_COUNT &&
+        cached.peaks.every((peak: unknown) => typeof peak === "number" && Number.isFinite(peak) && peak >= 0 && peak <= 1)) {
+      return { peaks: cached.peaks as number[], supported: cached.supported as boolean };
+    }
+  } catch { /* Missing or corrupt cache entries are recomputed. */ }
+  return null;
 }

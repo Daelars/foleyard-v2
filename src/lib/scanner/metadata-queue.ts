@@ -1,30 +1,65 @@
 import type { MetadataSeam, MetadataTask, MetadataUpdateRecord } from "./types";
 
+/** Waiting-job bound; discovery pauses on admission until capacity frees. */
+const DEFAULT_CAPACITY = 500;
+
 export function createMetadataQueue(
   concurrency: number,
   onResult: (record: MetadataUpdateRecord) => void,
   extractor: MetadataSeam,
   onError: () => void,
+  options?: { capacity?: number },
 ) {
+  const capacity = options?.capacity ?? DEFAULT_CAPACITY;
+  // Index-based deque: tasks leave by advancing `head` instead of
+  // Array.shift, so a large backlog never pays the O(n) shift cost. The
+  // array compacts when the waste grows past a threshold.
   const pending: MetadataTask[] = [];
+  let head = 0;
   let activeCount = 0;
   let fatalError: Error | null = null;
   let cancelled = false;
 
+  const pendingCount = () => pending.length - head;
+
   type Waiter = { resolve: () => void; reject: (error: Error) => void; timer?: ReturnType<typeof setTimeout>; timeoutMs: number };
-  const waiters = new Set<Waiter>();
+  const idleWaiters = new Set<Waiter>();
+  const admissionWaiters = new Set<Waiter>();
+
+  const compactPending = () => {
+    if (head > 1024 && head * 2 > pending.length) {
+      pending.splice(0, head);
+      head = 0;
+    }
+  };
+
+  const settleAdmissionWaiters = () => {
+    for (const waiter of admissionWaiters) {
+      if (fatalError || cancelled) {
+        admissionWaiters.delete(waiter);
+        waiter.reject(fatalError ?? new Error("Metadata queue cancelled"));
+      } else if (pendingCount() < capacity) {
+        admissionWaiters.delete(waiter);
+        waiter.resolve();
+      }
+    }
+  };
+
   const notify = () => {
-    for (const waiter of waiters) {
+    settleAdmissionWaiters();
+    for (const waiter of idleWaiters) {
       clearTimeout(waiter.timer);
-      if (fatalError) { waiters.delete(waiter); waiter.reject(fatalError); }
-      else if (activeCount === 0 && pending.length === 0) { waiters.delete(waiter); waiter.resolve(); }
-      else waiter.timer = setTimeout(() => { waiters.delete(waiter); waiter.reject(new Error("Metadata queue stalled")); }, waiter.timeoutMs);
+      if (fatalError) { idleWaiters.delete(waiter); waiter.reject(fatalError); }
+      else if (activeCount === 0 && pendingCount() === 0) { idleWaiters.delete(waiter); waiter.resolve(); }
+      else waiter.timer = setTimeout(() => { idleWaiters.delete(waiter); waiter.reject(new Error("Metadata queue stalled")); }, waiter.timeoutMs);
     }
   };
 
   const runNext = () => {
-    while (activeCount < concurrency && pending.length > 0 && !fatalError && !cancelled) {
-      const task = pending.shift()!;
+    while (activeCount < concurrency && pendingCount() > 0 && !fatalError && !cancelled) {
+      const task = pending[head]!;
+      head += 1;
+      compactPending();
       activeCount += 1;
 
       (async () => {
@@ -65,29 +100,46 @@ export function createMetadataQueue(
   };
 
   return {
-    enqueue(task: MetadataTask) {
+    /**
+     * Awaitable admission: waits while the waiting list is at capacity so
+     * discovery pauses instead of building an unbounded backlog. Rejects on
+     * cancel or fatal write failure so blocked producers are woken.
+     */
+    async enqueue(task: MetadataTask): Promise<void> {
       if (cancelled) return;
       if (fatalError) {
         throw fatalError;
       }
-
+      while (!cancelled && !fatalError && pendingCount() >= capacity) {
+        await new Promise<void>((resolve, reject) => {
+          admissionWaiters.add({ resolve, reject, timeoutMs: 0 });
+          settleAdmissionWaiters();
+        });
+      }
+      if (cancelled) return;
+      if (fatalError) {
+        throw fatalError;
+      }
       pending.push(task);
       runNext();
     },
     onIdle(timeoutMs = 30000): Promise<void> {
       if (fatalError) return Promise.reject(fatalError);
-      if (activeCount === 0 && pending.length === 0) return Promise.resolve();
+      if (activeCount === 0 && pendingCount() === 0) return Promise.resolve();
       return new Promise((resolve, reject) => {
-        waiters.add({ resolve, reject, timeoutMs });
+        idleWaiters.add({ resolve, reject, timeoutMs });
         notify();
       });
     },
     cancel() {
       cancelled = true;
       pending.length = 0;
+      head = 0;
       fatalError = new Error("Metadata queue cancelled");
       notify();
     },
+    getCounts() {
+      return { pending: pendingCount(), active: activeCount };
+    },
   };
 }
-

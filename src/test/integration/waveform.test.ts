@@ -7,7 +7,7 @@ import ffmpeg from "ffmpeg-static";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createScratchLibrary, type ScratchLibrary } from "@/test/fixtures";
 import { generateWaveform, WAVEFORM_PEAK_COUNT } from "@/lib/waveform-generator";
-import { getWaveformPeaks } from "@/lib/waveform-cache";
+import { getWaveformPeaks, withGenerationSlot } from "@/lib/waveform-cache";
 vi.mock("node:child_process", { spy: true });
 
 let library: ScratchLibrary;
@@ -57,8 +57,89 @@ it("replaces old flat MP3 caches and shares persisted peaks across callers and r
   expect(spawn).toHaveBeenCalledTimes(1);
 });
 
+it("serves a valid cache hit while both generation slots are held", async () => {
+  const file = encode("wav");
+  const cache = library.directory("cache");
+  await getWaveformPeaks(file, cache);
+
+  let releaseA: () => void = () => {};
+  let releaseB: () => void = () => {};
+  const holdA = withGenerationSlot(() => new Promise<void>((resolve) => { releaseA = resolve; }));
+  const holdB = withGenerationSlot(() => new Promise<void>((resolve) => { releaseB = resolve; }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const hit = await Promise.race([
+    getWaveformPeaks(file, cache).then(() => "hit"),
+    new Promise<string>((resolve) => setTimeout(() => resolve("blocked"), 300)),
+  ]);
+  releaseA();
+  releaseB();
+  await Promise.all([holdA, holdB]);
+
+  expect(hit).toBe("hit");
+});
+
 it("keeps corrupt audio neutral rather than inventing peaks", async () => {
   const result = await generateWaveform(library.writeFile("broken.mp3", "not audio"));
   expect(result.supported).toBe(false);
   expect(result.peaks).toEqual(Array(WAVEFORM_PEAK_COUNT).fill(0));
+});
+
+// Reference reduction: the pre-specialization PCM16 loop, kept in the test
+// so the specialized path is pinned against the behavior it replaced.
+function referencePcm16Peaks(samples: Int16Array, channels: number, frames: number) {
+  const peaks = Array<number>(WAVEFORM_PEAK_COUNT).fill(0);
+  const counts = Array<number>(WAVEFORM_PEAK_COUNT).fill(0);
+  let offset = 0;
+  for (let frame = 0; frame < frames; frame++) {
+    const bin = Math.min(WAVEFORM_PEAK_COUNT - 1, Math.floor(frame * WAVEFORM_PEAK_COUNT / frames));
+    for (let channel = 0; channel < channels; channel++) {
+      peaks[bin] += Math.min(1, Math.abs(samples[offset++]! / 32768));
+      counts[bin]++;
+    }
+  }
+  for (let i = 0; i < peaks.length; i++) peaks[i] = counts[i] ? peaks[i]! / counts[i]! : 0;
+  const maximum = Math.max(...peaks, 0.001);
+  return peaks.map((peak) => peak / maximum);
+}
+
+function writePcm16Wav(samples: Int16Array, channels: number) {
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0, "ascii");
+  header.writeUInt32LE(36 + samples.length * 2, 4);
+  header.write("WAVE", 8, "ascii");
+  header.write("fmt ", 12, "ascii");
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(16000, 24);
+  header.writeUInt32LE(16000 * 2 * channels, 28);
+  header.writeUInt16LE(2 * channels, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36, "ascii");
+  header.writeUInt32LE(samples.length * 2, 40);
+  const body = Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength);
+  return Buffer.concat([header, body]);
+}
+
+it.each([
+  ["stereo full scale", 2, (frame: number, channel: number) => (channel === 0 ? 32767 : -32768)],
+  ["mono silent", 1, () => 0],
+  ["mono odd frames", 1, (frame: number) => (frame % 37 === 0 ? 20000 : 0)],
+  ["stereo opposite phase", 2, (frame: number, channel: number) => (frame % 2 === 0 ? 16000 : -16000) * (channel === 0 ? 1 : -1)],
+  ["six channels mixed", 6, (frame: number, channel: number) => Math.trunc(3000 * Math.sin(frame / 17 + channel))],
+])("PCM16 specialized reduction matches the generic loop for %s", async (_name, channels, generator) => {
+  const frames = 1000 + (channels === 6 ? 13 : 0);
+  const samples = new Int16Array(frames * channels);
+  for (let frame = 0; frame < frames; frame++) {
+    for (let channel = 0; channel < channels; channel++) {
+      samples[frame * channels + channel] = generator(frame, channel);
+    }
+  }
+  const filePath = path.join(library.root, `parity-${channels}ch.wav`);
+  fs.writeFileSync(filePath, writePcm16Wav(samples, channels));
+  const expected = referencePcm16Peaks(samples, channels, frames);
+  const result = await generateWaveform(filePath);
+  expect(result.supported).toBe(true);
+  expect(result.peaks).toEqual(expected);
 });

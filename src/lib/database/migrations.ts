@@ -224,6 +224,8 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   // Collection names are unique at the storage layer so create/rename
   // checks cannot race (#252).
   sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_collections_name ON collections(name)`);
+  // Model-first vector reads for similarity search (#233).
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_embeddings_model ON file_embeddings(model, file_id)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_tags_tag_id ON file_tags(tag_id)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_tags_origin ON file_tags(origin)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_tag_aliases_tag_id ON tag_aliases(tag_id)`);

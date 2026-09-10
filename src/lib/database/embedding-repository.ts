@@ -54,6 +54,28 @@ export class SqliteEmbeddingRepository {
       .map((entry) => entry.fileId);
   }
 
+  /**
+   * One batched read of every vector for a model (#233), served by
+   * `idx_file_embeddings_model`. Similarity search then needs one liveness
+   * check for the candidate ids instead of a query per file.
+   */
+  listEmbeddings(model: string): Array<{ fileId: string; dim: number; vec: Buffer }> {
+    return this.db
+      .select({
+        fileId: schema.fileEmbeddings.fileId,
+        dim: schema.fileEmbeddings.dim,
+        vec: schema.fileEmbeddings.vec,
+      })
+      .from(schema.fileEmbeddings)
+      .where(eq(schema.fileEmbeddings.model, model))
+      .all()
+      .map((entry) => ({
+        fileId: entry.fileId,
+        dim: entry.dim,
+        vec: entry.vec as Buffer,
+      }));
+  }
+
   deleteEmbeddingsForFile(fileId: string): void {
     this.db.delete(schema.fileEmbeddings).where(eq(schema.fileEmbeddings.fileId, fileId)).run();
   }
@@ -72,5 +94,6 @@ export const upsertFileEmbedding = (fileId: string, model: string, dim: number, 
 export const getFileEmbedding = (fileId: string, model: string) =>
   getEmbeddingRepo().getEmbedding(fileId, model);
 export const listEmbeddingIds = (model: string) => getEmbeddingRepo().listEmbeddingIds(model);
+export const listEmbeddings = (model: string) => getEmbeddingRepo().listEmbeddings(model);
 export const deleteEmbeddingsForFile = (fileId: string) =>
   getEmbeddingRepo().deleteEmbeddingsForFile(fileId);

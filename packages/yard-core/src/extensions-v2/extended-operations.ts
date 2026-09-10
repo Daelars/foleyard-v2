@@ -116,15 +116,24 @@ export function createV2ExtendedOperations(
   const notifyTags = args.notify ? () => args.notify!("tags") : undefined;
   const notifyShelf = args.notify ? () => args.notify!("shelf") : undefined;
 
+  const isLiveFile = (fileId: string): boolean => {
+    const record = args.library.getFileById(fileId);
+    return record !== null && record.removedAt === null;
+  };
+  const liveFileIds = (fileIds: string[]): string[] => {
+    const live: string[] = [];
+    for (const record of args.library.getFilesByIds(fileIds)) {
+      if (record.removedAt === null) live.push(record.id);
+    }
+    return live;
+  };
+
   const organizationArgs: V2OrganizationFactoryArgs = {
     extensionId: args.extensionId,
     effectivePermissions: args.effectivePermissions,
     ...(args.collections ? { collections: args.collections } : {}),
     ...(args.tags ? { tags: args.tags } : {}),
-    isLiveFile: (fileId) => {
-      const record = args.library.getFileById(fileId);
-      return record !== null && record.removedAt === null;
-    },
+    isLiveFile,
     notify: (scope) => {
       if (scope === "collections") notifyCollections?.();
       else notifyTags?.();
@@ -155,7 +164,8 @@ export function createV2ExtendedOperations(
       extensionId: args.extensionId,
       effectivePermissions: args.effectivePermissions,
       ...(args.embeddings ? { embeddings: args.embeddings } : {}),
-      isLiveFile: organizationArgs.isLiveFile,
+      isLiveFile,
+      liveFileIds,
     }),
     analysis: createV2AnalysisOperations({
       extensionId: args.extensionId,

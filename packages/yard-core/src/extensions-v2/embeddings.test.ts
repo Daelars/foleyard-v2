@@ -63,6 +63,45 @@ describe("createV2EmbeddingOperations", () => {
     expect(ops.findSimilar("missing")).toEqual([]);
   });
 
+  it("ranks from one batched read and one liveness check (#233)", () => {
+    const f32 = (values: number[]) => new Uint8Array(new Float32Array(values).buffer);
+    const rows = new Map<string, { dim: number; vec: Uint8Array }>([
+      ["a", { dim: 2, vec: f32([1, 0]) }],
+      ["b", { dim: 2, vec: f32([0.9, 0.1]) }],
+      ["c", { dim: 2, vec: f32([0, 1]) }],
+      ["gone", { dim: 2, vec: f32([1, 0]) }],
+    ]);
+    const calls = { list: 0, listIds: 0, get: 0, live: 0 };
+    const ops = createV2EmbeddingOperations({
+      extensionId: "ext",
+      effectivePermissions: ["embeddings:read"],
+      embeddings: {
+        upsert: () => {},
+        get: (fileId) => {
+          calls.get += 1;
+          return rows.get(fileId) ?? null;
+        },
+        listIds: () => {
+          calls.listIds += 1;
+          return [...rows.keys()];
+        },
+        list: () => {
+          calls.list += 1;
+          return [...rows.entries()].map(([fileId, row]) => ({ fileId, ...row }));
+        },
+        removeFile: () => {},
+      },
+      liveFileIds: (fileIds) => {
+        calls.live += 1;
+        return fileIds.filter((fileId) => fileId !== "gone");
+      },
+    });
+
+    const similar = ops.findSimilar("a", { topN: 2 });
+    expect(similar.map((entry) => entry.fileId)).toEqual(["b", "c"]);
+    expect(calls).toEqual({ list: 1, listIds: 0, get: 1, live: 1 });
+  });
+
   it("denies reads and writes outside the effective set", () => {
     const ports = portsDouble();
     const reader = createV2EmbeddingOperations({

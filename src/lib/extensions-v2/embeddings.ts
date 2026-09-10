@@ -2,6 +2,7 @@ import {
   deleteEmbeddingsForFile,
   getFileEmbedding,
   listEmbeddingIds,
+  listEmbeddings,
   upsertFileEmbedding,
 } from "@/lib/db";
 import type { V2EmbeddingPorts } from "@yard-core";
@@ -26,6 +27,7 @@ export type V2EmbeddingsDeps = {
     upsert: V2EmbeddingPorts["upsert"];
     get: V2EmbeddingPorts["get"];
     listIds: V2EmbeddingPorts["listIds"];
+    list?: NonNullable<V2EmbeddingPorts["list"]>;
     removeFile: V2EmbeddingPorts["removeFile"];
   };
   notify?: () => void;
@@ -51,6 +53,19 @@ export function createV2EmbeddingPorts(deps: V2EmbeddingsDeps = {}): V2Embedding
       return row ? { dim: row.dim, vec: new Uint8Array(row.vec.buffer, row.vec.byteOffset, row.vec.byteLength) } : null;
     },
     listIds: (model) => (ports ? ports.listIds(model) : listEmbeddingIds(model)),
+    list: (model) => {
+      if (ports?.list) {
+        return ports.list(model).map((row) => ({
+          ...row,
+          vec: new Uint8Array(row.vec.buffer, row.vec.byteOffset, row.vec.byteLength),
+        }));
+      }
+      return listEmbeddings(model).map((row: { fileId: string; dim: number; vec: Buffer }) => ({
+        fileId: row.fileId,
+        dim: row.dim,
+        vec: new Uint8Array(row.vec.buffer, row.vec.byteOffset, row.vec.byteLength),
+      }));
+    },
     removeFile: (fileId) => {
       if (ports) ports.removeFile(fileId);
       else deleteEmbeddingsForFile(fileId);

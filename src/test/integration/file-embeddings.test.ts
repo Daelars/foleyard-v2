@@ -49,6 +49,25 @@ describe("file embeddings store", () => {
     expect(embeddings.getEmbedding(fileB, "stub")).toBeNull();
   });
 
+  it("reads all vectors for a model in one indexed query (#233)", () => {
+    embeddings.upsertEmbedding(fileA, "stub", 2, floatBytes([1, 0]));
+    embeddings.upsertEmbedding(fileB, "stub", 2, floatBytes([0, 1]));
+    embeddings.upsertEmbedding(fileA, "other", 2, floatBytes([1, 1]));
+
+    const listed = embeddings.listEmbeddings("stub");
+    expect(listed.map((row) => row.fileId).sort()).toEqual([fileA, fileB].sort());
+    expect(listed[0]!.dim).toBe(2);
+    expect(listed[0]!.vec.byteLength).toBe(8);
+
+    const plan = sqlite
+      .prepare("EXPLAIN QUERY PLAN SELECT file_id, dim, vec FROM file_embeddings WHERE model = 'stub'")
+      .all()
+      .map((row) => (row as { detail: string }).detail)
+      .join(" | ");
+    expect(plan).toContain("idx_file_embeddings_model");
+    expect(plan).not.toContain("TEMP B-TREE");
+  });
+
   it("re-upserts replace and file removal leaves no orphans", () => {
     embeddings.upsertEmbedding(fileA, "stub", 2, floatBytes([1, 0]));
     embeddings.upsertEmbedding(fileA, "stub", 2, floatBytes([0, 1]));

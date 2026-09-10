@@ -19,6 +19,8 @@ export type V2EmbeddingPorts = {
   upsert(fileId: string, model: string, dim: number, vec: Uint8Array): void;
   get(fileId: string, model: string): { dim: number; vec: Uint8Array } | null;
   listIds(model: string): string[];
+  /** One batched read of every vector for a model (#233). */
+  list?(model: string): Array<{ fileId: string; dim: number; vec: Uint8Array }>;
   removeFile(fileId: string): void;
 };
 
@@ -39,6 +41,8 @@ export type V2EmbeddingFactoryArgs = {
   embeddings?: V2EmbeddingPorts;
   /** Live index lookup so removed sounds never rank. */
   isLiveFile?(fileId: string): boolean;
+  /** One batched liveness check for candidate ids (#233). */
+  liveFileIds?(fileIds: string[]): string[];
 };
 
 function denied(permission: string, extensionId: string): V2OperationError {
@@ -83,6 +87,29 @@ function bytesToFloats(bytes: Uint8Array): number[] {
   return out;
 }
 
+/** Float-32 view over the blob without boxing per element (#233). */
+function bytesToFloat32(bytes: Uint8Array): Float32Array {
+  const length = Math.floor(bytes.byteLength / 4);
+  return new Float32Array(bytes.buffer, bytes.byteOffset, length);
+}
+
+/** Cosine similarity over typed arrays; same math as `cosineSimilarity`. */
+function cosineSimilarityTyped(a: Float32Array, b: Float32Array): number {
+  const length = Math.min(a.length, b.length);
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let index = 0; index < length; index += 1) {
+    const x = a[index]!;
+    const y = b[index]!;
+    dot += x * y;
+    normA += x * x;
+    normB += y * y;
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
 export function createV2EmbeddingOperations(args: V2EmbeddingFactoryArgs): V2EmbeddingOperations {
   const extensionId = args.extensionId;
   const granted = new Set(args.effectivePermissions);
@@ -125,15 +152,36 @@ export function createV2EmbeddingOperations(args: V2EmbeddingFactoryArgs): V2Emb
       require("embeddings:read");
       const model = options?.model ?? STUB_EMBEDDING_MODEL;
       const topN = Math.max(1, Math.min(50, Math.floor(options?.topN ?? 10)));
-      const target = ports().get(fileId, model);
+      const port = ports();
+      const target = port.get(fileId, model);
       if (!target) return [];
-      const targetVec = bytesToFloats(target.vec);
+      const targetVec = bytesToFloat32(target.vec);
+
+      // One batched read of every vector for the model (#233): the model-first
+      // index serves `list`, and the fallback keeps fixture hosts working.
+      const candidates = port.list
+        ? port.list(model)
+        : port.listIds(model).flatMap((candidateId) => {
+            const row = port.get(candidateId, model);
+            return row ? [{ fileId: candidateId, ...row }] : [];
+          });
+
+      // One batched liveness check instead of a point lookup per candidate.
+      const liveSet =
+        args.liveFileIds !== undefined
+          ? new Set(args.liveFileIds(candidates.map((candidate) => candidate.fileId)))
+          : null;
+      const isLiveCandidate = (candidateId: string): boolean =>
+        liveSet ? liveSet.has(candidateId) : live(candidateId);
+
       const scored: V2SimilarFile[] = [];
-      for (const candidateId of ports().listIds(model)) {
-        if (candidateId === fileId || !live(candidateId)) continue;
-        const row = ports().get(candidateId, model);
-        if (!row || row.dim !== target.dim) continue;
-        scored.push({ fileId: candidateId, score: cosineSimilarity(targetVec, bytesToFloats(row.vec)) });
+      for (const candidate of candidates) {
+        if (candidate.fileId === fileId || !isLiveCandidate(candidate.fileId)) continue;
+        if (candidate.dim !== target.dim) continue;
+        scored.push({
+          fileId: candidate.fileId,
+          score: cosineSimilarityTyped(targetVec, bytesToFloat32(candidate.vec)),
+        });
       }
       scored.sort((left, right) => right.score - left.score);
       return scored.slice(0, topN);

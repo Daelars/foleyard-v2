@@ -80,6 +80,7 @@ export {
   deleteEmbeddingsForFile,
   getFileEmbedding,
   listEmbeddingIds,
+  listEmbeddings,
   upsertFileEmbedding,
 } from "@/lib/database/embedding-repository";
 

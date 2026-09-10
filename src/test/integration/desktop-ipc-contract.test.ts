@@ -56,13 +56,21 @@ describe("desktop IPC contract", () => {
     expect(checkDesktopCall("desktop:reveal-path", "/lib/kick.wav")).toBeNull();
   });
 
-  it("leaves no handwritten channel strings outside the registry", () => {
+  it("preload mirrors the registry and no other file handwrites channel strings", () => {
     const root = process.cwd();
-    const suspects: string[] = [];
     const literal = /(?<!CHANNELS\[)["'](desktop:[a-z-]+)["']/g;
+
+    // Sandboxed preload scripts cannot require relative files, so
+    // electron/preload.cjs mirrors the channel names. It must mirror the
+    // registry exactly, and it must stay free of relative requires.
+    const preloadText = fs.readFileSync(path.join(root, "electron/preload.cjs"), "utf8");
+    const mirrored = [...new Set([...preloadText.matchAll(literal)].map((match) => match[1]))];
+    expect(mirrored.sort()).toEqual([...EXPECTED_CHANNELS].sort());
+    expect(preloadText).not.toMatch(/require\(\s*["']\.\.?\//);
+
+    const suspects: string[] = [];
     for (const file of [
       "electron/main/ipc.cjs",
-      "electron/preload.cjs",
       "electron/main/auto-updater.cjs",
       "electron/main/desktop-service.cjs",
       "electron/main/errors.cjs",

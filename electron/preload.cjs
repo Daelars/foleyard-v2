@@ -1,6 +1,38 @@
 const { contextBridge, ipcRenderer, webFrame } = require("electron");
 
-const { CHANNELS } = require("./main/ipc-channels.cjs");
+/**
+ * Sandboxed preload scripts cannot require relative files, so the bridge
+ * channel names are mirrored here instead of importing
+ * ./main/ipc-channels.cjs. `desktop-ipc-contract.test.ts` asserts this list
+ * equals the registry; update both together.
+ */
+const CHANNEL_NAMES = Object.freeze([
+  "desktop:check-for-updates",
+  "desktop:install-update",
+  "desktop:simulate-update",
+  "desktop:copy-file-path",
+  "desktop:pick-folder",
+  "desktop:reveal-in-explorer",
+  "desktop:reveal-path",
+  "desktop:open-file-externally",
+  "desktop:window-minimize",
+  "desktop:window-toggle-maximize",
+  "desktop:window-close",
+  "desktop:get-window-state",
+  "desktop:get-runtime-info",
+  "desktop:start-drag-file",
+  "desktop:update-available",
+  "desktop:update-ready",
+  "desktop:update-not-available",
+  "desktop:update-error",
+  "desktop:update-download-progress",
+  "desktop:action-error",
+  "desktop:window-state",
+]);
+
+const CHANNELS = Object.freeze(
+  Object.fromEntries(CHANNEL_NAMES.map((name) => [name, name])),
+);
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   isDesktop: true,

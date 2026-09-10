@@ -208,18 +208,17 @@ Verified:
 
 Unverified / blockers:
 - Pixel-perfect screenshot diffing: the preview tab's snapshot tool
-  failed (`PreviewAutomationExecutionError`/timeout) during this session;
-  comparison was done by computed-style signatures instead. Full
-  screenshot evidence (fixed viewport, aligned crops) remains to be
-  captured by a human or a working capture tool.
-- Hover/press/focus ring visual states, reduced-motion behavior, and
-  overlay clipping at viewport edges were not captured visually; the
-  relevant classes are ported verbatim from the specimen sources.
-- Real-file workflows (favorites, tags, bulk actions, playback, context
-  menus, v2 commands) could not be exercised in the browser: the dev
-  library contains directories but no indexed files, and no desktop
-  bridge. These paths compile and are wired to the real hooks but are
-  marked untested at runtime.
+  failed (`PreviewAutomationExecutionError`/timeout). Fixed-viewport
+  evidence is now committed through a CDP capture harness (see the
+  visual-evidence pass); automated diff scoring and human sign-off
+  remain.
+- Hover, focus, empty, overlay and reduced-motion states are captured in
+  the visual-evidence pass; press/active states and narrow-viewport
+  overlay clipping were not captured.
+- Real-file workflows were blocked at preparation time (the dev library
+  held directories but no indexed files). The 10 September pass below
+  exercised them against the real library; native desktop paths remain
+  untested.
 - Lint: `bun run lint` reports pre-existing baseline errors (29 errors,
   20 warnings) in files outside this work (board.tsx old-skin tokens,
   lib-adoption, yard-core, ui/chart, workspace fork…). All new files lint
@@ -231,9 +230,148 @@ Unverified / blockers:
   are untested in this web preview; runtime capability follows the same
   `useDesktopApp` gates as the original.
 
+## Verification pass — real library web flows, 10 September 2026
+
+Environment: `bun run dev` (Next 16.2.6, Turbopack) against the development
+database (`foleyard.sqlite`: 15,877 active files under `P:\SoundLibary`,
+21 tags, 3,014 tag attachments, 1 collection, 13,644 embeddings). Preview
+browser at 1280x800 (reported viewport 1843x1152), no desktop bridge.
+Ticket #200.
+
+Verified end to end with real data:
+
+- Shell and navigation: rail (Library, Favorites, Shelf, Organize, Auto
+  tag, Extensions, Settings), mobile navigation control present,
+  breadcrumbs and back navigation, folder drill-down to
+  `SFX/Alarm & Chime (SFX)` (87 files).
+- Library: file rows with format, provenance marks (M/D), durations and
+  tag chips; search ("alarm" -> 207 results); origin filter (Manual -> 25,
+  pressed state); multi-select (two of twelve) with the bulk bar (Save
+  all, Tag, Remove, Remove from Index (v2), Clear).
+- Playback: real audio played to completion (0:06), queue next advanced to
+  the following file, transport controls (previous, pause, next, seek,
+  volume, mute, autoplay, add to collection, close) present with live time.
+- Favorites: the player's Like toggles to Unlike, persists, and is
+  reflected in the Favorites rail badge.
+- Tags: attach/detach from the row menu persists (checked through
+  `GET /api/tags?fileId=...`) and shows the manual provenance mark when
+  the menu is reopened.
+- Context menu: Copy path, Save to favorites, tag checklist with
+  provenance, Remove from library, Find similar, and v2 contributions -
+  Scan Folder Mess (v2) disabled on files with its explanation, Remove
+  from Index (v2), Make Pack v2 from Selection, Add/Remove from Shelf (v2).
+- Shelf: add via the row menu; Shelf view with Pack Shelf v2 and Clear.
+  The `sound-shelf-v2.list` command correctly returns `permission-denied`
+  without the `library:read` grant.
+- Organize: 21 tag chips, one collection with counts, New collection.
+- Command palette (Ctrl+K): 29 commands across navigation, transport and
+  v2 tools; filtering ("shelf" -> 4).
+- Settings: all six tabs render with real data (Library & Storage with the
+  real root and idle scan status; Collections & Tags; Extensions listing
+  Auto Tag v2 and its permissions; Appearance zoom; Customisation remove
+  defaults; About runtime info).
+- Auto tag: coverage board (21/21 tags at goal, 2,083/15,877 tagged, 13%)
+  and Tag origins (1,256 manual / 615 rule / 249 AI) with real per-file
+  lists; Find similar returned ranked matches for a real file.
+- Extensions: tools cards for Make Pack v2, Sound Shelf v2, Smart
+  Collections v2, Folder Janitor v2 and Drop Rules v2 with permission
+  counts and run buttons; Make Pack v2 dialog renders source, name,
+  destination and format with Preview pack.
+
+Observations and limitations from this pass:
+
+- The preview snapshot tool still fails with
+  `PreviewAutomationExecutionError` on app-v3, so no screenshots were
+  captured; the visual-evidence gap remains open for #202.
+- The row menu does not reflect a just-toggled tag attachment until it is
+  reopened; reopening shows the correct provenance mark.
+- One unreproduced full navigation back to `/` occurred mid-session; no
+  cause was established.
+- Hidden settings tabs remain mounted while another view is active (matches
+  the original page's eager mount behavior).
+- The About tab states "MIT Licensed" while the repository has no LICENSE
+  file (pre-existing inconsistency, not part of this work).
+- Make Pack execution, CLAP inference, update notifications and first-run
+  onboarding were not exercised in this pass.
+
+## Verification pass — native desktop paths, 10 September 2026
+
+Environment: Electron 41.3.0 with Next dev on port 3001, driven over the
+remote debugging protocol against the real window. Desktop database
+(`%APPDATA%\Foleyard\foleyard.sqlite`) holds the same 15,877-file library
+(1 tag, 0 embeddings, so the Auto tag rail is absent there). Ticket #201.
+
+Found and fixed: the sandboxed preload could not require
+`./main/ipc-channels.cjs`, so `window.desktopBridge` was never exposed and
+every native action was dead. This is a regression introduced after v0.1.8
+(which shipped `sandbox: false`). Fixed in PR #216 by mirroring the frozen
+channel names inside the preload and pinning the mirror in
+`desktop-ipc-contract.test.ts`, including a guard against relative requires
+in the preload.
+
+Verified after the fix:
+
+- Bridge exposed: `isDesktop: true` with 23 methods.
+- Runtime info: owner `desktop`, win32, unpackaged, version 0.1.8, build id,
+  resources path, and 14 installed invoke/send channels.
+- Window controls: maximize and restore round-trip with window state
+  changing to `isMaximized: true` and back.
+- Updates: `simulateUpdate()` delivered available and ready events to the
+  renderer and rendered visible toasts (available -> 25/60/100% -> ready,
+  v0.2.0-dev).
+- Copy path: `copyFilePath` resolved a real indexed file to its
+  `P:\SoundLibary\...` path and wrote it to the OS clipboard.
+- app-v3 in Electron: the route loads in the desktop window and renders the
+  native title-bar controls (minimize, maximize, close window).
+
+Still untested (require a human at the desktop): drag-out (native drag
+start), the folder picker dialog, reveal/open-in-OS actions, and update
+install/restart. These are recorded as untested rather than verified.
+
+## Verification pass — visual evidence, 10 September 2026
+
+Environment: Electron 41.3.0 capture harness (fixed 1440x900 viewport,
+DPR 1, real desktop bridge) loading the dev server over the remote
+debugging protocol; reduced motion emulated with
+`prefers-reduced-motion: reduce`. Ticket #202.
+
+Thirteen captures are committed under `docs/variant-i-screenshots/`:
+
+| File | State |
+| --- | --- |
+| `01-old-app-library-root.png` | Current `/` baseline at the library root |
+| `02-app-v3-library-root.png` | app-v3 at the same state |
+| `03-app-v3-rail-hover-organize.png` | rail hover state |
+| `04-app-v3-search-focused.png` | search focus ring |
+| `05-app-v3-search-empty.png` | empty search state |
+| `06-app-v3-files-folder.png` | file table in `SFX/Alarm & Chime (SFX)` with waveforms |
+| `07-app-v3-row-context-menu.png` | row context menu with tag provenance and v2 actions |
+| `08-app-v3-command-palette.png` | command palette (31 commands) |
+| `09-app-v3-settings-dialog.png` | settings overlay |
+| `10-app-v3-reduced-motion.png` | same surface with reduced motion emulated |
+| `11-old-app-after-app-v3.png` | `/` after leaving app-v3 |
+| `12-variant-i-library.png` | Variant I specimen rebuilt from the library |
+| `13-component-library-i.png` | Original Variant I reference specimen |
+
+Programmatic checks recorded alongside the captures:
+
+- Settings overlay and tab panels: 0 of 12 panels overflow the 1440x900
+  viewport.
+- Style leakage on return to `/`: no variant-i attributes or classes in
+  the document, no variant-i toast host, no duplicate toaster.
+- Reduced motion: emulation confirmed active (`matchMedia` true) before
+  the capture.
+- Empty state renders "Nothing matches ..." with zero rows; the context
+  menu exposes 30 items including the folder-only disabled entry;
+  the palette reports 31 commands.
+
+Remaining gaps: automated pixel-diff scoring between the specimen and
+library pairs is not performed; press/active states and narrow-viewport
+overlay clipping were not captured; visual sign-off remains human
+(compare 01/02 and 12/13 by eye).
+
 ## Screenshot locations
 
-None committed: the preview capture tool failed during the session.
-Computed-style comparison data was captured live; re-capture is required
-to close the visual gap. See `docs/variant-i-screenshots/` (empty) for
-where they should land.
+All captures live in `docs/variant-i-screenshots/` as listed above.
+Earlier passes that reported this directory empty are superseded by the
+10 September visual-evidence capture.

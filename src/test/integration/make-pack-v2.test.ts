@@ -338,7 +338,13 @@ describe("make-pack-v2 real folder exports", () => {
       { fileIds: ["a", "b"] },
     );
     expect(state).toBe("succeeded");
-    expect(value).toMatchObject({ copied: 2, outputPath: world.outDir, manifestIncluded: true });
+    // Sync and async realpath disagree on Windows 8.3 short names
+    // (`RUNNER~1` vs `runneradmin` on CI), so compare via the same async
+    // canonicalization the implementation uses.
+    expect(value).toMatchObject({ copied: 2, manifestIncluded: true });
+    expect(await fs.promises.realpath(value.outputPath)).toBe(
+      await fs.promises.realpath(world.outDir),
+    );
     expect(fs.readFileSync(path.join(world.outDir, "kick.wav"), "utf8")).toBe("kick-bytes");
     expect(fs.readFileSync(path.join(world.outDir, "snare.wav"), "utf8")).toBe("snare-bytes");
     const manifest = JSON.parse(fs.readFileSync(path.join(world.outDir, "manifest.json"), "utf8")) as {
@@ -500,7 +506,9 @@ describe("make-pack-v2 real ZIP exports with independent verification", () => {
       );
       expect(state).toBe("succeeded");
       expect(value.copied).toBe(2);
-      expect(value.outputPath).toBe(path.join(world.outDir, "Zip.zip"));
+      expect(await fs.promises.realpath(value.outputPath)).toBe(
+        await fs.promises.realpath(path.join(world.outDir, "Zip.zip")),
+      );
       const entries = readZipEntries(value.outputPath);
       expect([...entries.keys()].sort()).toEqual(["kick.wav", "manifest.json", "snare.wav"]);
       expect(entries.get("kick.wav")?.toString("utf8")).toBe("kick-bytes");
@@ -721,7 +729,9 @@ describe("make-pack-v2 production registration and routes", () => {
   });
 
   it("issues destination grants for picked directories", async () => {
-    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-mpv2-grant-")));
+    const dir = await fs.promises.realpath(
+      fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-mpv2-grant-")),
+    );
     try {
       const response = await postGrant(
         new NextRequest("http://localhost/api/extensions-v2/grants", {

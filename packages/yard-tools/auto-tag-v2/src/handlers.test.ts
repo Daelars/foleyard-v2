@@ -48,6 +48,7 @@ import {
   type AutoTagV2TagSemanticResult,
   type CoverageSnapshot,
 } from "./index";
+import { MAX_QUEUE_FILES } from "./rules";
 
 // Area: auto-tag v2 (#190). Handlers through the real host preflight with
 // fixture library and tag ports: preview plans without writes, tag-files
@@ -98,6 +99,7 @@ type World = {
   tagsByName: Map<string, string>;
   vectors: Map<string, { dim: number; vec: Uint8Array }>;
   progress: { calls: number };
+  scanCalls: { pages: number };
   definition: ExtensionV2Definition;
 };
 
@@ -118,10 +120,12 @@ function world(overrides?: {
     record("f3", "paper-bag_crumple_fast.wav"),
   ];
   const byId = new Map(files.map((file) => [file.id, file]));
+  const scanCalls = { pages: 0 };
   const library: V2LibraryReadPorts = {
     getFileById: (id) => byId.get(id) ?? null,
     getFilesByIds: (ids) => ids.flatMap((id) => (byId.get(id) ? [byId.get(id)!] : [])),
     listPage: (cursor) => {
+      scanCalls.pages += 1;
       const start = cursor ? Number.parseInt(cursor, 10) || 0 : 0;
       const slice = files.slice(start, start + 2);
       return { files: slice, nextCursor: start + 2 < files.length ? String(start + 2) : null };
@@ -284,6 +288,7 @@ function world(overrides?: {
     tagsByName,
     vectors,
     progress,
+    scanCalls,
     definition,
   };
 }
@@ -635,7 +640,7 @@ describe("auto-tag-v2 find-similar", () => {
     expect((result as { ok: boolean }).ok).toBe(false);
   });
 
-  it("declares the row menu contribution", () => {
+  it("declares the row menu and sidebar contributions", () => {
     const w = world();
     expect(
       w.definition.contributions?.filter((entry) => entry.type === "file-context-menu"),
@@ -647,10 +652,6 @@ describe("auto-tag-v2 find-similar", () => {
         title: "Find similar",
       },
     ]);
-  });
-
-  it("declares sidebar contributions for status and candidates", () => {
-    const w = world();
     expect(
       w.definition.contributions?.filter((entry) => entry.type === "sidebar"),
     ).toEqual([
@@ -893,5 +894,75 @@ describe("auto-tag-v2 coverage history", () => {
     }));
     expect(removed.removed).toBe(1);
     expect(w.attachments).toContainEqual(expect.objectContaining({ fileId: "f1", origin: "manual" }));
+  });
+});
+
+describe("auto-tag-v2 one-pass scans (#229)", () => {
+  const originCommand = { extensionId: AUTO_TAG_V2_ID, commandId: AUTO_TAG_V2_LIST_ORIGINS, selection: { fileIds: [] } };
+  const coverageCommand = { extensionId: AUTO_TAG_V2_ID, commandId: AUTO_TAG_V2_COVERAGE_SUMMARY, selection: { fileIds: [] } };
+  const candidatesCommand = { extensionId: AUTO_TAG_V2_ID, commandId: AUTO_TAG_V2_LIST_CANDIDATES, selection: { fileIds: [] } };
+
+  it("list-origins walks the library once while paging entries", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    w.attachments.push(
+      { fileId: "f1", tagId: "t1", origin: "manual" },
+      { fileId: "f2", tagId: "t2", origin: "deterministic" },
+    );
+    w.scanCalls.pages = 0;
+
+    const value = immediateValue<{ summary: string; entries: string[]; nextCursor: string }>(
+      await w.host.execute({ ...originCommand, input: { origin: "all", limit: 1 } }),
+    );
+
+    const summary = JSON.parse(value.summary) as { matching: number; origins: Record<string, number> };
+    expect(summary.matching).toBe(3);
+    expect(summary.origins).toEqual({ manual: 1, deterministic: 1, semantic_ai: 0 });
+    expect(value.entries).toHaveLength(1);
+    expect(value.nextCursor).toBe("1");
+    expect(w.scanCalls.pages).toBe(2);
+  });
+
+  it("coverage-summary with a selected tag walks the library once", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    w.attachments.push(
+      { fileId: "f1", tagId: "t1", origin: "manual" },
+      { fileId: "f2", tagId: "t2", origin: "deterministic" },
+    );
+    w.scanCalls.pages = 0;
+
+    const value = immediateValue<{ summary: string }>(
+      await w.host.execute({ ...coverageCommand, input: { tag: "thunder", limit: 1 } }),
+    );
+
+    const summary = JSON.parse(value.summary) as { total: number; tagged: number; members: string[]; nextCursor: string };
+    expect(summary.total).toBe(3);
+    expect(summary.tagged).toBe(2);
+    expect(summary.members).toHaveLength(1);
+    expect(summary.nextCursor).toBe("");
+    expect(w.scanCalls.pages).toBe(2);
+  });
+
+  it("caps the candidate walk at MAX_QUEUE_FILES and shares one run", async () => {
+    const files = Array.from({ length: 2_500 }, (_, index) => record(`large-${index}`, `sound-${index}.wav`));
+    const w = world({ files });
+    w.scanCalls.pages = 0;
+
+    await Promise.all([
+      w.host.execute({ ...candidatesCommand, input: {} }),
+      w.host.execute({ ...candidatesCommand, input: {} }),
+    ]);
+
+    expect(w.scanCalls.pages).toBe(MAX_QUEUE_FILES / 2);
+  });
+
+  it("does not re-walk when the first walk found no candidates", async () => {
+    const files = Array.from({ length: 6 }, (_, index) => record(`n-${index}`, `${index + 1}.wav`));
+    const w = world({ files });
+    w.scanCalls.pages = 0;
+
+    await w.host.execute({ ...candidatesCommand, input: {} });
+    expect(w.scanCalls.pages).toBe(3);
+    await w.host.execute({ ...candidatesCommand, input: {} });
+    expect(w.scanCalls.pages).toBe(3);
   });
 });

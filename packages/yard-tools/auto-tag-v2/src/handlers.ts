@@ -4,7 +4,9 @@ import {
   isV2JobCancellation,
   V2OperationError,
   type ExtensionV2Host,
+  type IndexedAudioFile,
   type V2HandlerContext,
+  type V2TagAttachment,
 } from "yard-core";
 
 import {
@@ -30,6 +32,7 @@ import {
 import { clapPrompt, CLAP_MODEL_ID, rankLabels } from "./semantic";
 import {
   MAX_CANDIDATES,
+  MAX_QUEUE_FILES,
   MAX_TAG_FILES,
   SEED_RULES,
   cleanCandidateWord,
@@ -161,6 +164,7 @@ export type AutoTagCandidateRecord = {
 };
 
 const CANDIDATES_KEY = "candidates-v2";
+const CANDIDATES_MINED_KEY = "candidates-mined";
 const LATEST_ARRIVALS_KEY = "latest-arrivals";
 const LAST_RUN_KEY = "latest-run";
 
@@ -270,20 +274,26 @@ function upsertCandidateSuggestions(
 
 function ensureFilenameCandidates(ctx: V2HandlerContext): void {
   if (readCandidates(ctx).length > 0) return;
+  if (ctx.operations.state.read(CANDIDATES_MINED_KEY) === true) return;
   const rules = readRules(ctx);
   const suggestions: Array<{ label: string; source: "filename_token"; fileId: string }> = [];
   let cursor: string | null = null;
+  let walked = 0;
   do {
     const page = ctx.operations.library.listPage(cursor, 500);
-    for (const file of page.files) {
-      if (file.removedAt !== null) continue;
+    const files = page.files
+      .filter((file) => file.removedAt === null)
+      .slice(0, MAX_QUEUE_FILES - walked);
+    for (const file of files) {
       for (const label of unmatchedTokens(file.filename || `${file.id}.bin`, rules)) {
         suggestions.push({ label, source: "filename_token", fileId: file.id });
       }
     }
-    cursor = page.nextCursor;
+    walked += files.length;
+    cursor = walked >= MAX_QUEUE_FILES ? null : page.nextCursor;
   } while (cursor);
   upsertCandidateSuggestions(ctx, suggestions);
+  ctx.operations.state.write(CANDIDATES_MINED_KEY, true);
 }
 
 export function runPreview(ctx: V2HandlerContext) {
@@ -922,16 +932,37 @@ type AttachmentView = {
   confidence: number | null;
 };
 
-function aggregateLibrary(ctx: V2HandlerContext): {
+type LibraryScanCollector = {
+  matches: (file: IndexedAudioFile, attachments: V2TagAttachment[]) => boolean;
+  serialize: (file: IndexedAudioFile, attachments: V2TagAttachment[]) => string;
+  skip: number;
+  limit: number;
+};
+
+type LibraryScan = {
   total: number;
   tagged: number;
   tags: Record<string, number>;
   allTags: string[];
   origins: Record<"manual" | "deterministic" | "semantic_ai", number>;
-} {
+  entries: string[];
+  matched: number;
+};
+
+/**
+ * One active-library pass producing the coverage aggregate plus, when a
+ * collector is supplied, a page of matching entries and the full match
+ * count. Coverage, origins, and members all read from this single walk.
+ */
+function aggregateLibrary(
+  ctx: V2HandlerContext,
+  collector?: LibraryScanCollector,
+): LibraryScan {
   const { tags } = extendedOperationsOf(ctx);
   const tagCounts: Record<string, number> = {};
   const origins = { manual: 0, deterministic: 0, semantic_ai: 0 };
+  const entries: string[] = [];
+  let matched = 0;
   let total = 0;
   let tagged = 0;
   let cursor: string | null = null;
@@ -939,7 +970,7 @@ function aggregateLibrary(ctx: V2HandlerContext): {
     const page = ctx.operations.library.listPage(cursor, 500);
     const files = page.files.filter((file) => file.removedAt === null);
     const attachments = tags.attachmentsForFiles(files.map((file) => file.id));
-    const byFile = new Map<string, typeof attachments>();
+    const byFile = new Map<string, V2TagAttachment[]>();
     for (const attachment of attachments) {
       const list = byFile.get(attachment.fileId) ?? [];
       list.push(attachment);
@@ -955,10 +986,24 @@ function aggregateLibrary(ctx: V2HandlerContext): {
         seenOrigins.add(attachment.origin);
       }
       for (const origin of seenOrigins) origins[origin as keyof typeof origins] += 1;
+      if (collector?.matches(file, fileAttachments)) {
+        if (matched >= collector.skip && entries.length < collector.limit) {
+          entries.push(collector.serialize(file, fileAttachments));
+        }
+        matched += 1;
+      }
     }
     cursor = page.nextCursor;
   } while (cursor);
-  return { total, tagged, tags: tagCounts, allTags: tags.list().map((tag) => tag.name), origins };
+  return {
+    total,
+    tagged,
+    tags: tagCounts,
+    allTags: tags.list().map((tag) => tag.name),
+    origins,
+    entries,
+    matched,
+  };
 }
 
 function recordCoverageAtBoundary(ctx: V2HandlerContext, scanId?: string): void {
@@ -1040,47 +1085,38 @@ export function runCoverageSummary(ctx: V2HandlerContext) {
   const selectedTag = typeof input.tag === "string" ? input.tag.trim().toLowerCase() : "";
   const skip = typeof input.cursor === "string" ? Math.max(0, Number.parseInt(input.cursor, 10) || 0) : 0;
   const limit = Math.max(1, Math.min(100, typeof input.limit === "number" ? Math.floor(input.limit) : 50));
-  const aggregate = aggregateLibrary(ctx);
-  const configuredRules = readRules(ctx);
-  const members: string[] = [];
-  let matched = 0;
-  if (selectedTag) {
-    let cursor: string | null = null;
-    do {
-      const page = ctx.operations.library.listPage(cursor, 500);
-      const files = page.files.filter((file) => file.removedAt === null);
-      const attachments = extendedOperationsOf(ctx).tags.attachmentsForFiles(files.map((file) => file.id));
-      const byFile = new Map<string, typeof attachments>();
-      for (const attachment of attachments) {
-        const list = byFile.get(attachment.fileId) ?? [];
-        list.push(attachment);
-        byFile.set(attachment.fileId, list);
-      }
-      for (const file of files) {
-        const fileAttachments = byFile.get(file.id) ?? [];
-        if (!fileAttachments.some((attachment) => attachment.tagName.toLowerCase() === selectedTag)) continue;
-        if (matched >= skip && members.length < limit) {
-          members.push(JSON.stringify({
-            id: file.id,
-            filename: file.filename,
-            tags: fileAttachments.map((attachment) => ({
-              id: attachment.tagId,
-              name: attachment.tagName,
-              origin: attachment.origin,
-              confidence: attachment.confidence,
-            })),
-          }));
+  const scan = aggregateLibrary(
+    ctx,
+    selectedTag
+      ? {
+          matches: (_file, attachments) =>
+            attachments.some((attachment) => attachment.tagName.toLowerCase() === selectedTag),
+          serialize: (file, attachments) =>
+            JSON.stringify({
+              id: file.id,
+              filename: file.filename,
+              tags: attachments.map((attachment) => ({
+                id: attachment.tagId,
+                name: attachment.tagName,
+                origin: attachment.origin,
+                confidence: attachment.confidence,
+              })),
+            }),
+          skip,
+          limit,
         }
-        matched += 1;
-      }
-      cursor = page.nextCursor;
-    } while (cursor);
-  }
+      : undefined,
+  );
+  const configuredRules = readRules(ctx);
   return immediateV2Result({
     summary: JSON.stringify({
-      ...aggregate,
-      members,
-      nextCursor: skip + members.length < matched ? String(skip + members.length) : "",
+      total: scan.total,
+      tagged: scan.tagged,
+      tags: scan.tags,
+      allTags: scan.allTags,
+      origins: scan.origins,
+      members: scan.entries,
+      nextCursor: skip + scan.entries.length < scan.matched ? String(skip + scan.entries.length) : "",
       configuredRules,
     }),
   });
@@ -1093,46 +1129,30 @@ export function runListOrigins(ctx: V2HandlerContext) {
     : "all";
   const skip = typeof input.cursor === "string" ? Math.max(0, Number.parseInt(input.cursor, 10) || 0) : 0;
   const limit = Math.max(1, Math.min(100, typeof input.limit === "number" ? Math.floor(input.limit) : 50));
-  const aggregate = aggregateLibrary(ctx);
   const arrivals = latestArrival(ctx);
   const firedByFile = new Map(arrivals?.files.map((file) => [file.id, file.firedRules]) ?? []);
-  const entries: string[] = [];
-  let matched = 0;
-  let cursor: string | null = null;
-  do {
-    const page = ctx.operations.library.listPage(cursor, 500);
-    const files = page.files.filter((file) => file.removedAt === null);
-    const attachments = extendedOperationsOf(ctx).tags.attachmentsForFiles(files.map((file) => file.id));
-    const byFile = new Map<string, typeof attachments>();
-    for (const attachment of attachments) {
-      const list = byFile.get(attachment.fileId) ?? [];
-      list.push(attachment);
-      byFile.set(attachment.fileId, list);
-    }
-    for (const file of files) {
-      const fileAttachments = byFile.get(file.id) ?? [];
-      if (origin !== "all" && !fileAttachments.some((attachment) => attachment.origin === origin)) continue;
-      if (matched >= skip && entries.length < limit) {
-        entries.push(JSON.stringify({
-          id: file.id,
-          filename: file.filename,
-          tags: fileAttachments.map((attachment) => ({
-            id: attachment.tagId,
-            name: attachment.tagName,
-            origin: attachment.origin,
-            confidence: attachment.confidence,
-          })),
-          firedRules: firedByFile.get(file.id) ?? [],
-        }));
-      }
-      matched += 1;
-    }
-    cursor = page.nextCursor;
-  } while (cursor);
+  const scan = aggregateLibrary(ctx, {
+    matches: (_file, attachments) =>
+      origin === "all" || attachments.some((attachment) => attachment.origin === origin),
+    serialize: (file, attachments) =>
+      JSON.stringify({
+        id: file.id,
+        filename: file.filename,
+        tags: attachments.map((attachment) => ({
+          id: attachment.tagId,
+          name: attachment.tagName,
+          origin: attachment.origin,
+          confidence: attachment.confidence,
+        })),
+        firedRules: firedByFile.get(file.id) ?? [],
+      }),
+    skip,
+    limit,
+  });
   return immediateV2Result({
-    summary: JSON.stringify({ total: aggregate.total, origins: aggregate.origins, matching: matched }),
-    entries,
-    nextCursor: skip + entries.length < matched ? String(skip + entries.length) : "",
+    summary: JSON.stringify({ total: scan.total, origins: scan.origins, matching: scan.matched }),
+    entries: scan.entries,
+    nextCursor: skip + scan.entries.length < scan.matched ? String(skip + scan.entries.length) : "",
   });
 }
 

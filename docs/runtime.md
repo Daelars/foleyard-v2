@@ -10,9 +10,9 @@
 `GET /api/runtime` returns a read-only server snapshot (DTO `schemaVersion:
 1`) aggregating identity, capabilities, commands, extensions, events,
 extension points, settings refs, docs location, and limitations, for
-both extension systems. The v1 section covers the six tools; the v2
-section covers the v2 registry (Make Pack v2 plus any active
-fixtures in development). The desktop
+both extension systems. The v1 section covers no tools (all six
+retired); the v2 section covers the v2 registry (seven ports plus any
+active fixtures in development). The desktop
 side answers `desktop:get-runtime-info` with main-owned identity and the
 installed handler list. Help/About's "Export runtime info" merges both for a
 user-invoked diagnostic file. Everything is internal: no secrets, grant

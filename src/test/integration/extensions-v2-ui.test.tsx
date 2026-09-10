@@ -52,6 +52,10 @@ vi.mock("@/lib/extensions-v2/settings-state", () => {
     writeV2SettingsRow: (key: string, value: unknown) => {
       rows.set(key, value);
     },
+    deleteV2SettingsRow: (key: string) => {
+      rows.delete(key);
+    },
+    listV2SettingsKeys: (prefix: string) => [...rows.keys()].filter((key) => key.startsWith(prefix)),
     createV2SettingsPorts: () => ({
       readRaw: (key: string) => rows.get(key),
       writeRaw: (key: string, value: unknown) => {
@@ -80,7 +84,7 @@ import {
   setV2ExtensionEnabled,
   unregisterV2Extension,
 } from "@/lib/extensions-v2/host";
-import { setV2Approval } from "@/lib/extensions-v2/policy";
+import { revokeV2Approval, setV2Approval } from "@/lib/extensions-v2/policy";
 import { PATCH as patchExtension } from "@/app/api/extensions-v2/extensions/[extensionId]/route";
 import { GET as listExtensions } from "@/app/api/extensions-v2/extensions/route";
 import { GET as getSettings } from "@/app/api/extensions-v2/settings/[extensionId]/route";
@@ -116,6 +120,7 @@ beforeAll(() => {
 
 afterAll(() => {
   unregisterV2Extension(SURFACE_ID);
+  revokeV2Approval(SURFACE_ID);
 });
 
 const demoFile: FileTableFileRecord = {

@@ -6,7 +6,7 @@ import { createScratchLibrary, type ScratchLibrary } from "@/test/fixtures";
 
 const db = vi.hoisted(() => ({ getFileById: vi.fn(), getLibraryRoots: vi.fn() }));
 vi.mock("@/lib/db", () => db);
-vi.mock("@/lib/extensions/make-pack-recent-store", () => ({ recordRecentMakePackFile: vi.fn() }));
+vi.mock("@/lib/extensions-v2/recent-source-store", () => ({ recordRecentMakePackFile: vi.fn() }));
 import { GET } from "@/app/api/audio/route";
 
 let library: ScratchLibrary;

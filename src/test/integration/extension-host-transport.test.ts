@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -8,35 +7,10 @@ import {
   type YardExtensionContext,
   type YardExtensionDefinition,
 } from "@yard-core";
-import {
-  manifest as dropRulesManifest,
-  registerCommands as registerDropRulesCommands,
-} from "@foleyard/drop-rules";
-import {
-  manifest as folderJanitorManifest,
-  registerCommands as registerFolderJanitorCommands,
-} from "@foleyard/folder-janitor";
-import {
-  manifest as makePackManifest,
-  registerCommands as registerMakePackCommands,
-} from "@foleyard/make-pack";
-import {
-  manifest as libraryGathererManifest,
-  registerCommands as registerLibraryGathererCommands,
-} from "@foleyard/library-gatherer";
-import {
-  manifest as smartCollectionsManifest,
-  registerCommands as registerSmartCollectionsCommands,
-} from "@foleyard/smart-collections";
-import {
-  manifest as soundShelfManifest,
-  registerCommands as registerSoundShelfCommands,
-} from "@foleyard/sound-shelf";
 
 import {
   audioFileRecord,
   callRoute,
-  createScratchLibrary,
   createTestDatabase,
   type TestDatabase,
 } from "@/test/fixtures";
@@ -58,8 +32,6 @@ import {
   getSettingPreview,
   buildDropRulesRenamePreview,
 } from "@/lib/extensions/setting-previews";
-import { DbSoundShelfStore } from "@/lib/extensions/sound-shelf-store";
-import { setExtensionSettingValue } from "@/lib/extensions/settings-store";
 import { POST as executeRoute } from "@/app/api/extensions/execute/route";
 import { resolveCommandTransport } from "@/app/api/extensions/execute/transport";
 import { hostOutcomeStatus } from "@/app/api/extensions/host-outcome";
@@ -184,160 +156,27 @@ afterEach(() => {
 });
 
 describe("extension host and transport", () => {
-  it("holds every registered extension to its declared IDs, permissions and transport adapter", async () => {
-    const expected = [
-      {
-        id: "drop-rules",
-        manifest: dropRulesManifest,
-        commands: [
-          "drop-rules.open-settings",
-          "drop-rules.preview",
-          "drop-rules.apply",
-          "drop-rules.prepare-drag",
-        ],
-        permissions: [
-          "library:read",
-          "files:read",
-          "files:copy",
-          "files:write",
-          "drop:read",
-          "drop:modify",
-        ],
-        adapted: ["drop-rules.prepare-drag", "drop-rules.preview", "drop-rules.apply"],
-      },
-      {
-        id: "folder-janitor",
-        manifest: folderJanitorManifest,
-        commands: [
-          "folder-janitor.scan-library",
-          "folder-janitor.scan-folder",
-          "folder-janitor.remove-files",
-          "folder-janitor.delete-folders",
-        ],
-        permissions: ["library:read", "files:read", "files:write", "files:delete"],
-        adapted: [
-          "folder-janitor.scan-library",
-          "folder-janitor.scan-folder",
-          "folder-janitor.delete-folders",
-        ],
-      },
-      {
-        id: "make-pack",
-        manifest: makePackManifest,
-        commands: [
-          "make-pack.from-selection",
-          "make-pack.from-shelf",
-          "make-pack.from-recent",
-        ],
-        permissions: ["library:read", "files:read", "files:copy", "files:write"],
-        adapted: [
-          "make-pack.from-selection",
-          "make-pack.from-shelf",
-          "make-pack.from-recent",
-        ],
-      },
-      {
-        id: "library-gatherer",
-        manifest: libraryGathererManifest,
-        commands: ["library-gatherer.preview-gather", "library-gatherer.gather"],
-        permissions: [
-          "library:read",
-          "library:write",
-          "files:read",
-          "files:copy",
-          "files:write",
-        ],
-        adapted: ["library-gatherer.preview-gather", "library-gatherer.gather"],
-      },
-      {
-        id: "smart-collections",
-        manifest: smartCollectionsManifest,
-        commands: ["smart-collections.save-search"],
-        permissions: ["collections:read", "collections:write", "library:read"],
-        adapted: ["smart-collections.save-search"],
-      },
-      {
-        id: "sound-shelf",
-        manifest: soundShelfManifest,
-        commands: [
-          "sound-shelf.add-selected",
-          "sound-shelf.remove-selected",
-          "sound-shelf.clear",
-          "sound-shelf.list",
-        ],
-        permissions: ["library:read"],
-        adapted: ["sound-shelf.list"],
-      },
-    ];
+  it("holds an empty v1 registry after full retirement: nothing registered, transport passes through", async () => {
+    // All six v1 tools retired to their v2 ports; the registration table
+    // stays as the (now empty) registration point so the v1 route fails
+    // closed on unknown extension ids.
+    registerAllExtensions();
+    expect(extensionRegistry.listManifests()).toEqual([]);
 
-    // The manifests the packages actually declare are the contract: an
-    // extension that renames a command or widens its permissions fails here,
-    // once, instead of once per consumer.
-    const registered = new Map(
-      extensionRegistry.listManifests().map((manifest) => [manifest.id, manifest]),
-    );
-    expect(registered.size).toBe(6);
-    for (const extension of expected) {
-      const manifest = registered.get(extension.id);
-      expect(manifest, `${extension.id} is registered`).toBeDefined();
-      expect(manifest!.commands.map((command) => command.id)).toEqual(
-        extension.commands,
-      );
-      expect(manifest!.permissions).toEqual(extension.permissions);
-
-      // Each declared command either owns a transport adapter, which rejects
-      // an empty input with a controlled failure, or it passes straight
-      // through to the host untouched. sound-shelf.list is the exception:
-      // its adapter always resolves so it can shape whatever the store holds.
-      for (const commandId of extension.commands) {
-        const transport = await resolveCommandTransport({
-          extensionId: extension.id,
-          commandId,
-          input: {},
-        });
-        if (commandId === "sound-shelf.list") {
-          expect(transport.ok, `${commandId} always resolves`).toBe(true);
-          if (transport.ok) {
-            expect(typeof transport.shapeResult).toBe("function");
-          }
-        } else if (extension.adapted.includes(commandId)) {
-          expect(transport.ok, `${commandId} owns an adapter`).toBe(false);
-        } else {
-          expect(transport, `${commandId} passes through`).toEqual({
-            ok: true,
-            inputProvided: false,
-          });
-        }
-      }
-    }
-
-    // The registry surface the UI reads stays in step with the manifests.
-    const grid = listRegisteredExtensionGridItems();
-    expect(grid.map((item) => item.id).sort()).toEqual([
-      "drop-rules",
-      "folder-janitor",
-      "library-gatherer",
-      "make-pack",
-      "smart-collections",
-      "sound-shelf",
-    ]);
-    for (const item of grid) {
-      expect(item.commandCount).toBe(
-        expected.find((extension) => extension.id === item.id)!.commands.length,
-      );
-    }
-
-    // The register functions behind the manifests are the ones the table pins.
-    for (const register of [
-      registerDropRulesCommands,
-      registerFolderJanitorCommands,
-      registerMakePackCommands,
-      registerLibraryGathererCommands,
-      registerSmartCollectionsCommands,
-      registerSoundShelfCommands,
+    // With no adapters left, every body passes straight through to the
+    // host untouched.
+    for (const [extensionId, commandId] of [
+      ["folder-janitor", "folder-janitor.scan-library"],
+      ["sound-shelf", "sound-shelf.list"],
     ]) {
-      expect(typeof register).toBe("function");
+      expect(
+        await resolveCommandTransport({ extensionId, commandId, input: {} }),
+        `${extensionId} ${commandId} passes through`,
+      ).toEqual({ ok: true, inputProvided: false });
     }
+
+    // The registry surface the UI reads stays empty in step with that.
+    expect(listRegisteredExtensionGridItems()).toEqual([]);
   });
 
   it("enforces the shared host behaviours once: unknown, disabled, validation and permission", async () => {
@@ -473,108 +312,6 @@ describe("extension host and transport", () => {
     ).toMatchObject({ ok: true, type: "value", value: "pong" });
   });
 
-  it.fails("reports a folder scan past the cap as incomplete rather than truncating silently (B06)", async () => {
-    const scratch = createScratchLibrary("foleyard-ext-scan-");
-    try {
-      settings.setLibraryRoots([scratch.root]);
-      files.batchUpsertFiles(
-        Array.from({ length: 5001 }, (_, index) =>
-          audioFileRecord({
-            path: `/lib/loop-${index}.wav`,
-            filename: `loop-${index}.wav`,
-          }),
-        ),
-        NOW(),
-      );
-      sqlite.prepare("UPDATE files SET library_root = ?").run(scratch.root);
-      sqlite.prepare("UPDATE files SET directory = NULL").run();
-
-      const response = await postExecute({
-        extensionId: "folder-janitor",
-        commandId: "folder-janitor.scan-folder",
-        input: { folderPath: scratch.root },
-      });
-      expect(response.status).toBe(200);
-      const report = (response.body as { value: unknown }).value as {
-        scannedFiles?: unknown;
-        incomplete?: unknown;
-        total?: unknown;
-      };
-
-      // 5,001 files are indexed; the scan must either see all of them or say
-      // it did not. Today it returns 5,000 rows as if complete.
-      expect(
-        report.scannedFiles === 5001 ||
-          report.incomplete === true ||
-          report.total === 5001,
-        `a capped scan must report incompleteness, got scannedFiles=${String(report.scannedFiles)}`,
-      ).toBe(true);
-    } finally {
-      scratch.dispose();
-    }
-  });
-
-  it("hydrates make-pack selections from the shelf and stages drag-out files", async () => {
-    const scratch = createScratchLibrary("foleyard-ext-hydrate-");
-    try {
-      const kick = scratch.writeFile("library/kick.wav");
-      const snare = scratch.writeFile("library/snare.wav");
-      settings.setLibraryRoots([scratch.root]);
-      const [kickRow, snareRow] = seed([kick, snare]);
-      const grant = await scratch.grant("dest");
-
-      // Shelf hydration resolves ids to readable files and skips stale ones.
-      new DbSoundShelfStore().setFileIds([kickRow.id, snareRow.id, "stale-id"]);
-      const packed = await postExecute({
-        extensionId: "make-pack",
-        commandId: "make-pack.from-shelf",
-        input: {
-          destinationDirectory: grant.path,
-          packName: "test-pack",
-        },
-        destinationGrant: grant.grantToken,
-      });
-      expect(packed.status).toBe(200);
-      expect(existsSync(`${grant.path}/test-pack/kick.wav`)).toBe(true);
-      expect(existsSync(`${grant.path}/test-pack/snare.wav`)).toBe(true);
-
-      // Nothing but stale ids is a 404, not an empty pack.
-      new DbSoundShelfStore().setFileIds(["stale-id"]);
-      const stale = await postExecute({
-        extensionId: "make-pack",
-        commandId: "make-pack.from-shelf",
-        input: {
-          destinationDirectory: grant.path,
-          packName: "test-pack",
-        },
-        destinationGrant: grant.grantToken,
-      });
-      expect(stale.status).toBe(404);
-
-      // Drag-out stages the file and remaps the result to the staged copy.
-      setExtensionSettingValue("drop-rules", "drag-out-folder", scratch.root);
-      const drag = await postExecute({
-        extensionId: "drop-rules",
-        commandId: "drop-rules.prepare-drag",
-        input: { fileId: kickRow.id },
-      });
-      expect(drag.status).toBe(200);
-      const dragged = (drag.body as { value: { file: { id: string; filename: string; path: string } } }).value.file;
-      expect(dragged.id).toBe(kickRow.id);
-      expect(existsSync(dragged.path)).toBe(true);
-
-      // A file that is not indexed cannot be dragged out.
-      const missing = await postExecute({
-        extensionId: "drop-rules",
-        commandId: "drop-rules.prepare-drag",
-        input: { fileId: "missing-id" },
-      });
-      expect(missing.status).toBe(404);
-    } finally {
-      scratch.dispose();
-    }
-  });
-
   it("answers null, malformed and mistyped envelopes with controlled client errors", async () => {
     // A null envelope never reaches an adapter: JSON "null" parses, then the
     // unguarded property access throws out of the handler as a 500.
@@ -587,10 +324,12 @@ describe("extension host and transport", () => {
     expect(malformed.status).toBeLessThan(500);
 
     // A selection of the wrong type must be refused, not iterated as data:
-    // a string has a length, so it sails past any emptiness check.
+    // a string has a length, so it sails past any emptiness check. Envelope
+    // validation runs before the registry lookup, so this 400s even though
+    // the extension id is unknown.
     const mistyped = await postExecute({
-      extensionId: "sound-shelf",
-      commandId: "sound-shelf.add-selected",
+      extensionId: "nope",
+      commandId: "nope",
       selection: { fileIds: "not-an-array" },
     });
     expect(mistyped.status, "a mistyped selection must be a 4xx").toBeGreaterThanOrEqual(400);
@@ -664,184 +403,30 @@ describe("extension host and transport", () => {
     }
   });
 
-  it("runs gather, janitor, collection and rule commands end to end through the execute route", async () => {
-    const scratch = createScratchLibrary("foleyard-ext-commands-");
-    try {
-      const source = scratch.directory("source");
-      const kick = scratch.writeFile("source/kick.wav");
-      settings.setLibraryRoots([scratch.root]);
-      seed([kick]);
-      const grant = await scratch.grant("dest");
-
-      // Gather previews without copying; the plan names its sources.
-      const preview = await postExecute({
-        extensionId: "library-gatherer",
-        commandId: "library-gatherer.preview-gather",
-        input: {
-          sourceDirectories: [source],
-          destinationDirectory: grant.path,
-        },
-        destinationGrant: grant.grantToken,
-      });
-      expect(preview.status).toBe(200);
-      expect(
-        (preview.body as { value: { files: unknown[] } }).value.files,
-      ).toBeDefined();
-
-      // A gather with no sources is refused before touching the disk.
-      const noSources = await postExecute({
-        extensionId: "library-gatherer",
-        commandId: "library-gatherer.gather",
-        input: { sourceDirectories: [], destinationDirectory: grant.path },
-        destinationGrant: grant.grantToken,
-      });
-      expect(noSources.status).toBe(400);
-
-      // The janitor scans the whole library from the index, and its input
-      // schema rejects garbage before the service ever runs.
-      const scan = await postExecute({
-        extensionId: "folder-janitor",
-        commandId: "folder-janitor.scan-library",
-        input: {},
-      });
-      expect(scan.status).toBe(200);
-      expect(
-        (scan.body as { value: { scannedFiles: number } }).value.scannedFiles,
-      ).toBe(1);
-
-      // Commands without an adapter receive the raw body input, so their input
-      // schema rejects garbage before the service ever runs.
-      const badPreview = await postExecute({
-        extensionId: "drop-rules",
-        commandId: "drop-rules.preview",
-        input: {},
-      });
-      expect(badPreview.status, "schema violations are 400s").toBe(400);
-
-      // Removing files marks them removed in the index.
-      const [row] = files.getFiles({ limit: 10 });
-      const removed = await postExecute({
-        extensionId: "folder-janitor",
-        commandId: "folder-janitor.remove-files",
-        selection: { fileIds: [row.id] },
-      });
-      expect(removed.status).toBe(200);
-      expect(files.getFileById(row.id)?.removedAt).not.toBeNull();
-
-      // Empty folders are deleted; the grant boundary still applies.
-      const empty = scratch.directory("empty");
-      const deleted = await postExecute({
-        extensionId: "folder-janitor",
-        commandId: "folder-janitor.delete-folders",
-        input: { paths: [empty] },
-      });
-      expect(deleted.status).toBe(200);
-      expect(existsSync(empty)).toBe(false);
-
-      // Saving a search creates a smart collection and returns its id.
-      const saved = await postExecute({
-        extensionId: "smart-collections",
-        commandId: "smart-collections.save-search",
-        input: { name: "Kicks", query: "kick" },
-      });
-      expect(saved.status).toBe(200);
-      const savedId = (saved.body as { value: { id: string } }).value.id;
-      expect(
-        collections.getAllCollections().find((c) => c.id === savedId)?.isSmart,
-      ).toBeTruthy();
-
-      const unnamed = await postExecute({
-        extensionId: "smart-collections",
-        commandId: "smart-collections.save-search",
-        input: { name: "", query: "kick" },
-      });
-      expect(unnamed.status).toBe(400);
-
-      // Rule preview is a dry run over a real file.
-      const ruled = await postExecute({
-        extensionId: "drop-rules",
-        commandId: "drop-rules.preview",
-        selection: { fileIds: [row.id] },
-        input: {
-          targetDirectory: grant.path,
-          files: [{ id: row.id, filename: "kick.wav", path: kick }],
-        },
-      });
-      expect(ruled.status).toBe(200);
-      expect(
-        (ruled.body as { value: { actions: unknown[] } }).value.actions,
-      ).toBeDefined();
-    } finally {
-      scratch.dispose();
+  it("answers every retired v1 command as unknown through the execute route", async () => {
+    // Folder Janitor and Sound Shelf retired to v2 like the earlier four:
+    // their commands are unknown to the v1 route now, served by
+    // /api/extensions-v2/execute instead.
+    const retiredCases: Array<[string, string, Record<string, unknown>]> = [
+      ["folder-janitor", "folder-janitor.scan-library", { input: {} }],
+      ["folder-janitor", "folder-janitor.scan-folder", { input: { folderPath: "/lib" } }],
+      ["folder-janitor", "folder-janitor.remove-files", { selection: { fileIds: ["x"] } }],
+      ["folder-janitor", "folder-janitor.delete-folders", { input: { paths: ["/lib/empty"] } }],
+      ["sound-shelf", "sound-shelf.add-selected", { selection: { fileIds: ["x"] } }],
+      ["sound-shelf", "sound-shelf.remove-selected", { selection: { fileIds: ["x"] } }],
+      ["sound-shelf", "sound-shelf.clear", {}],
+      ["sound-shelf", "sound-shelf.list", {}],
+    ];
+    for (const [extensionId, commandId, extra] of retiredCases) {
+      const retired = await postExecute({ extensionId, commandId, ...extra });
+      expect(retired.status, `${extensionId} ${commandId} is unknown to v1`).toBe(404);
     }
   });
 
-  it("keeps shelf, ui-intent and client behaviour: dedupe, prune, dispatch and error mapping", async () => {
-    const [kickRow, snareRow] = seed(["/lib/kick.wav", "/lib/snare.wav"]);
-
-    // Adding twice dedupes; removing and clearing report honestly.
-    const add = await postExecute({
-      extensionId: "sound-shelf",
-      commandId: "sound-shelf.add-selected",
-      selection: { fileIds: [kickRow.id, snareRow.id] },
-    });
-    expect(add.status).toBe(200);
-    expect(add.body).toMatchObject({ value: { added: 2, remaining: 2 } });
-
-    const reAdd = await postExecute({
-      extensionId: "sound-shelf",
-      commandId: "sound-shelf.add-selected",
-      selection: { fileIds: [kickRow.id] },
-    });
-    expect(reAdd.body).toMatchObject({ value: { added: 0, remaining: 2 } });
-
-    const unadd = await postExecute({
-      extensionId: "sound-shelf",
-      commandId: "sound-shelf.remove-selected",
-      selection: { fileIds: [kickRow.id] },
-    });
-    expect(unadd.body).toMatchObject({ value: { removed: 1, remaining: 1 } });
-
-    // Listing enriches from the index and prunes what is gone.
-    const listed = await postExecute({
-      extensionId: "sound-shelf",
-      commandId: "sound-shelf.list",
-    });
-    expect(listed.status).toBe(200);
-    expect(
-      (listed.body as { value: { items: Array<{ id: string; filename: string }> } }).value.items.map(
-        (item) => item.id,
-      ),
-    ).toEqual([snareRow.id]);
-
-    files.markFileRemoved(snareRow.path, NOW());
-    const pruned = await postExecute({
-      extensionId: "sound-shelf",
-      commandId: "sound-shelf.list",
-    });
-    expect(
-      (pruned.body as { value: { items: unknown[] } }).value.items,
-    ).toEqual([]);
-    expect(new DbSoundShelfStore().getFileIds()).toEqual([]);
-
-    const cleared = await postExecute({
-      extensionId: "sound-shelf",
-      commandId: "sound-shelf.clear",
-    });
-    expect(cleared.body).toMatchObject({ value: { remaining: 0 } });
-
-    // A no-input command returns an intent the UI dispatches, not a value.
-    const settingsIntent = await postExecute({
-      extensionId: "drop-rules",
-      commandId: "drop-rules.open-settings",
-    });
-    expect(settingsIntent.status).toBe(200);
-    expect(settingsIntent.body).toMatchObject({
-      ok: true,
-      type: "ui-intent",
-      intent: { type: "drop-rules.open-settings" },
-    });
-
+  it("keeps ui-intent and client behaviour: dispatch and error mapping", async () => {
+    // UI intents dispatch through the interpreter; no v1 extension remains
+    // registered to return one from a route, so the assertions construct
+    // intents directly.
     const calls: Array<{ name: string; payload: unknown }> = [];
     const actions: ExtensionUiIntentActions = {
       openFolderJanitor: (payload) => {
@@ -850,22 +435,31 @@ describe("extension host and transport", () => {
       openLibraryGatherer: () => {
         calls.push({ name: "openLibraryGatherer", payload: undefined });
       },
-      openMakePack: (payload) => {
-        calls.push({ name: "openMakePack", payload });
-      },
       openSettings: () => {
         calls.push({ name: "openSettings", payload: undefined });
       },
     };
+    // The folder-janitor intent still dispatches to the v2 dialog opener.
     expect(
       interpretExtensionUiIntent(
-        createYardUiIntent("make-pack.open", { source: "shelf", fileIds: [snareRow.id] }),
+        createYardUiIntent("folder-janitor.open-scan", { target: "library" }),
         actions,
       ),
+      "janitor intents open the dialog",
     ).toBe(true);
     expect(calls).toEqual([
-      { name: "openMakePack", payload: { source: "shelf", fileIds: [snareRow.id] } },
+      { name: "openFolderJanitor", payload: { target: "library" } },
     ]);
+    calls.length = 0;
+    // Make Pack retired to v2: its intent is no longer dispatched here.
+    expect(
+      interpretExtensionUiIntent(
+        createYardUiIntent("make-pack.open", { source: "shelf", fileIds: ["x"] }),
+        actions,
+      ),
+      "retired intents dispatch to nothing",
+    ).toBe(false);
+    expect(calls).toEqual([]);
     expect(
       interpretExtensionUiIntent(createYardUiIntent("nope.unknown", {}), actions),
       "unknown intents dispatch to nothing",

@@ -19,6 +19,8 @@ type ExtensionGridProps = {
   pendingExtensionId?: string | null;
   /** Extra cards (e.g. v2 extensions) rendered inside the same grid. */
   trailing?: ReactNode;
+  /** Count of trailing cards; the empty state shows only when both lists are empty. */
+  trailingCount?: number;
 };
 
 const skeletonCount = 6;
@@ -27,28 +29,10 @@ function getPrimaryAction(extension: ExtensionGridItem): {
   label: string;
   command: string;
 } | null {
-  const map: Record<string, { label: string; command: string }> = {
-    "folder-janitor": {
-      label: "Scan library",
-      command: "folder-janitor.scan-library",
-    },
-    "library-gatherer": {
-      label: "Gather library",
-      command: "library-gatherer.gather",
-    },
-    "make-pack": {
-      label: "Make pack",
-      command: "make-pack.from-recent",
-    },
-    "sound-shelf": {
-      label: "Clear shelf",
-      command: "sound-shelf.clear",
-    },
-    "drop-rules": {
-      label: "Configure rules",
-      command: "drop-rules.open-settings",
-    },
-  };
+  // All v1 tools retired: the v1 grid is empty, so no extension ever
+  // matches. The map stays as the documented hook point, keyed by
+  // retired ids only in git history.
+  const map: Record<string, { label: string; command: string }> = {};
   return map[extension.id] ?? null;
 }
 
@@ -78,7 +62,7 @@ function ExtensionCard({
   }, [extension.id, primaryAction, onRunCommand]);
 
   return (
-    <div className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition-colors hover:bg-white/[0.06]">
+    <div className="group flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.04] p-4 transition-colors hover:bg-white/[0.06]">
       <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent-fill/12 text-lg font-bold text-accent-text">
         {extension.name.slice(0, 2).toUpperCase()}
       </div>
@@ -101,7 +85,8 @@ function ExtensionCard({
       {primaryAction && (
         <Button
           variant="ghost"
-          className="hidden h-8 shrink-0 gap-1.5 rounded-lg border border-accent-fill/40 bg-accent-fill/10 px-2.5 text-[11px] text-accent-text hover:bg-accent-fill/15 hover:text-accent-text sm:inline-flex"
+          size="sm"
+          className="hidden shrink-0 text-accent-text hover:text-accent-text sm:inline-flex"
           onClick={(e) => {
             e.stopPropagation();
             handlePrimaryAction();
@@ -114,8 +99,8 @@ function ExtensionCard({
 
       <Button
         variant="ghost"
-        size="icon"
-        className="size-8 shrink-0 rounded-lg border border-white/10 bg-white/5 text-zinc-400 hover:border-accent-fill/50 hover:bg-white/[0.08] hover:text-zinc-100"
+        size="icon-sm"
+        className="shrink-0"
         onClick={(e) => {
           e.stopPropagation();
           onOpenDetails?.(extension);
@@ -140,7 +125,7 @@ function ExtensionCard({
 
 function ExtensionCardSkeleton() {
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+    <div className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.04] p-4">
       <div className="size-11 shrink-0 animate-pulse rounded-xl bg-white/5" />
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="h-4 w-32 animate-pulse rounded bg-white/5" />
@@ -160,8 +145,12 @@ export function ExtensionGrid({
   onRunCommand,
   pendingExtensionId = null,
   trailing,
+  trailingCount = 0,
 }: ExtensionGridProps) {
-  const showEmptyState = !isLoading && extensions.length === 0;
+  // v1 is fully retired so its list is permanently empty; trailing v2
+  // cards keep the grid alive. The empty state shows only when neither
+  // generation has anything to display.
+  const showEmptyState = !isLoading && extensions.length === 0 && trailingCount === 0;
 
   const [mouse, setMouse] = useState({ x: 50, y: 50 });
   const rafRef = useRef<number | null>(null);
@@ -198,15 +187,20 @@ export function ExtensionGrid({
 
       <div className="relative z-10 flex-1">
       {showEmptyState ? (
-        <div className="flex min-h-64 flex-1 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 text-center">
-          <div className="max-w-md space-y-2">
-            <p className="text-sm font-medium text-zinc-200">No extensions registered</p>
-            <p className="text-sm text-zinc-500">
-              Installed local extensions appear here once they are registered
-              with the Foleyard runtime.
-            </p>
+        <>
+          <div className="flex min-h-64 flex-1 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 text-center">
+            <div className="max-w-md space-y-2">
+              <p className="text-sm font-medium text-zinc-200">No extensions registered</p>
+              <p className="text-sm text-zinc-500">
+                Installed local extensions appear here once they are registered
+                with the Foleyard runtime.
+              </p>
+            </div>
           </div>
-        </div>
+          {trailing ? (
+            <div className="mt-3 grid gap-3 xl:grid-cols-2">{trailing}</div>
+          ) : null}
+        </>
       ) : (
         <div className="grid gap-3 xl:grid-cols-2">
           {isLoading

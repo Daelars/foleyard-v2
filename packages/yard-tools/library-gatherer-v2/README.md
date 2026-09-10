@@ -73,5 +73,6 @@ settings migration.
 
 1. Settings → Extensions → **Library Gatherer v2** → enable.
 2. Approve the declared permissions.
-3. Run Preview Library Gather (palette) with source grants, then Gather
-   Library with a destination grant.
+3. Open the Tools card (Gather) or run Preview Library Gather
+   (palette) with source grants, then Gather Library with a
+   destination grant.

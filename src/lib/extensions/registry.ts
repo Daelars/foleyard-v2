@@ -6,32 +6,6 @@ import { getExtensionSettingValue } from "@/lib/extensions/settings-store";
 
 import { extensionRegistry } from "./runtime";
 
-import {
-  manifest,
-  registerCommands,
-} from "@foleyard/sound-shelf";
-import { DbSoundShelfStore } from "@/lib/extensions/sound-shelf-store";
-import {
-  manifest as makePackManifest,
-  registerCommands as registerMakePackCommands,
-} from "@foleyard/make-pack";
-import {
-  manifest as dropRulesManifest,
-  registerCommands as registerDropRulesCommands,
-} from "@foleyard/drop-rules";
-import {
-  manifest as folderJanitorManifest,
-  registerCommands as registerFolderJanitorCommands,
-} from "@foleyard/folder-janitor";
-import {
-  manifest as libraryGathererManifest,
-  registerCommands as registerLibraryGathererCommands,
-} from "@foleyard/library-gatherer";
-import {
-  manifest as smartCollectionsManifest,
-  registerCommands as registerSmartCollectionsCommands,
-} from "@foleyard/smart-collections";
-
 function toGridItem(manifest: YardExtensionManifest): ExtensionGridItem {
   return {
     id: manifest.id,
@@ -67,14 +41,13 @@ function toGridItem(manifest: YardExtensionManifest): ExtensionGridItem {
   };
 }
 
-const extensions: import("@yard-core").YardExtensionDefinition[] = [
-  { manifest, registerCommands: context => registerCommands(context, new DbSoundShelfStore()) },
-  { manifest: makePackManifest, registerCommands: registerMakePackCommands },
-  { manifest: dropRulesManifest, registerCommands: registerDropRulesCommands },
-  { manifest: folderJanitorManifest, registerCommands: registerFolderJanitorCommands },
-  { manifest: libraryGathererManifest, registerCommands: registerLibraryGathererCommands },
-  { manifest: smartCollectionsManifest, registerCommands: registerSmartCollectionsCommands },
-];
+/**
+ * All six v1 tools have retired to their v2 ports; the table stays as
+ * the (now empty) registration point so the v1 routes fail closed
+ * (unknown extension, 404) instead of breaking callers. See
+ * `docs/extensions-v2-migration.md` for the retirement mechanics.
+ */
+const extensions: import("@yard-core").YardExtensionDefinition[] = [];
 
 export function registerAllExtensions() {
   for (const extension of extensions) {

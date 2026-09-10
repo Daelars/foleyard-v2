@@ -5,9 +5,8 @@ import {
   YardExtensionRegistry,
   describeYardCommand,
   type YardExtensionDefinition,
+  type YardExtensionManifest,
 } from "@yard-core";
-import { COMMAND_DEFINITIONS as shelfDefs } from "@foleyard/sound-shelf";
-import { manifest as shelfManifest } from "@foleyard/sound-shelf";
 
 import { projectCatalogEntry } from "@/lib/extensions/catalog";
 import { describeCapabilities } from "@/lib/capabilities";
@@ -15,12 +14,33 @@ import { listEvents } from "@/lib/events";
 import { listExtensionPoints, registerContextMenuCommand, listContextMenuCommands, clearContextMenuCommands } from "@/lib/extensions/ui-contributions";
 import { validateTransportEnvelope } from "@/app/api/extensions/execute/transport";
 
+// Local fixture standing in for a retired v1 tool: these tests pin the
+// generic host/catalog machinery, not any real extension.
+const fixtureManifest: YardExtensionManifest = {
+  id: "fixture-shelf",
+  name: "Fixture Shelf",
+  provider: "Foleyard",
+  version: "1.0.0",
+  description: "Local fixture for runtime introspection tests.",
+  category: "utility",
+  permissions: ["library:read"],
+  commands: [
+    {
+      id: "fixture-shelf.add-selected",
+      title: "Add to Shelf",
+      description: "Add the selection to the fixture shelf.",
+      scope: "selection",
+      requiresSelection: true,
+    },
+  ],
+};
+
 function makeHost(permissions: string[], enabled = true) {
   const registry = new YardExtensionRegistry();
   const def: YardExtensionDefinition = {
-    manifest: { ...shelfManifest, permissions: permissions as never[] },
+    manifest: { ...fixtureManifest, permissions: permissions as never[] },
     registerCommands: (ctx) => {
-      const def0 = shelfDefs[0];
+      const def0 = fixtureManifest.commands[0]!;
       ctx.services.commands.register({ ...def0, handler: () => ctx.selection.fileIds });
     },
   };
@@ -35,35 +55,35 @@ function makeHost(permissions: string[], enabled = true) {
 
 describe("runtime introspection contracts", () => {
   it("projects serializable command descriptions without functions", () => {
-    const entry = projectCatalogEntry(shelfManifest, { enabled: true });
-    expect(entry.commandIds).toContain("sound-shelf.add-selected");
-    const described = entry.commands.find((c) => c.id === "sound-shelf.add-selected")!;
+    const entry = projectCatalogEntry(fixtureManifest, { enabled: true });
+    expect(entry.commandIds).toContain("fixture-shelf.add-selected");
+    const described = entry.commands.find((c) => c.id === "fixture-shelf.add-selected")!;
     expect(described.title).toBe("Add to Shelf");
     expect(described.requiresSelection).toBe(true);
     expect(described.executionOwner).toBe("extension-host");
     // No functions survive serialization.
     const json = JSON.parse(JSON.stringify(entry));
     expect(JSON.stringify(json)).not.toContain("handler");
-    expect(describeYardCommand(shelfDefs[0]).id).toBe("sound-shelf.add-selected");
+    expect(describeYardCommand(fixtureManifest.commands[0]).id).toBe("fixture-shelf.add-selected");
   });
 
   it("declared and registered command IDs agree", async () => {
     const registry = new YardExtensionRegistry();
-    registry.register({ manifest: shelfManifest, registerCommands: () => {} });
-    const host = makeHost([...shelfManifest.permissions]);
+    registry.register({ manifest: fixtureManifest, registerCommands: () => {} });
+    const host = makeHost([...fixtureManifest.permissions]);
     const outcome = await host.execute({
-      extensionId: "sound-shelf",
-      commandId: "sound-shelf.add-selected",
+      extensionId: "fixture-shelf",
+      commandId: "fixture-shelf.add-selected",
       selection: { fileIds: ["a", "b"] },
     });
     expect(outcome.ok).toBe(true);
   });
 
   it("reflects disabled extensions without executing", async () => {
-    const host = makeHost([...shelfManifest.permissions], false);
+    const host = makeHost([...fixtureManifest.permissions], false);
     const outcome = await host.execute({
-      extensionId: "sound-shelf",
-      commandId: "sound-shelf.add-selected",
+      extensionId: "fixture-shelf",
+      commandId: "fixture-shelf.add-selected",
       selection: { fileIds: ["a"] },
     });
     expect(outcome.ok).toBe(false);
@@ -71,14 +91,14 @@ describe("runtime introspection contracts", () => {
   });
 
   it("enforces write-capable services without cooperative checks", async () => {
-    // sound-shelf only requests library:read; markRemoved needs library:write.
+    // The fixture only requests library:read; markRemoved needs library:write.
     const host = makeHost(["library:read" as never]);
     const registry = new YardExtensionRegistry();
     const def: YardExtensionDefinition = {
-      manifest: shelfManifest,
+      manifest: fixtureManifest,
       registerCommands: (ctx) => {
         ctx.services.commands.register({
-          ...shelfDefs[0],
+          ...fixtureManifest.commands[0]!,
           handler: () => {
             ctx.services.files?.markRemoved(["x"]);
             return "done";
@@ -94,8 +114,8 @@ describe("runtime introspection contracts", () => {
       services: { files: { markRemoved: vi.fn() } },
     });
     const outcome = await guarded.execute({
-      extensionId: "sound-shelf",
-      commandId: "sound-shelf.add-selected",
+      extensionId: "fixture-shelf",
+      commandId: "fixture-shelf.add-selected",
       selection: { fileIds: ["x"] },
     });
     expect(outcome.ok).toBe(false);

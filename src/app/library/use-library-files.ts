@@ -5,6 +5,8 @@ import { toast } from "sonner";
 
 import type { FileTableDirectory } from "@/components/FileTable/types";
 import type { TagOrigin } from "@yard-core";
+import { SOUND_SHELF_V2_ID, SOUND_SHELF_V2_LIST } from "@foleyard/sound-shelf-v2";
+import { invokeV2Command } from "@/lib/extensions-v2/contributions";
 import { useFavorites } from "./use-favorites";
 import {
   applyBulkFavorite,
@@ -31,7 +33,7 @@ export interface LibraryFilesCallbacks {
   getSelectedFile: () => FileRecord | null;
   syncSelectedFile: (updater: (prev: FileRecord | null) => FileRecord | null) => void;
   onFilesRemoved: (removedIds: Set<string>, mode: "bulk" | "single") => void;
-  /** Shelf view loads through the sound-shelf endpoint; the catalog owns the count. */
+  /** Shelf view loads through the sound-shelf-v2 list command plus files hydration. */
   onShelfItemsLoaded: (items: FileRecord[]) => void;
 }
 
@@ -127,26 +129,35 @@ export function useLibraryFiles(input: LibraryFilesInput) {
     if (input.view === "shelf") {
       setIsLoadingFiles(true);
       try {
-        const res = await fetch("/api/extensions/execute", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            extensionId: "sound-shelf",
-            commandId: "sound-shelf.list",
-          }),
+        // Sound Shelf v2 owns membership and read-time repair; this
+        // data layer only hydrates the returned ids into records.
+        const invoked = await invokeV2Command({
+          extensionId: SOUND_SHELF_V2_ID,
+          commandId: SOUND_SHELF_V2_LIST,
         });
+        if (!invoked.ok) {
+          throw new Error(invoked.message);
+        }
+        const body = invoked.body as {
+          ok?: boolean;
+          error?: { message?: string };
+          outcome?: { value?: { ids?: string[] } };
+        };
+        if (!body?.ok) {
+          throw new Error(body?.error?.message ?? "Failed to fetch shelf");
+        }
+        const ids = body.outcome?.value?.ids ?? [];
+        const params = new URLSearchParams();
+        if (ids.length > 0) {
+          params.set("ids", ids.join(","));
+        }
+        const res = await fetch(`/api/files?${params.toString()}`);
         if (!res.ok) {
           throw new Error("Failed to fetch shelf");
         }
-        const data = (await res.json()) as {
-          ok?: boolean;
-          value?: { items?: FileRecord[] };
-        };
-        if (data?.ok === false) {
-          throw new Error("Failed to fetch shelf");
-        }
+        const data = (await res.json()) as { files?: FileRecord[] };
         if (filesRequestIdRef.current === requestId) {
-          const items = (data.value?.items ?? []) as FileRecord[];
+          const items = (data.files ?? []) as FileRecord[];
           setFiles(items);
           callbacksRef.current.onShelfItemsLoaded(items);
         }

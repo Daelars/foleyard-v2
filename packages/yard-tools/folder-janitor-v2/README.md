@@ -87,6 +87,7 @@ time); and silent v1→v2 settings migration.
 
 1. Settings → Extensions → **Folder Janitor v2** → enable.
 2. Approve the declared permissions.
-3. Run Scan Library (palette) or Scan Folder (folder menu); review the
+3. Open the report from the Tools card (Scan & clean), Scan Library
+   (palette), or Scan Folder (folder menu); review the
    report. Remove indexed files (row/bulk menu) or delete empty folders
    — deletes preview first and require confirmation.

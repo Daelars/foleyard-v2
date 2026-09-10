@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 
 import { db } from "@/lib/database/connection";
 import { settings } from "@/lib/schema";
@@ -58,6 +58,21 @@ export function readV2SettingsRow(key: string): unknown {
 /** Raw row write without event emission; the owning adapter emits its own typed event. */
 export function writeV2SettingsRow(key: string, value: unknown): void {
   writeRow(key, value);
+}
+
+/** Raw row deletion without event emission (retirement adoption removes v1 keys). */
+export function deleteV2SettingsRow(key: string): void {
+  db.delete(settings).where(eq(settings.key, key)).run();
+}
+
+/** Raw keys with the given prefix, for adapters that scan their namespace. */
+export function listV2SettingsKeys(prefix: string): string[] {
+  const rows = db
+    .select({ key: settings.key })
+    .from(settings)
+    .where(like(settings.key, `${prefix}%`))
+    .all();
+  return rows.map((row) => row.key);
 }
 
 const SETTING_ROW_PATTERN = /^extension:([^:]+):setting:(.+)$/;

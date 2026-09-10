@@ -332,12 +332,12 @@ export function useCollections(callbacks: CollectionsCallbacks) {
         return false;
       }
       try {
-        const res = await fetch("/api/extensions/execute", {
+        const res = await fetch("/api/extensions-v2/execute", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            extensionId: "smart-collections",
-            commandId: "smart-collections.save-search",
+            extensionId: "smart-collections-v2",
+            commandId: "smart-collections-v2.save-search",
             input: { name: name.trim(), query: query.trim() },
           }),
         });

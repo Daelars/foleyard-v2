@@ -39,8 +39,9 @@ const PAGE_LIMIT = 500;
 
 /**
  * Pure description of what the file list should load for a given workspace
- * state. The shelf branch is served by the sound-shelf endpoint; the
- * extensions view shows no files; every other branch maps to /api/files.
+ * state. The shelf branch is served by the sound-shelf-v2 list command
+ * plus /api/files hydration; the extensions view shows no files; every
+ * other branch maps to /api/files.
  * Extracted so the list contract is unit-testable without a DOM.
  */
 export function describeFilesQuery(input: FilesQueryInput): FilesQuery {

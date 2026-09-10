@@ -98,7 +98,8 @@ describe("v2 runtime discovery", () => {
         system: "v1",
         apiVersion: YARD_EXTENSION_API_VERSION,
         standing: "internal",
-        registered: expect.arrayContaining(["sound-shelf", "make-pack"]),
+        // All six v1 tools retired: the v1 registry is empty by design.
+        registered: [],
       },
       {
         system: "v2",

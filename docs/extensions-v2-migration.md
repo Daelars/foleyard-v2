@@ -1,6 +1,6 @@
 # Extension v1 to v2 migration
 
-> Feature status: internal (v2 bundled only; no cutover scheduled)
+> Feature status: internal (v2 bundled; all six v1 tools retired)
 > Contract: internal
 > Owner: `docs/adr/extension-v2-coexistence.md`
 > Applies to: docs manifest ID (`extensions-v2-migration`); development checkout when unbuilt
@@ -8,10 +8,49 @@
 ## What it does
 
 States what stays, what moves, and what must happen before anything
-moves. Today every product workflow runs on v1. Make Pack v2 is an
-opt-in internal reference beside the original, not a replacement.
-No bundled tool has migrated and no cutover is scheduled. A future
-cutover needs its own compatibility and rollback plan per tool.
+moves. All six v1 tools have retired to their v2 ports; every product
+workflow runs on v2 now. Retired pairs: Smart Collections
+(save-search through `smart-collections-v2`), Make Pack (pack exports
+through `make-pack-v2`), Drop Rules (drop handling through
+`drop-rules-v2`), Library Gatherer (gathering through
+`library-gatherer-v2`), Sound Shelf (scratchpad through
+`sound-shelf-v2`), and Folder Janitor (cleanup reports through
+`folder-janitor-v2`). Their v1 packages, commands, and settings rows
+are gone, and enablement, approvals and listed settings were adopted
+once onto the v2 ports. The Sound Shelf contents moved from
+`extension:sound-shelf:items` (`{ fileIds }`) to `v2shelf:sound-shelf-v2`
+(`{ ids }`); the Folder Janitor settings moved to the
+`folder-janitor-v2.*` namespace.
+
+## Retirement mechanics
+
+The pattern, in `src/lib/extensions-v2/enablement.ts`:
+
+1. **Persisted v2 enablement.** The v2 enabled set was memory-only and
+   reset every boot; enablement now persists per extension under
+   `v2:enablement:<id>` and hydrates once per boot. A missing database
+   falls back to the old memory-only behavior.
+2. **One-time adoption.** For each retired pair in
+   `RETIRED_V1_TO_V2`, the first boot after retirement finds the v2
+   enablement row absent and the v1 `extension:<id>:enabled` row
+   present, adopts the value, deletes the v1 row, and grants the v2
+   tool's declared permissions when the tool was enabled (v2 denies
+   without approval). Listed settings (`RETIRED_V1_SETTINGS`) and data
+   records (`RETIRED_V1_DATA`, e.g. the make-pack recent list) move to
+   their v2 keys the same way; v1 rows are deleted even when a v2
+   value already exists, since the retired tool never reads them
+   again. Deleting the v1 rows makes adoption run once.
+3. **UI flip.** The save-search call in
+   `src/app/library/use-collections.ts`, the shelf slice
+   (`src/app/library/use-shelf-v2.ts`, hydrated through
+   `/api/files?ids=`), the janitor dialog
+   (`src/components/extensions/folder-janitor-v2/`), and the header
+   gating in the page routes read the v2 tools now.
+
+Rollback of any single tool: re-register the v1 package and re-create
+the v1 settings rows; the shared collections table makes saved
+searches readable either way. The v1 shelf row is gone once adopted —
+restoring it needs the pre-retirement `{ fileIds }` payload.
 
 ## Responsibilities and boundaries
 
@@ -26,18 +65,19 @@ cutover needs its own compatibility and rollback plan per tool.
 
 ### What stays on v1
 
-The six tools under `packages/yard-tools/*` (sound-shelf,
-make-pack, drop-rules, folder-janitor, library-gatherer,
-smart-collections), their 18 commands, routes
-(`POST /api/extensions/execute`), settings namespaces, UI wiring,
-and stored data keep working unchanged. v1 commands never route
+Nothing stays on v1. The `packages/yard-tools/*` v1 packages are gone,
+the registration table is empty, and `POST /api/extensions/execute`
+fails closed on every id (404). Retired v1 command ids never route
 through v2, and a v2 failure never falls back to v1.
 
 ### What runs on v2 today
 
 Seven bundled internal ports, each disabled by default with its own
-settings namespace and no auto-migration from v1 (parity tables live
-in each package README):
+settings namespace (parity tables live in each package README). All
+six retired tools are active implementations now: their enablement
+was adopted from the retired v1 tools and the app serves save-search,
+pack exports, drop handling, library gathering, the shelf scratchpad
+and janitor cleanup reports through them.
 
 - Make Pack v2 (`make-pack-v2`): three commands, three settings, seven
   contributions.
@@ -113,10 +153,13 @@ migration must satisfy.
   in-flight runs fail closed at their next permission check.
 - Restart expires destination grants and interrupts live jobs with
   known outputs; history stays reviewable.
-- The Tools grid run button is wired only for Make Pack v2; the other
-  five ports run from the palette, menus, sidebar, settings, or drop
-  zone. Generalizing the run button needs a per-extension run intent
-  and is recorded as a limitation, not a regression.
+- Every Tools grid card except Drop Rules v2 has a run button opening
+  its dialog or view (`V2_RUN_LABELS` in
+  `src/components/extensions-v2/run-labels.ts`): pack/shelf/search/
+  janitor/gather/auto-tag. Drop Rules v2 has none by design — its UI
+  is the drop zone plus the palette and settings surface. Dialog-owned
+  palette and row/menu commands (janitor scans/deletes, gather)
+  likewise open their dialogs instead of invoking headless.
 - Drop Rules v2 stages drag-out copies into a staging grant rather
   than the configured raw folder path; Folder Janitor v2 cannot tell
   an unreadable-but-present file from a missing one (no `stat` op).

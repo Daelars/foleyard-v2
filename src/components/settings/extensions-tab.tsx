@@ -123,6 +123,7 @@ export function ExtensionsTab({ extensions, onToggleExtension, onUpdateExtension
                           <Switch
                             checked={ext.enabled}
                             onCheckedChange={(checked) => onToggleExtension?.(ext.id, checked)}
+                            aria-label={`Toggle ${ext.name}`}
                           />
                         </div>
 
@@ -195,14 +196,7 @@ function ExtensionSettingControl({
 
       {setting.type === "boolean" ? (
         <div className="flex justify-start sm:justify-end">
-          <Switch
-            id={inputId}
-            disabled={disabled}
-            checked={Boolean(setting.value)}
-            onCheckedChange={(checked) =>
-              onUpdate?.(extensionId, setting.id, checked)
-            }
-          />
+          <Switch id={inputId} disabled={disabled} checked={Boolean(setting.value)} onCheckedChange={(checked) => onUpdate?.(extensionId, setting.id, checked)} />
         </div>
       ) : setting.type === "select" ? (
         <select

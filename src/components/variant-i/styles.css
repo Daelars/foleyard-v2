@@ -1,0 +1,140 @@
+/*
+ * Variant I component library — static visual rules, tokens, state
+ * selectors and keyframes.
+ *
+ * Everything is scoped under the `[data-variant-i]` library marker so the
+ * library never restyles the original app. The original `/` route never
+ * mounts the provider and therefore never sees these tokens or rules.
+ *
+ * Token contract: the library consumes the established global accent token
+ * contract (--accent-fill, --accent-fill-hover, --accent-text from
+ * :root in src/app/globals.css) through color-mix, exactly like the
+ * specimen it was extracted from. The five --vi-* material tokens below are
+ * the exact values DSurface supplied in variant-d-kit.tsx. No global
+ * `button`, `input`, `body` or `:root` overrides live here.
+ */
+
+[data-variant-i] {
+  /* D-surface material tokens (exact source values). */
+  --vi-well: rgba(0, 0, 0, 0.42);
+  --vi-edge: rgba(255, 255, 255, 0.09);
+  --vi-edge-hi: rgba(255, 255, 255, 0.16);
+  --vi-lift: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --vi-sink: inset 0 1px 3px rgba(0, 0, 0, 0.55);
+
+  /* Specimen canvas (variant I specimen background; the app-v3 route keeps
+     its own app shell canvas and only uses the components). */
+  --vi-canvas: #0a0a0e;
+
+  /* Floating surfaces used by panels, menus, dialogs and toasts. */
+  --vi-panel: #101014;
+  --vi-menu: #141419;
+  --vi-tooltip: #17171c;
+
+  /* Focus ring, shared by every interactive control. */
+  --vi-focus: color-mix(in oklab, var(--accent-fill) 55%, transparent);
+}
+
+/*
+ * Library keyframes. Prefixed `vi-` so they can never collide with other
+ * animation names. Mounted once through the provider's <style> tag; every
+ * animated surface renders its end state instantly under reduced motion.
+ */
+@keyframes vi-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes vi-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(220%);
+  }
+}
+
+@keyframes vi-pop {
+  0% {
+    transform: scale(0.5);
+  }
+  60% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes vi-draw {
+  from {
+    stroke-dashoffset: 12;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes vi-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* List scroller used by command panels and selects: hairline, no buttons. */
+[data-variant-i] .vi-scroll {
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+  scrollbar-width: thin;
+}
+
+/*
+ * I-styled toast host (Sonner). Renders outside [data-variant-i] (the
+ * toaster lives in the root layout tree), so tone rings are declared here
+ * against sonner's data-type attribute. The host sets the --vi-* tokens it
+ * needs as inline styles on the viewport.
+ */
+.vi-toast-host [data-sonner-toast][data-type="success"] {
+  border-color: rgba(110, 231, 183, 0.25) !important;
+}
+
+.vi-toast-host [data-sonner-toast][data-type="error"] {
+  border-color: color-mix(in oklab, var(--accent-fill) 45%, transparent) !important;
+}
+
+.vi-toast-host [data-sonner-toast][data-type="warning"] {
+  border-color: rgba(252, 211, 77, 0.25) !important;
+}
+
+.vi-toast-host [data-sonner-toast][data-type="info"] {
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+[data-variant-i] .vi-scroll::-webkit-scrollbar {
+  width: 0.5rem;
+}
+
+[data-variant-i] .vi-scroll::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+[data-variant-i] .vi-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-variant-i] .vi-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.14);
+  border: 0.15rem solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}

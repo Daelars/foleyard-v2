@@ -5,8 +5,8 @@ import { useState } from "react";
 import { AlertCircle, CheckCircle2, FolderOpen, Loader2, RefreshCw, Save, Trash2, Activity, Layers, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StatusBadge, PendingButton } from "@/components/ui/foleyard";
 
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -144,9 +144,9 @@ export function LibraryTab({ settings, onSaveRoot, onRemoveRoot, scanStatus, onS
                     <span className="text-sm font-medium text-zinc-200">Library folders</span>
                   </div>
                   {settings.libraryRoots.length > 0 ? (
-                    <Badge variant="secondary" className="rounded-full bg-accent-fill/15 font-mono text-accent-text">Configured</Badge>
+                    <StatusBadge status="Configured" tone="ready" />
                   ) : (
-                    <Badge variant="outline" className="rounded-full border-accent-fill/50 font-mono text-accent-text">Required</Badge>
+                    <StatusBadge status="Required" tone="warning" />
                   )}
                 </div>
 
@@ -159,14 +159,13 @@ export function LibraryTab({ settings, onSaveRoot, onRemoveRoot, scanStatus, onS
                         setValidationResult(null);
                       }}
                       placeholder="e.g. C:\Samples or /Volumes/Audio"
-                      className="h-10 flex-1 rounded-xl border-white/10 bg-black/30 font-mono text-sm shadow-none"
+                      className="flex-1 font-mono"
                     />
                     {desktop ? (
                       <Button
                         variant="outline"
                         onClick={handleBrowse}
                         disabled={isValidating}
-                        className="h-10 rounded-xl border-white/10 bg-white/5 px-4 text-zinc-200 shadow-none backdrop-blur-none hover:border-accent-fill/50 hover:bg-white/[0.08] hover:text-zinc-100"
                       >
                         {isValidating ? (
                           <Loader2 className="size-4 animate-spin" />
@@ -199,9 +198,8 @@ export function LibraryTab({ settings, onSaveRoot, onRemoveRoot, scanStatus, onS
                           {confirmRemoveRoot === root ? (
                             <>
                               <Button
-                                variant="ghost"
+                                variant="destructive"
                                 size="sm"
-                                className="h-7 shrink-0 rounded-lg bg-destructive/15 px-3 text-xs font-semibold text-destructive transition-all hover:bg-destructive/25 active:scale-95"
                                 onClick={() => void handleConfirmRemoveRoot()}
                               >
                                 Sure?
@@ -209,7 +207,6 @@ export function LibraryTab({ settings, onSaveRoot, onRemoveRoot, scanStatus, onS
                               <Button
                                 variant="ghost"
                                 size="icon-sm"
-                                className="shrink-0 text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
                                 onClick={() => setConfirmRemoveRoot(null)}
                                 aria-label="Cancel remove folder"
                               >
@@ -218,9 +215,8 @@ export function LibraryTab({ settings, onSaveRoot, onRemoveRoot, scanStatus, onS
                             </>
                           ) : (
                             <Button
-                              variant="ghost"
+                              variant="destructive"
                               size="icon-sm"
-                              className="text-zinc-500 hover:bg-destructive/15 hover:text-destructive"
                               onClick={() => setConfirmRemoveRoot(root)}
                               aria-label={`Remove library folder ${root}`}
                             >
@@ -248,7 +244,6 @@ export function LibraryTab({ settings, onSaveRoot, onRemoveRoot, scanStatus, onS
                         !rootDraft.trim() ||
                         settings.libraryRoots.includes(rootDraft.trim())
                       }
-                      className="gap-2 rounded-lg"
                     >
                       {isSaving ? (
                         <Loader2 className="size-4 animate-spin" />
@@ -281,21 +276,16 @@ export function LibraryTab({ settings, onSaveRoot, onRemoveRoot, scanStatus, onS
                       Refreshes metadata and discovers new files.
                     </p>
                   </div>
-                  <Button
+                  <PendingButton
                     onClick={handleStartScan}
                     disabled={scanStatus.running || isStartingScan || settings.libraryRoots.length === 0}
+                    pending={scanStatus.running || isStartingScan}
+                    pendingText="Scanning..."
                     variant={scanStatus.running ? "outline" : "default"}
-                    className={cn(
-                      "gap-2 rounded-lg h-10 px-6",
-                    )}
                   >
-                    {scanStatus.running || isStartingScan ? (
-                      <RefreshCw className="size-4 animate-spin" />
-                    ) : (
-                      <Activity className="size-4" />
-                    )}
-                    {scanStatus.running ? "Scanning..." : "Start Full Scan"}
-                  </Button>
+                    <Activity data-icon="inline-start" />
+                    Start Full Scan
+                  </PendingButton>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

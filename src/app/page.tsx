@@ -12,12 +12,20 @@ import { V2LibraryDropZone } from "@/components/extensions-v2/drop-zone";
 import { V2SelectionActions } from "@/components/extensions-v2/menus";
 import { V2ExtensionsSection } from "@/components/extensions-v2/settings-section";
 import { V2ToolsCards } from "@/components/extensions-v2/tools-cards";
-import { V2ExtensionSidebarPanels } from "@/components/extensions-v2/sidebar-panels";
 import { AutoTagBoard } from "@/components/AutoTagBoard/board";
 import { useV2PaletteBridge } from "@/components/extensions-v2/use-v2-palette";
 import { MakePackV2Dialog } from "@/components/extensions/make-pack-v2/MakePackV2Dialog";
 import { MAKE_PACK_V2_ID, type MakePackV2Source } from "@/components/extensions/make-pack-v2/use-make-pack-v2";
-import { AUTO_TAG_V2_ID } from "@foleyard/auto-tag-v2";
+import { AUTO_TAG_V2_FIND_SIMILAR, AUTO_TAG_V2_ID } from "@foleyard/auto-tag-v2";
+import {
+  FOLDER_JANITOR_V2_DELETE_FOLDERS,
+  FOLDER_JANITOR_V2_ID,
+  FOLDER_JANITOR_V2_SCAN_FOLDER,
+  FOLDER_JANITOR_V2_SCAN_LIBRARY,
+} from "@foleyard/folder-janitor-v2";
+import { LIBRARY_GATHERER_V2_ID } from "@foleyard/library-gatherer-v2";
+import { SMART_COLLECTIONS_V2_ID } from "@foleyard/smart-collections-v2";
+import { SOUND_SHELF_V2_ID } from "@foleyard/sound-shelf-v2";
 import {
   invokeV2Command,
   resolveV2UiPoint,
@@ -27,9 +35,8 @@ import {
 import type { V2ResolvedContribution } from "@yard-core";
 import { DesktopTitleBar } from "@/components/DesktopTitleBar";
 import { ExtensionGrid } from "@/components/ExtensionGrid";
-import { FolderJanitorDialog } from "@/components/extensions/folder-janitor/FolderJanitorDialog";
-import { LibraryGathererDialog } from "@/components/extensions/library-gatherer/LibraryGathererDialog";
-import { MakePackDialog } from "@/components/extensions/make-pack/MakePackDialog";
+import { FolderJanitorV2Dialog } from "@/components/extensions/folder-janitor-v2/FolderJanitorV2Dialog";
+import { LibraryGathererV2Dialog } from "@/components/extensions/library-gatherer-v2/LibraryGathererV2Dialog";
 import { OnboardingDialog } from "@/components/OnboardingDialog";
 import { FileTable } from "@/components/FileTable";
 import { OrganizeView } from "@/components/OrganizeView";
@@ -48,7 +55,7 @@ import { useSettingsScan } from "./library/use-settings-scan";
 import { useExtensionUi } from "./library/use-extension-ui";
 import { useTransport } from "./library/use-transport";
 import { usePalette } from "./library/use-palette";
-import { useShelf } from "./library/use-shelf";
+import { useShelfV2 } from "./library/use-shelf-v2";
 import {
   ExtensionDetailsDialog,
   RenameCollectionDialog,
@@ -104,6 +111,8 @@ function HomeContent() {
     showShelf,
     showOrganize,
     showAutoTag,
+    autoTagPage,
+    setAutoTagPage,
     handleFilterTag,
     handleFilterTagOrigin,
     navigateDirectory,
@@ -115,7 +124,7 @@ function HomeContent() {
   const settingsScan = useSettingsScan({
     onScanSettled: () => scanSettledRef.current(),
   });
-  const shelf = useShelf();
+  const shelf = useShelfV2();
   const { loadShelfCount: loadSoundShelfCount, setShelfItems } = shelf;
 
   const catalog = useExtensionCatalog({
@@ -211,30 +220,21 @@ function HomeContent() {
   // Initial mount only: full workspace load. Every mutation and the scan
   // settle path below refetch only their own slice, never the catalog, so a
   // collection rename costs one collections round-trip with no extension
-  // re-registration. The shelf count resolves after the extension list, since
-  // only an enabled sound-shelf reports items.
+  // re-registration. The shelf count resolves through the v2 engine, which
+  // fails closed (clears local state) when sound-shelf-v2 is disabled.
   const { loadSettingsScan } = settingsScan;
   const { loadExtensions } = catalog;
   const { loadOrganization } = org;
-  const { clearShelfState } = shelf;
   // Hook result objects change on every render. Depend on their stable
   // loaders so startup responses cannot schedule another workspace load.
   const loadInitialData = useCallback(async () => {
-    const [, loadedExtensions] = await Promise.all([
+    await Promise.all([
       loadSettingsScan(),
       loadExtensions(),
       loadOrganization(),
     ]);
-    if (
-      loadedExtensions?.some(
-        (extension) => extension.id === "sound-shelf" && extension.enabled,
-      )
-    ) {
-      void loadSoundShelfCount();
-    } else {
-      clearShelfState();
-    }
-  }, [loadSettingsScan, loadExtensions, loadOrganization, loadSoundShelfCount, clearShelfState]);
+    void loadSoundShelfCount();
+  }, [loadSettingsScan, loadExtensions, loadOrganization, loadSoundShelfCount]);
 
   // Targeted post-scan refetch driven by the per-mutation refetch map:
   // files plus collection counts, nothing else.
@@ -341,7 +341,6 @@ function HomeContent() {
 
   const extUi = useExtensionUi({
     showShelf,
-    enterLibraryView: () => view.enterView("all"),
     openSettings: settingsScan.openSettings,
     requestClearShelf: shelf.requestClearShelf,
     getSelectedFile: () => selectionApiRef.current.get(),
@@ -350,12 +349,7 @@ function HomeContent() {
     addToShelf: (ids) => shelf.addToShelf(ids),
     saveSearch: (name) => org.saveSearch(name, debouncedSearchQuery),
     renameCollection: (id, name) => org.renameCollection(id, name),
-    extensions,
   });
-
-  // v2 palette bridge (R6): resolved palette-point contributions for the
-  // current selection; v1 entries and shortcuts keep working untouched.
-  const v2Palette = useV2PaletteBridge(selectedIds);
 
   // v2 entry points (R8): live catalog for row/bulk/settings adapters plus
   // the Make Pack v2 dialog. Renderer-owned routing: Make Pack v2 commands
@@ -363,6 +357,11 @@ function HomeContent() {
   // invokes through the single execution path with a toast outcome.
   const v2Catalog = useV2Catalog();
   const [packV2, setPackV2] = useState<{ source: MakePackV2Source; fileIds: string[] } | null>(null);
+  const [similarV2, setSimilarV2] = useState<null | {
+    source: string;
+    state: "unavailable" | "empty" | "ready";
+    matches: Array<{ fileId: string; filename: string; score: number }>;
+  }>(null);
   const v2UiState: V2UiState = useMemo(
     () => ({
       enabled: new Set(v2Catalog.extensions.filter((entry) => entry.enabled).map((entry) => entry.id)),
@@ -370,6 +369,15 @@ function HomeContent() {
     }),
     [v2Catalog.extensions],
   );
+
+  // v2 palette bridge (R6): resolved palette-point contributions for the
+  // current selection over the shared catalog snapshot — selection
+  // changes re-resolve locally with no refetch; v1 entries and
+  // shortcuts keep working untouched.
+  const v2Palette = useV2PaletteBridge(selectedIds, v2Catalog.catalog, v2UiState, {
+    onOpenJanitor: extUi.openJanitorLibrary,
+    onOpenGather: extUi.openGatherDialog,
+  });
   const makePackV2Enabled = useMemo(
     () => v2Catalog.extensions.some((entry) => entry.id === MAKE_PACK_V2_ID && entry.enabled),
     [v2Catalog.extensions],
@@ -381,10 +389,55 @@ function HomeContent() {
   const openPackV2 = useCallback((source: MakePackV2Source, fileIds: string[]) => {
     setPackV2({ source, fileIds });
   }, []);
+  // Tools-grid run dispatch: every card opens its dialog or view per the
+  // package README. Drop Rules v2 has no run action (drop zone +
+  // settings surface instead).
+  const runV2Extension = useCallback((extensionId: string) => {
+    if (extensionId === MAKE_PACK_V2_ID) {
+      openPackV2("recent", []);
+      return;
+    }
+    if (extensionId === SOUND_SHELF_V2_ID) {
+      showShelf();
+      return;
+    }
+    if (extensionId === SMART_COLLECTIONS_V2_ID) {
+      extUi.setShowSaveSearch(true);
+      return;
+    }
+    if (extensionId === FOLDER_JANITOR_V2_ID) {
+      extUi.openJanitorLibrary();
+      return;
+    }
+    if (extensionId === LIBRARY_GATHERER_V2_ID) {
+      extUi.openGatherDialog();
+      return;
+    }
+    if (extensionId === AUTO_TAG_V2_ID) {
+      showAutoTag();
+    }
+  }, [openPackV2, showShelf, showAutoTag, extUi.setShowSaveSearch, extUi.openJanitorLibrary, extUi.openGatherDialog]);
   const invokeV2RowCommand = useCallback(
     (item: V2ResolvedContribution, fileIds: string[]) => {
       if (item.extensionId === MAKE_PACK_V2_ID) {
         openPackV2("selection", fileIds);
+        return;
+      }
+      // Dialog-owned tools: scans and deletes need the janitor report UI
+      // and gather needs the grant-orchestrating dialog; invoking them
+      // headless strands review plans with nowhere to confirm. Index
+      // removals stay headless (immediate, toast-confirmed below).
+      if (
+        item.extensionId === FOLDER_JANITOR_V2_ID &&
+        (item.commandId === FOLDER_JANITOR_V2_SCAN_LIBRARY ||
+          item.commandId === FOLDER_JANITOR_V2_SCAN_FOLDER ||
+          item.commandId === FOLDER_JANITOR_V2_DELETE_FOLDERS)
+      ) {
+        extUi.openJanitorLibrary();
+        return;
+      }
+      if (item.extensionId === LIBRARY_GATHERER_V2_ID) {
+        extUi.openGatherDialog();
         return;
       }
       void invokeV2Command({
@@ -401,10 +454,27 @@ function HomeContent() {
           toast.error(body?.error?.message ?? "Extension command failed.");
           return;
         }
+        if (item.extensionId === AUTO_TAG_V2_ID && item.commandId === AUTO_TAG_V2_FIND_SIMILAR) {
+          const outcome = (result.body as { outcome?: { kind?: string; value?: Record<string, unknown> } }).outcome;
+          const value = outcome?.kind === "immediate" ? outcome.value : undefined;
+          const matches = Array.isArray(value?.matches)
+            ? value.matches.flatMap((entry) => {
+                if (typeof entry !== "string") return [];
+                try { return [JSON.parse(entry) as { fileId: string; filename: string; score: number }]; }
+                catch { return []; }
+              })
+            : [];
+          setSimilarV2({
+            source: typeof value?.targetFilename === "string" ? value.targetFilename : "Selected sound",
+            state: value?.unavailable === true ? "unavailable" : matches.length ? "ready" : "empty",
+            matches,
+          });
+          return;
+        }
         toast.success("Extension command completed.");
       });
     },
-    [openPackV2],
+    [openPackV2, extUi.openJanitorLibrary, extUi.openGatherDialog],
   );
   const resolveV2FileItems = useCallback(
     (fileId: string) =>
@@ -427,8 +497,8 @@ function HomeContent() {
     autoplay: transport.autoplay,
     selectedFile,
     canStepQueue: transport.queueState.queue.length > 1,
-    shelfEnabled: extensions.some(
-      (extension) => extension.id === "sound-shelf" && extension.enabled,
+    shelfEnabled: v2Catalog.extensions.some(
+      (extension) => extension.id === "sound-shelf-v2" && extension.enabled,
     ),
     autoTagEnabled,
     showLibrary,
@@ -524,28 +594,27 @@ function HomeContent() {
 
   const {
     soundShelfEnabled,
-    makePackEnabled,
     folderJanitorEnabled,
     smartCollectionsEnabled,
     viewingSmartCollection,
     activeSmartCollectionId,
   } = useMemo(() => {
-    const shelfEnabled = extensions.find((e) => e.id === "sound-shelf")?.enabled ?? false;
-    const pack = extensions.find((e) => e.id === "make-pack")?.enabled ?? false;
-    const janitor = extensions.find((e) => e.id === "folder-janitor")?.enabled ?? false;
-    const smart = extensions.find((e) => e.id === "smart-collections")?.enabled ?? false;
+    // Sound Shelf and Folder Janitor retired from v1: their v2 ports own them now.
+    const shelfEnabled = v2Catalog.extensions.find((e) => e.id === "sound-shelf-v2")?.enabled ?? false;
+    const janitor = v2Catalog.extensions.find((e) => e.id === "folder-janitor-v2")?.enabled ?? false;
+    // Smart Collections retired from v1: the v2 port owns save-search now.
+    const smart = v2Catalog.extensions.find((e) => e.id === "smart-collections-v2")?.enabled ?? false;
     const activeSmart = selectedCollection
       ? org.collections.find((c) => c.id === selectedCollection && c.isSmart) ?? null
       : null;
     return {
       soundShelfEnabled: shelfEnabled,
-      makePackEnabled: pack,
       folderJanitorEnabled: janitor,
       smartCollectionsEnabled: smart,
       viewingSmartCollection: activeSmart !== null,
       activeSmartCollectionId: activeSmart?.id ?? null,
     };
-  }, [extensions, selectedCollection, org.collections]);
+  }, [v2Catalog.extensions, selectedCollection, org.collections]);
 
   const nextTitle = transport.nextTitleFor(files, selectedFile?.id);
 
@@ -734,18 +803,6 @@ function HomeContent() {
             ) : null}
             {showShelfView ? (
               <div className="flex flex-wrap items-center gap-2">
-                {makePackEnabled && files.length > 0 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-9 gap-2 rounded-xl px-3 text-xs"
-                    onClick={() => void extUi.handleMakePackShelf()}
-                  >
-                    <PackagePlus className="size-4" />
-                    Pack Shelf
-                  </Button>
-                ) : null}
                 {makePackV2Enabled && files.length > 0 ? (
                   <Button
                     type="button"
@@ -822,15 +879,9 @@ function HomeContent() {
               onToggleEnabled={catalog.handleToggleExtensionEnabled}
               onRunCommand={extUi.handleRunCommand}
               pendingExtensionId={catalog.pendingExtensionId}
-              trailing={<V2ToolsCards onRunPack={() => openPackV2("recent", [])} />}
+              trailing={<V2ToolsCards onRunExtension={runV2Extension} />}
+              trailingCount={v2Catalog.extensions.length}
             />
-            <div className="px-4 pb-4 md:px-5">
-              <V2ExtensionSidebarPanels
-                catalog={v2Catalog.catalog}
-                uiState={v2UiState}
-                onInvoke={(item) => invokeV2RowCommand(item, [])}
-              />
-            </div>
           </div>
         ) : showOrganizeView ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -854,7 +905,12 @@ function HomeContent() {
           </div>
         ) : showAutoTagView ? (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5">
-            <AutoTagBoard enabled={autoTagEnabled} />
+            <AutoTagBoard
+              enabled={autoTagEnabled}
+              page={autoTagPage}
+              onPageChange={setAutoTagPage}
+              onOpenExtensionControls={view.showExtensions}
+            />
           </div>
         ) : (
           <>
@@ -904,7 +960,7 @@ function HomeContent() {
               </div>
             ) : null}
             <div className="flex min-h-0 flex-1">
-              <V2LibraryDropZone>
+              <V2LibraryDropZone catalog={v2Catalog.catalog} uiState={v2UiState}>
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <FileTable
                 files={orderedFiles}
@@ -925,8 +981,6 @@ function HomeContent() {
                 showContainerBorder={currentView !== "favorites"}
                 soundShelfEnabled={soundShelfEnabled}
                 shelfFileIds={shelf.soundShelfFileIds}
-                makePackEnabled={makePackEnabled}
-                onMakePackFile={extUi.handleMakePackFile}
                 resolveV2FileItems={resolveV2FileItems}
                 onV2Command={(item, file) =>
                   invokeV2RowCommand(
@@ -1047,7 +1101,7 @@ function HomeContent() {
         onRunCommand={extUi.handleRunCommand}
       />
 
-      <FolderJanitorDialog
+      <FolderJanitorV2Dialog
         open={extUi.folderJanitorOpen}
         onOpenChange={extUi.setFolderJanitorOpen}
         initialTarget={extUi.folderJanitorTarget}
@@ -1056,17 +1110,9 @@ function HomeContent() {
         }
       />
 
-      <LibraryGathererDialog
+      <LibraryGathererV2Dialog
         open={extUi.gatherOpen}
         onOpenChange={extUi.handleCloseGather}
-      />
-
-      <MakePackDialog
-        open={extUi.packSource !== null}
-        onOpenChange={extUi.handleClosePack}
-        initialSource={extUi.packSource ?? "selection"}
-        initialFileIds={extUi.packFileIds}
-        initialOutputFormat={extUi.makePackDefaultFormat}
       />
 
       <MakePackV2Dialog
@@ -1077,6 +1123,16 @@ function HomeContent() {
         initialSource={packV2?.source ?? "selection"}
         initialFileIds={packV2?.fileIds ?? []}
       />
+
+      <Dialog open={similarV2 !== null} onOpenChange={(open) => { if (!open) setSimilarV2(null); }}>
+        <DialogContent>
+          <DialogTitle>Similar sounds</DialogTitle>
+          <p className="truncate text-xs text-muted-foreground">Compared with {similarV2?.source}</p>
+          {similarV2?.state === "unavailable" && <p>Similarity unavailable until audio analysis completes.</p>}
+          {similarV2?.state === "empty" && <p>Analysis is available, but no similar files met the threshold.</p>}
+          {similarV2?.state === "ready" && <ul className="divide-y divide-border">{similarV2.matches.map((match) => <li key={match.fileId} className="flex gap-3 py-2"><span className="min-w-0 flex-1 truncate">{match.filename}</span><span className="font-mono text-muted-foreground">{Math.round(match.score * 100)}%</span></li>)}</ul>}
+        </DialogContent>
+      </Dialog>
 
       <SaveSearchDialog
         open={extUi.showSaveSearch}

@@ -19,14 +19,18 @@ import {
 import {
   AUTO_TAG_V2_CLAP_STATUS,
   AUTO_TAG_V2_COVERAGE_HISTORY,
+  AUTO_TAG_V2_COVERAGE_SUMMARY,
   AUTO_TAG_V2_DISMISS_CANDIDATE,
   AUTO_TAG_V2_DOWNLOAD_MODEL,
   AUTO_TAG_V2_FIND_SIMILAR,
   AUTO_TAG_V2_ID,
+  AUTO_TAG_V2_LATEST_ARRIVALS,
   AUTO_TAG_V2_LIST_CANDIDATES,
+  AUTO_TAG_V2_LIST_ORIGINS,
   AUTO_TAG_V2_PREVIEW,
   AUTO_TAG_V2_PROMOTE_CANDIDATE,
   AUTO_TAG_V2_RECORD_COVERAGE,
+  AUTO_TAG_V2_REMOVE_BY_ORIGIN,
   AUTO_TAG_V2_TAG_FILES,
   AUTO_TAG_V2_TAG_SEMANTIC,
   createAutoTagV2Definition,
@@ -101,12 +105,14 @@ function world(overrides?: {
   granted?: string[];
   backendAvailable?: boolean;
   seedTags?: string[];
+  embedAudio?: (fileId: string) => Promise<{ dim: number; vec: number[] }>;
+  files?: IndexedAudioFile[];
 }): World {
   const definition = createAutoTagV2Definition();
   const registry = new ExtensionV2Registry();
   registry.register(definition);
   const granted = overrides?.granted ?? FULL_PERMISSIONS;
-  const files = [
+  const files = overrides?.files ?? [
     record("f1", "thunder-close_take01.wav"),
     record("f2", "rain-gutter_drip_metal.wav"),
     record("f3", "paper-bag_crumple_fast.wav"),
@@ -187,14 +193,30 @@ function world(overrides?: {
       attachments.push({ fileId, tagId, origin, confidence });
     },
     detach: () => {},
+    attachmentsForFiles: (fileIds) => attachments
+      .filter((entry) => fileIds.includes(entry.fileId))
+      .flatMap((entry) => {
+        const name = [...tagsByName.entries()].find(([, id]) => id === entry.tagId)?.[0];
+        return name ? [{ ...entry, tagName: name, origin: entry.origin ?? "manual", confidence: entry.confidence ?? null }] : [];
+      }),
+    detachByOrigin: (origin) => {
+      let removed = 0;
+      for (let index = attachments.length - 1; index >= 0; index -= 1) {
+        if (attachments[index]?.origin === origin) { attachments.splice(index, 1); removed += 1; }
+      }
+      return removed;
+    },
+    resolveAlias: () => null,
+    renamePreservingAlias: () => {},
+    merge: () => ({ moved: 0 }),
   };
   const analysisPorts: V2AnalysisPorts = {
     modelStatus: () => ({ ...modelState }),
     downloadModel: async () => ({ bytes: modelState.totalBytes }),
-    embedAudio: async (fileId) => {
+    embedAudio: overrides?.embedAudio ?? (async (fileId) => {
       const vec = audioVecs[fileId] ?? [0, 0];
       return { dim: vec.length, vec };
-    },
+    }),
     embedTexts: async (texts) => texts.map((text) => textVecs[text] ?? [0, 0]),
     backendAvailable: () => modelState.backendAvailable,
   };
@@ -384,6 +406,37 @@ describe("auto-tag-v2 tag-files", () => {
     expect(value.attached).toBe(4);
     expect(w.progress.calls).toBeGreaterThan(0);
   });
+  it("records the last run and surfaces it with latest arrivals", async () => {
+    const w = world();
+    const tagged = immediateValue<AutoTagV2TagFilesResult>(await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_TAG_FILES,
+      input: { fileIds: ["f1", "f2", "f3"] },
+      selection: { fileIds: [] },
+    }));
+    expect(tagged.tagged).toBe(2);
+    const arrivals = immediateValue<{ hasData: boolean; batch: string; lastRun: string }>(
+      await w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_LATEST_ARRIVALS,
+        input: {},
+        selection: { fileIds: [] },
+      }),
+    );
+    expect(arrivals.hasData).toBe(false);
+    expect(JSON.parse(arrivals.lastRun)).toMatchObject({
+      command: "tag-files",
+      tagged: 2,
+      attached: 4,
+      skipped: 1,
+      missing: 0,
+      failed: 0,
+    });
+    const command = w.definition.commands.find(
+      (entry) => entry.id === AUTO_TAG_V2_LATEST_ARRIVALS,
+    )!;
+    expect(validateV2Value(command.result!, arrivals, "result")).toBeNull();
+  });
 });
 
 describe("auto-tag-v2 candidates", () => {
@@ -402,7 +455,7 @@ describe("auto-tag-v2 candidates", () => {
     const value = await listCandidates(w);
     expect(value.words).toContain("paper");
     expect(value.words).not.toContain("thunder");
-    expect(value.lines.some((line) => line.startsWith("paper —"))).toBe(true);
+    expect(value.lines.some((line) => line.startsWith("paper -"))).toBe(true);
     expect(value.truncated).toBe(false);
     expect(value.totalFiles).toBe(3);
     // The queue never creates tags: listing twice changes nothing.
@@ -485,6 +538,24 @@ describe("auto-tag-v2 candidates", () => {
     expect((result as { ok: boolean }).ok).toBe(false);
     expect(w.created).toEqual([]);
   });
+
+  it("can persist a promoted filename token as a future deterministic rule", async () => {
+    const w = world();
+    await listCandidates(w);
+    immediateValue<AutoTagV2PromoteCandidateResult>(await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_PROMOTE_CANDIDATE,
+      input: { word: "paper", fileIds: ["f3"], useForFutureFilenames: true },
+      selection: { fileIds: [] },
+    }));
+    await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_TAG_FILES,
+      input: { fileIds: ["f3"] },
+      selection: { fileIds: ["f3"] },
+    });
+    expect(w.attachments.some((entry) => entry.fileId === "f3" && entry.origin === "deterministic")).toBe(true);
+  });
 });
 
 function stubVec(values: number[]): Uint8Array {
@@ -497,9 +568,9 @@ function stubVec(values: number[]): Uint8Array {
 describe("auto-tag-v2 find-similar", () => {
   function seeded(): World {
     const w = world();
-    w.vectors.set("audio-stub-v1:f1", { dim: 2, vec: stubVec([1, 0]) });
-    w.vectors.set("audio-stub-v1:f2", { dim: 2, vec: stubVec([0.9, 0.1]) });
-    w.vectors.set("audio-stub-v1:f3", { dim: 2, vec: stubVec([0, 1]) });
+    w.vectors.set("Xenova/clap-htsat-unfused:f1", { dim: 2, vec: stubVec([1, 0]) });
+    w.vectors.set("Xenova/clap-htsat-unfused:f2", { dim: 2, vec: stubVec([0.9, 0.1]) });
+    w.vectors.set("Xenova/clap-htsat-unfused:f3", { dim: 2, vec: stubVec([0, 1]) });
     return w;
   }
 
@@ -536,7 +607,8 @@ describe("auto-tag-v2 find-similar", () => {
     });
     const value = immediateValue<AutoTagV2FindSimilarResult>(result);
     expect(value.similarFileIds).toEqual([]);
-    expect(value.reason).toMatch(/No embeddings/);
+    expect(value.reason).toBe("Similarity unavailable until audio analysis completes.");
+    expect(value.unavailable).toBe(true);
   });
 
   it("fails unknown targets with a reason", async () => {
@@ -686,10 +758,42 @@ describe("auto-tag-v2 clap", () => {
     expect((empty as { ok: boolean }).ok).toBe(false);
     expect(noVocab.attachments).toEqual([]);
   });
+  it("cancels after analysis without committing a partial semantic batch", async () => {
+    let calls = 0;
+    let firstAnalyzed!: () => void;
+    let releaseSecond!: () => void;
+    const first = new Promise<void>((resolve) => { firstAnalyzed = resolve; });
+    const second = new Promise<void>((resolve) => { releaseSecond = resolve; });
+    const w = world({
+      seedTags: ["thunder", "rain"],
+      embedAudio: async (fileId) => {
+        calls += 1;
+        if (calls === 1) firstAnalyzed();
+        if (calls === 2) await second;
+        return { dim: 2, vec: fileId === "f1" ? [1, 0] : [0, 1] };
+      },
+    });
+    const submitted = await w.host.submitJob({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_TAG_SEMANTIC,
+      input: { fileIds: ["f1", "f2", "f3"] },
+      selection: { fileIds: ["f1", "f2", "f3"] },
+    });
+    expect(submitted.ok).toBe(true);
+    if (!submitted.ok || submitted.outcome.kind !== "job") throw new Error("expected job");
+    await first;
+    w.host.cancelJob(submitted.outcome.jobId);
+    releaseSecond();
+    const settled = await w.host.jobs.waitFor(submitted.outcome.jobId);
+    expect(settled.state).toBe("cancelled");
+    expect(calls).toBeGreaterThan(0);
+    expect(w.attachments).toEqual([]);
+    expect(w.vectors.size).toBe(0);
+  });
 });
 
 describe("auto-tag-v2 coverage history", () => {
-  async function record(
+  async function recordSnapshot(
     w: World,
     tagged: number,
     total: number,
@@ -718,15 +822,16 @@ describe("auto-tag-v2 coverage history", () => {
   it("records snapshots and reads them back oldest first", async () => {
     const w = world();
     expect(await history(w)).toEqual([]);
-    const recorded = await record(w, 2, 3, ["thunder:2", "rain:1", "bogus", "zero:-1"]);
+    const recorded = await recordSnapshot(w, 2, 3, ["thunder:2", "rain:1", "bogus", "zero:-1"]);
     expect(recorded.recorded).toBe(true);
     expect(recorded.entriesCount).toBe(1);
     expect(await history(w)).toEqual([
       {
         at: expect.any(String),
-        tagged: 2,
+        tagged: 0,
         total: 3,
-        tags: { thunder: 2, rain: 1 },
+        tags: {},
+        invocationId: expect.any(String),
       },
     ]);
   });
@@ -734,11 +839,59 @@ describe("auto-tag-v2 coverage history", () => {
   it("caps history at thirty snapshots", async () => {
     const w = world();
     for (let index = 0; index < 32; index += 1) {
-      await record(w, index, 32, []);
+      await recordSnapshot(w, index, 32, []);
     }
     const entries = await history(w);
     expect(entries).toHaveLength(30);
-    expect(entries[0]!.tagged).toBe(2);
-    expect(entries[29]!.tagged).toBe(31);
+    expect(entries[0]!.tagged).toBe(0);
+    expect(entries[29]!.tagged).toBe(0);
+  });
+
+  it("aggregates libraries larger than two thousand files", async () => {
+    const files = Array.from({ length: 2_105 }, (_, index) => record(`large-${index}`, `sound-${index}.wav`));
+    const w = world({ files });
+    const value = immediateValue<{ summary: string }>(await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_COVERAGE_SUMMARY,
+      input: {}, selection: { fileIds: [] },
+    }));
+    expect(JSON.parse(value.summary)).toMatchObject({ total: 2_105, tagged: 0 });
+  });
+
+  it("lists every tag name so the board can tell real tags from suggestions", async () => {
+    const empty = world();
+    const noTags = immediateValue<{ summary: string }>(await empty.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_COVERAGE_SUMMARY,
+      input: {}, selection: { fileIds: [] },
+    }));
+    expect(JSON.parse(noTags.summary)).toMatchObject({ allTags: [] });
+    const seeded = world({ seedTags: ["thunder", "rain"] });
+    const someTags = immediateValue<{ summary: string }>(await seeded.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_COVERAGE_SUMMARY,
+      input: {}, selection: { fileIds: [] },
+    }));
+    expect(JSON.parse(someTags.summary)).toMatchObject({ allTags: ["thunder", "rain"] });
+  });
+
+  it("counts mixed origins per file and never rolls back manual attachments", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    w.attachments.push(
+      { fileId: "f1", tagId: "t1", origin: "manual" },
+      { fileId: "f1", tagId: "t2", origin: "deterministic" },
+      { fileId: "f2", tagId: "t2", origin: "semantic_ai", confidence: 0.81 },
+    );
+    const origins = immediateValue<{ summary: string }>(await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID, commandId: AUTO_TAG_V2_LIST_ORIGINS,
+      input: { origin: "all" }, selection: { fileIds: [] },
+    }));
+    expect(JSON.parse(origins.summary).origins).toEqual({ manual: 1, deterministic: 1, semantic_ai: 1 });
+    const removed = immediateValue<{ removed: number }>(await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID, commandId: AUTO_TAG_V2_REMOVE_BY_ORIGIN,
+      input: { origin: "deterministic", confirm: true }, selection: { fileIds: [] },
+    }));
+    expect(removed.removed).toBe(1);
+    expect(w.attachments).toContainEqual(expect.objectContaining({ fileId: "f1", origin: "manual" }));
   });
 });

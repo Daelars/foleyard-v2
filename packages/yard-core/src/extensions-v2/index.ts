@@ -159,6 +159,7 @@ export {
   type V2CollectionPorts,
   type V2OrganizationFactoryArgs,
   type V2TagOperations,
+  type V2TagAttachment,
   type V2TagPorts,
 } from "./organization";
 export {

@@ -12,6 +12,7 @@
     "dev": "next dev",
     "dev:desktop": "node scripts/dev-desktop.cjs",
     "bench:scan": "tsx scripts/benchmark-scan.ts",
+    "bench:performance": "node scripts/performance/run.mjs",
     "prebuild": "node scripts/verify-workspace-root.cjs",
     "build": "next build",
     "start": "next start",
@@ -35,6 +36,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
+    "@huggingface/transformers": "^4.2.0",
     "@tanstack/react-virtual": "^3.13.24",
     "better-sqlite3": "^12.9.0",
     "class-variance-authority": "^0.7.1",

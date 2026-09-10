@@ -4,11 +4,16 @@ import {
   createSmartCollection,
   createTag,
   deleteCollection,
+  detachAttachmentsByOrigin,
   detachFileFromCollection,
   detachTagFromFile,
   getAllCollections,
   getAllTags,
+  getAttachmentsWithTagsForFiles,
   getTagsForFile,
+  mergeTags,
+  renameTagPreservingAlias,
+  resolveTagAlias,
   updateCollectionFilter,
 } from "@/lib/db";
 import type { Collection, Tag, TagOrigin, V2CollectionPorts, V2TagPorts } from "@yard-core";
@@ -105,6 +110,10 @@ export function createV2TagPorts(deps: V2OrganizationDeps = {}): V2TagPorts {
   return {
     list: () => (ports ? ports.list() : getAllTags()),
     tagsForFile: (fileId): Tag[] => (ports ? ports.tagsForFile(fileId) : getTagsForFile(fileId)),
+    attachmentsForFiles: (fileIds) =>
+      ports?.attachmentsForFiles
+        ? ports.attachmentsForFiles(fileIds)
+        : getAttachmentsWithTagsForFiles(fileIds),
     create: (name) => {
       const id = ports ? ports.create(name) : createTag(name);
       notify();
@@ -119,6 +128,27 @@ export function createV2TagPorts(deps: V2OrganizationDeps = {}): V2TagPorts {
       if (ports) ports.detach(fileId, tagId);
       else detachTagFromFile(fileId, tagId);
       notify();
+    },
+    detachByOrigin: (origin) => {
+      const removed = ports?.detachByOrigin
+        ? ports.detachByOrigin(origin)
+        : detachAttachmentsByOrigin(origin);
+      notify();
+      return removed;
+    },
+    resolveAlias: (alias) =>
+      ports?.resolveAlias ? ports.resolveAlias(alias) : resolveTagAlias(alias),
+    renamePreservingAlias: (tagId, name) => {
+      if (ports?.renamePreservingAlias) ports.renamePreservingAlias(tagId, name);
+      else renameTagPreservingAlias(tagId, name);
+      notify();
+    },
+    merge: (sourceTagId, targetTagId) => {
+      const result = ports?.merge
+        ? ports.merge(sourceTagId, targetTagId)
+        : mergeTags(sourceTagId, targetTagId);
+      notify();
+      return result;
     },
   };
 }

@@ -28,12 +28,30 @@ export const AUTO_TAG_V2_DOWNLOAD_MODEL = "auto-tag-v2.download-model";
 export const AUTO_TAG_V2_TAG_SEMANTIC = "auto-tag-v2.tag-semantic";
 export const AUTO_TAG_V2_COVERAGE_HISTORY = "auto-tag-v2.coverage-history";
 export const AUTO_TAG_V2_RECORD_COVERAGE = "auto-tag-v2.record-coverage";
+export const AUTO_TAG_V2_COVERAGE_SUMMARY = "auto-tag-v2.coverage-summary";
+export const AUTO_TAG_V2_LIST_ORIGINS = "auto-tag-v2.list-origins";
+export const AUTO_TAG_V2_LATEST_ARRIVALS = "auto-tag-v2.latest-arrivals";
+export const AUTO_TAG_V2_REMOVE_BY_ORIGIN = "auto-tag-v2.remove-by-origin";
+export const AUTO_TAG_V2_RENAME_TAG = "auto-tag-v2.rename-tag";
+export const AUTO_TAG_V2_MERGE_TAG = "auto-tag-v2.merge-tag";
 
 function fileIdsInput(): ExtensionV2ValueSchema {
   return {
     kind: "object",
     properties: {
       fileIds: { kind: "string-array", minItems: 1 },
+    },
+    required: ["fileIds"],
+  };
+}
+
+function arrivalFileIdsInput(): ExtensionV2ValueSchema {
+  return {
+    kind: "object",
+    properties: {
+      fileIds: { kind: "string-array", minItems: 1 },
+      batchId: { kind: "string", minLength: 1 },
+      scanStartedAt: { kind: "string", minLength: 1 },
     },
     required: ["fileIds"],
   };
@@ -74,10 +92,11 @@ function listCandidatesResultSchema(): ExtensionV2ValueSchema {
     properties: {
       words: { kind: "string-array" },
       lines: { kind: "string-array" },
+      entries: { kind: "string-array" },
       truncated: { kind: "boolean" },
       totalFiles: { kind: "number", integer: true, min: 0 },
     },
-    required: ["words", "lines", "truncated", "totalFiles"],
+    required: ["words", "lines", "entries", "truncated", "totalFiles"],
   };
 }
 
@@ -113,9 +132,11 @@ function findSimilarResultSchema(): ExtensionV2ValueSchema {
       targetFilename: { kind: "string" },
       similarFileIds: { kind: "string-array" },
       similarFilenames: { kind: "string-array" },
+      matches: { kind: "string-array" },
+      unavailable: { kind: "boolean" },
       reason: { kind: "string" },
     },
-    required: ["targetFileId", "targetFilename", "similarFileIds", "similarFilenames"],
+    required: ["targetFileId", "targetFilename", "similarFileIds", "similarFilenames", "matches", "unavailable"],
   };
 }
 
@@ -203,7 +224,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Auto-tag files",
         description: "Tag the given sounds with the filename rules.",
         scope: "global",
-        input: fileIdsInput(),
+        input: arrivalFileIdsInput(),
         result: tagFilesResultSchema(),
         docsId: "commands",
       },
@@ -240,6 +261,8 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
           properties: {
             word: { kind: "string", minLength: 1 },
             fileIds: { kind: "string-array" },
+            candidateId: { kind: "string", minLength: 1 },
+            useForFutureFilenames: { kind: "boolean" },
           },
           required: ["word"],
         },
@@ -306,7 +329,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Tag with CLAP",
         description: "Tag sounds with model suggestions over the approved vocabulary.",
         scope: "global",
-        input: fileIdsInput(),
+        input: arrivalFileIdsInput(),
         result: tagSemanticResultSchema(),
         docsId: "commands",
       },
@@ -334,6 +357,115 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
           required: ["tagged", "total", "tags"],
         },
         result: recordCoverageResultSchema(),
+        docsId: "commands",
+      },
+      {
+        id: AUTO_TAG_V2_COVERAGE_SUMMARY,
+        title: "Coverage summary",
+        description: "Aggregate full-Library tag coverage and return a bounded selected-tag page.",
+        scope: "global",
+        input: {
+          kind: "object",
+          properties: {
+            tag: { kind: "string" },
+            cursor: { kind: "string" },
+            limit: { kind: "number", integer: true, min: 1, max: 100 },
+          },
+        },
+        result: {
+          kind: "object",
+          properties: { summary: { kind: "string" } },
+          required: ["summary"],
+        },
+        docsId: "commands",
+      },
+      {
+        id: AUTO_TAG_V2_LIST_ORIGINS,
+        title: "List tag origins",
+        description: "List a bounded page of files with attachment origins and full-Library origin counts.",
+        scope: "global",
+        input: {
+          kind: "object",
+          properties: {
+            origin: { kind: "enum", values: ["all", "manual", "deterministic", "semantic_ai"] },
+            cursor: { kind: "string" },
+            limit: { kind: "number", integer: true, min: 1, max: 100 },
+          },
+        },
+        result: {
+          kind: "object",
+          properties: {
+            summary: { kind: "string" },
+            entries: { kind: "string-array" },
+            nextCursor: { kind: "string" },
+          },
+          required: ["summary", "entries", "nextCursor"],
+        },
+        docsId: "commands",
+      },
+      {
+        id: AUTO_TAG_V2_LATEST_ARRIVALS,
+        title: "Latest Auto Tag arrivals",
+        description: "Read the most recently completed Auto Tag arrival job and its recorded rules.",
+        scope: "global",
+        input: { kind: "object", properties: {} },
+        result: {
+          kind: "object",
+          properties: { hasData: { kind: "boolean" }, batch: { kind: "string" }, lastRun: { kind: "string" } },
+          required: ["hasData", "batch", "lastRun"],
+        },
+        docsId: "commands",
+      },
+      {
+        id: AUTO_TAG_V2_REMOVE_BY_ORIGIN,
+        title: "Remove automatic tags",
+        description: "Remove deterministic or semantic AI attachments without touching manual tags.",
+        scope: "global",
+        destructive: true,
+        input: {
+          kind: "object",
+          properties: {
+            origin: { kind: "enum", values: ["deterministic", "semantic_ai"] },
+            confirm: { kind: "boolean" },
+          },
+          required: ["origin", "confirm"],
+        },
+        result: {
+          kind: "object",
+          properties: { origin: { kind: "string" }, removed: { kind: "number", integer: true, min: 0 } },
+          required: ["origin", "removed"],
+        },
+        docsId: "commands",
+      },
+      {
+        id: AUTO_TAG_V2_RENAME_TAG,
+        title: "Rename tag with alias",
+        description: "Rename a canonical tag and preserve its old normalized name as an alias.",
+        scope: "global",
+        input: {
+          kind: "object",
+          properties: { tagId: { kind: "string", minLength: 1 }, name: { kind: "string", minLength: 1 } },
+          required: ["tagId", "name"],
+        },
+        result: { kind: "object", properties: { renamed: { kind: "boolean" } }, required: ["renamed"] },
+        docsId: "commands",
+      },
+      {
+        id: AUTO_TAG_V2_MERGE_TAG,
+        title: "Merge tags",
+        description: "Move attachments into one canonical tag while preserving manual precedence and aliases.",
+        scope: "global",
+        destructive: true,
+        input: {
+          kind: "object",
+          properties: {
+            sourceTagId: { kind: "string", minLength: 1 },
+            targetTagId: { kind: "string", minLength: 1 },
+            confirm: { kind: "boolean" },
+          },
+          required: ["sourceTagId", "targetTagId", "confirm"],
+        },
+        result: { kind: "object", properties: { moved: { kind: "number", integer: true, min: 0 } }, required: ["moved"] },
         docsId: "commands",
       },
     ],

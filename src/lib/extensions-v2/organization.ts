@@ -1,6 +1,7 @@
 import {
   attachFileToCollection,
   attachTagToFileWithOrigin,
+  attachTagsBatch,
   createSmartCollection,
   createTag,
   deleteCollection,
@@ -123,6 +124,19 @@ export function createV2TagPorts(deps: V2OrganizationDeps = {}): V2TagPorts {
     attach: (fileId, tagId, origin?: TagOrigin, confidence: number | null = null) => {
       if (ports) ports.attach(fileId, tagId, origin, confidence);
       else attachTagToFileWithOrigin(fileId, tagId, origin ?? "manual", confidence);
+      notify();
+    },
+    attachMany: (entries) => {
+      if (entries.length === 0) return;
+      if (ports?.attachMany) {
+        ports.attachMany(entries);
+      } else if (ports) {
+        for (const entry of entries) {
+          ports.attach(entry.fileId, entry.tagId, entry.origin, entry.confidence);
+        }
+      } else {
+        attachTagsBatch(entries);
+      }
       notify();
     },
     detach: (fileId, tagId) => {

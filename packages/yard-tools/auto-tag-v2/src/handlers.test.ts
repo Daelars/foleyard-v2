@@ -95,6 +95,7 @@ type Attachment = {
 type World = {
   host: ExtensionV2Host;
   attachments: Attachment[];
+  attachBatches: Attachment[][];
   created: string[];
   tagsByName: Map<string, string>;
   vectors: Map<string, { dim: number; vec: Uint8Array }>;
@@ -133,6 +134,7 @@ function world(overrides?: {
   };
   const tagsByName = new Map<string, string>();
   const attachments: Attachment[] = [];
+  const attachBatches: Attachment[][] = [];
   const created: string[] = [];
   const stateStore = new Map<string, unknown>();
   const vectors = new Map<string, { dim: number; vec: Uint8Array }>();
@@ -195,6 +197,24 @@ function world(overrides?: {
     },
     attach: (fileId, tagId, origin, confidence) => {
       attachments.push({ fileId, tagId, origin, confidence });
+    },
+    attachMany: (entries) => {
+      attachBatches.push(
+        entries.map((entry) => ({
+          fileId: entry.fileId,
+          tagId: entry.tagId,
+          origin: entry.origin,
+          confidence: entry.confidence,
+        })),
+      );
+      for (const entry of entries) {
+        attachments.push({
+          fileId: entry.fileId,
+          tagId: entry.tagId,
+          origin: entry.origin,
+          confidence: entry.confidence,
+        });
+      }
     },
     detach: () => {},
     attachmentsForFiles: (fileIds) => attachments
@@ -284,6 +304,7 @@ function world(overrides?: {
   return {
     host,
     attachments,
+    attachBatches,
     created,
     tagsByName,
     vectors,
@@ -376,6 +397,9 @@ describe("auto-tag-v2 tag-files", () => {
     // Shared tags are created once; every attachment is deterministic.
     expect(w.created.sort()).toEqual(["rain", "thunder", "weather"]);
     expect(w.attachments.every((entry) => entry.origin === "deterministic")).toBe(true);
+    // #258: the whole job's rows land in one batched transaction.
+    expect(w.attachBatches).toHaveLength(1);
+    expect(w.attachBatches[0]).toHaveLength(4);
     const command = w.definition.commands.find((entry) => entry.id === AUTO_TAG_V2_TAG_FILES)!;
     expect(validateV2Value(command.result!, value, "result")).toBeNull();
   });

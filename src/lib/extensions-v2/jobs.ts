@@ -60,24 +60,59 @@ function isJobManager(value: unknown): value is V2JobManager {
 /** Last emitted state per job: progress reports stay memory-only, transitions emit. */
 const lastEmittedState = new Map<string, string>();
 
+/**
+ * Progress persistence is coalesced (#258): state transitions and terminal
+ * records persist immediately; progress-only ticks persist at most once per
+ * interval. The typed `job-transition` event still fires only on a state
+ * change, never for progress.
+ */
+export const JOB_PROGRESS_PERSIST_INTERVAL_MS = 2000;
+
+export function createV2JobTransitionHandler(deps: {
+  persist: () => void;
+  emitTransition: (record: { jobId: string; extensionId: string; state: string }) => void;
+  now?: () => number;
+  intervalMs?: number;
+}): (record: { jobId: string; extensionId: string; state: string }) => void {
+  const now = deps.now ?? (() => Date.now());
+  const intervalMs = deps.intervalMs ?? JOB_PROGRESS_PERSIST_INTERVAL_MS;
+  const lastState = new Map<string, string>();
+  let lastPersistedAt = 0;
+  return (record) => {
+    const stateChanged = lastState.get(record.jobId) !== record.state;
+    const terminal =
+      record.state === "succeeded" ||
+      record.state === "failed" ||
+      record.state === "cancelled" ||
+      record.state === "interrupted";
+    const currentTime = now();
+    if (stateChanged || terminal || currentTime - lastPersistedAt >= intervalMs) {
+      deps.persist();
+      lastPersistedAt = currentTime;
+    }
+    if (stateChanged) {
+      lastState.set(record.jobId, record.state);
+      deps.emitTransition(record);
+    }
+  };
+}
+
 export function getV2JobManager(): V2JobManager {
   const scope = globalThis as Record<string, unknown>;
   const existing = scope[MANAGER_KEY];
   if (isJobManager(existing)) return existing;
-  const created = new V2JobManager({
-    onTransition: (record) => {
-      persistV2JobSnapshot();
-      // Typed job events carry state transitions only — per-chunk
-      // progress is high-frequency renderer state and never an event.
-      if (lastEmittedState.get(record.jobId) !== record.state) {
-        lastEmittedState.set(record.jobId, record.state);
-        getV2Events().emit("job-transition", record.extensionId, {
-          jobId: record.jobId,
-          jobState: record.state,
-        });
-      }
+  const onTransition = createV2JobTransitionHandler({
+    persist: persistV2JobSnapshot,
+    emitTransition: (record) => {
+      if (lastEmittedState.get(record.jobId) === record.state) return;
+      lastEmittedState.set(record.jobId, record.state);
+      getV2Events().emit("job-transition", record.extensionId, {
+        jobId: record.jobId,
+        jobState: record.state,
+      });
     },
   });
+  const created = new V2JobManager({ onTransition });
   scope[MANAGER_KEY] = created;
   return created;
 }

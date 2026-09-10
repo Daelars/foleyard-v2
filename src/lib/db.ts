@@ -59,6 +59,7 @@ export {
 export {
   attachTagToFile,
   attachTagToFileWithOrigin,
+  attachTagsBatch,
   createTag,
   deleteTag,
   detachAttachmentsByOrigin,

@@ -343,6 +343,46 @@ export async function runTagFiles(ctx: V2HandlerContext) {
     return created;
   };
 
+  // #258: one transaction per file chunk instead of one commit per row. A
+  // failed chunk is attributed to its files and the job keeps going.
+  const TAG_BATCH_FILES = 100;
+  let pending: Array<{ filename: string; fileId: string; names: string[] }> = [];
+  const flushTagBatch = () => {
+    if (pending.length === 0) return;
+    const batch = pending;
+    pending = [];
+    const entries = batch.flatMap((file) =>
+      file.names.map((name) => ({
+        fileId: file.fileId,
+        tagId: tagIdFor(name),
+        origin: "deterministic" as const,
+      })),
+    );
+    try {
+      if (tags.attachMany) {
+        tags.attachMany(entries);
+      } else {
+        for (const entry of entries) {
+          tags.attach(entry.fileId, entry.tagId, entry.origin);
+        }
+      }
+      attached += entries.length;
+      tagged += batch.length;
+    } catch (error) {
+      if (isV2JobCancellation(error)) throw error;
+      for (const file of batch) {
+        failedFiles.push(file.filename);
+        failedReasons.push(
+          `"${file.filename}": ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    for (const file of batch) {
+      done += 1;
+      ctx.operations.jobs.reportProgress(done, live.length);
+    }
+  };
+
   for (const file of live) {
     try {
       ctx.operations.jobs.throwIfCancelled();
@@ -357,22 +397,10 @@ export async function runTagFiles(ctx: V2HandlerContext) {
       ctx.operations.jobs.reportProgress(done, live.length);
       continue;
     }
-    try {
-      let fileTagged = false;
-      for (const name of names) {
-        tags.attach(file.fileId, tagIdFor(name), "deterministic");
-        attached += 1;
-        fileTagged = true;
-      }
-      if (fileTagged) tagged += 1;
-    } catch (error) {
-      if (isV2JobCancellation(error)) throw error;
-      failedFiles.push(file.filename);
-      failedReasons.push(`"${file.filename}": ${error instanceof Error ? error.message : String(error)}`);
-    }
-    done += 1;
-    ctx.operations.jobs.reportProgress(done, live.length);
+    pending.push({ filename: file.filename, fileId: file.fileId, names });
+    if (pending.length >= TAG_BATCH_FILES) flushTagBatch();
   }
+  flushTagBatch();
 
   const filenameSuggestions = live.flatMap((file) =>
     unmatchedTokens(file.filename, rules).map((label) => ({

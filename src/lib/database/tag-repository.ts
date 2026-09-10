@@ -60,9 +60,24 @@ export class SqliteTagRepository implements TagRepository {
     origin: TagOrigin,
     confidence: number | null = null,
   ): void {
-    // Manual wins without a read: an incoming manual upgrades the row, an
-    // incoming automatic never downgrades a stored manual.
-    this.sqlite
+    this.attachTagsBatch([{ fileId, tagId, origin, confidence }]);
+  }
+
+  /**
+   * One transaction for many attachments (#258). Manual wins without a
+   * read: an incoming manual upgrades the row, an incoming automatic never
+   * downgrades a stored manual. Idempotent per (file, tag) pair.
+   */
+  attachTagsBatch(
+    entries: ReadonlyArray<{
+      fileId: string;
+      tagId: string;
+      origin?: TagOrigin;
+      confidence?: number | null;
+    }>,
+  ): void {
+    if (entries.length === 0) return;
+    const stmt = this.sqlite
       .prepare(
         `INSERT INTO file_tags (file_id, tag_id, origin, confidence)
          VALUES (?, ?, ?, ?)
@@ -72,8 +87,22 @@ export class SqliteTagRepository implements TagRepository {
              WHEN excluded.origin = 'manual' AND file_tags.origin != 'manual' THEN excluded.confidence
              ELSE file_tags.confidence
            END`,
-      )
-      .run(fileId, tagId, origin, confidence);
+      );
+    const write = this.sqlite.transaction(
+      (
+        batch: ReadonlyArray<{
+          fileId: string;
+          tagId: string;
+          origin?: TagOrigin;
+          confidence?: number | null;
+        }>,
+      ) => {
+        for (const entry of batch) {
+          stmt.run(entry.fileId, entry.tagId, entry.origin ?? "manual", entry.confidence ?? null);
+        }
+      },
+    );
+    write(entries);
   }
 
   getAttachmentsForFile(fileId: string): FileTagAttachment[] {
@@ -288,6 +317,14 @@ export const createTag = (name: string) => getTagRepo().createTag(name);
 export const renameTag = (tagId: string, name: string) => getTagRepo().renameTag(tagId, name);
 export const updateTagColor = (tagId: string, color: string | null) => getTagRepo().updateTagColor(tagId, color);
 export const attachTagToFile = (fileId: string, tagId: string) => getTagRepo().attachTagToFile(fileId, tagId);
+export const attachTagsBatch = (
+  entries: ReadonlyArray<{
+    fileId: string;
+    tagId: string;
+    origin?: TagOrigin;
+    confidence?: number | null;
+  }>,
+) => getTagRepo().attachTagsBatch(entries);
 export const attachTagToFileWithOrigin = (
   fileId: string,
   tagId: string,

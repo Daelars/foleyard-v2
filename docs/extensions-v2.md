@@ -158,6 +158,13 @@ stopped while work still writes. Restart marks live jobs interrupted
 with known outputs; filesystem effects never replay. Duplicate
 invocation keys return the existing job.
 
+Job persistence is coalesced (#258): state transitions and terminal
+records persist immediately, while per-file progress ticks persist at
+most once per two seconds, so a 500-file job performs a bounded number
+of snapshot writes. Batched writes through the tag operation
+(`attachMany`) land in one transaction per chunk and are idempotent per
+`(file, tag)` pair, so a retried job cannot duplicate attachments.
+
 Plans (`vplan_` IDs) bind extension, command, validated
 targets/options, authorization context, expiry, and invocation.
 Single use, 15-minute default TTL capped at 1 hour. Apply revalidates

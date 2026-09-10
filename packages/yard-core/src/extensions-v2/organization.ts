@@ -45,6 +45,13 @@ export type V2TagPorts = {
   attachmentsForFiles?(fileIds: string[]): V2TagAttachment[];
   create(name: string): string;
   attach(fileId: string, tagId: string, origin?: TagOrigin, confidence?: number | null): void;
+  /** Optional single-transaction batch attach (#258). */
+  attachMany?(entries: ReadonlyArray<{
+    fileId: string;
+    tagId: string;
+    origin?: TagOrigin;
+    confidence?: number | null;
+  }>): void;
   detach(fileId: string, tagId: string): void;
   detachByOrigin?(origin: Exclude<TagOrigin, "manual">): number;
   resolveAlias?(alias: string): string | null;
@@ -70,6 +77,16 @@ export type V2TagOperations = {
   attachmentsForFiles(fileIds: string[]): V2TagAttachment[];
   create(name: string): { id: string };
   attach(fileId: string, tagId: string, origin?: TagOrigin, confidence?: number | null): void;
+  /**
+   * Batch attach (#258): one transaction for many attachments when the host
+   * supports it. Optional so fixture hosts keep the per-attach shape.
+   */
+  attachMany?(entries: ReadonlyArray<{
+    fileId: string;
+    tagId: string;
+    origin?: TagOrigin;
+    confidence?: number | null;
+  }>): void;
   detach(fileId: string, tagId: string): void;
   detachByOrigin(origin: Exclude<TagOrigin, "manual">): number;
   resolveAlias(alias: string): string | null;
@@ -284,6 +301,26 @@ export function createV2TagOperations(args: V2OrganizationFactoryArgs): V2TagOpe
       ports().attach(checkId(fileId, "Sound ID"), checkId(tagId, "Tag ID"), origin, confidence ?? null);
       args.notify?.("tags");
     },
+    attachMany(entries): void {
+      require("tags:write");
+      const clean = entries.map((entry) => ({
+        fileId: checkId(entry.fileId, "Sound ID"),
+        tagId: checkId(entry.tagId, "Tag ID"),
+        origin: entry.origin,
+        confidence: entry.confidence ?? null,
+      }));
+      for (const entry of clean) liveTarget(entry.fileId);
+      if (clean.length === 0) return;
+      const portsValue = ports();
+      if (portsValue.attachMany) {
+        portsValue.attachMany(clean);
+      } else {
+        for (const entry of clean) {
+          portsValue.attach(entry.fileId, entry.tagId, entry.origin, entry.confidence);
+        }
+      }
+      args.notify?.("tags");
+    },
     detach(fileId: string, tagId: string): void {
       require("tags:write");
       liveTarget(fileId);
@@ -346,6 +383,7 @@ export function denyV2OrganizationOperations(extensionId: string): {
     attachmentsForFiles: () => deny("tags:read"),
     create: () => deny("tags:write"),
     attach: () => deny("tags:write"),
+    attachMany: () => deny("tags:write"),
     detach: () => deny("tags:write"),
     detachByOrigin: () => deny("tags:write"),
     resolveAlias: () => deny("tags:write"),

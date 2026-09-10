@@ -75,21 +75,52 @@ export type RuntimeSnapshot = {
   limitations: string[];
 };
 
-function readBuildId(): string | undefined {
+/**
+ * Build identity from the packaged app root (Electron sets FOLEYARD_APP_PATH)
+ * or the working directory, so the server snapshot and the desktop identity
+ * read the same BUILD_ID and provenance file (#241).
+ */
+function readBuildProvenance(): {
+  buildId?: string;
+  sourceRevision?: string;
+  sourceDirty?: boolean;
+} {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fs = require("node:fs") as typeof import("node:fs");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require("node:path") as typeof import("node:path");
-    const candidate = path.join(process.cwd(), ".next", "BUILD_ID");
-    if (fs.existsSync(candidate)) {
-      const raw = fs.readFileSync(candidate, "utf8").trim();
-      return raw || undefined;
+    const roots = [process.env.FOLEYARD_APP_PATH, process.cwd()].filter(
+      (root): root is string => typeof root === "string" && root.length > 0,
+    );
+    for (const root of roots) {
+      const provenancePath = path.join(root, ".next", "build-provenance.json");
+      if (fs.existsSync(provenancePath)) {
+        const parsed = JSON.parse(fs.readFileSync(provenancePath, "utf8")) as {
+          buildId?: unknown;
+          sourceRevision?: unknown;
+          sourceDirty?: unknown;
+        };
+        return {
+          buildId: typeof parsed.buildId === "string" ? parsed.buildId : undefined,
+          sourceRevision:
+            typeof parsed.sourceRevision === "string" ? parsed.sourceRevision : undefined,
+          sourceDirty:
+            typeof parsed.sourceDirty === "boolean" ? parsed.sourceDirty : undefined,
+        };
+      }
+    }
+    for (const root of roots) {
+      const candidate = path.join(root, ".next", "BUILD_ID");
+      if (fs.existsSync(candidate)) {
+        const raw = fs.readFileSync(candidate, "utf8").trim();
+        if (raw) return { buildId: raw };
+      }
     }
   } catch {
     // absence is explicit, not fatal
   }
-  return undefined;
+  return {};
 }
 
 /**
@@ -155,6 +186,7 @@ export function readRuntimeDatabaseFlags(databasePath: string = getDatabasePath(
 
 export function getServerRuntimeSnapshot(): RuntimeSnapshot {
   const db = getDatabaseVersionInfo();
+  const provenance = readBuildProvenance();
 
   // v2 identity comes from the production registry only. Reading a
   // definition never runs its handler; effective permissions are the
@@ -206,9 +238,14 @@ export function getServerRuntimeSnapshot(): RuntimeSnapshot {
       product: "Foleyard",
       version: (packageJson as { version: string }).version,
       coreVersion: (corePackageJson as { version: string }).version,
-      buildId: readBuildId(),
-      sourceRevision: process.env.FOLEYARD_SOURCE_REVISION,
-      sourceDirty: process.env.FOLEYARD_SOURCE_DIRTY === "true" ? true : undefined,
+      buildId: provenance.buildId,
+      sourceRevision: process.env.FOLEYARD_SOURCE_REVISION ?? provenance.sourceRevision,
+      sourceDirty:
+        process.env.FOLEYARD_SOURCE_DIRTY === "true"
+          ? true
+          : process.env.FOLEYARD_SOURCE_DIRTY === "false"
+            ? false
+            : provenance.sourceDirty,
       environment: process.env.NODE_ENV === "production" ? "production" : "development",
       mode: process.env.FOLEYARD_DESKTOP === "1" ? "desktop" : "web",
       packaged: process.env.FOLEYARD_DESKTOP === "1" ? undefined : false,

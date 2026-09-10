@@ -20,6 +20,28 @@ function readBuildId(appPath) {
   return null;
 }
 
+/**
+ * Build provenance written after `next build` (#241). The server runtime reads
+ * the same file from FOLEYARD_APP_PATH, so both identities report one build id
+ * and revision.
+ */
+function readBuildProvenance(appPath) {
+  const result = { buildId: null, sourceRevision: null, sourceDirty: null };
+  try {
+    const candidate = path.join(appPath, ".next", "build-provenance.json");
+    if (fs.existsSync(candidate)) {
+      const parsed = JSON.parse(fs.readFileSync(candidate, "utf8"));
+      if (typeof parsed.buildId === "string") result.buildId = parsed.buildId;
+      if (typeof parsed.sourceRevision === "string") result.sourceRevision = parsed.sourceRevision;
+      if (typeof parsed.sourceDirty === "boolean") result.sourceDirty = parsed.sourceDirty;
+    }
+  } catch {
+    // absence is explicit
+  }
+  if (!result.buildId) result.buildId = readBuildId(appPath);
+  return result;
+}
+
 function getInstalledChannels() {
   try {
     const { CHANNEL_SPECS } = require("./ipc-channels.cjs");
@@ -49,12 +71,15 @@ function getDesktopIdentity() {
   } catch {
     version = null;
   }
+  const provenance = readBuildProvenance(appPath);
   return {
     owner: "desktop",
     platform: process.platform,
     packaged: app.isPackaged,
     version,
-    buildId: readBuildId(appPath),
+    buildId: provenance.buildId,
+    sourceRevision: provenance.sourceRevision,
+    sourceDirty: provenance.sourceDirty,
     resourcesPath: process.resourcesPath || null,
     docsRoot: (() => {
       try {

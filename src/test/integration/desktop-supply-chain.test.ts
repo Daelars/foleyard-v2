@@ -322,6 +322,18 @@ describe("desktop and supply chain", () => {
     for (const scriptName of ["build:desktop", "release", "release:build"]) {
       expect(packageJson.scripts[scriptName]).not.toContain("foleyardOpenDevTools=true");
       expect(packageJson.scripts[scriptName]).not.toContain("foleyardResetDatabaseOnBuild=true");
+      // Provenance and fresh docs staging run between the build and packaging.
+      const script = packageJson.scripts[scriptName];
+      const buildIndex = script.indexOf("next build");
+      const provenanceIndex = script.indexOf("write-build-provenance.cjs");
+      const stageIndex = script.indexOf("prepare-docs.cjs");
+      const checkIndex = script.indexOf("check-docs.cjs");
+      const packageIndex = script.indexOf("electron-builder");
+      expect(buildIndex, scriptName).toBeGreaterThanOrEqual(0);
+      expect(provenanceIndex, scriptName).toBeGreaterThan(buildIndex);
+      expect(stageIndex, scriptName).toBeGreaterThan(provenanceIndex);
+      expect(checkIndex, scriptName).toBeGreaterThan(stageIndex);
+      expect(packageIndex, scriptName).toBeGreaterThan(checkIndex);
     }
     expect(packageJson.scripts["build:desktop:disposable"]).toContain("foleyardOpenDevTools=true");
     expect(packageJson.scripts["build:desktop:disposable"]).toContain("foleyardResetDatabaseOnBuild=true");
@@ -372,6 +384,47 @@ describe("desktop and supply chain", () => {
       expect(notifications).toBe(2);
     } finally {
       unsubscribe();
+    }
+  });
+
+  it("reports one build id and revision to the server and the desktop (#241)", async () => {
+    const appRoot = fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-app-"));
+    const originalGetAppPath = electronFake.app.getAppPath;
+    try {
+      fs.mkdirSync(path.join(appRoot, ".next"), { recursive: true });
+      fs.writeFileSync(
+        path.join(appRoot, ".next", "build-provenance.json"),
+        JSON.stringify({
+          productVersion: "9.9.9",
+          buildId: "build-xyz",
+          sourceRevision: "rev-abc",
+          sourceDirty: true,
+        }),
+      );
+      electronFake.app.getAppPath = () => appRoot;
+
+      const { getDesktopIdentity } = requireElectronMain<{
+        getDesktopIdentity: () => {
+          buildId: string | null;
+          sourceRevision: string | null;
+          sourceDirty: boolean | null;
+        };
+      }>("runtime-info.cjs");
+      const desktop = getDesktopIdentity();
+      expect(desktop.buildId).toBe("build-xyz");
+      expect(desktop.sourceRevision).toBe("rev-abc");
+      expect(desktop.sourceDirty).toBe(true);
+
+      vi.stubEnv("FOLEYARD_APP_PATH", appRoot);
+      const { getServerRuntimeSnapshot } = await import("@/lib/runtime-info");
+      const server = getServerRuntimeSnapshot();
+      expect(server.identity.buildId).toBe(desktop.buildId);
+      expect(server.identity.sourceRevision).toBe(desktop.sourceRevision);
+      expect(server.identity.sourceDirty).toBe(desktop.sourceDirty);
+    } finally {
+      vi.unstubAllEnvs();
+      electronFake.app.getAppPath = originalGetAppPath;
+      fs.rmSync(appRoot, { recursive: true, force: true });
     }
   });
 

@@ -86,14 +86,41 @@ const coreVersion = JSON.parse(
   fs.readFileSync(path.join(root, "packages", "yard-core", "package.json"), "utf8"),
 ).version;
 
-let buildId = null;
-const buildIdPath = path.join(root, ".next", "BUILD_ID");
-if (fs.existsSync(buildIdPath)) buildId = fs.readFileSync(buildIdPath, "utf8").trim() || null;
+// Build provenance, written after `next build` (write-build-provenance.cjs),
+// keeps the manifest and the running identity in agreement. Fall back to the
+// raw BUILD_ID and git when the provenance file is absent (docs-only staging
+// in a checkout).
+let provenance = null;
+try {
+  provenance = JSON.parse(
+    fs.readFileSync(path.join(root, ".next", "build-provenance.json"), "utf8"),
+  );
+} catch {
+  provenance = null;
+}
 
-const sourceRevision =
-  process.env.SOURCE_REVISION || tryExec("git rev-parse HEAD") || "unknown";
+let buildId = typeof provenance?.buildId === "string" ? provenance.buildId : null;
+if (buildId === null) {
+  const buildIdPath = path.join(root, ".next", "BUILD_ID");
+  if (fs.existsSync(buildIdPath)) buildId = fs.readFileSync(buildIdPath, "utf8").trim() || null;
+}
+
 const statusOutput = tryExec("git status --porcelain");
-const sourceDirty = statusOutput === null ? false : statusOutput.length > 0;
+const sourceRevision =
+  process.env.SOURCE_REVISION ||
+  (typeof provenance?.sourceRevision === "string" ? provenance.sourceRevision : null) ||
+  tryExec("git rev-parse HEAD") ||
+  "unknown";
+const sourceDirty =
+  process.env.FOLEYARD_SOURCE_DIRTY === "true"
+    ? true
+    : process.env.FOLEYARD_SOURCE_DIRTY === "false"
+      ? false
+      : typeof provenance?.sourceDirty === "boolean"
+        ? provenance.sourceDirty
+        : statusOutput === null
+          ? false
+          : statusOutput.length > 0;
 
 const seenIds = new Set();
 const documents = registry.documents.map((entry) => {

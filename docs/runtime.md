@@ -24,8 +24,10 @@ are ever included.
   snapshot. It reads the v2 registry for identity only and overlays
   approvals best-effort.
 - `electron/main/runtime-info.cjs` (`getDesktopIdentity`) owns desktop
-  identity: platform, packaged state, app version, Next BUILD_ID,
-  resources/docs paths, installed channels.
+  identity: platform, packaged state, app version, the Next BUILD_ID and
+  source revision/dirty from `.next/build-provenance.json` (the same file the
+  server identity reads through `FOLEYARD_APP_PATH`), resources/docs paths,
+  installed channels.
 - `src/app/(variant-i)/components/settings/about-tab.tsx` (`handleExportRuntimeInfo`) owns
   the user-invoked export: fetches `/api/runtime`, appends desktop info, and
   downloads `foleyard-runtime-info.json`.

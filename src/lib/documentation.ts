@@ -176,10 +176,15 @@ export function getDocumentationRegistry(): DocumentationRegistry {
 
 function readBuildId(): string | undefined {
   try {
-    const candidate = path.join(process.cwd(), ".next", "BUILD_ID");
-    if (fs.existsSync(candidate)) {
-      const raw = fs.readFileSync(candidate, "utf8").trim();
-      return raw || undefined;
+    const roots = [process.env.FOLEYARD_APP_PATH, process.cwd()].filter(
+      (root): root is string => typeof root === "string" && root.length > 0,
+    );
+    for (const root of roots) {
+      const candidate = path.join(root, ".next", "BUILD_ID");
+      if (fs.existsSync(candidate)) {
+        const raw = fs.readFileSync(candidate, "utf8").trim();
+        if (raw) return raw;
+      }
     }
   } catch {
     // Absence is explicit, not fatal.

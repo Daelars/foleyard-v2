@@ -42,8 +42,12 @@ bun run docs:check     # verify staged docs (also in CI)
 `predev`/`prebuild` run `scripts/verify-workspace-root.cjs`.
 `dev:desktop` is implemented by `scripts/dev-desktop.cjs` and sets desktop
 mode env vars. `build:desktop` rebuilds `better-sqlite3`, runs `next build`,
-rebuilds the traced copy (`scripts/rebuild-traced.cjs`), and runs
-`electron-builder` into `dist-electron/`.
+writes build provenance (`scripts/write-build-provenance.cjs`), stages and
+checks the docs bundle (`prepare-docs` + `check-docs`, so a stale or missing
+`staged-docs/foleyard-docs` fails the build), rebuilds the traced copy
+(`scripts/rebuild-traced.cjs`), and runs `electron-builder` into
+`dist-electron/`. The release workflow packages through the same chain and
+asserts the staged manifest carries the build id.
 
 Fixture isolation: `src/test/fixtures.ts` builds throwaway libraries and
 databases per test; integration tests live in `src/test/integration/`.

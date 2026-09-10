@@ -50,6 +50,9 @@ async function startNextProductionServer() {
   nextServerUrlPromise = (async () => {
     installServerConsoleCapture();
     process.env.FOLEYARD_DESKTOP = "1";
+    // The packaged server resolves build provenance from the app root, not
+    // from whatever cwd the OS launched the app with (#241).
+    process.env.FOLEYARD_APP_PATH = app.getAppPath();
 
     // All private Next.js coupling (version check, private module import,
     // loopback port selection) lives in next-server-adapter.cjs, which fails

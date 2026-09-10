@@ -9,6 +9,12 @@ type PrototypeLink = {
 
 const PROTOTYPES: PrototypeLink[] = [
   {
+    route: "/prototype/archive",
+    title: "Archive",
+    blurb:
+      "Audit reports, plans and HTML explainers from the separate foleyard-archive checkout, rendered here for review. Dev only.",
+  },
+  {
     route: "/prototype/component-library",
     title: "Component library",
     blurb:
@@ -24,18 +30,6 @@ const PROTOTYPES: PrototypeLink[] = [
       { key: "I", name: "H plus leftovers" },
       { key: "J", name: "App, new parts" },
     ],
-  },
-  {
-    route: "/prototype/variant-i-library",
-    title: "Variant I library",
-    blurb:
-      "The Variant I specimen rebuilt from the extracted library alone. The living styleguide and validation aid for src/components/variant-i.",
-  },
-  {
-    route: "/prototype/ext-v2-workbench",
-    title: "Ext v2 workbench",
-    blurb:
-      "v2 development workbench: contributions through the production adapters, sanitized catalog inspection, fixture commands, and job outcomes with reload.",
   },
 ];
 
@@ -92,14 +86,6 @@ export default function PrototypeIndexPage() {
             </li>
           ))}
         </ul>
-
-        <p className="mt-8 text-xs text-zinc-500">
-          Code-only, no route:{" "}
-          <code className="font-mono text-[11px] text-zinc-400">
-            arch-review
-          </code>{" "}
-          (proto-1 … proto-7 pipeline scripts, no page.tsx).
-        </p>
       </div>
     </div>
   );

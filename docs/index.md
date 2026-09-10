@@ -97,7 +97,7 @@ the absolute path under the docs root, and reads it as UTF-8.
 | Status | Meaning | Members |
 | --- | --- | --- |
 | current | Live guide, describes shipped behavior | All rows above |
-| historical | Point-in-time audit, kept for reference, not current behavior | `docs/audit-2026-09/`, `docs/audits/foleyard-self-awareness-audit.md`, `docs/audits/history/` |
+| historical | Point-in-time audit, kept for reference, not current behavior | moved to `Daelars/foleyard-archive` (blog-posts research, `docs/audits/`, `docs/audit-2026-09/`, `docs/plans/`) |
 | experimental | Throwaway prototype, deleted once its design question is answered | `src/app/prototype/**` (excluded from coverage; never executed by docs reads) |
 
 ## Examples

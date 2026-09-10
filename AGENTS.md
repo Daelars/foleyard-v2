@@ -38,8 +38,16 @@ Read the relevant guide and follow its source map:
 - Setup, tests and release: `docs/development.md` and `RELEASE.md`.
 
 Runnable examples live in `examples/`; their READMEs state prerequisites
-and commands. Prototype routes and dated audit handoffs describe experiments
-or historical findings, not the installed product's supported behavior.
+and commands.
+
+Document status vocabulary (see `docs/index.md`): `current` guides describe
+shipped behavior, `historical` material is point-in-time evidence, and
+`experimental` covers throwaway prototypes. Blog posts, audits, plans,
+design briefs and prototype routes are historical or experimental by
+definition and never describe supported behavior. Archived material lives
+in the separate `Daelars/foleyard-archive` checkout; in development it is
+read only through `/prototype/archive` (or `FOLEYARD_ARCHIVE_DIR`). Never
+treat archive or prototype content as current product documentation.
 
 For questions about a running installation, inspect runtime information and
 the matching documentation manifest as described in `docs/runtime.md`.

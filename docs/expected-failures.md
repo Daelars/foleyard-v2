@@ -12,8 +12,6 @@ the same change.
 
 - B03 — database-correctness: collection-branch count disagreement (#137)
 - B09 — database-correctness: unchunked, non-atomic smart conversion (#137)
-- B06 — extension-host-transport: silent 5,000-file scan cap (#138)
-- E01 — filesystem-boundary: unpermitted service reachability (#135)
 - B02 — data-loss-prevention: distinct recordings inherit tags (#136)
 - B10 — data-loss-prevention: removal undone by rescan (#136)
 - I03 — scanner: order-dependent root ownership (#139)

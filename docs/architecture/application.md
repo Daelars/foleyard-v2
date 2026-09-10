@@ -57,8 +57,6 @@ desktop helpers grouped):
 | `GET /api/waveform` | waveform peaks (FFmpeg for compressed) |
 | `GET/POST /api/scan` | scan start + status polling |
 | `GET/POST /api/settings` | library roots, onboarding |
-| `GET/PATCH /api/extensions` | grid, catalog (`?view=catalog`), enable/settings |
-| `POST /api/extensions/execute` | command execution |
 | `GET /api/extensions-v2` | v2 serializable catalog |
 | `GET /api/extensions-v2/availability` | v2 availability with reasons |
 | `POST /api/extensions-v2/execute` | v2 immediate/reviewed execution |
@@ -71,14 +69,14 @@ desktop helpers grouped):
 | `GET /api/docs`, `GET /api/docs/[...id]` | version-matched docs |
 | `desktop/*` (`file`, `grants`, `path`) | main-process helpers (resolve, grants, path checks) |
 
-Server adapters: `execute/transport.ts` per-command adapters hydrate inputs
-and enforce readable/writable grants; `filesystem-boundary.ts` resolves paths
+Server adapters: `filesystem-boundary.ts` resolves paths
 against Library roots and opaque destination grants; `createExtensionServices`
 (`src/lib/db.ts`) composes guarded repository services for the host.
-The v2 side composes its own adapters under `src/lib/extensions-v2/`
+The v2 engine composes its own adapters under `src/lib/extensions-v2/`
 (host, Library/file/archive/settings ports, shelf/recent sources,
-job wiring, UI resolvers) over the same repositories and boundaries;
-v1 adapters are untouched and never routed through v2.
+job wiring, UI resolvers) over the same repositories and boundaries.
+Version 1 execution routes and adapters were removed; the v2 host is the
+only extension execution path.
 
 State ownership: one hook per slice (files, view, selection, organization,
 shelf, palette, transport, settings/scan). The page derives memos; dialogs
@@ -111,7 +109,6 @@ open/close state. No global store; no EventBus.
 - `src/app/prototype/legacy-app/page.tsx` — parked previous surface (dev-only, slated for deletion)
 - `src/app/library/{use-library-files,use-library-view,use-library-organization,use-selection,use-bulk-actions,use-collections,use-tags,use-favorites,use-shelf,use-transport,use-palette,use-extension-catalog,use-extension-ui,use-settings-scan,dialogs,file-query,refetch-map,types}.ts(x)`
 - `src/app/api/**/route.ts` — HTTP surface
-- `src/app/api/extensions/execute/transport.ts` — transport adapters
 - `src/lib/filesystem-boundary.ts` — path authorization
 - `src/lib/db.ts` — service composition + repository wiring
 

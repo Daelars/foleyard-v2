@@ -1,4 +1,3 @@
-import type { ExtensionGridItem } from "@/lib/extensions/types";
 import type { ScanStatusResponse } from "@/lib/scanner/types";
 import type { RemoveDefault, ShortcutAction, ShortcutBindings } from "@/components/Shortcuts/shortcuts";
 export type ValidationResult = {
@@ -30,14 +29,6 @@ export interface SettingsDialogProps {
   onConvertToRegularCollection?: (id: string) => void;
   onCreateTag: (name: string, color?: string) => Promise<string | null | void>;
   onDeleteTag: (id: string) => Promise<void>;
-  // New props for extensions
-  extensions: ExtensionGridItem[];
-  onToggleExtension?: (id: string, enabled: boolean) => void;
-  onUpdateExtensionSetting?: (
-    extensionId: string,
-    settingId: string,
-    value: unknown,
-  ) => void;
   zoom?: number;
   onUpdateZoom?: (zoom: number) => void;
   /** v2 settings slot (R8): live v2 extension management renders here. */
@@ -64,9 +55,6 @@ export type SettingsDialogBodyProps = Pick<
   | "onConvertToRegularCollection"
   | "onCreateTag"
   | "onDeleteTag"
-  | "extensions"
-  | "onToggleExtension"
-  | "onUpdateExtensionSetting"
   | "v2Settings"
   | "zoom"
   | "onUpdateZoom"
@@ -80,8 +68,6 @@ export type SettingsDialogBodyProps = Pick<
 export type LibraryTabProps = Pick<SettingsDialogProps, "settings" | "onSaveRoot" | "onRemoveRoot" | "scanStatus" | "onStartScan">;
 
 export type MetadataTabProps = Pick<SettingsDialogProps, "collections" | "tags" | "onCreateCollection" | "onDeleteCollection" | "onRenameCollection" | "onConvertToRegularCollection" | "onCreateTag" | "onDeleteTag">;
-
-export type ExtensionsTabProps = Pick<SettingsDialogProps, "extensions" | "onToggleExtension" | "onUpdateExtensionSetting">;
 
 export type AppearanceTabProps = Pick<SettingsDialogProps, "zoom" | "onUpdateZoom">;
 

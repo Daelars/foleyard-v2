@@ -9,7 +9,7 @@ import {
   SOUND_SHELF_V2_ID,
   SOUND_SHELF_V2_LIST,
 } from "@foleyard/sound-shelf-v2";
-import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
+import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/shelf-events";
 import { invokeV2Command } from "@/lib/extensions-v2/contributions";
 
 /** Derive the shelf file-id list from a sound-shelf list payload. */

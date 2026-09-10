@@ -10,7 +10,6 @@ import { usePalette, type PaletteInput } from "./use-palette";
 const noop = () => {};
 
 const input: PaletteInput = {
-  extensions: [],
   orderedFiles: [],
   isPlaying: false,
   autoplay: false,
@@ -31,7 +30,6 @@ const input: PaletteInput = {
   toggleAutoplay: noop,
   toggleFavoriteCurrent: noop,
   addCurrentToShelf: noop,
-  runCommand: noop,
   playSound: noop,
   moveNext: noop,
   movePrev: noop,

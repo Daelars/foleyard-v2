@@ -6,15 +6,14 @@ import Database from "better-sqlite3";
 
 import {
   V2_EXTENSION_API_VERSION,
-  YARD_EXTENSION_API_VERSION,
   type ExtensionV2Definition,
 } from "@yard-core";
 
-// Area: extension v2 R10 (#173). Runtime discovery reports v1/v2
-// identity, actual registration and enablement, API standing,
-// capabilities, contributions, commands, events, and settings schema
-// refs. Reads are side-effect free: no handler runs, and the database
-// file is opened read-only only when it already exists.
+// Area: extension v2 R10 (#173). Runtime discovery reports v2 identity,
+// actual registration and enablement, API standing, capabilities,
+// contributions, commands, events, and settings schema refs. Reads are
+// side-effect free: no handler runs, and the database file is opened
+// read-only only when it already exists. Version 1 is retired.
 
 vi.mock("@/lib/db", () => ({
   getLibraryRoots: () => [],
@@ -90,31 +89,23 @@ function seedTempDatabase(dir: string): string {
 }
 
 describe("v2 runtime discovery", () => {
-  it("reports v1 and v2 systems with API identity and real registration", () => {
+  it("reports the v2 system with API identity and real registration", () => {
     const snapshot = getServerRuntimeSnapshot();
     expect(snapshot.schemaVersion).toBe(1);
-    expect(snapshot.extensionSystems).toEqual([
-      {
-        system: "v1",
-        apiVersion: YARD_EXTENSION_API_VERSION,
-        standing: "internal",
-        // All six v1 tools retired: the v1 registry is empty by design.
-        registered: [],
-      },
-      {
-        system: "v2",
-        apiVersion: V2_EXTENSION_API_VERSION,
-        standing: "internal",
-        registered: expect.arrayContaining([
-          "make-pack-v2",
-          "sound-shelf-v2",
-          "smart-collections-v2",
-          "folder-janitor-v2",
-          "library-gatherer-v2",
-          "drop-rules-v2",
-        ]),
-      },
-    ]);
+    expect(snapshot.extensionsV2.map((entry) => entry.id)).toEqual(
+      expect.arrayContaining([
+        "make-pack-v2",
+        "sound-shelf-v2",
+        "smart-collections-v2",
+        "folder-janitor-v2",
+        "library-gatherer-v2",
+        "drop-rules-v2",
+      ]),
+    );
+    for (const entry of snapshot.extensionsV2) {
+      expect(entry.apiVersion).toBe(V2_EXTENSION_API_VERSION);
+      expect(entry.standing).toBe("internal");
+    }
     const makePack = snapshot.extensionsV2.find((entry) => entry.id === "make-pack-v2");
     expect(makePack).toMatchObject({
       name: "Make Pack v2",
@@ -191,7 +182,6 @@ describe("v2 runtime discovery", () => {
       const missing = join(dir, "absent.sqlite");
       const absent = readRuntimeDatabaseFlags(missing);
       expect(absent.filePresent).toBe(false);
-      expect(absent.v1Enabled.size).toBe(0);
       expect(absent.approvals).toBeNull();
       // The read must not create the file.
       const after = readdirSync(dir);
@@ -200,7 +190,6 @@ describe("v2 runtime discovery", () => {
       const dbPath = seedTempDatabase(dir);
       const present = readRuntimeDatabaseFlags(dbPath);
       expect(present.filePresent).toBe(true);
-      expect(present.v1Enabled.get("sound-shelf")).toBe(true);
       expect(present.approvals?.grantedPermissions("make-pack-v2")).toEqual(["library:read"]);
       // Read-only proof: no WAL, SHM, or journal sidecars appear beside the file.
       const sidecars = readdirSync(dir).filter((name) => name !== "probe.sqlite");

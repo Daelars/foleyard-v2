@@ -51,8 +51,8 @@ const DOCUMENTS = [
 ];
 
 const EXAMPLES = [
-  { id: "extensions/selected-ids", runnableIn: "repository" },
   { id: "core/query-library", runnableIn: "repository" },
+  { id: "extensions-v2/minimal", runnableIn: "repository" },
 ];
 
 function parseOutDir(argv) {

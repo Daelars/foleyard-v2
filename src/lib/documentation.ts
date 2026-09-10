@@ -86,7 +86,6 @@ export function getDocumentationLocation() {
     indexId: "index",
     documentIds: DOCUMENT_REGISTRY.map((d) => d.id),
     examples: [
-      { id: "extensions/selected-ids", runnableIn: "repository" as const },
       { id: "core/query-library", runnableIn: "repository" as const },
       { id: "extensions-v2/minimal", runnableIn: "repository" as const },
     ],

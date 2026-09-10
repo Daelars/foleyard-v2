@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -101,6 +101,14 @@ describe("v2 module dependency boundaries", () => {
       readFileSync(join(here, "..", "..", "package.json"), "utf8"),
     ) as { dependencies?: Record<string, string> };
     expect(manifest.dependencies ?? {}).toEqual({});
+  });
+
+  it("keeps the version 1 engine deleted", () => {
+    // The v1 modules lived beside this directory; reintroducing them must
+    // fail the build rather than silently restoring a second extension API.
+    expect(existsSync(join(here, "..", "extensions"))).toBe(false);
+    const barrel = readFileSync(join(here, "..", "index.ts"), "utf8");
+    expect(barrel).not.toMatch(/from "\.\/extensions"/);
   });
 
   it("keeps the privileged surface out of the operation-services permission map", () => {

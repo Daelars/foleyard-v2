@@ -38,8 +38,12 @@ contracts are interfaces; the SQLite repositories in the app implement them
 SQLite repositories), `services/library/*` (settings shape, scan status),
 `services/organization/*` (collections, tags, favorites), the
 `normalizeDirectoryPath` utility in `services/search/filter-service.ts`
-(used by the browse and file queries), and everything under `extensions/`,
-`domain/`, `errors/`, and `async/`.
+(used by the browse and file queries), and everything under
+`extensions-v2/`, `domain/`, `errors/`, and `async/`.
+
+**Retired — removed with the v1 system**: `extensions/` (manifest,
+command registry, extension context, host). `extensions-v2/` is the only
+extension runtime.
 
 **Superseded — deleted in #130 with reasoning**: `services/commands/`
 (`CommandRegistry`/`CommandDefinition`) predates `YardCommandRegistry`,

@@ -88,8 +88,6 @@ import { SqliteBrowseRepository } from "@/lib/database/browse-repository";
 
 import type { CollectionService, FavoriteService, LibraryService, TagService } from "@yard-core";
 
-import type { YardExtensionContext } from "@yard-core";
-
 export type AppServices = {
   fileRepository: SqliteAudioFileRepository;
   tagRepository: SqliteTagRepository;
@@ -131,15 +129,21 @@ export function getAppServices(): AppServices {
   return _services;
 }
 
-export function createExtensionServices(): Omit<
-  YardExtensionContext["services"],
-  "commands" | "settings"
-> {
+/** Guarded services exposed to extension operations (v2 host bindings). */
+export type AppExtensionServices = {
+  library: LibraryService;
+  files: { markRemoved: (fileIds: string[]) => void };
+  collections: CollectionService;
+  tags: TagService;
+  favorites: FavoriteService;
+};
+
+export function createExtensionServices(): AppExtensionServices {
   const services = getAppServices();
   return {
     library: services.libraryService,
     files: {
-      markRemoved: (fileIds) => {
+      markRemoved: (fileIds: string[]) => {
         const removedAt = new Date().toISOString();
         const paths = services.fileRepository.getFilesByIds(fileIds).map((file) => file.path);
         if (paths.length > 0) {

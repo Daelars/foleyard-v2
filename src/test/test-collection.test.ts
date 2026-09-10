@@ -24,12 +24,9 @@ const SKIP_DIRECTORIES = new Set([
 
 // Test files deliberately kept out of the product run, each with a reason.
 // Anything not listed here must be collected by the default `vitest run`.
-const UNCOLLECTED_BY_DESIGN = new Map([
-  [
-    "docs/audit-2026-09/reproduce.test.ts",
-    "Audit evidence: asserts current faulty behaviour on purpose. Runs via its own config until each assertion is inverted into a regression.",
-  ],
-]);
+// (Currently empty: the last entry, the 2026-09 audit reproducer, was
+// deleted with the v1 engine it was written against.)
+const UNCOLLECTED_BY_DESIGN = new Map<string, string>();
 
 const COLLECTED_EXTENSIONS = [".test.ts", ".test.tsx"];
 

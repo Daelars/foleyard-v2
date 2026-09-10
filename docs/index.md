@@ -31,9 +31,8 @@ missing-from-build error rather than falling back. Staging is
 ## Runtime behavior
 
 `getDocumentationLocation()` reports the manifest ID, matched product
-version, index ID (`index`), document IDs, and the three runnable-in-repo
-examples (`extensions/selected-ids`, `core/query-library`,
-`extensions-v2/minimal`).
+version, index ID (`index`), document IDs, and the two runnable-in-repo
+examples (`core/query-library`, `extensions-v2/minimal`).
 `readDocumentation(id)` allowlists the ID against the registry, resolves
 the absolute path under the docs root, and reads it as UTF-8.
 
@@ -105,8 +104,6 @@ the absolute path under the docs root, and reads it as UTF-8.
 Runnable examples live in `examples/`; each README states prerequisites,
 invocation, expected results and version provenance:
 
-- `examples/extensions/selected-ids/` (`bun run example:selected-ids`) —
-  selected-IDs extension command through the real registry and host.
 - `examples/core/query-library/` (`node examples/core/query-library/run.ts`;
   `bun` cannot dlopen better-sqlite3 on Windows, see its README) —
   disposable in-memory SQLite query via app repository contracts.
@@ -114,7 +111,7 @@ invocation, expected results and version provenance:
   minimal v2 extension (one global command) through the real v2
   registry and host. No filesystem, no database.
 
-All three are repository-run examples, not executable installed plugins.
+Both are repository-run examples, not executable installed plugins.
 
 ## Related documentation
 

@@ -14,7 +14,7 @@ import { Button, TagChip } from "@/components/variant-i";
 
 import { getDesktopBridge } from "@/lib/desktop";
 
-import packageJson from "../../../../../../package.json";
+import packageJson from "../../../../../package.json";
 export const APP_VERSION = packageJson.version;
 
 export function V3SettingsAboutTab() {

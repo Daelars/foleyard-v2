@@ -46,6 +46,7 @@ const DOCUMENTS = [
   { id: "architecture/yard-core", relativePath: "docs/architecture/yard-core.md", status: "current" },
   { id: "architecture/extensions", relativePath: "docs/architecture/extensions.md", status: "current" },
   { id: "adr/filesystem-access", relativePath: "docs/adr/filesystem-access.md", status: "current" },
+  { id: "adr/new-surface-promotion", relativePath: "docs/adr/new-surface-promotion.md", status: "current" },
   { id: "readme", relativePath: "README.md", status: "current" },
 ];
 

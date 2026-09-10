@@ -3,7 +3,7 @@ import { act, screen, fireEvent, render, waitFor } from "@testing-library/react"
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import Home from "@/app/page";
+import Home from "@/app/prototype/legacy-app/page";
 import {
   audioFileRecord,
   createScratchLibrary,

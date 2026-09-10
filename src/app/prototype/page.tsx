@@ -140,6 +140,12 @@ const PROTOTYPES: PrototypeLink[] = [
       { key: "C", name: "Implementation desk" },
     ],
   },
+  {
+    route: "/prototype/legacy-app",
+    title: "Legacy app (retired surface)",
+    blurb:
+      "The pre-variant-I workspace kept under the prototype gate for comparison while the new surface at / settles. Slated for deletion with the old component tree.",
+  },
 ];
 
 export default function PrototypeIndexPage() {

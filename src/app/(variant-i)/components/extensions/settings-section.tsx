@@ -60,9 +60,9 @@ export function V3ExtensionsSection({
               description={entry.description}
               enabled={entry.enabled}
               onToggle={(enabled) => {
-                void toggle(entry.id, enabled).then(() =>
-                  onEnabledToggle?.(entry.id, enabled),
-                );
+                void toggle(entry.id, enabled).then((ok) => {
+                  if (ok) onEnabledToggle?.(entry.id, enabled);
+                });
               }}
             />
             <div className="mt-3 space-y-3">

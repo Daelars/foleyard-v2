@@ -81,9 +81,9 @@ export function V3ToolsCards({
               : undefined
           }
           onToggle={(checked) => {
-            void toggle(entry.id, checked).then(() =>
-              onEnabledToggle?.(entry.id, checked),
-            );
+            void toggle(entry.id, checked).then((ok) => {
+              if (ok) onEnabledToggle?.(entry.id, checked);
+            });
           }}
           onToggleInfo={() => setDetailsId(entry.id)}
           expanded={false}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { fetchV2ExtensionStatesCached, invalidateV2ClientCaches, setV2ExtensionEnabledRemote } from "@/lib/extensions-v2/contributions";
@@ -13,9 +13,10 @@ import type { V2ExtensionSettingsEntry } from "./settings";
  *
  * Load-once: the loaded entries live in a process-wide cache, so the
  * second mount (settings dialog after the Tools grid, view switches,
- * StrictMode remounts) renders instantly with zero HTTP. Every write
- * path below (toggle, setting update, reset, approve) invalidates and
- * reloads, which is the only way the data can change.
+ * StrictMode remounts) renders instantly with zero HTTP. Enable and
+ * setting toggles update that cache optimistically and roll back on a
+ * failed write, so the switch moves immediately and persists one request
+ * instead of reloading every extension.
  */
 type EntriesLoadResult = {
   entries: V2ExtensionSettingsEntry[];
@@ -31,6 +32,18 @@ function readEntriesSnapshot(): V2ExtensionSettingsEntry[] | null {
 
 export function invalidateV2EntriesCache(): void {
   cachedEntries = null;
+}
+
+function patchEntry(
+  extensionId: string,
+  patch: (entry: V2ExtensionSettingsEntry) => V2ExtensionSettingsEntry,
+): V2ExtensionSettingsEntry[] {
+  const current = cachedEntries ?? [];
+  const next = current.map((entry) =>
+    entry.id === extensionId ? patch(entry) : entry,
+  );
+  cachedEntries = next;
+  return next;
 }
 
 function loadEntriesShared(): Promise<EntriesLoadResult> {
@@ -100,6 +113,7 @@ export function useV2ExtensionEntries() {
   );
   const [loading, setLoading] = useState(() => readEntriesSnapshot() === null);
   const [error, setError] = useState<string | null>(null);
+  const inFlightWritesRef = useRef(new Set<string>());
 
   const refresh = useCallback(async () => {
     invalidateV2EntriesCache();
@@ -128,19 +142,41 @@ export function useV2ExtensionEntries() {
   }, []);
 
   const toggle = useCallback(
-    async (extensionId: string, enabled: boolean) => {
-      const result = await setV2ExtensionEnabledRemote(extensionId, enabled);
-      if (!result.ok) {
-        toast.error(result.message);
-        return;
+    async (extensionId: string, enabled: boolean): Promise<boolean> => {
+      const key = `toggle:${extensionId}`;
+      if (inFlightWritesRef.current.has(key)) return false;
+      inFlightWritesRef.current.add(key);
+      const original = cachedEntries?.find((entry) => entry.id === extensionId);
+      setEntries(patchEntry(extensionId, (entry) => ({ ...entry, enabled })));
+      try {
+        const result = await setV2ExtensionEnabledRemote(extensionId, enabled);
+        if (!result.ok) {
+          if (original) setEntries(patchEntry(extensionId, () => original));
+          toast.error(result.message);
+          return false;
+        }
+        return true;
+      } finally {
+        inFlightWritesRef.current.delete(key);
       }
-      await refresh();
     },
-    [refresh],
+    [],
   );
 
   const updateSetting = useCallback(
     async (extensionId: string, settingId: string, value: unknown) => {
+      const key = `setting:${extensionId}:${settingId}`;
+      if (inFlightWritesRef.current.has(key)) return;
+      inFlightWritesRef.current.add(key);
+      const original = cachedEntries?.find((entry) => entry.id === extensionId);
+      setEntries(
+        patchEntry(extensionId, (entry) => ({
+          ...entry,
+          rows: entry.rows.map((row) =>
+            row.declaration.id === settingId ? { ...row, value } : row,
+          ),
+        })),
+      );
       try {
         const response = await fetch(
           `/api/extensions-v2/settings/${encodeURIComponent(extensionId)}/${encodeURIComponent(settingId)}`,
@@ -155,15 +191,17 @@ export function useV2ExtensionEntries() {
           error?: { message?: string };
         } | null;
         if (!response.ok || !body?.ok) {
+          if (original) setEntries(patchEntry(extensionId, () => original));
           toast.error(body?.error?.message ?? "Setting update failed.");
-          return;
         }
-        await refresh();
       } catch (error) {
+        if (original) setEntries(patchEntry(extensionId, () => original));
         toast.error(error instanceof Error ? error.message : "Setting update failed.");
+      } finally {
+        inFlightWritesRef.current.delete(key);
       }
     },
-    [refresh],
+    [],
   );
 
   const reset = useCallback(

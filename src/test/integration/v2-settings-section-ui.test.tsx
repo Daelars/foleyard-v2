@@ -12,6 +12,7 @@ import { invalidateV2EntriesCache } from "@/components/extensions-v2/use-v2-exte
 // routes: entries load, declared-but-denied permissions surface the
 // approve affordance, and approve/reset/toggle each reach their route.
 const calls: Array<{ url: string; method: string; body: unknown }> = [];
+let failedWrites = new Set<string>();
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -22,6 +23,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 beforeEach(() => {
   calls.length = 0;
+  failedWrites = new Set();
   invalidateV2ClientCaches();
   invalidateV2EntriesCache();
   vi.stubGlobal(
@@ -58,13 +60,30 @@ beforeEach(() => {
           ok: true,
           declaredPermissions: ["files:write"],
           effectivePermissions: [],
-          settings: [],
+          settings: [
+            {
+              declaration: {
+                id: "copy-on-drop",
+                label: "Copy on drop",
+                description: "Copy files here instead of moving them.",
+                type: "boolean",
+                defaultValue: false,
+              },
+              value: false,
+            },
+          ],
         });
       }
       if (url.startsWith("/api/extensions-v2/extensions/make-pack-v2")) {
+        if (failedWrites.has("PATCH")) {
+          return jsonResponse({ ok: false, error: { message: "write refused" } }, 500);
+        }
         return jsonResponse({ ok: true });
       }
       if (url.startsWith("/api/extensions-v2/settings/make-pack-v2")) {
+        if (failedWrites.has("PUT")) {
+          return jsonResponse({ ok: false, error: { message: "write refused" } }, 500);
+        }
         return jsonResponse({ ok: true });
       }
       return jsonResponse(
@@ -111,7 +130,10 @@ describe("v2 settings section UI", () => {
     const toggle =
       screen.queryByRole("switch", { name: /Make Pack v2/ }) ??
       screen.getByLabelText(/Toggle Make Pack v2/);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
     fireEvent.click(toggle);
+    // Optimistic: the switch moves without waiting for the PATCH round trip.
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
     await waitFor(() =>
       expect(
         calls.some(
@@ -120,6 +142,60 @@ describe("v2 settings section UI", () => {
             call.method === "PATCH",
         ),
       ).toBe(true),
+    );
+    // One write, no per-extension settings reload behind it.
+    const patchIndex = calls.findIndex(
+      (call) =>
+        call.url === "/api/extensions-v2/extensions/make-pack-v2" &&
+        call.method === "PATCH",
+    );
+    expect(calls.slice(patchIndex + 1).filter((call) => call.method === "GET")).toEqual([]);
+  });
+
+  it("moves a setting switch immediately and writes once", async () => {
+    render(<V3ExtensionsSection />);
+
+    await waitFor(() => expect(screen.getByText("Make Pack v2")).toBeTruthy());
+    const setting = screen.getByRole("switch", { name: "Copy on drop" });
+    expect(setting.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(setting);
+    expect(setting.getAttribute("aria-checked")).toBe("true");
+
+    await waitFor(() =>
+      expect(calls.some((call) => call.method === "PUT")).toBe(true),
+    );
+    const putIndex = calls.findIndex((call) => call.method === "PUT");
+    expect(calls.slice(putIndex + 1).filter((call) => call.method === "GET")).toEqual([]);
+  });
+
+  it("rolls the extension switch back when the write fails", async () => {
+    failedWrites.add("PATCH");
+    render(<V3ExtensionsSection />);
+
+    await waitFor(() => expect(screen.getByText("Make Pack v2")).toBeTruthy());
+    const toggle =
+      screen.queryByRole("switch", { name: /Make Pack v2/ }) ??
+      screen.getByLabelText(/Toggle Make Pack v2/);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    await waitFor(() => expect(toggle.getAttribute("aria-checked")).toBe("true"));
+  });
+
+  it("rolls a setting switch back when the write fails", async () => {
+    failedWrites.add("PUT");
+    render(<V3ExtensionsSection />);
+
+    await waitFor(() => expect(screen.getByText("Make Pack v2")).toBeTruthy());
+    const setting = screen.getByRole("switch", { name: "Copy on drop" });
+    expect(setting.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(setting);
+    expect(setting.getAttribute("aria-checked")).toBe("true");
+    await waitFor(() =>
+      expect(setting.getAttribute("aria-checked")).toBe("false"),
     );
   });
 });

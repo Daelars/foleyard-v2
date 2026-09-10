@@ -4,6 +4,11 @@ import {
   V2PermissionApprovals,
 } from "@yard-core";
 import { describeCapabilities } from "@/lib/capabilities";
+import {
+  BUILTIN_COMMAND_ACTIONS,
+  BUILTIN_COMMANDS,
+  BUILTIN_COMMAND_PREVIEW_CONTEXT,
+} from "@/lib/commands";
 import { listEvents } from "@/lib/events";
 import { getV2Registry, isV2ExtensionEnabled } from "@/lib/extensions-v2/host";
 import { getSettingsSchemaRefs } from "@/lib/settings-schema";
@@ -64,14 +69,28 @@ export type RuntimeSnapshot = {
       id: string;
       title: string;
       scope: string;
+      destructive: boolean;
       requiresSelection: boolean;
       requiredCapabilities: string[];
+      /** Serializable input/result value schemas; null when the command takes/produces none. */
+      input: unknown | null;
+      result: unknown | null;
+      docsId: string | null;
     }>;
     contributions: Array<{ id: string; type: string; commandId: string }>;
     settings: Array<{ id: string; type: string; defaultValue: unknown }>;
     docsRefs: Array<{ id: string; title: string }>;
   }>;
   eventsV2: Array<{ type: string; owner: "host"; docsId: string }>;
+  /** Built-in palette actions from the descriptor table in src/lib/commands.ts. */
+  commandsBuiltin: Array<{
+    id: string;
+    title: string;
+    section: string;
+    hint: string;
+    action: string;
+    docsId: string;
+  }>;
   limitations: string[];
 };
 
@@ -214,8 +233,12 @@ export function getServerRuntimeSnapshot(): RuntimeSnapshot {
         id: command.id,
         title: command.title,
         scope: command.scope,
+        destructive: command.destructive ?? false,
         requiresSelection: command.requiresSelection ?? false,
         requiredCapabilities: [...(command.requiredCapabilities ?? [])],
+        input: command.input ?? null,
+        result: command.result ?? null,
+        docsId: command.docsId ?? null,
       })),
       contributions: (definition.contributions ?? []).map((contribution) => ({
         id: contribution.id,
@@ -269,6 +292,14 @@ export function getServerRuntimeSnapshot(): RuntimeSnapshot {
       { type: "job-transition", owner: "host" as const, docsId: "events" },
       { type: "contributions-changed", owner: "host" as const, docsId: "events" },
     ],
+    commandsBuiltin: BUILTIN_COMMANDS.map((command) => ({
+      id: command.id,
+      title: command.title(BUILTIN_COMMAND_PREVIEW_CONTEXT),
+      section: command.section,
+      hint: command.hint,
+      action: BUILTIN_COMMAND_ACTIONS[command.id] as string,
+      docsId: "commands",
+    })),
     limitations: [
       "Bundled Node extensions are trusted code; service wrappers do not sandbox direct Node imports.",
       "No external extension loading, marketplace, or third-party code loader.",

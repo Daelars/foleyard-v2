@@ -135,6 +135,20 @@ export const BUILTIN_COMMANDS: readonly BuiltinCommandDescriptor[] = [
   },
 ];
 
+/**
+ * Context used for non-live projections (runtime snapshot, docs): every gate
+ * is satisfied so the canonical title for each action is visible.
+ */
+export const BUILTIN_COMMAND_PREVIEW_CONTEXT: BuiltinCommandContext = {
+  isPlaying: false,
+  autoplay: false,
+  hasCurrentFile: true,
+  canStepQueue: true,
+  isFavorite: false,
+  shelfEnabled: true,
+  autoTagEnabled: true,
+};
+
 export const BUILTIN_COMMAND_ACTIONS: Record<string, BuiltinCommandAction> = {
   "view:library": "showLibrary",
   "view:favorites": "showFavorites",

@@ -136,6 +136,38 @@ describe("v2 runtime discovery", () => {
     expect(typeof makePack!.approvalsKnown).toBe("boolean");
   });
 
+  it("reports built-in actions and full v2 command metadata", async () => {
+    const { BUILTIN_COMMANDS, BUILTIN_COMMAND_ACTIONS } = await import("@/lib/commands");
+    const snapshot = getServerRuntimeSnapshot();
+
+    expect(snapshot.commandsBuiltin.map((entry) => entry.id).sort()).toEqual(
+      BUILTIN_COMMANDS.map((command) => command.id).sort(),
+    );
+    for (const builtin of snapshot.commandsBuiltin) {
+      expect(builtin.action).toBe(BUILTIN_COMMAND_ACTIONS[builtin.id]);
+      expect(builtin.docsId).toBe("commands");
+    }
+
+    const makePack = snapshot.extensionsV2.find((entry) => entry.id === "make-pack-v2")!;
+    const fromSelection = makePack.commands.find(
+      (command) => command.id === "make-pack-v2.from-selection",
+    )!;
+    expect(fromSelection).toMatchObject({
+      scope: "selection",
+      destructive: false,
+      requiresSelection: true,
+      docsId: "commands",
+    });
+    expect(fromSelection.input).not.toBeNull();
+    expect(fromSelection.result).not.toBeNull();
+
+    const deleteFolders = snapshot.extensionsV2
+      .find((entry) => entry.id === "folder-janitor-v2")!
+      .commands.find((command) => command.id === "folder-janitor-v2.delete-folders")!;
+    expect(deleteFolders.destructive).toBe(true);
+    expect(deleteFolders.input).not.toBeNull();
+  });
+
   it("lists the host-owned v2 event contracts", () => {
     const snapshot = getServerRuntimeSnapshot();
     expect(snapshot.eventsV2.map((event) => event.type).sort()).toEqual([

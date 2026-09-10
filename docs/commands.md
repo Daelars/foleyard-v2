@@ -2,45 +2,105 @@
 
 > Feature status: shipped
 > Contract: internal
-> Owner: `packages/yard-tools/*-v2/src/definition.ts` + `src/lib/extensions-v2/host.ts`
+> Owner: `packages/yard-tools/*-v2/src/definition.ts` + `src/lib/commands.ts`
 > Applies to: docs manifest ID (`commands`); development checkout when unbuilt
 
 ## What it does
 
 Commands are the executable surface of the bundled tools. Each command
 carries metadata (id, title, scope, destructive flag, selection needs,
-owning runtime, required capabilities) declared in its package
-`definition.ts` and validated by the v2 registry at registration. Version 1
-commands and their host were removed from the app entirely (see
-`docs/extensions-v2-migration.md`); the v2 engine is the only command
-runtime. The renderer adds built-in palette actions (view and transport
-shortcuts) and projects v2 tool commands as `v2tool:` entries. There is no
-public command SDK and no external command source.
+input/result schemas, owning runtime, required capabilities, docs ref) in
+its package `definition.ts` and is validated by the v2 registry at
+registration. The renderer additionally ships built-in palette actions
+(view, transport, file) from the descriptor table in `src/lib/commands.ts`.
+There is no public command SDK and no external command source.
 
 ## Responsibilities and boundaries
 
-- Each tool's `definition.ts` is the single source of metadata; handlers
-  live in the same package and run only through the v2 host.
+- Each tool's `definition.ts` is the single source of command metadata;
+  handlers live in the same package and run only through the v2 host.
+- `src/lib/commands.ts` is the single source of built-in palette actions
+  (id, section, gate, title, action). The palette builder and the
+  palette/shortcut dispatch both read it.
 - `ExtensionV2Registry` validates declarations; `ExtensionV2Host` owns the
   single execution path (direct, reviewed plan, or host-owned job).
 - `packages/yard-core/src/extensions-v2/transport.ts` owns the HTTP codec:
   envelope decode, payload limits, status mapping, error envelopes.
-- The renderer palette (`src/components/CommandPalette/`,
-  `src/app/library/use-palette.ts`) projects `v2tool:<extensionId>:<commandId>`
-  entries through the v2 bridge; availability shown in the palette is
-  revalidated at execution time.
+- `GET /api/runtime` reports every built-in action and the full v2 command
+  metadata (`commandsBuiltin`, `extensionsV2[].commands`).
+
+## Built-in palette actions
+
+| Palette id | Section | Gate | Shortcut |
+| --- | --- | --- | --- |
+| `view:library` | view | — | — |
+| `view:favorites` | view | — | — |
+| `view:shelf` | view | `sound-shelf-v2` enabled | — |
+| `view:organize` | view | — | — |
+| `view:tools` | view | — | — |
+| `view:auto-tag` | view | `auto-tag-v2` enabled | — |
+| `view:settings` | view | — | `,` (`open-settings`) |
+| `transport:toggle-play` | transport | current file | Space (`toggle-playback`) |
+| `transport:next` | transport | queue can step | — |
+| `transport:prev` | transport | queue can step | — |
+| `transport:autoplay` | transport | — | — |
+| `file:toggle-favorite` | file | current file | `f` (`toggle-favorite`) |
+| `file:add-to-shelf` | file | current file + shelf enabled | — |
+
+Shortcut bindings also cover `focus-search` (`/`), `move-next` (`j`) and
+`move-prev` (`k`), which have no palette entry. Defaults live in
+`DEFAULT_SHORTCUTS` (`src/components/Shortcuts/shortcuts.ts`). Palette
+availability is display-only; execution revalidates.
+
+## Bundled v2 commands
+
+All 35 commands run through `POST /api/extensions-v2/execute` (API version 2,
+internal). Each port is disabled by default with explicit enable and
+approval; settings namespaces exist only where the port declares settings
+(`auto-tag-v2` declares none).
+
+| Command id | Scope | Selection | Destructive | Input | Result | Docs |
+| --- | --- | --- | --- | --- | --- | --- |
+| `auto-tag-v2.tag-files` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.preview` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.list-candidates` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.promote-candidate` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.dismiss-candidate` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.find-similar` | selection | required | | yes | yes | `commands` |
+| `auto-tag-v2.clap-status` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.download-model` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.tag-semantic` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.coverage-history` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.record-coverage` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.coverage-summary` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.list-origins` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.latest-arrivals` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.remove-by-origin` | global | — | destructive | yes | yes | `commands` |
+| `auto-tag-v2.rename-tag` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.merge-tag` | global | — | destructive | yes | yes | `commands` |
+| `drop-rules-v2.preview` | drop | — | | yes | yes | `commands` |
+| `drop-rules-v2.apply` | drop | — | | yes | yes | `commands` |
+| `drop-rules-v2.prepare-drag` | drop | — | | yes | yes | `commands` |
+| `drop-rules-v2.open-settings` | global | — | | — | yes | `commands` |
+| `folder-janitor-v2.scan-library` | global | — | | yes | yes | `commands` |
+| `folder-janitor-v2.scan-folder` | folder | — | | yes | yes | `commands` |
+| `folder-janitor-v2.remove-files` | selection | required | | — | yes | `commands` |
+| `folder-janitor-v2.delete-folders` | global | — | destructive | yes | yes | `commands` |
+| `library-gatherer-v2.preview-gather` | global | — | | yes | yes | `commands` |
+| `library-gatherer-v2.gather` | global | — | | yes | yes | `commands` |
+| `make-pack-v2.from-selection` | selection | required | | yes | yes | `commands` |
+| `make-pack-v2.from-shelf` | global | — | | yes | yes | `commands` |
+| `make-pack-v2.from-recent` | global | — | | yes | yes | `commands` |
+| `smart-collections-v2.save-search` | global | — | | yes | yes | `commands` |
+| `sound-shelf-v2.add-selected` | selection | required | | — | yes | `commands` |
+| `sound-shelf-v2.remove-selected` | selection | required | | — | yes | `commands` |
+| `sound-shelf-v2.clear` | global | — | | — | yes | `commands` |
+| `sound-shelf-v2.list` | global | — | | — | yes | `commands` |
+
+Input and result schemas are machine-readable value schemas declared in each
+`definition.ts` and reported by the runtime snapshot.
 
 ## Runtime behavior
-
-Seven v2 ports run through `POST /api/extensions-v2/execute` (API version 2,
-internal), each disabled by default with its own settings namespace (see
-`docs/extensions-v2-migration.md`).
-
-| Command id | Title | Scope | Selection |
-| --- | --- | --- | --- |
-| `make-pack-v2.from-selection` | Make Pack v2 from Selection | selection | required |
-| `make-pack-v2.from-shelf` | Make Pack v2 from Shelf | global | — |
-| `make-pack-v2.from-recent` | Make Pack v2 from Recent Sounds | global | — |
 
 Execution model: shared availability preflight (enabled, scope, selection,
 input, unknown-capability denial, granted permissions), ownership-keyed
@@ -52,11 +112,8 @@ goes through `POST /api/extensions-v2/jobs` with `vjob_` IDs and polling;
 reviewed work goes through the plans routes. Full contracts and author
 examples live in `docs/extensions-v2.md`.
 
-Palette: `v2tool:` ids plus the built-in shortcut actions from
-`DEFAULT_SHORTCUTS` in `src/components/Shortcuts/shortcuts.ts` —
-`view:toggle-playback` (Space), `view:focus-search` (/),
-`view:toggle-favorite` (f), `view:next` (j), `view:prev` (k),
-`view:open-settings` (,).
+The palette projects v2 commands as `v2tool:<extensionId>:<commandId>`
+entries through the v2 bridge.
 
 ## Contracts
 
@@ -66,9 +123,8 @@ Palette: `v2tool:` ids plus the built-in shortcut actions from
   destination access travels through the grants routes, never raw paths.
 - Outcomes: `{ ok: true, outcome: { kind: "immediate" | "review" | "job",
   ... } }` or `{ ok: false, error: { code, message } }`.
-- Permissions (access policy) live on v2 definitions — see
-  `docs/extensions-v2.md`; capabilities (availability semantics) are part of
-  the availability evaluator.
+- Built-ins: `BuiltinCommandDescriptor` and `BUILTIN_COMMAND_ACTIONS` in
+  `src/lib/commands.ts`.
 
 ## Failure behavior and limitations
 
@@ -81,17 +137,17 @@ Palette: `v2tool:` ids plus the built-in shortcut actions from
 | `job-unknown` / `plan-unknown` | 404 | missing job or plan id |
 | `plan-expired` / `plan-altered` / `review-required` | 400 | reviewed-plan contract violations |
 
-Palette availability is best-effort display; execution always revalidates,
-so a visible-but-unavailable command returns the code above instead of
-running. Cancellation is cooperative: work stops between operations.
+Cancellation is cooperative: work stops between operations.
 
 ## Source map (real file paths)
 
 - `packages/yard-tools/*-v2/src/definition.ts` — v2 command declarations
+- `src/lib/commands.ts` — built-in descriptor table and action map
 - `packages/yard-core/src/extensions-v2/{registry,host,jobs,plans,transport}.ts`
 - `src/lib/extensions-v2/host.ts` — registry + enablement composition
 - `src/components/CommandPalette/command-palette.ts` — entry builder
-- `src/app/library/use-palette.ts` — palette data wiring
+- `src/app/library/use-palette.ts` — palette data wiring and dispatch
+- `src/lib/runtime-info.ts` — `commandsBuiltin` and v2 command metadata
 
 ## Examples
 
@@ -108,7 +164,7 @@ the v2 bridge (`sound-shelf-v2.list` → `v2tool:sound-shelf-v2:sound-shelf-v2.l
 
 ## Related documentation
 
-- `docs/extensions.md` — tools, permissions, settings UI
+- `docs/extensions-v2.md` — authoring contracts and execution model
 - `docs/events.md` — execution outcomes vs subscription events
-- `docs/runtime.md` — v2 projection in the runtime snapshot
+- `docs/runtime.md` — the command projection in the runtime snapshot
 - `docs/architecture/extensions.md` — end-to-end registration trace

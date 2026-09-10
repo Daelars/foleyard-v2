@@ -36,7 +36,13 @@ export type ExtensionV2CatalogEntry = {
   name: string;
   version: string;
   description: string;
+  /** Effective (declared ∩ approved) permissions the renderer enforces against. */
   permissions: ExtensionV2Permission[];
+  /**
+   * Declared permissions the command requirements are evaluated against
+   * (`permissions` is the granted side). Present on effective catalogs.
+   */
+  declaredPermissions?: ExtensionV2Permission[];
   commands: ExtensionV2CatalogCommand[];
   settings: ExtensionV2Setting[];
   contributions: ExtensionV2Contribution[];

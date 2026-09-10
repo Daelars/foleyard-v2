@@ -87,12 +87,14 @@ describe("buildEffectiveV2Catalog", () => {
     return next;
   }
 
-  it("projects effective permissions, not declared ones", () => {
+  it("carries effective permissions for grants and declared ones for requirements", () => {
     const unapproved = buildEffectiveV2Catalog(registry(), () => []);
     expect(unapproved.entries[0]!.permissions).toEqual([]);
+    expect(unapproved.entries[0]!.declaredPermissions).toEqual(["library:read"]);
 
     const approved = buildEffectiveV2Catalog(registry(), () => ["library:read"]);
     expect(approved.entries[0]!.permissions).toEqual(["library:read"]);
+    expect(approved.entries[0]!.declaredPermissions).toEqual(["library:read"]);
 
     // Declared catalog still shows the declaration; the effective
     // projection is what renderers enforce against.

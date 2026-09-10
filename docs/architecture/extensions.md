@@ -55,10 +55,11 @@ commandId, selection, input }`:
    recent record), authorized file/archive output, namespaced
    settings/state, and job reporting — never raw DB, routes, React,
    or Electron.
-5. **UI.** Values, review plans, and job outcomes return typed;
-   generic components render forms, previews, progress, and results.
-   Per-item availability comes from the same evaluator as preflight.
-   Disable removes contributions and listeners.
+5. **UI.** Values, review plans, and job outcomes return typed; the
+   route-local adapters render dialogs, progress and results (there is
+   no generic form/preview/result renderer). Per-item availability comes
+   from the same evaluator as preflight. Disable removes contributions
+   and listeners.
 
 Module dependency direction (enforced by
 `node scripts/check-v2-boundaries.cjs` in CI): definitions →

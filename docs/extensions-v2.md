@@ -34,9 +34,10 @@ record.
 - `src/app/api/extensions-v2/` owns thin HTTP wrappers over the
   transport codec. One host execution path serves HTTP and direct
   invocation.
-- `src/components/extensions-v2/` owns generic renderers: palette,
-  menus, selection actions, toolbar, sidebar, settings, drop zone,
-  forms, previews, job progress, results.
+- `src/components/extensions-v2/` owns shared data shapes and the
+  renderer-neutral resolver; the promoted surface renders the actual UI
+  through route-local adapters in `src/app/(variant-i)/components/`.
+  There is no generic form, preview or result renderer.
 - Extensions never import React, Next routes, Electron, database
   handles, application internals, raw filesystem/process/network
   access, or v1 extension modules. `node scripts/check-v2-boundaries.cjs`
@@ -83,7 +84,7 @@ Routes (all under `src/app/api/extensions-v2/`, envelopes
 
 | Route | Method | Purpose |
 | --- | --- | --- |
-| `/api/extensions-v2` | GET | serializable catalog, effective permissions |
+| `/api/extensions-v2` | GET | serializable catalog: effective (granted) permissions plus the declared set requirements are evaluated against |
 | `/api/extensions-v2/availability` | GET | availability with reasons, never executes |
 | `/api/extensions-v2/execute` | POST | immediate or reviewed execution |
 | `/api/extensions-v2/plans/:planId` | GET | review a prepared plan |
@@ -149,15 +150,23 @@ the bus. Per-chunk job progress is never an event.
 
 ### Contribution points
 
-Eight declared types resolve through production adapters with stable
-`v2:{ext}:{contrib}` keys, `order ?? 100` ordering, keep-both
-collision rule, and per-item availability:
+Eight declared types resolve through the shared availability evaluator
+with stable `v2:{ext}:{contrib}` keys, `order ?? 100` ordering and a
+keep-both collision rule. These points mount in the workspace:
 
-command-palette, file-context-menu, folder-context-menu (shared
-context-menu adapter), selection-actions, toolbar, sidebar, settings,
-drop-menu. Forms, previews, and results render from input schemas and
-plan previews through generic components. Disabling an extension
-removes its UI and listeners.
+- `command-palette` → palette entries (`v2tool:` ids)
+- `file-context-menu` and `folder-context-menu` → the file-table row menu
+- `selection-actions` → the selection bulk bar
+- `drop-menu` → the Library drop zone
+- `sidebar` → the extension panel rail (`xl` and wider)
+
+`toolbar` and `settings` are declared vocabulary with no generic mount:
+each extension's settings and tool surfaces are hand-built route-local
+dialogs (`make-pack-v2`, `folder-janitor-v2`, `library-gatherer-v2`,
+`auto-tag-v2`, `drop-rules-v2`, `smart-collections-v2`), and previews
+and results are rendered by those dialogs, not by generic components.
+A contribution only renders while its extension is enabled and
+approved; disabling removes its UI and listeners.
 
 ## Contracts
 
@@ -185,7 +194,7 @@ removes its UI and listeners.
 - `packages/yard-core/src/extensions-v2/{jobs,plans,extension-data,events,contributions}.ts` — lifecycle and UI data
 - `src/lib/extensions-v2/host.ts` — application host composition
 - `src/app/api/extensions-v2/` — HTTP wrappers
-- `src/components/extensions-v2/` — generic renderers
+- `src/components/extensions-v2/` — shared data shapes and resolver
 - `packages/yard-tools/make-pack-v2/` — reference extension
 - `scripts/scaffold-extension-v2.cjs` — scaffolding CLI
 - `examples/extensions-v2/minimal/` — minimal runnable example
@@ -242,14 +251,15 @@ reaches the handler. Provenance: API v2 input contracts.
 
 Prerequisites: same as 3.
 
-Declare a `sidebar` contribution pointing at a global command whose
-result is a string. The surface's sidebar panel
-(`src/app/(variant-i)/components/extensions/sidebar-panels.tsx`) renders
-loading, empty, error, and item-action states. Make Pack v2's
-`make-pack-v2.side-shelf` is the shipped reference; `fixture-surface`
-proves the adapter without product content. Expected: the panel appears
-when the extension is enabled and approved, and vanishes on disable.
-Provenance: API v2 contribution contracts.
+Declare a `sidebar` contribution pointing at a global command. The
+surface's extension panel rail
+(`src/app/(variant-i)/components/extensions/sidebar-panels.tsx`)
+resolves items through the shared availability evaluator and renders one
+panel per contributing extension. Shipped references: Make Pack v2's
+`make-pack-v2.side-shelf`, Sound Shelf v2's `sound-shelf-v2.side-list`
+and Auto Tag v2's status/candidate entries. Expected: the panel appears
+when the extension is enabled and approved, and vanishes on disable or
+approval revocation. Provenance: API v2 contribution contracts.
 
 ### 5. Add a setting
 

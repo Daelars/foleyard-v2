@@ -18,6 +18,7 @@ import { V3LibraryDropZone } from "./components/extensions/drop-zone";
 import { V3SelectionActions } from "./components/extensions/selection-actions";
 import { V3ExtensionsSection } from "./components/extensions/settings-section";
 import { V3ToolsCards } from "./components/extensions/tools-cards";
+import { V3ExtensionSidebarPanels } from "./components/extensions/sidebar-panels";
 import { V3SearchField } from "./components/search-field";
 import { getAvailableCapabilityIds } from "@/lib/capabilities";
 import { useDesktopApp } from "@/lib/desktop";
@@ -1082,6 +1083,11 @@ function AppV3Content() {
                     />
                   </div>
                 </V3LibraryDropZone>
+                <V3ExtensionSidebarPanels
+                  catalog={v2Catalog.catalog}
+                  uiState={v2UiState}
+                  onInvoke={(item) => invokeV2RowCommand(item, [])}
+                />
               </div>
             </>
           )}

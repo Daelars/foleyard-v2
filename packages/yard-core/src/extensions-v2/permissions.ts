@@ -176,7 +176,7 @@ export function buildEffectiveV2Catalog(
       const effective = definition
         ? computeEffectiveV2Permissions(definition.permissions, grantedFor(entry.id))
         : [];
-      return { ...entry, permissions: effective };
+      return { ...entry, declaredPermissions: [...entry.permissions], permissions: effective };
     }),
   };
 }

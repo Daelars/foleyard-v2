@@ -10,9 +10,10 @@ import { useV2FocusRestore } from "@/components/extensions-v2/shared";
 
 /**
  * I-styled production mount for `sidebar` contributions. Resolves items
- * by extension and renders one panel per contributing extension with the
- * I surface treatment: rounded panel, mono uppercase label, and
- * MenuItem-style list rows with unavailability reasons.
+ * through the shared availability evaluator, so a panel only renders while
+ * its extension is enabled and approved, and disappears when enablement or
+ * approval changes. One panel per contributing extension with the I surface
+ * treatment: rounded panel, mono uppercase label, and MenuItem-style rows.
  */
 export function V3ExtensionSidebarPanels({
   catalog,
@@ -24,7 +25,8 @@ export function V3ExtensionSidebarPanels({
   onInvoke: (item: V2ResolvedContribution) => void;
 }) {
   const groups = useMemo(() => {
-    const items = resolveV2UiPoint(catalog, "sidebar", { fileIds: [] }, uiState);
+    const items = resolveV2UiPoint(catalog, "sidebar", { fileIds: [] }, uiState)
+      .filter((item) => item.availability.available);
     const byExtension = new Map<string, V2ResolvedContribution[]>();
     for (const item of items) {
       const group = byExtension.get(item.extensionId) ?? [];
@@ -39,7 +41,11 @@ export function V3ExtensionSidebarPanels({
   if (groups.length === 0) return null;
 
   return (
-    <div className="grid gap-3">
+    <aside
+      aria-label="Extension panels"
+      className="hidden w-[240px] shrink-0 overflow-y-auto border-l border-(--vi-edge) p-3 xl:block"
+    >
+      <div className="grid gap-3">
       {groups.map(([extensionId, items]) => (
         <section
           key={extensionId}
@@ -53,37 +59,22 @@ export function V3ExtensionSidebarPanels({
             </h2>
           </header>
           <ul className="mt-2 min-w-0 space-y-1">
-            {items.map((item) => {
-              const disabled = !item.availability.available;
-              return (
-                <li key={item.key}>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    aria-disabled={disabled}
-                    onClick={() => onInvoke(item)}
-                    title={
-                      item.availability.available
-                        ? item.title
-                        : item.availability.reason
-                    }
-                    className="flex w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--vi-focus)] disabled:cursor-not-allowed disabled:text-zinc-600 enabled:text-zinc-300 enabled:hover:bg-white/[0.04]"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">{item.title}</span>
-                      {!item.availability.available ? (
-                        <span className="block truncate text-[11px] text-zinc-600">
-                          {item.availability.reason}
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
+            {items.map((item) => (
+              <li key={item.key}>
+                <button
+                  type="button"
+                  onClick={() => onInvoke(item)}
+                  title={item.title}
+                  className="flex w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-zinc-300 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--vi-focus)] hover:bg-white/[0.04]"
+                >
+                  <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                </button>
+              </li>
+            ))}
           </ul>
         </section>
       ))}
-    </div>
+      </div>
+    </aside>
   );
 }

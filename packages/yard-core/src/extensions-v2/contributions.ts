@@ -187,7 +187,9 @@ export function resolveV2PointContributions(
       version: entry.version,
       apiVersion: 2,
       description: entry.description,
-      permissions: [...entry.permissions],
+      // Requirements come from the declared set; `entry.permissions` is the
+      // effective (granted) side passed to the evaluator below.
+      permissions: [...(entry.declaredPermissions ?? entry.permissions)],
       commands: entry.commands.map(toCommand),
     };
     for (const contribution of entry.contributions) {

@@ -60,7 +60,7 @@ persists results through the file repository writes.
 - `src/lib/database/files/writes.ts` — metadata persistence
 - `src/lib/database/tag-repository.ts` — tag storage
 - `src/lib/database/collection-repository.ts` — Collection storage
-- `src/components/settings/*` — Settings tabs incl. Metadata management UI
+- `src/app/(variant-i)/components/settings/*` — Settings tabs incl. Metadata management UI
 
 ## Examples
 

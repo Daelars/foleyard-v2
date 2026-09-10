@@ -7,12 +7,10 @@
 
 ## What it does
 
-Catalogs the only actually emitted/consumed notifications: seven desktop IPC
-push events, one renderer-local shelf event, one renderer bridge-ready
-notification, and two server-side progress callbacks. UI intents
-(`YardUiIntent`) are request/result protocol, not events, and there is no
-`EventBus` on the v1 path — stale references to a generic event bus describe something that
-does not exist.
+Catalogs the notifications the product actually emits: seven desktop IPC
+push events and one renderer-local shelf event. Internal callbacks that
+are not subscriptions are listed separately. UI intents are request/result
+protocol, not events, and there is no generic application event bus.
 
 ## Responsibilities and boundaries
 
@@ -20,11 +18,14 @@ does not exist.
   record. Anything not in the catalog is not a supported event.
 - `electron/main/ipc-channels.cjs` (`CHANNEL_SPECS`) owns IPC channel kinds
   and payload field names — a registry, not a subscription API.
-- `src/lib/shelf-events.ts` owns the shelf constant.
-- `src/lib/desktop.ts` owns bridge-ready detection (`useSyncExternalStore`
-  + setter trap + `desktop-bridge-ready` window event).
-- Scan progress has no subscription contract: the runner accepts an optional
-  `onProgress` callback and the UI polls `GET /api/scan`.
+- `electron/main/auto-updater.cjs`, `window.cjs` and `errors.cjs` are the
+  emitters behind the desktop events.
+- `src/lib/shelf-events.ts` owns the shelf constant; the shelf hooks
+  dispatch it.
+- `src/lib/desktop.ts` owns bridge-ready detection through a setter trap
+  on `window.desktopBridge` (`useSyncExternalStore`), not through an event.
+- Scan progress has no subscription contract: `ScanRunner` accepts optional
+  progress and completion callbacks, and the UI polls `GET /api/scan`.
 
 ## Runtime behavior
 
@@ -32,9 +33,9 @@ Promotion rules (proposed for any future domain event, not available today):
 emit only after the mutation completes (post-persistence/reconciliation, never
 optimistic UI), include an explicit failed/partial outcome, and keep
 high-frequency updates (e.g. playback time) renderer-local unless a consumer
-justifies a separate contract. A future scan-completed event would fire from
-the scan owner after metadata persistence; organization subscriptions would
-fire after successful repository mutation.
+justifies a separate contract.
+
+### Emitted notifications
 
 | Event id | Owner | Transport | Subscription | Payload / how to observe |
 | --- | --- | --- | --- | --- |
@@ -42,15 +43,24 @@ fire after successful repository mutation.
 | `desktop:update-ready` | desktop | ipc | yes | `UpdateInfo { version }` |
 | `desktop:update-not-available` | desktop | ipc | yes | none |
 | `desktop:update-error` | desktop | ipc | yes | `UpdateError { message }` |
-| `desktop:update-download-progress` | desktop | ipc | yes | `UpdateProgress` |
-| `desktop:action-error` | desktop | ipc | yes | message → toast |
+| `desktop:update-download-progress` | desktop | ipc | yes | `UpdateProgress { percent, bytesPerSecond, transferred, total }` |
+| `desktop:action-error` | desktop | ipc | yes | `message: string` → toast |
 | `desktop:window-state` | desktop | ipc | yes | `DesktopWindowState { isMaximized }` → title bar |
-| `sound-shelf:changed` | renderer | renderer-local | yes (`addEventListener`) | `CustomEvent`, no schema/persistence/cross-process |
-| `desktop-bridge-ready` | renderer | renderer-local | yes | window event for late preload injection |
-| `scan.progress` | server | callback | no | `ScanRunner onProgress` + `GET /api/scan` polling |
-| `extension.scan-progress` | server | callback | no | `services.scanProgress.report`; execute route supplies none |
+| `sound-shelf:changed` | renderer | renderer-local | yes (`addEventListener`) | `CustomEvent`, no payload schema/persistence/cross-process |
 
-## The five v2 contracts beside them
+### Internal callbacks (not subscribable)
+
+These are seams inside the server process, listed so the catalog and the
+runtime snapshot agree on what exists. They are not events and nothing
+outside the owner subscribes to them.
+
+| Callback | Owner | Emitter | Payload |
+| --- | --- | --- | --- |
+| `scan.progress` | server | optional `ScanRunner onProgress` | `ScanStatus`; the app does not pass one and polls `GET /api/scan` |
+| `scan.complete` | server | `ScanRunner onComplete` | `{ startedAt, fileIds }`; run-scan.ts hands arrivals to the auto-tag trigger |
+| `job.transition` | server | `V2JobManager onTransition` | job record state change; persists the snapshot and emits `job-transition` on the v2 bus |
+
+## The five v2 contracts
 
 The v2 extension bus (`V2EventBus` in
 `packages/yard-core/src/extensions-v2/events.ts`, app singleton in
@@ -62,9 +72,8 @@ payload names its owning extension (or `"*"` for the
 contributions refresh hint) and carries a sequence number for gap
 detection. Persist precedes notify on every write, so a subscriber
 that rereads on receipt sees the triggering change. Per-chunk job
-progress is high-frequency renderer state and never an event. The
-table above stays the complete v1-adjacent catalog; these five are
-reported separately in the runtime snapshot (`eventsV2`).
+progress is high-frequency renderer state and never an event. These
+five are reported separately in the runtime snapshot (`eventsV2`).
 
 Subscribe with disposal; recovery is always a reread:
 
@@ -85,8 +94,6 @@ const unsubscribe = getV2Events().subscribe("settings-changed", reread);
 
 - Shelf events do not cross processes and do not persist; a reload loses
   anything not already in the shelf store.
-- Bridge-ready only matters when preload injects late; readers must re-read
-  on notification rather than caching the first `false`.
 - `desktop:simulate-update` is declared but only registered when
   `!app.isPackaged`, so it is unreachable in packaged builds.
 - Scan callbacks are optional and synchronous to the run; missed polls just
@@ -96,10 +103,13 @@ const unsubscribe = getV2Events().subscribe("settings-changed", reread);
 
 - `src/lib/events.ts` — `EVENT_CATALOG`, `listEvents`
 - `electron/main/ipc-channels.cjs` — `CHANNEL_SPECS`, payload fields
+- `electron/main/auto-updater.cjs`, `electron/main/window.cjs`,
+  `electron/main/errors.cjs` — desktop emitters
 - `electron/preload.cjs` — IPC listener exposure
-- `src/lib/desktop.ts` — bridge types, late-injection trap
+- `src/lib/desktop.ts` — bridge types, late-injection setter trap
 - `src/lib/shelf-events.ts` — `SOUND_SHELF_CHANGED_EVENT`
-- `src/lib/scanner/run-scan.ts` — scan progress callback origin
+- `src/lib/scanner/scan-runner.ts` — progress and completion callbacks
+- `src/lib/extensions-v2/jobs.ts` — job transition callback
 
 ## Examples
 

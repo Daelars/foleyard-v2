@@ -101,11 +101,6 @@ function armLateBridgeTrap(): void {
   }
   desktopBridgeTrapTarget = window;
   try {
-    window.addEventListener("desktop-bridge-ready", notifyDesktopBridgeChanged);
-  } catch {
-    // Ignore: notification still works via the setter trap below.
-  }
-  try {
     let current = window.desktopBridge;
     Object.defineProperty(window, "desktopBridge", {
       configurable: true,
@@ -118,16 +113,15 @@ function armLateBridgeTrap(): void {
     });
   } catch {
     // Non-configurable bridge (e.g. contextBridge getter): subscribers still
-    // re-read on demand and on "desktop-bridge-ready" if dispatched.
+    // re-read on demand when they mount.
   }
 }
 
 /**
  * The desktop bridge is injected by the preload script, normally before the
  * renderer loads but occasionally after first render. The subscription
- * notifies on late assignment (via a setter trap plus a
- * `desktop-bridge-ready` window event) so readers re-render instead of
- * staying stuck at `false`.
+ * notifies on late assignment through a setter trap so readers re-render
+ * instead of staying stuck at `false`.
  */
 export function subscribeDesktopBridge(
   listener: DesktopBridgeListener,

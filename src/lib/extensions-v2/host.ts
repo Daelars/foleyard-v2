@@ -127,8 +127,43 @@ export function isV2ExtensionEnabled(extensionId: string): boolean {
   return enabled.has(extensionId);
 }
 
-/** V2 extensions are disabled by default and persist explicit enablement. */
-export function setV2ExtensionEnabled(extensionId: string, value: boolean): void {
+/**
+ * Invoke one declared lifecycle hook. Hooks run after enablement is
+ * persisted and before the `contributions-changed` notification. A hook
+ * failure is isolated and reported: the enablement change stands, and the
+ * caller never sees a rejection.
+ */
+async function runV2LifecycleHook(
+  extensionId: string,
+  hook: "onEnabled" | "onDisabled",
+): Promise<void> {
+  const commandId = registry.get(extensionId)?.lifecycle?.[hook]?.commandId;
+  if (!commandId) return;
+  try {
+    const result = await getAppV2Host().execute({
+      extensionId,
+      commandId,
+      selection: { fileIds: [] },
+    });
+    if (!result.ok) {
+      console.error(
+        `v2 lifecycle hook ${hook} for "${extensionId}" failed: ${result.code}: ${result.message}`,
+      );
+    }
+  } catch (error) {
+    console.error(`v2 lifecycle hook ${hook} for "${extensionId}" failed`, error);
+  }
+}
+
+/**
+ * V2 extensions are disabled by default and persist explicit enablement.
+ * State and persistence update synchronously; declared lifecycle hooks run
+ * after persist and before notify (async callers can await that ordering).
+ */
+export async function setV2ExtensionEnabled(
+  extensionId: string,
+  value: boolean,
+): Promise<void> {
   ensureEnablementLoaded();
   const before = enabled.has(extensionId);
   if (value) {
@@ -148,9 +183,9 @@ export function setV2ExtensionEnabled(extensionId: string, value: boolean): void
   } catch {
     // Persistence failure keeps the in-memory state; the next toggle retries.
   }
-  // Renderer adapters refresh on this hint and drop cached resolutions;
-  // disposal is idempotent, so a no-op toggle is still safe to emit.
   if (before !== value) {
+    // Persist precedes notify; the hook runs between them.
+    await runV2LifecycleHook(extensionId, value ? "onEnabled" : "onDisabled");
     getV2Events().emit("contributions-changed", "*");
   }
 }
@@ -241,16 +276,41 @@ export function buildAppV2Catalog() {
   );
 }
 
+/**
+ * Register the bundled ports one by one, isolating failures: a malformed
+ * definition is reported and skipped instead of aborting the route bundle
+ * that imports this module (#247). Returns the ids/labels that failed.
+ */
+export function registerBundledV2Extensions(
+  registrations: ReadonlyArray<readonly [string, () => void]>,
+): string[] {
+  const failed: string[] = [];
+  for (const [label, register] of registrations) {
+    try {
+      register();
+    } catch (error) {
+      failed.push(label);
+      console.error(
+        `v2 bundled registration failed for "${label}"; the extension is unavailable until fixed`,
+        error,
+      );
+    }
+  }
+  return failed;
+}
+
 // Bundled internal example (R8): Make Pack v2 registers here so every
 // v2 route serves it without per-route branches. Registration never
 // enables and never approves: the extension stays opt-in and denied
 // by default until explicit enable + approval. The import cycle with
 // `make-pack-v2.ts` is safe: that module only binds host functions
 // for later calls and runs no top-level effects.
-ensureMakePackV2Registered();
-ensureSoundShelfV2Registered();
-ensureSmartCollectionsV2Registered();
-ensureFolderJanitorV2Registered();
-ensureDropRulesV2Registered();
-ensureLibraryGathererV2Registered();
-ensureAutoTagV2Registered();
+registerBundledV2Extensions([
+  ["make-pack-v2", ensureMakePackV2Registered],
+  ["sound-shelf-v2", ensureSoundShelfV2Registered],
+  ["smart-collections-v2", ensureSmartCollectionsV2Registered],
+  ["folder-janitor-v2", ensureFolderJanitorV2Registered],
+  ["drop-rules-v2", ensureDropRulesV2Registered],
+  ["library-gatherer-v2", ensureLibraryGathererV2Registered],
+  ["auto-tag-v2", ensureAutoTagV2Registered],
+]);

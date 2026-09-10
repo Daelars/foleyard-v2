@@ -69,7 +69,25 @@ registerMinimalHandlers(getAppV2Host());
 ```
 
 Registration never enables and never approves. New extensions stay
-disabled and denied until explicit enable + approval.
+disabled and denied until explicit enable + approval. Bundled
+registration is isolated per port: a malformed definition is reported
+and skipped instead of aborting the route bundle that imported the host.
+
+### Lifecycle hooks
+
+A definition may declare `lifecycle` with `onEnabled` and `onDisabled`
+command references (both must point at commands in the same definition;
+the registry rejects unresolved references).
+
+- Hooks run on enable and disable **after** enablement is persisted and
+  **before** the `contributions-changed` notification; the PATCH route
+  awaits that ordering.
+- Hooks execute through the normal host path as that extension (single
+  invocation, availability and permissions apply). They are not exempt
+  from permission checks.
+- Hook failures are isolated and reported to the server log; the
+  enablement change stands and the caller never sees a rejection, so a
+  broken hook cannot leave enablement and persisted state disagreeing.
 
 ### Invocation, availability, transport
 

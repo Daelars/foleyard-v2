@@ -1,0 +1,198 @@
+[
+  {
+    "order": 1,
+    "title": "The audit that turned into Foleyard v2",
+    "slug": "audit-that-became-v2",
+    "excerpt": "I asked for a full read of my own repo and got 27 findings back. Four of them could have eaten someone's files. That report is the reason the next version of Foleyard is a rebuild instead of a patch.",
+    "tags": [
+      "foleyard-v2",
+      "architecture",
+      "audit"
+    ],
+    "coverImage": "/blog-images/repo-audit-workbench.png",
+    "contentFile": "blog-posts/for-publishing/01-audit-that-became-v2.md",
+    "words": 1069,
+    "images": [
+      "/blog-images/repo-audit-workbench.png",
+      "/blog-images/diagram-extensions-v1.png"
+    ]
+  },
+  {
+    "order": 2,
+    "title": "I threw away Foleyard's extension system",
+    "slug": "extension-system-rebuild",
+    "excerpt": "The honest rating of my plan to improve Foleyard's extension system was 7 out of 10. I asked what a 10 looked like, read the answer, and started again from an empty folder.",
+    "tags": [
+      "foleyard-v2",
+      "extensions",
+      "architecture"
+    ],
+    "coverImage": "/blog-images/diagram-extensions-v2.png",
+    "contentFile": "blog-posts/for-publishing/02-extension-system-rebuild.md",
+    "words": 1459,
+    "images": [
+      "/blog-images/diagram-extensions-v2.png",
+      "/blog-images/diagram-extension-reach.png",
+      "/blog-images/ext-v2-workbench.png",
+      "/blog-images/app-extensions.png"
+    ]
+  },
+  {
+    "order": 3,
+    "title": "Three extensions I designed, two I deleted",
+    "slug": "three-extensions-two-deleted",
+    "excerpt": "A new extension system is worth nothing if nobody builds anything good on it. So I spent a night designing new tools for Foleyard, threw most of them away, and one of the rejects turned into the headline feature of v2.",
+    "tags": [
+      "foleyard-v2",
+      "extensions",
+      "design",
+      "prototype"
+    ],
+    "coverImage": "/blog-images/concept-sound-rack.png",
+    "contentFile": "blog-posts/for-publishing/03-three-extensions-two-deleted.md",
+    "words": 1102,
+    "images": [
+      "/blog-images/concept-auto-tag.png",
+      "/blog-images/concept-take-compare.png",
+      "/blog-images/concept-sound-rack.png"
+    ]
+  },
+  {
+    "order": 4,
+    "title": "Teaching Foleyard to tag itself, and to show its work",
+    "slug": "teaching-foleyard-to-tag",
+    "excerpt": "Auto Tag is the biggest new feature in Foleyard v2. Every tag it writes records who wrote it, because a tag you cannot trace is worse than no tag at all.",
+    "tags": [
+      "foleyard-v2",
+      "auto-tag",
+      "tagging",
+      "extensions"
+    ],
+    "coverImage": "/blog-images/app-auto-tag.png",
+    "contentFile": "blog-posts/for-publishing/04-teaching-foleyard-to-tag.md",
+    "words": 1393,
+    "images": [
+      "/blog-images/diagram-auto-tag.png",
+      "/blog-images/app-library-files.png",
+      "/blog-images/app-auto-tag.png",
+      "/blog-images/autotag-fit-current.png",
+      "/blog-images/autotag-fit-command.png"
+    ]
+  },
+  {
+    "order": 5,
+    "title": "15,000 files, 0 tags",
+    "slug": "fifteen-thousand-files-zero-tags",
+    "excerpt": "The first time Foleyard's semantic tagger ran against my actual library it looked at 500 files and tagged none of them. Then it turned out the more embarrassing bug was that I could not have seen it if it had worked.",
+    "tags": [
+      "foleyard-v2",
+      "auto-tag",
+      "development-diary"
+    ],
+    "coverImage": "/blog-images/app-auto-tag-origins.png",
+    "contentFile": "blog-posts/for-publishing/05-fifteen-thousand-files-zero-tags.md",
+    "words": 1110,
+    "images": [
+      "/blog-images/app-auto-tag-origins.png",
+      "/blog-images/app-auto-tag.png"
+    ]
+  },
+  {
+    "order": 6,
+    "title": "Waveforms used to be instant",
+    "slug": "waveforms-used-to-be-instant",
+    "excerpt": "Foleyard drew waveforms the moment you opened a folder, and then at some point it stopped. Getting that back meant moving the decode off the server, and it turned into the fastest week of work in v2.",
+    "tags": [
+      "foleyard-v2",
+      "performance",
+      "audio",
+      "scanning"
+    ],
+    "coverImage": "/blog-images/diagram-waveform.png",
+    "contentFile": "blog-posts/for-publishing/06-waveforms-used-to-be-instant.md",
+    "words": 1354,
+    "images": [
+      "/blog-images/diagram-waveform.png"
+    ]
+  },
+  {
+    "order": 7,
+    "title": "I deleted 410 tests",
+    "slug": "deleted-410-tests",
+    "excerpt": "Foleyard had 410 unit tests and a layout bug they could never have caught. Replacing them with 56 integration tests made the suite smaller, slower, and far more useful.",
+    "tags": [
+      "foleyard-v2",
+      "testing",
+      "engineering"
+    ],
+    "coverImage": "/blog-images/repo-audit-timeline.png",
+    "contentFile": "blog-posts/for-publishing/07-deleted-410-tests.md",
+    "words": 1158,
+    "images": [
+      "/blog-images/repo-audit-test-health.png"
+    ]
+  },
+  {
+    "order": 8,
+    "title": "The library designs that didn't ship",
+    "slug": "library-designs-that-didnt-ship",
+    "excerpt": "To redesign Foleyard's library I asked for five versions of every element and picked winners by letter. Most of what you see here never shipped, including the settings dialog I rejected five times in a row.",
+    "tags": [
+      "foleyard-v2",
+      "design",
+      "prototype",
+      "ui"
+    ],
+    "coverImage": "/blog-images/design-showcase.png",
+    "contentFile": "blog-posts/for-publishing/08-library-designs-that-didnt-ship.md",
+    "words": 1198,
+    "images": [
+      "/blog-images/design-showcase.png",
+      "/blog-images/design-app-v2.png",
+      "/blog-images/design-redesign.png",
+      "/blog-images/app-organize.png"
+    ]
+  },
+  {
+    "order": 9,
+    "title": "Ten variants to get one button right",
+    "slug": "ten-variants-one-button",
+    "excerpt": "Foleyard's controls were shadcn defaults with my colors on them. Fixing that took ten labeled variants, one favorite, and a rebuild of the entire app on top of the winner.",
+    "tags": [
+      "foleyard-v2",
+      "design",
+      "components",
+      "prototype"
+    ],
+    "coverImage": "/blog-images/complib-G.png",
+    "contentFile": "blog-posts/for-publishing/09-ten-variants-one-button.md",
+    "words": 1126,
+    "images": [
+      "/blog-images/complib-A.png",
+      "/blog-images/complib-B.png",
+      "/blog-images/complib-D.png",
+      "/blog-images/complib-G.png",
+      "/blog-images/complib-I.png",
+      "/blog-images/app-v3.png"
+    ]
+  },
+  {
+    "order": 10,
+    "title": "Introducing Foleyard v2",
+    "slug": "introducing-foleyard-v2",
+    "excerpt": "A new extension system, seven tools rebuilt on top of it, a tagger that shows its work, and an engine that stopped making you wait. Here is what Foleyard v2 is, and what is still missing from it.",
+    "tags": [
+      "foleyard-v2",
+      "release",
+      "architecture"
+    ],
+    "coverImage": "/blog-images/diagram-system.png",
+    "contentFile": "blog-posts/for-publishing/10-introducing-foleyard-v2.md",
+    "words": 1204,
+    "images": [
+      "/blog-images/diagram-system.png",
+      "/blog-images/app-extensions.png",
+      "/blog-images/app-library-files.png"
+    ]
+  }
+]

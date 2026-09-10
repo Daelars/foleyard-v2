@@ -1,0 +1,49 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<div class="eyebrow">Foleyard extensions &middot; v2</div>
+<h1>How a tool runs in Foleyard v2</h1>
+<p class="sub">Same job, rebuilt from scratch rather than layered on top. A tool now declares what it is and what it
+needs before it is allowed to do anything, and long work runs as a job you can watch, cancel and recover.</p>
+
+<div class="wrap">
+  <div class="row">
+    <div class="node"><div class="k">Definition</div><div class="t">Contract first</div>
+      <div class="d">The tool declares its commands, settings, surfaces and permissions up front, as data.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="k">Catalog</div><div class="t">Serializable catalog</div>
+      <div class="d">The host builds a sanitized description of every tool. The UI reads that, never the tool itself.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="k">Registry</div><div class="t">Only what the contract allows</div>
+      <div class="d">Registration is rejected if the definition does not match the contract.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node accent"><div class="k">Availability</div><div class="t">Can this run here, now?</div>
+      <div class="d">One place answers it: enabled, approved, in scope, valid selection.</div></div>
+  </div>
+  <div class="down">&darr;</div>
+  <div class="row">
+    <div class="node accent"><div class="k">Permissions</div><div class="t">Declared, then approved</div>
+      <div class="d">Nothing is implicit. An undeclared call throws, and the host reports <code>permission-denied</code>.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="k">Filesystem</div><div class="t">One adapter, enforced</div>
+      <div class="d">All disk access goes through the seam. There is no <code>node:fs</code> fallback to take.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="k">Jobs</div><div class="t">Progress, cancel, recover</div>
+      <div class="d">Work runs in chunks that report where they are and survive a restart.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="k">Apply</div><div class="t">Preview &rarr; review &rarr; apply</div>
+      <div class="d">A tool can show you what it is about to do before it does it.</div></div>
+  </div>
+</div>
+
+<div class="note">
+  <div class="card"><h4>Switching off means something</h4>
+    <p>Turning a tool off rejects new work, cancels live jobs, and removes its UI once the work it owns has settled.
+    It is not a hidden checkbox.</p></div>
+  <div class="card"><h4>Tools add UI without reaching in</h4>
+    <p>Contribution adapters let a tool add a panel, a button or a page. The app never imports the tool, and the tool
+    never imports the app.</p></div>
+  <div class="card"><h4>Seven tools run on this today</h4>
+    <p>Make Pack, Sound Shelf, Smart Collections, Folder Janitor, Library Gatherer, Drop Rules, and Auto Tag, which
+    was built on v2 from the start.</p></div>
+</div>
+
+<div class="foot">Evidence: packages/yard-core/src/extensions-v2/, src/lib/extensions-v2/. Built on the 197-board development branch, not in 0.1.8.</div>

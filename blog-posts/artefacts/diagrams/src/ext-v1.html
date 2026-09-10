@@ -1,0 +1,43 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<div class="eyebrow">Foleyard extensions &middot; before v2</div>
+<h1>How a tool ran in the old extension system</h1>
+<p class="sub">Every bundled tool took this route. It worked. The problem was the last box: the context
+offered a filesystem service, but nothing forced a tool to use it, so tools reached the disk directly.</p>
+
+<div class="wrap">
+  <div class="row">
+    <div class="node"><div class="k">Renderer</div><div class="t">A surface fires a command</div>
+      <div class="d">A button in the library calls <code>executeHostedCommand()</code> with the current selection.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="k">HTTP</div><div class="t">POST /api/extensions/execute</div>
+      <div class="d">One route for every tool. Rejects a missing id or the wrong input shape.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="k">Host</div><div class="t">Registry lookup, enabled check</div>
+      <div class="d">All six tools register at module level, then the host checks the id exists and is switched on.</div></div>
+  </div>
+  <div class="down">&darr;</div>
+  <div class="row">
+    <div class="node"><div class="k">Core</div><div class="t">Build the context</div>
+      <div class="d">Library, tags, favorites, collections, settings, events. Handed over as one object.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="k">Extension</div><div class="t">The handler runs</div>
+      <div class="d">Scope and selection validated, then the tool's own code does the work and returns an outcome.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node warn"><div class="k">Disk</div><div class="t">node:fs, directly</div>
+      <div class="d">Every tool treated the filesystem service as optional and fell back to raw <code>fs</code> with no library-root check.</div></div>
+  </div>
+</div>
+
+<div class="note">
+  <div class="card"><h4>The seam had no teeth</h4>
+    <p>The context promised to resolve paths safely. Tools wrote <span class="mono">if (services.filesystem &amp;&amp; ...)</span>
+    and otherwise touched the disk themselves. Permission checks passed while a tool could still write anywhere.</p></div>
+  <div class="card"><h4>Six tools, six habits</h4>
+    <p>Filename cleaning, extension matching and settings persistence were re-implemented per tool, each slightly
+    differently. Fixing one did not fix the others.</p></div>
+  <div class="card"><h4>Nothing could report progress</h4>
+    <p>A command was one call that either returned or threw. Long jobs had no progress, no cancel, and nothing to
+    recover if the app closed mid-run.</p></div>
+</div>
+
+<div class="foot">Evidence: packages/yard-core/src/extensions/, src/lib/extensions/host.ts, and the September repo audit. This is the system Foleyard 0.1.8 ships.</div>

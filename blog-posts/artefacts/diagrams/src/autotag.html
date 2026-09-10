@@ -1,0 +1,57 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<div class="eyebrow">Foleyard v2 &middot; auto tag</div>
+<h1>How a tag gets onto one of your files</h1>
+<p class="sub">Three routes in, three different levels of trust, and every one of them records who did it. That last
+part is the point: a tag you cannot trace is worse than no tag.</p>
+
+<div class="wrap">
+  <div class="row">
+    <div class="node"><div class="k">Trigger</div><div class="t">A scan finishes</div>
+      <div class="d">New files land in the index. If Auto Tag is switched on and approved, the app submits chunked,
+      repeatable jobs. If it is off, nothing happens at all.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="k">Route 1</div><div class="t">Filename rules</div>
+      <div class="d">Deterministic rules read the name and existing metadata. You can preview the plan before a single
+      write happens.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node accent"><div class="k">Written as</div><div class="t">D &middot; rules</div>
+      <div class="d">Stored with origin <code>deterministic</code> and a confidence value.</div></div>
+  </div>
+  <div class="down">&darr;</div>
+  <div class="row">
+    <div class="node"><div class="k">Route 2</div><div class="t">Candidate queue</div>
+      <div class="d">Suggestions sit in a paged queue and write nothing while you browse them. Dismiss one and it stops
+      coming back.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="k">Gate</div><div class="t">You press accept</div>
+      <div class="d">Promoting a candidate is the only thing that turns it into a real tag.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node accent"><div class="k">Written as</div><div class="t">M &middot; manual</div>
+      <div class="d">Your decision, recorded as yours. Manual tags win on read.</div></div>
+  </div>
+  <div class="down">&darr;</div>
+  <div class="row">
+    <div class="node"><div class="k">Route 3</div><div class="t">Semantic tagging</div>
+      <div class="d">Opt-in. You consent to the model download, it runs against an approved vocabulary, and only tags
+      that clear the confidence bar are considered.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="k">Side effect</div><div class="t">Vectors, kept</div>
+      <div class="d">The embedding store keeps model-keyed vectors so "find similar" can rank neighbors by cosine
+      distance.</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node accent"><div class="k">Written as</div><div class="t">AI &middot; semantic</div>
+      <div class="d">Stored with origin <code>semantic_ai</code>, and marked as such everywhere it appears.</div></div>
+  </div>
+</div>
+
+<div class="note">
+  <div class="card"><h4>Origins are visible, not internal</h4>
+    <p>Every tag in a file row carries an M, D or AI mark, and the library has an origin filter across the top:
+    All, Manual, Rules, AI.</p></div>
+  <div class="card"><h4>You can undo the machine</h4>
+    <p>Because the origin travels with the tag, you can revert in bulk by origin. Change your mind about the model
+    and its work comes off without touching what you typed.</p></div>
+  <div class="card"><h4>Moving a file keeps its history</h4>
+    <p>Origins and vectors follow the file instead of being quietly dropped when it moves.</p></div>
+</div>
+<div class="foot">On the development branch, not in 0.1.8. Semantic tagging currently ranks stub vectors behind an explicit inference seam; the model side is not finished.</div>

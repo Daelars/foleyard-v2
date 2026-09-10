@@ -1,0 +1,398 @@
+{
+  "series": "building-foleyard-v2",
+  "release_target": "foleyard-v2",
+  "release_named_by": "user instruction 2026-09-10",
+  "public_version": "0.1.8",
+  "publication_order": [
+    "audit-that-became-v2",
+    "extension-system-rebuild",
+    "three-extensions-two-deleted",
+    "teaching-foleyard-to-tag",
+    "fifteen-thousand-files-zero-tags",
+    "waveforms-used-to-be-instant",
+    "deleted-410-tests",
+    "library-designs-that-didnt-ship",
+    "ten-variants-one-button",
+    "introducing-foleyard-v2"
+  ],
+  "posts": [
+    {
+      "id": "POST-001",
+      "order": 1,
+      "title": "The audit that turned into Foleyard v2",
+      "slug": "audit-that-became-v2",
+      "status": "ready",
+      "release_target": "foleyard-v2",
+      "development_state": "in-progress",
+      "date_range": {
+        "start": "2026-09-04",
+        "end": "2026-09-05"
+      },
+      "commits": [
+        "b8ed1bb",
+        "9772cc1",
+        "14ed665"
+      ],
+      "threads": [
+        "24a60214",
+        "7eddc82a",
+        "b75345d0",
+        "0e0ec7d2",
+        "bf45734d"
+      ],
+      "issues": [],
+      "prs": [
+        120
+      ],
+      "images": [
+        "/blog-images/repo-audit-workbench.png",
+        "/blog-images/diagram-extensions-v1.png"
+      ],
+      "confidence": "high",
+      "word_count": 1138,
+      "article_path": "blog-posts/posts/audit-that-became-v2/index.md",
+      "research_path": "blog-posts/posts/audit-that-became-v2/research.md"
+    },
+    {
+      "id": "POST-002",
+      "order": 2,
+      "title": "I threw away Foleyard's extension system",
+      "slug": "extension-system-rebuild",
+      "status": "ready",
+      "release_target": "foleyard-v2",
+      "development_state": "implemented-unreleased",
+      "date_range": {
+        "start": "2026-09-06",
+        "end": "2026-09-10"
+      },
+      "commits": [
+        "e181dbd"
+      ],
+      "threads": [
+        "847e11b6",
+        "878dc4b9",
+        "1c02df0f",
+        "8171801c",
+        "bce23d60",
+        "86bfb0d6"
+      ],
+      "issues": [
+        164,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182
+      ],
+      "prs": [
+        196,
+        198
+      ],
+      "images": [
+        "/blog-images/diagram-extensions-v2.png",
+        "/blog-images/diagram-extension-reach.png",
+        "/blog-images/ext-v2-workbench.png",
+        "/blog-images/app-extensions.png"
+      ],
+      "confidence": "high",
+      "word_count": 1520,
+      "article_path": "blog-posts/posts/extension-system-rebuild/index.md",
+      "research_path": "blog-posts/posts/extension-system-rebuild/research.md"
+    },
+    {
+      "id": "POST-003",
+      "order": 3,
+      "title": "Three extensions I designed, two I deleted",
+      "slug": "three-extensions-two-deleted",
+      "status": "ready",
+      "release_target": "foleyard-v2",
+      "development_state": "prototype",
+      "date_range": {
+        "start": "2026-09-06",
+        "end": "2026-09-07"
+      },
+      "commits": [],
+      "threads": [
+        "e1eed243",
+        "8866cfcb"
+      ],
+      "issues": [],
+      "prs": [],
+      "images": [
+        "/blog-images/concept-auto-tag.png",
+        "/blog-images/concept-take-compare.png",
+        "/blog-images/concept-sound-rack.png"
+      ],
+      "confidence": "high",
+      "word_count": 1173,
+      "article_path": "blog-posts/posts/three-extensions-two-deleted/index.md",
+      "research_path": "blog-posts/posts/three-extensions-two-deleted/research.md"
+    },
+    {
+      "id": "POST-004",
+      "order": 4,
+      "title": "Teaching Foleyard to tag itself, and to show its work",
+      "slug": "teaching-foleyard-to-tag",
+      "status": "ready",
+      "release_target": "foleyard-v2",
+      "development_state": "implemented-unreleased",
+      "date_range": {
+        "start": "2026-09-06",
+        "end": "2026-09-08"
+      },
+      "commits": [
+        "825bc2b",
+        "928c322",
+        "f13d108",
+        "e423302",
+        "0f53487",
+        "61d9330",
+        "e340f7d",
+        "8782ebf",
+        "8839369"
+      ],
+      "threads": [
+        "95607d6b",
+        "52b58842",
+        "68714aee",
+        "34723c14",
+        "acb159ee"
+      ],
+      "issues": [
+        189,
+        190,
+        191,
+        192,
+        193,
+        194,
+        195,
+        197
+      ],
+      "prs": [],
+      "images": [
+        "/blog-images/diagram-auto-tag.png",
+        "/blog-images/app-library-files.png",
+        "/blog-images/app-auto-tag.png",
+        "/blog-images/autotag-fit-current.png",
+        "/blog-images/autotag-fit-command.png"
+      ],
+      "confidence": "high",
+      "word_count": 1457,
+      "article_path": "blog-posts/posts/teaching-foleyard-to-tag/index.md",
+      "research_path": "blog-posts/posts/teaching-foleyard-to-tag/research.md"
+    },
+    {
+      "id": "POST-005",
+      "order": 5,
+      "title": "15,000 files, 0 tags",
+      "slug": "fifteen-thousand-files-zero-tags",
+      "status": "ready",
+      "release_target": "foleyard-v2",
+      "development_state": "in-progress",
+      "date_range": {
+        "start": "2026-09-07",
+        "end": "2026-09-10"
+      },
+      "commits": [],
+      "threads": [
+        "34723c14",
+        "681c4cd2",
+        "acb159ee",
+        "0a01fd01",
+        "8171801c"
+      ],
+      "issues": [],
+      "prs": [],
+      "images": [
+        "/blog-images/app-auto-tag-origins.png",
+        "/blog-images/app-auto-tag.png"
+      ],
+      "confidence": "high",
+      "word_count": 1177,
+      "article_path": "blog-posts/posts/fifteen-thousand-files-zero-tags/index.md",
+      "research_path": "blog-posts/posts/fifteen-thousand-files-zero-tags/research.md"
+    },
+    {
+      "id": "POST-006",
+      "order": 6,
+      "title": "Waveforms used to be instant",
+      "slug": "waveforms-used-to-be-instant",
+      "status": "ready",
+      "release_target": "foleyard-v2",
+      "development_state": "in-progress",
+      "date_range": {
+        "start": "2026-09-06",
+        "end": "2026-09-10"
+      },
+      "commits": [
+        "14ed665"
+      ],
+      "threads": [
+        "ba5ac4c4",
+        "2f1f2aad",
+        "682a19e9"
+      ],
+      "issues": [],
+      "prs": [],
+      "images": [
+        "/blog-images/diagram-waveform.png"
+      ],
+      "confidence": "high",
+      "word_count": 1419,
+      "article_path": "blog-posts/posts/waveforms-used-to-be-instant/index.md",
+      "research_path": "blog-posts/posts/waveforms-used-to-be-instant/research.md"
+    },
+    {
+      "id": "POST-007",
+      "order": 7,
+      "title": "I deleted 410 tests",
+      "slug": "deleted-410-tests",
+      "status": "ready",
+      "release_target": "foleyard-v2",
+      "development_state": "implemented",
+      "date_range": {
+        "start": "2026-09-05",
+        "end": "2026-09-05"
+      },
+      "commits": [
+        "8ec273e",
+        "742fd71"
+      ],
+      "threads": [
+        "0e0ec7d2",
+        "bf45734d",
+        "c397b243"
+      ],
+      "issues": [],
+      "prs": [
+        143,
+        154,
+        155,
+        156,
+        157,
+        159
+      ],
+      "images": [
+        "/blog-images/repo-audit-timeline.png"
+      ],
+      "confidence": "medium",
+      "word_count": 1213,
+      "article_path": "blog-posts/posts/deleted-410-tests/index.md",
+      "research_path": "blog-posts/posts/deleted-410-tests/research.md"
+    },
+    {
+      "id": "POST-008",
+      "order": 8,
+      "title": "The library designs that didn't ship",
+      "slug": "library-designs-that-didnt-ship",
+      "status": "ready",
+      "release_target": "foleyard-v2",
+      "development_state": "prototype",
+      "date_range": {
+        "start": "2026-09-03",
+        "end": "2026-09-04"
+      },
+      "commits": [
+        "8778693",
+        "cd5a4e8",
+        "b6a3b9c",
+        "48c04a8"
+      ],
+      "threads": [
+        "4707196e",
+        "0aed44e6",
+        "5af5f7f0",
+        "11138765"
+      ],
+      "issues": [],
+      "prs": [],
+      "images": [
+        "/blog-images/design-showcase.png",
+        "/blog-images/design-app-v2.png",
+        "/blog-images/design-redesign.png",
+        "/blog-images/app-organize.png"
+      ],
+      "confidence": "medium",
+      "word_count": 1263,
+      "article_path": "blog-posts/posts/library-designs-that-didnt-ship/index.md",
+      "research_path": "blog-posts/posts/library-designs-that-didnt-ship/research.md"
+    },
+    {
+      "id": "POST-009",
+      "order": 9,
+      "title": "Ten variants to get one button right",
+      "slug": "ten-variants-one-button",
+      "status": "ready",
+      "release_target": "foleyard-v2",
+      "development_state": "in-progress",
+      "date_range": {
+        "start": "2026-09-09",
+        "end": "2026-09-10"
+      },
+      "commits": [],
+      "threads": [
+        "2ec4601f",
+        "d6e08527",
+        "da57cfe9",
+        "c15b7ccb",
+        "ee78ec00",
+        "9db717c4",
+        "3d421f55",
+        "f92766d1"
+      ],
+      "issues": [],
+      "prs": [],
+      "images": [
+        "/blog-images/complib-A.png",
+        "/blog-images/complib-B.png",
+        "/blog-images/complib-D.png",
+        "/blog-images/complib-G.png",
+        "/blog-images/complib-I.png",
+        "/blog-images/app-v3.png"
+      ],
+      "confidence": "high",
+      "word_count": 1186,
+      "article_path": "blog-posts/posts/ten-variants-one-button/index.md",
+      "research_path": "blog-posts/posts/ten-variants-one-button/research.md"
+    },
+    {
+      "id": "POST-010",
+      "order": 10,
+      "title": "Introducing Foleyard v2",
+      "slug": "introducing-foleyard-v2",
+      "status": "ready",
+      "release_target": "foleyard-v2",
+      "development_state": "in-progress",
+      "date_range": {
+        "start": "2026-09-03",
+        "end": "2026-09-10"
+      },
+      "commits": [],
+      "threads": [],
+      "issues": [],
+      "prs": [],
+      "images": [
+        "/blog-images/diagram-system.png",
+        "/blog-images/app-extensions.png",
+        "/blog-images/app-library-files.png"
+      ],
+      "confidence": "high",
+      "word_count": 1267,
+      "article_path": "blog-posts/posts/introducing-foleyard-v2/index.md",
+      "research_path": "blog-posts/posts/introducing-foleyard-v2/research.md"
+    }
+  ]
+}

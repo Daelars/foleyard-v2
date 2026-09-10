@@ -1,0 +1,51 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<div class="eyebrow">Foleyard v2 &middot; the engine</div>
+<h1>Why waveforms stopped being instant, and how they got fast again</h1>
+<p class="sub">Drawing a waveform means decoding audio and reducing it to peaks. Where that decode happens decides
+whether a list of fifty sounds appears at once or one at a time.</p>
+
+<div class="wrap">
+  <div class="band">
+    <div class="lbl">Before &mdash; every row queued behind one decoder</div>
+    <div class="row">
+      <div class="node"><div class="k">Renderer</div><div class="t">50 rows ask for peaks</div>
+        <div class="d">A folder opens. Every visible row wants a waveform at the same moment.</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="node"><div class="k">HTTP</div><div class="t">GET /api/waveform</div>
+        <div class="d">Fifty requests to one route.</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="node warn"><div class="k">Server</div><div class="t">One ffmpeg slot</div>
+        <div class="d">Decoding is serialized. Row 50 waits for rows 1 to 49 to finish.</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="node"><div class="k">Disk</div><div class="t">Cache warms slowly</div>
+        <div class="d">The disk cache only helps the second time you look at a folder.</div></div>
+    </div>
+  </div>
+  <div class="down">&darr;</div>
+  <div class="band">
+    <div class="lbl">After &mdash; decode where the parallelism already is</div>
+    <div class="row">
+      <div class="node"><div class="k">Renderer</div><div class="t">50 rows ask for peaks</div>
+        <div class="d">Same folder, same fifty rows.</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="node accent"><div class="k">Browser</div><div class="t">Web Audio decodes them</div>
+        <div class="d">Rows and the player decode in parallel in the browser and reduce to 512 peaks each.</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="node"><div class="k">IndexedDB</div><div class="t">Keyed by mtime and size</div>
+        <div class="d">Best effort only, with a bounded wait, so a cold or blocked cache never stalls a row.</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="node ghost"><div class="k">Fallback</div><div class="t">The server route, still there</div>
+        <div class="d">Kept for formats the browser refuses to decode.</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <div class="card"><h4>The fix was not a bigger cache</h4>
+    <p>The brief was to make it feel instant with a cold cache, the way it used to, rather than to warm a cache
+    harder. Moving the decode into the browser is what did that.</p></div>
+  <div class="card"><h4>The scanner got the same treatment</h4>
+    <p>A 443-line scan runner became separate discovery, metadata queue, progress and reconcile stages, so metadata
+    is preserved across a rescan instead of being thrown away and rebuilt.</p></div>
+</div>
+<div class="foot">Source: src/lib/client-waveform.ts, src/components/AudioPlayer/use-waveform-peaks.ts, and the scanner split in commit 14ed665.</div>

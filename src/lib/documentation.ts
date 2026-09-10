@@ -38,6 +38,41 @@ export type DocumentationRegistry = {
   examples: DocumentationExample[];
 };
 
+/** Provenance carried by a staged manifest; checkout manifests have none. */
+export type DocsManifestIdentity = {
+  productVersion: string | null;
+  buildId: string | null;
+  sourceRevision: string | null;
+  sourceDirty: boolean | null;
+  documentCount: number;
+};
+
+/** One identity field the staged manifest and the running build disagree on. */
+export type DocsMismatch = {
+  field: string;
+  expected: string;
+  actual: string;
+};
+
+export type DocsMatchState =
+  | "matched"
+  | "mismatched"
+  | "unversioned"
+  | "missing-manifest";
+
+export type DocumentationLocation = {
+  manifestId: string;
+  productVersion: string;
+  matched: boolean;
+  matchState: DocsMatchState;
+  mismatches: DocsMismatch[];
+  manifest: DocsManifestIdentity | null;
+  indexId: string;
+  documentIds: string[];
+  examples: DocumentationExample[];
+  localRoot?: string;
+};
+
 const EMPTY_REGISTRY: DocumentationRegistry = {
   manifestId: "foleyard-docs",
   documents: [],
@@ -139,17 +174,124 @@ export function getDocumentationRegistry(): DocumentationRegistry {
   return readRegistry(root) ?? EMPTY_REGISTRY;
 }
 
-export function getDocumentationLocation() {
+function readBuildId(): string | undefined {
+  try {
+    const candidate = path.join(process.cwd(), ".next", "BUILD_ID");
+    if (fs.existsSync(candidate)) {
+      const raw = fs.readFileSync(candidate, "utf8").trim();
+      return raw || undefined;
+    }
+  } catch {
+    // Absence is explicit, not fatal.
+  }
+  return undefined;
+}
+
+/** Provenance block of a staged `manifest.json`; null when absent or invalid. */
+function readStagedManifest(root: string): (DocsManifestIdentity & { documents: unknown[] }) | null {
+  const manifestPath = path.join(root, "manifest.json");
+  if (!fs.existsSync(manifestPath)) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    return {
+      productVersion: typeof parsed.productVersion === "string" ? parsed.productVersion : null,
+      buildId: typeof parsed.buildId === "string" ? parsed.buildId : null,
+      sourceRevision: typeof parsed.sourceRevision === "string" ? parsed.sourceRevision : null,
+      sourceDirty: typeof parsed.sourceDirty === "boolean" ? parsed.sourceDirty : null,
+      documentCount: Array.isArray(parsed.documents) ? parsed.documents.length : 0,
+      documents: Array.isArray(parsed.documents) ? parsed.documents : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Docs location plus a real match verdict (#240). A packaged build compares
+ * the staged manifest's product version, build id and source revision with
+ * the running identity and names every mismatched field with both values. A
+ * development checkout reports unversioned, and a staged root without a
+ * manifest reports missing-manifest — never a constant `matched: true`.
+ */
+export function getDocumentationLocation(): DocumentationLocation {
   const { root, packaged } = resolveDocsRoot();
   const registry = readRegistry(root) ?? EMPTY_REGISTRY;
-  return {
+  const productVersion = (packageJson as { version: string }).version;
+  const base = {
     manifestId: registry.manifestId,
-    productVersion: (packageJson as { version: string }).version,
-    matched: true,
+    productVersion,
     indexId: "index",
     documentIds: registry.documents.map((d) => d.id),
     examples: registry.examples,
     ...(packaged ? {} : { localRoot: root }),
+  };
+
+  if (!packaged) {
+    return {
+      ...base,
+      matched: false,
+      matchState: "unversioned",
+      manifest: null,
+      mismatches: [
+        {
+          field: "manifest",
+          expected: "staged version-matched manifest",
+          actual: "development checkout",
+        },
+      ],
+    };
+  }
+
+  const staged = readStagedManifest(root);
+  if (!staged) {
+    return {
+      ...base,
+      matched: false,
+      matchState: "missing-manifest",
+      manifest: null,
+      mismatches: [
+        {
+          field: "manifest",
+          expected: "manifest.json in the docs root",
+          actual: "absent",
+        },
+      ],
+    };
+  }
+
+  const mismatches: DocsMismatch[] = [];
+  if (staged.productVersion !== productVersion) {
+    mismatches.push({
+      field: "productVersion",
+      expected: productVersion,
+      actual: staged.productVersion ?? "absent",
+    });
+  }
+  const runningBuildId = readBuildId();
+  if (staged.buildId && runningBuildId && staged.buildId !== runningBuildId) {
+    mismatches.push({ field: "buildId", expected: runningBuildId, actual: staged.buildId });
+  }
+  const runningRevision = process.env.FOLEYARD_SOURCE_REVISION;
+  if (staged.sourceRevision && runningRevision && staged.sourceRevision !== runningRevision) {
+    mismatches.push({
+      field: "sourceRevision",
+      expected: runningRevision,
+      actual: staged.sourceRevision,
+    });
+  }
+
+  return {
+    ...base,
+    matched: mismatches.length === 0,
+    matchState: mismatches.length === 0 ? "matched" : "mismatched",
+    manifest: {
+      productVersion: staged.productVersion,
+      buildId: staged.buildId,
+      sourceRevision: staged.sourceRevision,
+      sourceDirty: staged.sourceDirty,
+      documentCount: staged.documentCount,
+    },
+    mismatches,
   };
 }
 

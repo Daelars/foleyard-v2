@@ -47,7 +47,7 @@ are ever included.
 | `settingsSchemaRefs` | `["settings.md", "extensions.md#settings", "commands.md", "extensions-v2.md"]` |
 | `extensionsV2` | per-v2-extension id/name/version, `registered`, in-memory `enabled`, apiVersion, standing, declared vs effective permissions, `approvalsKnown`, command/contribution IDs, settings schema (defaults only), docs refs |
 | `eventsV2` | the five typed v2 contracts with host ownership |
-| `documentation` | manifest id, product version, index + document ids, runnable examples |
+| `documentation` | manifest id, product version, `matchState` (`matched` \| `mismatched` \| `unversioned` \| `missing-manifest`), `mismatches` (field + expected + actual), the staged manifest identity (product version, build id, source revision/dirty, document count), index + document ids, runnable examples |
 | `limitations` | trusted-code note, no external loading, renderer unknown, v2 bundled-only and cooperative-cancellation notes |
 
 v2 reading rules: definitions come from the production registry only.
@@ -68,9 +68,17 @@ missing or unreadable file degrades explicitly instead:
 does creates, migrates, or writes the database. `readRuntimeDatabaseFlags`
 in `src/lib/runtime-info.ts` owns the read-only path.
 
+Docs matching (`src/lib/documentation.ts`): a packaged build compares the
+staged manifest's product version, build id and source revision with the
+running identity and reports `matchState: "matched"` only when nothing
+disagrees; every mismatch names the field and both values. A development
+checkout reports `"unversioned"` and a staged root without a manifest
+reports `"missing-manifest"` — the verdict is never a constant. The About
+tab export includes this section unchanged.
+
 Agent workflow (supported, read-only): fetch the exported snapshot →
-verify `identity` against the docs manifest (`foleyard-docs`, matched
-product version) → read `docs/index.md` → follow `docsId` links to the
+check `documentation.matchState` and `mismatches` before trusting the
+guides → read `docs/index.md` → follow `docsId` links to the
 relevant subsystem guide → use its contracts/examples → report missing
 providers or version mismatch explicitly. Never infer installed capabilities
 from the checkout version: the checkout is not proof of the installed build;

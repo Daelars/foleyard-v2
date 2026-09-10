@@ -2,10 +2,11 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import Database from "better-sqlite3";
 
 import {
+  getDocumentationLocation,
   getDocumentationRegistry,
   readDocumentation,
   listDocumentIds,
@@ -138,5 +139,94 @@ describe("documentation bundle contracts", () => {
     expect(["ready", "not-initialized", "unavailable"]).toContain(snapshot.database.state);
     expect(snapshot.documentation?.indexId).toBe("index");
     expect(snapshot.limitations.join(" ")).toMatch(/trusted code/);
+  });
+});
+
+// Area: #240. The docs match verdict comes from the staged manifest, never a
+// constant: matched, mismatched (field + both values), absent and
+// development-checkout states are all explicit.
+describe("docs match verdict", () => {
+  const stagedRoots: string[] = [];
+
+  function stagedRoot(manifest: Record<string, unknown> | null): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-docs-match-"));
+    stagedRoots.push(dir);
+    if (manifest) {
+      fs.mkdirSync(path.join(dir, "docs"), { recursive: true });
+      fs.writeFileSync(path.join(dir, "docs", "index.md"), "# Index\n");
+      fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(manifest));
+    }
+    return dir;
+  }
+
+  function productVersion(): string {
+    return JSON.parse(
+      fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"),
+    ).version as string;
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    for (const dir of stagedRoots) fs.rmSync(dir, { recursive: true, force: true });
+    stagedRoots.length = 0;
+  });
+
+  it("matches when the staged manifest agrees with the running version", () => {
+    const dir = stagedRoot({
+      manifestId: "foleyard-docs",
+      productVersion: productVersion(),
+      buildId: null,
+      sourceRevision: null,
+      documents: [{ id: "index", path: "docs/index.md" }],
+    });
+    vi.stubEnv("FOLEYARD_DOCS_ROOT", dir);
+
+    const location = getDocumentationLocation();
+    expect(location.matched).toBe(true);
+    expect(location.matchState).toBe("matched");
+    expect(location.mismatches).toEqual([]);
+    expect(location.manifest?.documentCount).toBe(1);
+    expect(location.manifest?.productVersion).toBe(productVersion());
+  });
+
+  it("names the mismatched field with both values", () => {
+    const dir = stagedRoot({
+      manifestId: "foleyard-docs",
+      productVersion: "0.0.0-old",
+      buildId: null,
+      sourceRevision: "rev-old",
+      documents: [{ id: "index", path: "docs/index.md" }],
+    });
+    vi.stubEnv("FOLEYARD_DOCS_ROOT", dir);
+    vi.stubEnv("FOLEYARD_SOURCE_REVISION", "rev-new");
+
+    const location = getDocumentationLocation();
+    expect(location.matched).toBe(false);
+    expect(location.matchState).toBe("mismatched");
+    expect(location.mismatches).toEqual(
+      expect.arrayContaining([
+        { field: "productVersion", expected: productVersion(), actual: "0.0.0-old" },
+        { field: "sourceRevision", expected: "rev-new", actual: "rev-old" },
+      ]),
+    );
+  });
+
+  it("reports missing-manifest for a staged root without one", () => {
+    const dir = stagedRoot(null);
+    vi.stubEnv("FOLEYARD_DOCS_ROOT", dir);
+
+    const location = getDocumentationLocation();
+    expect(location.matched).toBe(false);
+    expect(location.matchState).toBe("missing-manifest");
+    expect(location.mismatches).toEqual([
+      { field: "manifest", expected: "manifest.json in the docs root", actual: "absent" },
+    ]);
+  });
+
+  it("reports a development checkout as unversioned, not matched", () => {
+    const location = getDocumentationLocation();
+    expect(location.matched).toBe(false);
+    expect(location.matchState).toBe("unversioned");
+    expect(location.manifest).toBeNull();
   });
 });

@@ -32,9 +32,11 @@ missing-from-build error rather than falling back. Staging is
 
 ## Runtime behavior
 
-`getDocumentationLocation()` reports the manifest ID, matched product
-version, index ID (`index`), document IDs, and the two runnable-in-repo
-examples (`core/query-library`, `extensions-v2/minimal`).
+`getDocumentationLocation()` reports the manifest ID, the staged
+manifest's product version/build/revision with a real `matchState` and
+per-field `mismatches`, the index ID (`index`), document IDs, and the two
+runnable-in-repo examples (`core/query-library`,
+`extensions-v2/minimal`).
 `readDocumentation(id)` allowlists the ID against the registry, resolves
 the absolute path under the docs root, and reads it as UTF-8.
 

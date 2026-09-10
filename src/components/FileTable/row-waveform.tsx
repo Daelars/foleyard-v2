@@ -10,20 +10,22 @@ export function RowWaveform({
   fileId,
   sourceVersion,
   active,
+  sizeBytes,
 }: {
   fileId: string;
   sourceVersion: string;
   active: boolean;
+  sizeBytes?: number | null;
 }) {
   const [peaks, setPeaks] = useState<number[]>([]);
 
   useEffect(() => {
     const controller = new AbortController();
-    computeAndCachePeaks(fileId, sourceVersion, controller.signal).then((next) => {
+    computeAndCachePeaks(fileId, sourceVersion, controller.signal, { sizeBytes }).then((next) => {
       if (!controller.signal.aborted) setPeaks(next);
     }).catch(() => {});
     return () => controller.abort();
-  }, [fileId, sourceVersion]);
+  }, [fileId, sourceVersion, sizeBytes]);
 
   return (
     <Waveform

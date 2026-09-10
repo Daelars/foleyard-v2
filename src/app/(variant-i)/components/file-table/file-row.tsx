@@ -142,6 +142,7 @@ export const V3FileRow = memo(function V3FileRow({
           fileId={file.id}
           sourceVersion={`${file.mtimeMs ?? "unknown"}:${file.fileSize ?? "unknown"}`}
           active={isSelected}
+          sizeBytes={file.fileSize}
         />
       </span>
       <span className="text-right font-mono text-xs font-medium tabular-nums text-zinc-300">

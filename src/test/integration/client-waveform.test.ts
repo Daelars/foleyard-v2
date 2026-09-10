@@ -82,6 +82,61 @@ it("falls back to the server route where Web Audio is unavailable", async () => 
   expect(String(firstFetchUrl(fetchSpy))).toContain("/api/waveform");
 });
 
+it("hands long files to the server peaks route without fetching the body (#232)", async () => {
+  const decode = vi.fn();
+  vi.stubGlobal(
+    "OfflineAudioContext",
+    class {
+      async decodeAudioData() {
+        decode();
+        return stereoBuffer();
+      }
+    },
+  );
+  const fetchSpy = vi.fn(async (url: string) => {
+    if (typeof url === "string" && url.startsWith("/api/waveform")) {
+      return { ok: true, json: async () => ({ peaks: Array(180).fill(0.4) }) };
+    }
+    throw new Error(`unexpected fetch of ${url}`);
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  const { computeAndCachePeaks } = await freshModule();
+
+  const peaks = await computeAndCachePeaks("file-long", "v1", undefined, {
+    sizeBytes: 64 * 1024 * 1024,
+  });
+  expect(peaks).toHaveLength(PEAKS);
+  expect(String(firstFetchUrl(fetchSpy))).toContain("/api/waveform");
+  expect(String(firstFetchUrl(fetchSpy))).toContain(`peaks=${PEAKS}`);
+  expect(decode).not.toHaveBeenCalled();
+});
+
+it("caps simultaneous decode work (#232)", async () => {
+  let active = 0;
+  let peak = 0;
+  vi.stubGlobal(
+    "OfflineAudioContext",
+    class {
+      async decodeAudioData() {
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active -= 1;
+        return stereoBuffer();
+      }
+    },
+  );
+  const fetchSpy = vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }));
+  vi.stubGlobal("fetch", fetchSpy);
+  const { computeAndCachePeaks } = await freshModule();
+
+  await Promise.all(
+    Array.from({ length: 8 }, (_, index) => computeAndCachePeaks(`file-cap-${index}`, "v1")),
+  );
+  expect(peak).toBeLessThanOrEqual(4);
+  expect(peak).toBeGreaterThan(1);
+});
+
 it("rejects a pre-aborted caller without blocking others", async () => {
   vi.stubGlobal(
     "OfflineAudioContext",

@@ -62,6 +62,15 @@ distinct-directory scan. Pinned by
 are partial over active rows, so scans pay write cost only for rows
 that remain active; the harness scan-stage numbers monitor the change.
 
+**Bounded row waveforms (added with #232)** — rows no longer stream a whole
+audio body through the renderer: files above 32 MiB read the server's
+generated peaks (`/api/waveform?...&peaks=512`, a small JSON) and all other
+reads carry a bounded `Range` prefix. Server responses at any supported
+resolution are resampled into the 512-peak cache, simultaneous decode work is
+capped at four jobs, and unmounts cancel only their own waiter while the
+shared job finishes for the remounted row. Pinned by
+`src/test/integration/client-waveform.test.ts`.
+
 Still deferred (item 5/6 of the original sequence): cursor pagination
 (indexed pages are now ~3 ms; contract/client change not justified by
 these numbers), workers and Rust (the specialized loop delivered the

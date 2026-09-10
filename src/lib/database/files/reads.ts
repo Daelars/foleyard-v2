@@ -1,7 +1,8 @@
 import { and, asc, count, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import type { AudioFile, IndexedAudioFile, FileSearchQuery, TagOrigin } from "@yard-core";
 import { normalizeDirectoryPath } from "@yard-core";
-import { chunkArray, filenameLike, SQLITE_MAX_VARIABLES } from "../sql-parameters";
+import { filenameSearch } from "../filename-search";
+import { chunkArray, SQLITE_MAX_VARIABLES } from "../sql-parameters";
 import * as schema from "@/lib/schema";
 import type { FileRepositoryContext } from "./context";
 
@@ -68,7 +69,7 @@ function buildFileFilters(context: FileRepositoryContext, options: FileSearchQue
   }
 
   if (query) {
-    filters.push(filenameLike(query));
+    filters.push(filenameSearch(context.sqlite, query));
   }
 
   if (directory) {

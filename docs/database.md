@@ -38,6 +38,7 @@ Tables in `src/lib/schema.ts` (mirrored by DDL in `migrations.ts`):
 | `tag_aliases` | retired tag names resolving to their surviving tag |
 | `file_embeddings` | per-file model vectors (`file_id`, `model`, `dim`, `vec` blob) for similarity search |
 | `collections` / `file_collections` | regular + smart Collections and membership |
+| `files_fts` | FTS5 trigram index over `files.filename` (#251), external content kept in sync by triggers |
 
 Connections set `busy_timeout = 5000`, `journal_mode = WAL`,
 `foreign_keys = ON`, `synchronous = NORMAL`, `temp_store = MEMORY`, a
@@ -108,6 +109,7 @@ Database paths (`src/lib/database-path.ts`):
 - `src/lib/schema.ts` — Drizzle table declarations
 - `src/lib/database/connection.ts` — pragmas, lazy `db`/`sqlite` proxies
 - `src/lib/database/prepared-statements.ts` — bounded statement cache
+- `src/lib/database/filename-search.ts` — FTS5-vs-LIKE filename predicate
 - `src/lib/database/migrations.ts` — DDL, `CURRENT_SCHEMA_VERSION`,
   `getDatabaseVersionInfo`, `initializeDatabaseSchema`
 - `src/lib/database-path.ts` — web/desktop/legacy path resolution

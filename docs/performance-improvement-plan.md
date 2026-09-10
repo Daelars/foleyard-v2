@@ -62,6 +62,13 @@ distinct-directory scan. Pinned by
 are partial over active rows, so scans pay write cost only for rows
 that remain active; the harness scan-stage numbers monitor the change.
 
+**Filename FTS5 index (added with #251)** — `files_fts` (external content
+over `files`, trigram tokenizer) backs filename search and smart-collection
+counts, with LIKE kept for short/non-ASCII queries and databases without
+FTS5. The benchmark records `filenameSearch.fts` versus `filenameSearch.like`
+plans and timings over the 100k fixture; the index is maintained by triggers
+and backfilled once per populated legacy library.
+
 **Bounded row waveforms (added with #232)** — rows no longer stream a whole
 audio body through the renderer: files above 32 MiB read the server's
 generated peaks (`/api/waveform?...&peaks=512`, a small JSON) and all other

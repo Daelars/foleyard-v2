@@ -8,13 +8,20 @@
 ## What it does
 
 Searches the local Library index by filename substring with pagination
-and filename/duration sort. All reads go through Drizzle; there is no
-full-text index and no semantic/vector search.
+and filename/duration sort. Filename matching runs through an FTS5
+trigram index maintained over the `files` table (#251), so search and
+smart-collection counts do not scan the Library; there is no semantic or
+vector search in this path.
 
 ## Responsibilities and boundaries
 
-- Filename-substring search only (`LIKE` with escaping). No FTS table,
-  no trigram index, no semantic ranking, no external search provider.
+- Filename-substring search only. The FTS5 trigram index (`files_fts`,
+  external content over `files`) answers matches case-insensitively;
+  queries shorter than three characters, non-ASCII queries and databases
+  without the index fall back to `LIKE` with wildcard escaping, so
+  results are identical on both paths.
+- No semantic ranking in this path (embeddings power the auto-tag
+  find-similar command only) and no external search provider.
 - The search endpoint doubles as the browse endpoint: favorites,
   Collection, tag, directory, and library-root filters compose with the
   query rather than living on a separate route.
@@ -33,8 +40,11 @@ Reads build Drizzle filters in `src/lib/database/files/reads.ts`:
 equality (+ `directory IS NULL` when `atLibraryRoot`), tag membership via
 `fileTags` subselect, directory normalization via
 `normalizeDirectoryPath` (`yard-core` filter-service), and
-`filenameLike(query)` from `src/lib/database/sql-parameters.ts` with
-`LIKE` wildcard escaping. Collection-branch queries join
+`filenameSearch(sqlite, query)` from
+`src/lib/database/filename-search.ts`: an FTS5 `MATCH` subquery when the
+trigram index is usable, otherwise `filenameLike` from
+`src/lib/database/sql-parameters.ts` with `LIKE` wildcard escaping.
+Collection-branch queries join
 `fileCollections` (`buildCollectionFilters`); the file-list branch uses
 `buildFileFilters`. Sorting and limit/offset apply after filtering; the
 route also returns the matching count (`getFileCount`) for pagination UI.
@@ -50,9 +60,10 @@ route also returns the matching count (`getFileCount`) for pagination UI.
 
 - B03 (expected-to-fail, #137): the collection-branch count disagrees
   with the main file list — Collection-filtered counts are untrusted.
-- No FTS or semantic matching: `q=horn` matches filenames containing
-  "horn" only; metadata fields (codec, duration) and tag names are not
-  substring-searched by `q`.
+- No semantic matching: `q=horn` matches filenames containing "horn"
+  only; metadata fields (codec, duration) and tag names are not
+  substring-searched by `q`. A database without FTS5 keeps working on
+  the LIKE path.
 - Stale pagination can unlock a duplicate request (finding B11,
   expected-to-fail, #140): an old page response releases a newer
   request's lock in `use-library-files.ts`.
@@ -61,6 +72,8 @@ route also returns the matching count (`getFileCount`) for pagination UI.
 
 - `src/app/api/files/route.ts` — query parsing, validation, GET/DELETE surface
 - `src/lib/database/files/reads.ts` — Drizzle filters, collection vs file branches
+- `src/lib/database/filename-search.ts` — FTS5-vs-LIKE predicate
+- `src/lib/database/migrations.ts` — `files_fts` index, triggers, backfill
 - `src/lib/database/sql-parameters.ts` — `filenameLike` escaping,
   `chunkArray`, `SQLITE_MAX_VARIABLES`
 - `src/lib/database/files/context.ts` — repository context

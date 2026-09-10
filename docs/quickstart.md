@@ -32,9 +32,10 @@ and tags. Each step links to the guide that documents it in full.
    metadata-queue → progress. Poll `GET /api/scan` (or rely on
    `use-scan-polling.ts`, 2 s interval) until `running` is false.
    See `docs/scanning.md`.
-3. **Search.** Type in the library view. `GET /api/files?q=…` runs a
-   Drizzle read with `LIKE` escaping, pagination (`limit`/`offset`),
-   and `filename`/`duration` sort. See `docs/search.md`.
+3. **Search.** Type in the library view. `GET /api/files?q=…` matches
+   filenames through the FTS5 trigram index (LIKE fallback for short or
+   non-ASCII queries), with pagination (`limit`/`offset`) and
+   `filename`/`duration` sort. See `docs/search.md`.
 4. **Preview.** Select a row and press play. The player streams
    `GET /api/audio?id=…` (HTTP Range) and renders peaks from
    `GET /api/waveform?id=…`. See `docs/playback.md`.
@@ -56,8 +57,8 @@ and tags. Each step links to the guide that documents it in full.
 - Scan is best-effort per file: individual metadata failures are counted
   (`failed`/`errors` in `ScanStatus`) without aborting the run.
 - Collection-branch counts currently disagree with the main file list
-  (finding B03, expected-to-fail); search does not use full-text or
-  semantic ranking — substring `LIKE` only.
+  (finding B03, expected-to-fail); filename search is substring-only
+  (FTS5 trigram, LIKE fallback), with no semantic ranking.
 
 ## Source map (real file paths)
 

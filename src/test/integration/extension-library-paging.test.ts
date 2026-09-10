@@ -88,5 +88,7 @@ describe("active paging query plan", () => {
     ).toBe(true);
 
     sqlite.close();
-  });
+    // 50k inserts also populate the trigram FTS index (#251), so the fixture
+    // build is slower than the plan checks it serves.
+  }, 60_000);
 });

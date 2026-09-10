@@ -204,6 +204,19 @@ async function main() {
     rows:directoryDistinct.all().length,
     ms:await repeat(()=>directoryDistinct.all()),
   };
+  // Filename search index (#251): the FTS5 trigram path versus a LIKE scan
+  // over the same 100k fixture, with identical rows.
+  {
+    const searchQuery='clip-123';
+    const escapeLike=(value)=>value.replace(/\\/g,'\\\\').replace(/%/g,'\\%').replace(/_/g,'\\_');
+    const ftsSearch=sqlite.prepare(`SELECT ${columns} FROM files WHERE removed_at IS NULL AND rowid IN (SELECT rowid FROM files_fts WHERE files_fts MATCH ?) ORDER BY filename,id LIMIT 100`);
+    const likeSearch=sqlite.prepare(`SELECT ${columns} FROM files WHERE removed_at IS NULL AND filename LIKE ? ESCAPE '\\' ORDER BY filename,id LIMIT 100`);
+    assert.deepEqual(ftsSearch.all(`"${searchQuery}"`).map(f=>f.id),likeSearch.all(`%${escapeLike(searchQuery)}%`).map(f=>f.id));
+    report.queries.filenameSearch={
+      fts:{plan:sqlite.prepare(`EXPLAIN QUERY PLAN ${ftsSearch.source}`).all(),ms:await repeat(()=>ftsSearch.all(`"${searchQuery}"`))},
+      like:{plan:sqlite.prepare(`EXPLAIN QUERY PLAN ${likeSearch.source}`).all(),ms:await repeat(()=>likeSearch.all(`%${escapeLike(searchQuery)}%`))},
+    };
+  }
   // SQLite tuning (#254): commit-heavy cost under synchronous FULL vs NORMAL
   // (WAL) on the tuned connection, and cached point-lookup throughput.
   {

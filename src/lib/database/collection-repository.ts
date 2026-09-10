@@ -6,7 +6,7 @@ import type { CollectionRepository } from "@yard-core";
 import type { Collection } from "@yard-core";
 
 import { sqlite as defaultSqlite } from "./connection";
-import { filenameLike } from "./sql-parameters";
+import { filenameSearch } from "./filename-search";
 import { extractSmartQuery } from "@/lib/smart-collection-filter";
 import * as schema from "@/lib/schema";
 
@@ -22,13 +22,14 @@ export interface GetAllCollectionsOptions {
 }
 
 function countFilesMatchingQuery(
+  sqlite: Database,
   db: ReturnType<typeof drizzle<typeof schema>>,
   query: string,
 ): number {
   const result = db
     .select({ count: count() })
     .from(schema.files)
-    .where(and(sql`${schema.files.removedAt} IS NULL`, filenameLike(query)))
+    .where(and(sql`${schema.files.removedAt} IS NULL`, filenameSearch(sqlite, query)))
     .get() as { count: number } | undefined;
   return result?.count ?? 0;
 }
@@ -123,7 +124,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
       if (options?.includeSmartCounts && c.isSmart && c.filter) {
         const query = extractSmartQuery(c.filter);
         if (query) {
-          c.fileCount = countFilesMatchingQuery(this.db, query);
+          c.fileCount = countFilesMatchingQuery(this.sqlite, this.db, query);
         }
       }
     }
@@ -152,7 +153,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
     if (!query) {
       return null;
     }
-    return countFilesMatchingQuery(this.db, query);
+    return countFilesMatchingQuery(this.sqlite, this.db, query);
   }
 
   createCollection(name: string, isSmart?: boolean, filter?: string): string {
@@ -217,7 +218,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
         .where(
           and(
             sql`${schema.files.removedAt} IS NULL`,
-            filenameLike(query),
+            filenameSearch(this.sqlite, query),
           ),
         )
         .all() as { id: string }[];

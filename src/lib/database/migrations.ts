@@ -224,6 +224,37 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   // Collection names are unique at the storage layer so create/rename
   // checks cannot race (#252).
   sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_collections_name ON collections(name)`);
+  // Filename substring search index (#251). FTS5 may be unavailable in some
+  // SQLite builds; failure leaves the LIKE fallback in place.
+  try {
+    sqlite.exec(
+      `CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(filename, content='files', content_rowid='rowid', tokenize='trigram')`,
+    );
+    sqlite.exec(
+      `CREATE TRIGGER IF NOT EXISTS files_fts_ai AFTER INSERT ON files BEGIN INSERT INTO files_fts(rowid, filename) VALUES (new.rowid, new.filename); END`,
+    );
+    sqlite.exec(
+      `CREATE TRIGGER IF NOT EXISTS files_fts_ad AFTER DELETE ON files BEGIN INSERT INTO files_fts(files_fts, rowid, filename) VALUES ('delete', old.rowid, old.filename); END`,
+    );
+    sqlite.exec(
+      `CREATE TRIGGER IF NOT EXISTS files_fts_au AFTER UPDATE OF filename ON files BEGIN INSERT INTO files_fts(files_fts, rowid, filename) VALUES ('delete', old.rowid, old.filename); INSERT INTO files_fts(rowid, filename) VALUES (new.rowid, new.filename); END`,
+    );
+    // Backfill once for libraries that existed before the index. An
+    // external-content FTS table reports its content rows before the index
+    // is built, so the empty check reads the docsize shadow table, which is
+    // populated only by an actual index.
+    const indexed = (
+      sqlite.prepare("SELECT COUNT(*) AS n FROM files_fts_docsize").get() as { n: number }
+    ).n;
+    const total = (
+      sqlite.prepare("SELECT COUNT(*) AS n FROM files").get() as { n: number }
+    ).n;
+    if (indexed === 0 && total > 0) {
+      sqlite.exec("INSERT INTO files_fts(files_fts) VALUES ('rebuild')");
+    }
+  } catch {
+    // No FTS5: filename search stays on the LIKE path.
+  }
   // Model-first vector reads for similarity search (#233).
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_embeddings_model ON file_embeddings(model, file_id)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_file_tags_tag_id ON file_tags(tag_id)`);

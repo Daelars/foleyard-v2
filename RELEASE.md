@@ -51,39 +51,43 @@ Do not use `build:desktop:disposable` for real user releases.
 
 ## Release Flow
 
-Prepare a release commit and tag:
+Everyday work happens on `development`. Cutting a release bumps the
+version, commits, tags, syncs `main`, and publishes in one command:
 
 ```bash
-bun run release:prepare
+bun run release:cut            # patch
+bun run release:cut -- minor
+bun run release:cut -- major
+bun run release:cut -- 0.2.3
 ```
 
-This defaults to a patch bump, for example `0.1.0` to `0.1.1`.
-
-Other bump options:
-
-```bash
-bun run release:prepare -- minor
-bun run release:prepare -- major
-bun run release:prepare -- 0.2.3
-```
-
-Prepare and push in one command:
-
-```bash
-bun run release:prepare -- patch --push
-```
-
-The prepare script:
+`release:cut` runs `prepare-release.cjs --cut`, which:
 
 1. Refuses to run if the working tree is dirty.
-2. Bumps `package.json`.
-3. Updates root version fields in `package-lock.json`, but only when that
-   file exists (conditional — it is not created when absent).
-4. Commits `Release x.y.z`.
-5. Creates annotated tag `vx.y.z`.
-6. Pushes the commit and tag when `--push` is passed.
+2. Bumps the version in `package.json` — the single version source. The
+   About/settings UI, runtime snapshot, documentation manifest, and
+   installer all derive from it during the release build.
+3. Commits `Release x.y.z`.
+4. Creates annotated tag `vx.y.z`.
+5. Pushes the current branch (`development`).
+6. Fast-forwards `main` to the released commit and pushes it; aborts
+   loudly if `main` has diverged.
+7. Pushes the tag last, triggering `.github/workflows/release.yml`.
 
-Pushing the tag triggers `.github/workflows/release.yml`.
+Afterwards `development` and `main` point at the same code. Keep
+committing to `development` and cut again when ready; the cycle repeats.
+
+Lower-level variants if you only want to prepare, not publish:
+
+```bash
+bun run release:prepare                 # bump + commit + tag, no push
+bun run release:prepare -- patch --push # no main sync
+```
+
+The prepare script supports `--dry-run` and resumes a prepared version
+bump when only `package.json` is modified. It updates root version
+fields in `package-lock.json` only when that file exists (this repo uses
+`bun.lock` and has no such file).
 
 ## GitHub Release Build
 
@@ -145,15 +149,13 @@ git push origin vx.y.z
 
 Replace `vx.y.z` with the tag created by `release:prepare`, for example `v0.1.1`.
 
-## Extension v2 status (internal, bundled-only)
+## Extension status (v2 only)
 
-No release ships a v2 cutover. The six v1 tools stay the product
-surface with their routes, settings, and data untouched. Six v2 ports
-ship as disabled-by-default internal references — Make Pack v2, Sound
-Shelf v2, Smart Collections v2, Folder Janitor v2, Library Gatherer
-v2, and Drop Rules v2: enabling one exposes real entry points, and
-disabling it rejects new work, cancels live jobs, and removes its UI.
-None migrate v1 settings; the namespaces stay separate.
+Version 1 extensions were removed. Seven v2 tools ship disabled by
+default — Make Pack, Sound Shelf, Smart Collections, Folder Janitor,
+Library Gatherer, Drop Rules, and Auto Tag. Enabling one exposes real
+entry points; disabling it rejects new work, cancels live jobs, and
+removes its UI.
 
 A future per-tool cutover needs its own compatibility and rollback
 plan, with parity, data, and recovery checks passing first (see
@@ -165,8 +167,8 @@ completed file operations.
 ### Enabling and disabling v2 ports
 
 Every v2 port is disabled by default and changes nothing until both
-steps are done (shown for Make Pack v2; the other five follow the
-same routes with their own IDs):
+steps are done (shown for Make Pack v2; the other six follow the same
+routes with their own IDs):
 
 1. Settings, Extensions, enable Make Pack v2 (or
    `PATCH /api/extensions-v2/extensions/make-pack-v2` with

@@ -9,6 +9,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import packageJson from "../../package.json";
+
 export type DocumentStatus = "current" | "historical" | "experimental";
 
 export type DocumentEntry = {
@@ -81,7 +83,7 @@ export function getDocumentationLocation() {
   const { root, packaged } = resolveDocsRoot();
   return {
     manifestId: "foleyard-docs",
-    productVersion: "0.1.8",
+    productVersion: (packageJson as { version: string }).version,
     matched: true,
     indexId: "index",
     documentIds: DOCUMENT_REGISTRY.map((d) => d.id),

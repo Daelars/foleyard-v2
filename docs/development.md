@@ -116,8 +116,9 @@ thresholds and `bun run test:coverage` are the source of truth.
 
 ## Examples
 
-The runnable-in-repository examples are `core/query-library` and
-`extensions-v2/minimal`.
+The runnable-in-repository examples (derived from `examples/`) are
+`core/query-library`, `extensions-v2/minimal` and
+`extensions-v2/settings`; CI runs all three.
 
 ## Related documentation
 

@@ -47,8 +47,27 @@ function readRegistry() {
   return {
     manifestId: typeof parsed.manifestId === "string" ? parsed.manifestId : "foleyard-docs",
     documents,
-    examples: Array.isArray(parsed.examples) ? parsed.examples : [],
   };
+}
+
+/**
+ * Runnable examples derived from `examples/<area>/<name>/run.ts` (#249):
+ * the directory is the single source, not a hardcoded list.
+ */
+function listExamples() {
+  const examplesDir = path.join(root, "examples");
+  const found = [];
+  if (!fs.existsSync(examplesDir)) return found;
+  for (const area of fs.readdirSync(examplesDir, { withFileTypes: true })) {
+    if (!area.isDirectory()) continue;
+    const areaDir = path.join(examplesDir, area.name);
+    for (const example of fs.readdirSync(areaDir, { withFileTypes: true })) {
+      if (!example.isDirectory()) continue;
+      if (!fs.existsSync(path.join(areaDir, example.name, "run.ts"))) continue;
+      found.push({ id: `${area.name}/${example.name}`, runnableIn: "repository" });
+    }
+  }
+  return found.sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function parseOutDir(argv) {
@@ -156,7 +175,7 @@ const manifest = {
   sourceRevision,
   sourceDirty,
   documents,
-  examples: registry.examples,
+  examples: listExamples(),
 };
 
 fs.mkdirSync(outDir, { recursive: true });

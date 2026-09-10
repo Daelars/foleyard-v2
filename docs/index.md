@@ -111,8 +111,9 @@ the absolute path under the docs root, and reads it as UTF-8.
 
 ## Examples
 
-Runnable examples live in `examples/`; each README states prerequisites,
-invocation, expected results and version provenance:
+Runnable examples live in `examples/`; the served list is derived from
+that directory (`examples/<area>/<name>/run.ts`), and each README states
+prerequisites, invocation, expected results and version provenance:
 
 - `examples/core/query-library/` (`node examples/core/query-library/run.ts`;
   `bun` cannot dlopen better-sqlite3 on Windows, see its README) —
@@ -120,8 +121,11 @@ invocation, expected results and version provenance:
 - `examples/extensions-v2/minimal/` (`bun run example:v2-minimal`) —
   minimal v2 extension (one global command) through the real v2
   registry and host. No filesystem, no database.
+- `examples/extensions-v2/settings/` (`bun run example:v2-settings`) —
+  authored settings and a sidebar contribution resolved through the
+  shared availability evaluator.
 
-Both are repository-run examples, not executable installed plugins.
+They are repository-run examples, not executable installed plugins.
 
 ## Related documentation
 

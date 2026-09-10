@@ -132,6 +132,11 @@ curl -X PUT /api/extensions-v2/settings/make-pack-v2/default-format \
   -d '{"value":"zip"}'
 ```
 
+The runnable-in-repository example `extensions-v2/settings`
+(`bun run example:v2-settings`) exercises an authored setting, its
+validation and reset, and a sidebar contribution through the real
+extension engine without a database.
+
 ## Related documentation
 
 - `docs/extensions-v2.md` — setting declaration and lifecycle contract

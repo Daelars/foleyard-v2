@@ -29,9 +29,5 @@
     { "id": "adr/filesystem-access", "path": "docs/adr/filesystem-access.md", "title": "Filesystem access ADR", "status": "current", "audience": "developers" },
     { "id": "adr/new-surface-promotion", "path": "docs/adr/new-surface-promotion.md", "title": "New surface promotion ADR", "status": "current", "audience": "developers" },
     { "id": "readme", "path": "README.md", "title": "Product overview", "status": "current", "audience": "users" }
-  ],
-  "examples": [
-    { "id": "core/query-library", "runnableIn": "repository" },
-    { "id": "extensions-v2/minimal", "runnableIn": "repository" }
   ]
 }

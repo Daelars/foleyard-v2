@@ -51,6 +51,23 @@ describe("documentation bundle contracts", () => {
     }
   });
 
+  it("derives the runnable example list from the examples directory", () => {
+    const raw = JSON.parse(
+      fs.readFileSync(path.join(REPO_ROOT, "docs", "manifest.json"), "utf8"),
+    ) as { examples?: unknown };
+    expect(raw.examples, "the manifest must not hardcode examples").toBeUndefined();
+
+    const ids = getDocumentationLocation().examples.map((example) => example.id);
+    expect(ids).toContain("core/query-library");
+    expect(ids).toContain("extensions-v2/minimal");
+    expect(ids).toContain("extensions-v2/settings");
+    for (const id of ids) {
+      const dir = path.join(REPO_ROOT, "examples", id);
+      expect(fs.existsSync(path.join(dir, "run.ts")), `missing ${id}/run.ts`).toBe(true);
+      expect(fs.existsSync(path.join(dir, "README.md")), `missing ${id}/README.md`).toBe(true);
+    }
+  });
+
   it("registers and serves the live expected-failures ledger", () => {
     expect(listDocumentIds()).toContain("expected-failures");
     expect(readDocumentation("expected-failures").content.length).toBeGreaterThan(100);

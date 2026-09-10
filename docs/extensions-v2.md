@@ -303,7 +303,9 @@ PUT validates against the declaration (bad values return 400);
 reset restores the default. Settings live namespaced per extension;
 one extension cannot touch another's. Provenance: API v2 authored
 settings, app `settings-state.ts` over the existing settings table
-(no new migration).
+(no new migration). The self-contained version of this flow — authored
+setting plus contribution resolution — is the runnable example at
+`examples/extensions-v2/settings/` (`bun run example:v2-settings`).
 
 ### 6. Run a guarded operation
 

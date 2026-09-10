@@ -322,8 +322,8 @@ for (const file of definitionsFiles) {
   }
 }
 
-// 9. Every example the manifest lists has a directory and a README.
-const examples = Array.isArray(registry?.examples) ? registry.examples : [];
+// 9. Every example the staged manifest lists has a directory and a README.
+const examples = Array.isArray(manifest?.examples) ? manifest.examples : [];
 for (const example of examples) {
   if (typeof example?.id !== "string") {
     errors.push(`manifest example entry needs an id: ${JSON.stringify(example)}`);

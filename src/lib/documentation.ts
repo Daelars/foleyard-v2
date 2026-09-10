@@ -174,6 +174,33 @@ export function getDocumentationRegistry(): DocumentationRegistry {
   return readRegistry(root) ?? EMPTY_REGISTRY;
 }
 
+/**
+ * Runnable examples derived from the checkout's `examples/` directory
+ * (`examples/<area>/<name>/run.ts`), never from a constant (#249). Packaged
+ * builds do not ship examples, so the list is empty there.
+ */
+export function listRunnableExamples(): DocumentationExample[] {
+  const { root, packaged } = resolveDocsRoot();
+  if (packaged) return [];
+  const examplesDir = path.join(resolveWorkspaceRoot(), "examples");
+  if (!fs.existsSync(examplesDir)) return [];
+  const found: DocumentationExample[] = [];
+  for (const area of fs.readdirSync(examplesDir, { withFileTypes: true })) {
+    if (!area.isDirectory()) continue;
+    const areaDir = path.join(examplesDir, area.name);
+    for (const example of fs.readdirSync(areaDir, { withFileTypes: true })) {
+      if (!example.isDirectory()) continue;
+      const runPath = path.join(areaDir, example.name, "run.ts");
+      if (!fs.existsSync(runPath)) continue;
+      found.push({
+        id: `${area.name}/${example.name}`,
+        runnableIn: "repository",
+      });
+    }
+  }
+  return found.sort((left, right) => left.id.localeCompare(right.id));
+}
+
 function readBuildId(): string | undefined {
   try {
     const roots = [process.env.FOLEYARD_APP_PATH, process.cwd()].filter(
@@ -227,7 +254,7 @@ export function getDocumentationLocation(): DocumentationLocation {
     productVersion,
     indexId: "index",
     documentIds: registry.documents.map((d) => d.id),
-    examples: registry.examples,
+    examples: listRunnableExamples(),
     ...(packaged ? {} : { localRoot: root }),
   };
 

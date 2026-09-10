@@ -26,7 +26,7 @@ export class ScanRunner implements ScannerService {
   private fs: FileSystemSeam;
   private metadataExtractor: MetadataSeam;
   private onProgress?: (status: ScanStatus) => void;
-  private onComplete?: (completion: { startedAt: string }) => void;
+  private onComplete?: (completion: { startedAt: string; fileIds: string[] }) => void;
 
   private status = createScanStatus();
 
@@ -40,11 +40,12 @@ export class ScanRunner implements ScannerService {
     metadataExtractor: MetadataSeam;
     onProgress?: (status: ScanStatus) => void;
     /**
-     * Fires once per finished run, success or failure: arrivals that
-     * landed before a failure are real, and deterministic tagging is
-     * idempotent, so there is nothing to gain by skipping failed runs.
+     * Fires once per finished run, success or failure, with the files the
+     * run actually added or updated. Arrivals that landed before a failure
+     * are real, and deterministic tagging is idempotent, so there is
+     * nothing to gain by skipping failed runs.
      */
-    onComplete?: (completion: { startedAt: string }) => void;
+    onComplete?: (completion: { startedAt: string; fileIds: string[] }) => void;
   }) {
     this.fileRepo = deps.fileRepo;
     this.settingsRepo = deps.settingsRepo;
@@ -127,6 +128,10 @@ export class ScanRunner implements ScannerService {
   private async runScan(libraryRoots: string[]) {
     let metadataQueue: ReturnType<typeof createMetadataQueue> | null = null;
     const metadataUpdates: MetadataUpdateRecord[] = [];
+    // Files actually added or updated by this run, in discovery order.
+    // Collected outside the try so a partial failure still hands off the
+    // arrivals that landed (#234).
+    const arrivals: string[] = [];
     let lastScannedAt = new Date().toISOString();
 
     try {
@@ -150,7 +155,7 @@ export class ScanRunner implements ScannerService {
         () => this.incrementScanErrors(),
       );
 
-      const healthyRoots = await discoverRoots(this.phaseContext(), libraryRoots, lastScannedAt, seenPaths, metadataQueue);
+      const healthyRoots = await discoverRoots(this.phaseContext(), libraryRoots, lastScannedAt, seenPaths, metadataQueue, arrivals);
 
       this.status.phase = "metadata";
       this.emitProgress();
@@ -177,7 +182,7 @@ export class ScanRunner implements ScannerService {
       this.emitProgress();
     } finally {
       this.status.running = false;
-      this.onComplete?.({ startedAt: lastScannedAt });
+      this.onComplete?.({ startedAt: lastScannedAt, fileIds: arrivals });
       this.emitProgress();
     }
   }

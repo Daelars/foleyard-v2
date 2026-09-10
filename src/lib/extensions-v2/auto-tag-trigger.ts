@@ -1,31 +1,35 @@
 import { AUTO_TAG_V2_ID, AUTO_TAG_V2_TAG_FILES, MAX_TAG_FILES } from "@foleyard/auto-tag-v2";
 
-import { getFileIdsScannedSince } from "@/lib/db";
-
 import { getAppV2Host, isV2ExtensionEnabled } from "./host";
 import { getV2GrantedPermissions } from "./policy";
 
 /**
- * Post-scan auto-tag trigger (#194). A finished scan hands its arrival
- * list to the auto-tag tool as background jobs: one job per 500 files
- * with a stable idempotency key per chunk, so a repeated completion
- * never double-tags. Nothing submits unless the tool is both enabled
- * and approved for tag writes.
+ * Post-scan auto-tag trigger (#194, #234). A finished scan hands the
+ * files it actually added or updated to the auto-tag tool as background
+ * jobs: one job per 500 files with a stable idempotency key per chunk,
+ * so a repeated completion never double-tags. An unchanged rescan
+ * reports no arrivals and submits nothing. Nothing submits unless the
+ * tool is both enabled and approved for tag writes.
  *
  * Pure seam: every collaborator injects through deps and only the
  * defaults touch production singletons, so tests drive the whole
  * decision table without a database or a host.
  */
 
+/** Files a finished scan actually added or updated, plus its start time. */
+export type ScanCompletion = {
+  startedAt: string;
+  fileIds: string[];
+};
+
 export type AutoTagTriggerDeps = {
   isEnabled?: (extensionId: string) => boolean;
   granted?: (extensionId: string) => readonly string[];
-  arrivalsSince?: (sinceIso: string) => string[];
   submit?: (fileIds: string[], idempotencyKey: string, batchId: string) => Promise<unknown>;
 };
 
 export async function triggerAutoTagAfterScan(
-  startedAtIso: string,
+  completion: ScanCompletion,
   deps: AutoTagTriggerDeps = {},
 ): Promise<{ submitted: number; files: number }> {
   const isEnabled = deps.isEnabled ?? isV2ExtensionEnabled;
@@ -33,7 +37,7 @@ export async function triggerAutoTagAfterScan(
   const granted = deps.granted ?? getV2GrantedPermissions;
   if (!granted(AUTO_TAG_V2_ID).includes("tags:write")) return { submitted: 0, files: 0 };
 
-  const arrivals = (deps.arrivalsSince ?? getFileIdsScannedSince)(startedAtIso);
+  const arrivals = completion.fileIds;
   if (arrivals.length === 0) return { submitted: 0, files: 0 };
 
   const submit =
@@ -42,15 +46,15 @@ export async function triggerAutoTagAfterScan(
       getAppV2Host().submitJob({
         extensionId: AUTO_TAG_V2_ID,
         commandId: AUTO_TAG_V2_TAG_FILES,
-        input: { fileIds, batchId, scanStartedAt: startedAtIso },
+        input: { fileIds, batchId, scanStartedAt: completion.startedAt },
         idempotencyKey,
       }));
   let submitted = 0;
   for (let index = 0; index < arrivals.length; index += MAX_TAG_FILES) {
     await submit(
       arrivals.slice(index, index + MAX_TAG_FILES),
-      `auto-tag-scan-${startedAtIso}-${index / MAX_TAG_FILES}`,
-      `scan:${startedAtIso}`,
+      `auto-tag-scan-${completion.startedAt}-${index / MAX_TAG_FILES}`,
+      `scan:${completion.startedAt}`,
     );
     submitted += 1;
   }

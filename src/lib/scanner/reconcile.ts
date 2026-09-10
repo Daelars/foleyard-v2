@@ -13,12 +13,13 @@ function normalizeStoredDirectory(directory: string | null | undefined) {
   return directory == null ? null : directory.replace(/\\/g, "/");
 }
 
-export async function processDiscoveredBatch(context: ScanPhaseContext, filePaths: string[], normalizedRoot: string, lastScannedAt: string, seenPaths: Set<string>, metadataQueue: ReturnType<typeof createMetadataQueue>) {
+export async function processDiscoveredBatch(context: ScanPhaseContext, filePaths: string[], normalizedRoot: string, lastScannedAt: string, seenPaths: Set<string>, metadataQueue: ReturnType<typeof createMetadataQueue>, arrivals: string[]) {
     const existingByPath = new Map(
       context.fileRepo.getFilesByPaths(filePaths).map((file) => [file.path, file]),
     );
     const touchActivePaths: string[] = [];
     const upsertRecords: ScanFileRecord[] = [];
+    const newPaths: string[] = [];
 
     filePaths.forEach((filePath) => seenPaths.add(filePath));
     const statResults = await mapConcurrent(filePaths, 32, async (filePath) => {
@@ -83,13 +84,22 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
 
       if (existing) {
         context.status.updated += 1;
+        arrivals.push(existing.id);
       } else {
         context.status.added += 1;
+        newPaths.push(filePath);
       }
     }
 
     context.fileRepo.batchTouchActiveFiles(touchActivePaths, lastScannedAt);
     context.fileRepo.batchUpsertFiles(upsertRecords, lastScannedAt);
+    if (newPaths.length > 0) {
+      // New rows get their ids at insert; resolve them so the arrival list
+      // matches the files the scan actually added.
+      for (const file of context.fileRepo.getFilesByPaths(newPaths)) {
+        arrivals.push(file.id);
+      }
+    }
 
     for (const record of upsertRecords) {
       // Unknown files escalate to a full parse in the same job when the

@@ -59,11 +59,12 @@ function getRunner(): ScanRunner {
       metadataExtractor: {
         extract: extractMetadata,
       },
-      // Post-scan auto-tag (#194): fire and forget. The runner fires
-      // onComplete even for failed runs because arrivals that landed
-      // are real; a failing trigger itself must never fail the scan.
-      onComplete: ({ startedAt }) => {
-        void triggerAutoTagAfterScan(startedAt).catch((error) => {
+      // Post-scan auto-tag (#194, #234): fire and forget with the files
+      // the scan actually added or updated. The runner fires onComplete
+      // even for failed runs because arrivals that landed are real; a
+      // failing trigger itself must never fail the scan.
+      onComplete: ({ startedAt, fileIds }) => {
+        void triggerAutoTagAfterScan({ startedAt, fileIds }).catch((error) => {
           console.error("Auto-tag trigger failed after scan", error);
         });
       },

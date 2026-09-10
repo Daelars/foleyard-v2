@@ -83,12 +83,12 @@ vi.mock("@/lib/metadata", () => ({
 }));
 
 const triggerState = vi.hoisted(() => ({
-  calls: [] as Array<{ startedAt: string }>,
+  calls: [] as Array<{ startedAt: string; fileIds: string[] }>,
 }));
 
 vi.mock("@/lib/extensions-v2/auto-tag-trigger", () => ({
-  triggerAutoTagAfterScan: (startedAt: string) => {
-    triggerState.calls.push({ startedAt });
+  triggerAutoTagAfterScan: (completion: { startedAt: string; fileIds: string[] }) => {
+    triggerState.calls.push({ ...completion, fileIds: [...completion.fileIds] });
     return Promise.resolve({ submitted: 0, files: 0 });
   },
 }));
@@ -164,19 +164,18 @@ describe("scanner", () => {
     }
   });
 
-  it("hands scan arrivals to the auto-tag trigger on completion", async () => {
+  it("hands the files the scan actually landed to the auto-tag trigger", async () => {
     const scratch = createScratchLibrary("foleyard-scan-trigger-");
     try {
-      scratch.writeFile("kick.wav");
+      const kick = scratch.writeFile("kick.wav");
       settings.setLibraryRoots([scratch.root]);
 
       await runScanToIdle();
       expect(triggerState.calls).toHaveLength(1);
       expect(typeof triggerState.calls[0]!.startedAt).toBe("string");
-      // The arrivals query behind the trigger sees the scanned file.
-      expect(
-        files.getFileIdsScannedSince(triggerState.calls[0]!.startedAt),
-      ).toHaveLength(1);
+      expect(triggerState.calls[0]!.fileIds).toEqual([
+        files.getFileByPath(kick)!.id,
+      ]);
     } finally {
       scratch.dispose();
     }
@@ -193,6 +192,8 @@ describe("scanner", () => {
       const second = await runScanToIdle();
       expect(second.added).toBe(0);
       expect(second.skippedUnchanged).toBe(2);
+      // A no-change rescan reports no arrivals, so no tagging jobs run.
+      expect(triggerState.calls.at(-1)!.fileIds).toEqual([]);
 
       // A touched file is re-indexed; the untouched one is skipped again.
       const later = new Date(Date.now() + 5000);
@@ -200,6 +201,9 @@ describe("scanner", () => {
       const third = await runScanToIdle();
       expect(third.updated).toBe(1);
       expect(third.skippedUnchanged).toBe(1);
+      expect(triggerState.calls.at(-1)!.fileIds).toEqual([
+        files.getFileByPath(kick)!.id,
+      ]);
     } finally {
       scratch.dispose();
     }

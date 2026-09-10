@@ -5,7 +5,7 @@ import { processDiscoveredBatch } from "./reconcile";
 
 const DISCOVERY_BATCH_SIZE = 500;
 
-export async function discoverRoots(context: ScanPhaseContext, libraryRoots: string[], lastScannedAt: string, seenPaths: Set<string>, metadataQueue: ReturnType<typeof createMetadataQueue>) {
+export async function discoverRoots(context: ScanPhaseContext, libraryRoots: string[], lastScannedAt: string, seenPaths: Set<string>, metadataQueue: ReturnType<typeof createMetadataQueue>, arrivals: string[]) {
   const healthyRoots = new Set<string>();
       for (const libraryRoot of libraryRoots) {
         context.status.phase = "validating";
@@ -37,6 +37,7 @@ export async function discoverRoots(context: ScanPhaseContext, libraryRoots: str
             lastScannedAt,
             seenPaths,
             metadataQueue,
+            arrivals,
           );
         }
         if (!discoveryFailed) healthyRoots.add(normalizedRoot);

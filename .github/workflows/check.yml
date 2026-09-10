@@ -24,6 +24,5 @@ jobs:
       - run: node scripts/check-v2-boundaries.cjs
       - run: bun run docs:prepare
       - run: bun run docs:check
-      - run: bun run example:selected-ids
       - run: bun run example:v2-minimal
       - run: node examples/core/query-library/run.ts

@@ -1,4 +1,4 @@
-import type { YardContractStanding } from "@yard-core";
+import type { ContractStanding } from "@/lib/contract-types";
 
 /**
  * Internal event catalog — only actually emitted/consumed contracts.
@@ -13,7 +13,7 @@ export type EventDescription = {
   id: string;
   owner: EventOwner;
   transport: EventTransport;
-  contract: YardContractStanding;
+  contract: ContractStanding;
   subscriptionAvailable: boolean;
   payloadRef?: string;
   docsId: string;

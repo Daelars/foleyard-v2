@@ -1,4 +1,4 @@
-import type { YardContractStanding, YardFeatureStatus } from "@yard-core";
+import type { ContractStanding, FeatureStatus } from "@/lib/contract-types";
 
 /**
  * Implemented capability catalog.
@@ -20,8 +20,8 @@ export type CapabilityDescription = {
   id: string;
   owner: CapabilityOwner;
   title: string;
-  featureStatus: YardFeatureStatus;
-  contract: YardContractStanding;
+  featureStatus: FeatureStatus;
+  contract: ContractStanding;
   availability: CapabilityAvailability;
   requiredPermissions: string[];
   docsId: string;

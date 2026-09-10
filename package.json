@@ -27,7 +27,6 @@
     "test": "npx vitest run",
     "test:watch": "npx vitest",
     "test:coverage": "npx vitest run --coverage",
-    "example:selected-ids": "bun examples/extensions/selected-ids/run.ts",
     "example:v2-minimal": "bun examples/extensions-v2/minimal/run.ts",
     "example:query-library": "bun examples/core/query-library/run.ts",
     "docs:prepare": "node scripts/prepare-docs.cjs",

@@ -141,7 +141,19 @@ for (const tool of fs.readdirSync(toolsDir)) {
     if (manifest.version !== "1.0.0") {
       errors.push(`${tool} version is ${JSON.stringify(manifest.version)}, expected "1.0.0".`);
     }
+  } else {
+    // Version 1 tools were retired; only `-v2` ports may exist.
+    errors.push(`v1 tool package reintroduced: packages/yard-tools/${tool}`);
   }
+}
+
+// 2b. Version 1 removal guards: the core v1 engine and its runnable
+// example must stay deleted.
+if (fs.existsSync(path.join(root, "packages", "yard-core", "src", "extensions"))) {
+  errors.push("packages/yard-core/src/extensions (v1 engine) must not exist.");
+}
+if (rootPackage.scripts && rootPackage.scripts["example:selected-ids"]) {
+  errors.push("package.json must not expose the retired example:selected-ids script.");
 }
 
 // 3. Production fixture exclusion wiring.
@@ -164,5 +176,5 @@ if (errors.length > 0) {
 }
 
 console.log(
-  "check-v2-boundaries: OK — v2 dependency boundary, workspace inclusion, and prototype exclusion hold.",
+  "check-v2-boundaries: OK — v2 dependency boundary, workspace inclusion, prototype exclusion, and v1 retirement hold.",
 );

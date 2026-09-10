@@ -215,11 +215,10 @@ Unverified / blockers:
 - Hover/press/focus ring visual states, reduced-motion behavior, and
   overlay clipping at viewport edges were not captured visually; the
   relevant classes are ported verbatim from the specimen sources.
-- Real-file workflows (favorites, tags, bulk actions, playback, context
-  menus, v2 commands) could not be exercised in the browser: the dev
-  library contains directories but no indexed files, and no desktop
-  bridge. These paths compile and are wired to the real hooks but are
-  marked untested at runtime.
+- Real-file workflows were blocked at preparation time (the dev library
+  held directories but no indexed files). The 10 September pass below
+  exercised them against the real library; native desktop paths remain
+  untested.
 - Lint: `bun run lint` reports pre-existing baseline errors (29 errors,
   20 warnings) in files outside this work (board.tsx old-skin tokens,
   lib-adoption, yard-core, ui/chart, workspace fork…). All new files lint
@@ -230,6 +229,70 @@ Unverified / blockers:
 - Native-only actions (drag-out, reveal, window controls, update toasts)
   are untested in this web preview; runtime capability follows the same
   `useDesktopApp` gates as the original.
+
+## Verification pass — real library web flows, 10 September 2026
+
+Environment: `bun run dev` (Next 16.2.6, Turbopack) against the development
+database (`foleyard.sqlite`: 15,877 active files under `P:\SoundLibary`,
+21 tags, 3,014 tag attachments, 1 collection, 13,644 embeddings). Preview
+browser at 1280x800 (reported viewport 1843x1152), no desktop bridge.
+Ticket #200.
+
+Verified end to end with real data:
+
+- Shell and navigation: rail (Library, Favorites, Shelf, Organize, Auto
+  tag, Extensions, Settings), mobile navigation control present,
+  breadcrumbs and back navigation, folder drill-down to
+  `SFX/Alarm & Chime (SFX)` (87 files).
+- Library: file rows with format, provenance marks (M/D), durations and
+  tag chips; search ("alarm" -> 207 results); origin filter (Manual -> 25,
+  pressed state); multi-select (two of twelve) with the bulk bar (Save
+  all, Tag, Remove, Remove from Index (v2), Clear).
+- Playback: real audio played to completion (0:06), queue next advanced to
+  the following file, transport controls (previous, pause, next, seek,
+  volume, mute, autoplay, add to collection, close) present with live time.
+- Favorites: the player's Like toggles to Unlike, persists, and is
+  reflected in the Favorites rail badge.
+- Tags: attach/detach from the row menu persists (checked through
+  `GET /api/tags?fileId=...`) and shows the manual provenance mark when
+  the menu is reopened.
+- Context menu: Copy path, Save to favorites, tag checklist with
+  provenance, Remove from library, Find similar, and v2 contributions -
+  Scan Folder Mess (v2) disabled on files with its explanation, Remove
+  from Index (v2), Make Pack v2 from Selection, Add/Remove from Shelf (v2).
+- Shelf: add via the row menu; Shelf view with Pack Shelf v2 and Clear.
+  The `sound-shelf-v2.list` command correctly returns `permission-denied`
+  without the `library:read` grant.
+- Organize: 21 tag chips, one collection with counts, New collection.
+- Command palette (Ctrl+K): 29 commands across navigation, transport and
+  v2 tools; filtering ("shelf" -> 4).
+- Settings: all six tabs render with real data (Library & Storage with the
+  real root and idle scan status; Collections & Tags; Extensions listing
+  Auto Tag v2 and its permissions; Appearance zoom; Customisation remove
+  defaults; About runtime info).
+- Auto tag: coverage board (21/21 tags at goal, 2,083/15,877 tagged, 13%)
+  and Tag origins (1,256 manual / 615 rule / 249 AI) with real per-file
+  lists; Find similar returned ranked matches for a real file.
+- Extensions: tools cards for Make Pack v2, Sound Shelf v2, Smart
+  Collections v2, Folder Janitor v2 and Drop Rules v2 with permission
+  counts and run buttons; Make Pack v2 dialog renders source, name,
+  destination and format with Preview pack.
+
+Observations and limitations from this pass:
+
+- The preview snapshot tool still fails with
+  `PreviewAutomationExecutionError` on app-v3, so no screenshots were
+  captured; the visual-evidence gap remains open for #202.
+- The row menu does not reflect a just-toggled tag attachment until it is
+  reopened; reopening shows the correct provenance mark.
+- One unreproduced full navigation back to `/` occurred mid-session; no
+  cause was established.
+- Hidden settings tabs remain mounted while another view is active (matches
+  the original page's eager mount behavior).
+- The About tab states "MIT Licensed" while the repository has no LICENSE
+  file (pre-existing inconsistency, not part of this work).
+- Make Pack execution, CLAP inference, update notifications and first-run
+  onboarding were not exercised in this pass.
 
 ## Screenshot locations
 

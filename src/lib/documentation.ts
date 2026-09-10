@@ -180,7 +180,7 @@ export function getDocumentationRegistry(): DocumentationRegistry {
  * builds do not ship examples, so the list is empty there.
  */
 export function listRunnableExamples(): DocumentationExample[] {
-  const { root, packaged } = resolveDocsRoot();
+  const { packaged } = resolveDocsRoot();
   if (packaged) return [];
   const examplesDir = path.join(resolveWorkspaceRoot(), "examples");
   if (!fs.existsSync(examplesDir)) return [];

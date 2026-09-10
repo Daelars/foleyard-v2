@@ -32,7 +32,6 @@ export default function DocsPage() {
             <DocsBrowser
               documents={documents}
               location={location}
-              examples={location.examples}
               initialId={null}
             />
           </div>

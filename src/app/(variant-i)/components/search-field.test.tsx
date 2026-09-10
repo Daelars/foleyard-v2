@@ -66,10 +66,7 @@ describe("V3SearchField", () => {
   });
 
   it("adopts a value set outside the field", () => {
-    let setExternal: ((value: string) => void) | null = null;
-    function External() {
-      const [value, setValue] = useState("");
-      setExternal = setValue;
+    function Controlled({ value }: { value: string }) {
       return (
         <V3SearchField
           value={value}
@@ -79,13 +76,11 @@ describe("V3SearchField", () => {
         />
       );
     }
-    render(<External />);
+    const { rerender } = render(<Controlled value="" />);
     const input = screen.getByLabelText("Search sounds");
     expect((input as HTMLInputElement).value).toBe("");
 
-    act(() => {
-      setExternal?.("rain");
-    });
+    rerender(<Controlled value="rain" />);
     expect((input as HTMLInputElement).value).toBe("rain");
   });
 });

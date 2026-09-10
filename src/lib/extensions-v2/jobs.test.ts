@@ -5,8 +5,6 @@ import { createV2JobTransitionHandler } from "./jobs";
 // Area: #258. Progress ticks are high-frequency and memory-only; persistence
 // is coalesced to state changes, terminals and one snapshot per interval.
 
-type Record = { jobId: string; extensionId: string; state: string };
-
 describe("createV2JobTransitionHandler", () => {
   function world(intervalMs = 2000) {
     let nowMs = 0;

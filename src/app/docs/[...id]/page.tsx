@@ -36,7 +36,6 @@ export default async function DocDetailPage({
             <DocsBrowser
               documents={documents}
               location={location}
-              examples={location.examples}
               initialId={documentId}
             />
           </div>

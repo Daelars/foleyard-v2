@@ -47,12 +47,10 @@ const GROUP_ORDER = ["Start here", "Guides", "Extensions", "Architecture", "Deci
 export function DocsBrowser({
   documents,
   location,
-  examples,
   initialId,
 }: {
   documents: DocumentEntry[];
   location: DocsLocation;
-  examples: DocsExample[];
   initialId: string | null;
 }) {
   const router = useRouter();

@@ -377,7 +377,7 @@ export async function runTagFiles(ctx: V2HandlerContext) {
         );
       }
     }
-    for (const file of batch) {
+    for (let index = 0; index < batch.length; index += 1) {
       done += 1;
       ctx.operations.jobs.reportProgress(done, live.length);
     }

@@ -1,18 +1,18 @@
 // Verifies staged documentation identity and internal consistency.
 //
-// Checks:
-// - every DOCUMENT_REGISTRY relativePath exists in the checkout,
+// `docs/manifest.json` is the single registry (#236): the application, the
+// staging script and this checker all read it. Checks:
+// - the registry parses, has unique ids, and every path exists in the checkout,
 // - manifest.json exists in the staged dir,
+// - the staged manifest's document set equals the registry (id, path, status),
 // - manifest productVersion matches root package.json (and coreVersion
 //   matches packages/yard-core/package.json),
 // - each manifest sha256 matches the staged file content,
 // - docs/index.md + README.md are present in the staged dir,
 // - relative .md links inside live docs resolve (only relative .md links;
-//   http(s)/anchors skipped; historical audits are exempt from source-path
-//   checks but inter-audit links must resolve),
+//   http(s)/anchors skipped),
 // - structured command IDs in docs/commands.md resolve against the
-//   packages/yard-tools/*-v2/src/definition.ts files (v1 retired fully;
-//   v2 command IDs are the exported const string values containing a dot).
+//   packages/yard-tools/*-v2/src/definition.ts files.
 //
 // Usage: node scripts/check-docs.cjs --dir <staged-dir>
 // (also accepts --out or a positional dir; defaults to
@@ -23,41 +23,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 
 const root = path.resolve(__dirname, "..");
-
-// Same table as DOCUMENT_REGISTRY in src/lib/documentation.ts.
-const DOCUMENTS = [
-  { id: "index", relativePath: "docs/index.md", status: "current" },
-  { id: "quickstart", relativePath: "docs/quickstart.md", status: "current" },
-  { id: "development", relativePath: "docs/development.md", status: "current" },
-  { id: "library", relativePath: "docs/library.md", status: "current" },
-  { id: "scanning", relativePath: "docs/scanning.md", status: "current" },
-  { id: "metadata", relativePath: "docs/metadata.md", status: "current" },
-  { id: "playback", relativePath: "docs/playback.md", status: "current" },
-  { id: "search", relativePath: "docs/search.md", status: "current" },
-  { id: "collections", relativePath: "docs/collections.md", status: "current" },
-  { id: "filesystem", relativePath: "docs/filesystem.md", status: "current" },
-  { id: "settings", relativePath: "docs/settings.md", status: "current" },
-  { id: "database", relativePath: "docs/database.md", status: "current" },
-  { id: "extensions", relativePath: "docs/extensions.md", status: "current" },
-  { id: "extensions-v2", relativePath: "docs/extensions-v2.md", status: "current" },
-  { id: "extensions-v2-migration", relativePath: "docs/extensions-v2-migration.md", status: "current" },
-  { id: "extensions-v2-make-pack", relativePath: "docs/extensions-v2-make-pack.md", status: "current" },
-  { id: "extensions-v2-troubleshooting", relativePath: "docs/extensions-v2-troubleshooting.md", status: "current" },
-  { id: "commands", relativePath: "docs/commands.md", status: "current" },
-  { id: "events", relativePath: "docs/events.md", status: "current" },
-  { id: "runtime", relativePath: "docs/runtime.md", status: "current" },
-  { id: "architecture/application", relativePath: "docs/architecture/application.md", status: "current" },
-  { id: "architecture/desktop", relativePath: "docs/architecture/desktop.md", status: "current" },
-  { id: "architecture/yard-core", relativePath: "docs/architecture/yard-core.md", status: "current" },
-  { id: "architecture/extensions", relativePath: "docs/architecture/extensions.md", status: "current" },
-  { id: "adr/filesystem-access", relativePath: "docs/adr/filesystem-access.md", status: "current" },
-  { id: "adr/new-surface-promotion", relativePath: "docs/adr/new-surface-promotion.md", status: "current" },
-  { id: "readme", relativePath: "README.md", status: "current" },
-];
-
-const HISTORICAL_PREFIXES = ["docs/audits/", "docs/audit-"];
-const isHistorical = (relativePath) =>
-  HISTORICAL_PREFIXES.some((prefix) => relativePath.startsWith(prefix));
+const REGISTRY_PATH = path.join(root, "docs", "manifest.json");
 
 function parseStagedDir(argv) {
   for (let i = 0; i < argv.length; i++) {
@@ -105,12 +71,37 @@ function listFilesRecursive(dir, extension) {
 const errors = [];
 const stagedDir = parseStagedDir(process.argv.slice(2));
 
-// 1. Registry sources exist in the checkout.
-for (const entry of DOCUMENTS) {
-  if (!fs.existsSync(path.join(root, entry.relativePath))) {
-    errors.push(`registry source missing in checkout: ${entry.relativePath} (id "${entry.id}")`);
+// 1. Registry parses and every source exists in the checkout.
+let registry = null;
+if (!fs.existsSync(REGISTRY_PATH)) {
+  errors.push("docs/manifest.json not found; it is the single registry");
+} else {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8"));
+    if (Array.isArray(parsed.documents) && parsed.documents.length > 0) {
+      registry = parsed;
+    } else {
+      errors.push("docs/manifest.json declares no documents");
+    }
+  } catch (error) {
+    errors.push(`docs/manifest.json is not valid JSON: ${error.message}`);
   }
 }
+if (registry) {
+  const ids = new Set();
+  for (const entry of registry.documents) {
+    if (typeof entry.id !== "string" || typeof entry.path !== "string") {
+      errors.push(`manifest entry needs id and path: ${JSON.stringify(entry)}`);
+      continue;
+    }
+    if (ids.has(entry.id)) errors.push(`duplicate manifest id "${entry.id}"`);
+    ids.add(entry.id);
+    if (!fs.existsSync(path.join(root, entry.path))) {
+      errors.push(`registry source missing in checkout: ${entry.path} (id "${entry.id}")`);
+    }
+  }
+}
+const registryDocuments = registry ? registry.documents : [];
 
 // 2. Manifest exists in the staged dir.
 const manifestPath = path.join(stagedDir, "manifest.json");
@@ -149,23 +140,39 @@ if (manifest) {
   }
 }
 
-// 4. sha256 of every manifest document matches the staged file.
+// 4. Staged document set equals the registry, and each sha256 matches.
 if (manifest && Array.isArray(manifest.documents)) {
-  const manifestIds = new Set(manifest.documents.map((d) => d.id));
-  for (const entry of DOCUMENTS) {
-    if (!manifestIds.has(entry.id)) {
-      errors.push(`manifest is missing registry id "${entry.id}"`);
+  const stagedById = new Map(manifest.documents.map((doc) => [doc.id, doc]));
+  for (const entry of registryDocuments) {
+    const staged = stagedById.get(entry.id);
+    if (!staged) {
+      errors.push(`staged manifest is missing registry id "${entry.id}"`);
+      continue;
+    }
+    if (staged.path !== entry.path) {
+      errors.push(
+        `staged manifest path for "${entry.id}" is "${staged.path}", registry says "${entry.path}"`,
+      );
+    }
+    if (staged.status !== entry.status) {
+      errors.push(
+        `staged manifest status for "${entry.id}" is "${staged.status}", registry says "${entry.status}"`,
+      );
     }
   }
+  const registryIds = new Set(registryDocuments.map((entry) => entry.id));
   for (const doc of manifest.documents) {
-    const stagedPath = path.join(stagedDir, doc.relativePath);
+    if (!registryIds.has(doc.id)) {
+      errors.push(`staged manifest has unknown id "${doc.id}" (registry is the single source)`);
+    }
+    const stagedPath = path.join(stagedDir, doc.path);
     if (!fs.existsSync(stagedPath)) {
-      errors.push(`staged file missing: ${doc.relativePath} (id "${doc.id}")`);
+      errors.push(`staged file missing: ${doc.path} (id "${doc.id}")`);
       continue;
     }
     const actual = sha256(fs.readFileSync(stagedPath, "utf8"));
     if (actual !== doc.sha256) {
-      errors.push(`sha256 mismatch for staged ${doc.relativePath} (id "${doc.id}")`);
+      errors.push(`sha256 mismatch for staged ${doc.path} (id "${doc.id}")`);
     }
   }
 } else if (manifest) {
@@ -181,7 +188,7 @@ for (const required of ["docs/index.md", "README.md"]) {
 
 // 6. Relative .md links resolve.
 let linkCount = 0;
-function checkLinksInFile(absPath, resolveRoot, exemptNonAuditTargets) {
+function checkLinksInFile(absPath, resolveRoot) {
   const content = fs.readFileSync(absPath, "utf8");
   const fromRelative = path.relative(resolveRoot, absPath).replace(/\\/g, "/");
   for (const target of relativeMarkdownLinks(content)) {
@@ -195,31 +202,23 @@ function checkLinksInFile(absPath, resolveRoot, exemptNonAuditTargets) {
       ? fs.existsSync(path.resolve(root, resolvedRelative))
       : fs.existsSync(resolved);
     if (!exists) {
-      const targetIsAudit = isHistorical(resolvedRelative);
-      if (exemptNonAuditTargets && !targetIsAudit) continue; // historical audits exempt from source-path checks
       errors.push(`unresolved .md link in ${fromRelative}: "${target}"`);
     }
   }
 }
-for (const entry of DOCUMENTS) {
-  if (!entry.relativePath.startsWith("docs/") || !entry.relativePath.endsWith(".md")) continue;
-  const stagedPath = path.join(stagedDir, entry.relativePath);
-  if (fs.existsSync(stagedPath)) checkLinksInFile(stagedPath, stagedDir, false);
+for (const entry of registryDocuments) {
+  if (!entry.path.startsWith("docs/") || !entry.path.endsWith(".md")) continue;
+  const stagedPath = path.join(stagedDir, entry.path);
+  if (fs.existsSync(stagedPath)) checkLinksInFile(stagedPath, stagedDir);
 }
-// Historical audits: exempt from source-path checks, but inter-audit links must resolve.
-for (const auditsDir of ["docs/audit-2026-09", "docs/audits"]) {
-  for (const abs of listFilesRecursive(path.join(root, auditsDir), ".md")) {
-    checkLinksInFile(abs, root, true);
-  }
-}
-// Remaining top-level docs/*.md working files (not in the registry, not
-// audits): live working docs, so their relative .md links must resolve.
+// Remaining top-level docs/*.md working files (not in the registry):
+// live working docs, so their relative .md links must resolve.
 {
-  const covered = new Set(DOCUMENTS.map((d) => path.join(root, d.relativePath)));
+  const covered = new Set(registryDocuments.map((entry) => path.join(root, entry.path)));
   for (const abs of listFilesRecursive(path.join(root, "docs"), ".md")) {
     if (path.dirname(abs) !== path.join(root, "docs")) continue;
     if (covered.has(abs)) continue;
-    checkLinksInFile(abs, root, false);
+    checkLinksInFile(abs, root);
   }
 }
 
@@ -275,5 +274,5 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `check-docs: OK — ${DOCUMENTS.length} registry sources, manifest identity (product ${productVersion}, core ${coreVersion}), ${linkCount} relative .md links checked, staged dir ${stagedDir}.`,
+  `check-docs: OK — ${registryDocuments.length} registry sources, staged set matches docs/manifest.json, manifest identity (product ${productVersion}, core ${coreVersion}), ${linkCount} relative .md links checked, staged dir ${stagedDir}.`,
 );

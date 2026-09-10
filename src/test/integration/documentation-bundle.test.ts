@@ -1,9 +1,27 @@
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
 
-import { readDocumentation, listDocumentIds } from "@/lib/documentation";
+import {
+  getDocumentationRegistry,
+  readDocumentation,
+  listDocumentIds,
+} from "@/lib/documentation";
 import { initializeDatabaseSchema, getDatabaseVersionInfo, CURRENT_SCHEMA_VERSION } from "@/lib/database/migrations";
 import { getServerRuntimeSnapshot } from "@/lib/runtime-info";
+
+const REPO_ROOT = process.cwd();
+
+function readManifest(): {
+  documents: Array<{ id: string; path: string; title: string; status: string }>;
+} {
+  return JSON.parse(
+    fs.readFileSync(path.join(REPO_ROOT, "docs", "manifest.json"), "utf8"),
+  );
+}
 
 describe("documentation bundle contracts", () => {
   it("resolves known document IDs and rejects traversal/unknown IDs", () => {
@@ -16,6 +34,68 @@ describe("documentation bundle contracts", () => {
     expect(() => readDocumentation("..")).toThrow(/Unknown document/);
     expect(() => readDocumentation("")).toThrow(/Unknown document/);
   });
+
+  it("serves exactly the documents declared in docs/manifest.json", () => {
+    const manifest = readManifest();
+    const registry = getDocumentationRegistry();
+    expect(registry.documents.map((doc) => doc.id)).toEqual(
+      manifest.documents.map((doc) => doc.id),
+    );
+    expect(registry.documents.map((doc) => doc.relativePath)).toEqual(
+      manifest.documents.map((doc) => doc.path),
+    );
+    expect(listDocumentIds()).toEqual(manifest.documents.map((doc) => doc.id));
+    for (const doc of manifest.documents) {
+      expect(fs.existsSync(path.join(REPO_ROOT, doc.path)), `missing ${doc.path}`).toBe(true);
+    }
+  });
+
+  it("registers and serves the live expected-failures ledger", () => {
+    expect(listDocumentIds()).toContain("expected-failures");
+    expect(readDocumentation("expected-failures").content.length).toBeGreaterThan(100);
+  });
+
+  it("stages the registry faithfully and fails the check on staged drift", () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-docs-"));
+    try {
+      execFileSync(process.execPath, ["scripts/prepare-docs.cjs", "--out", outDir], {
+        cwd: REPO_ROOT,
+        stdio: "pipe",
+      });
+      const check = execFileSync(process.execPath, ["scripts/check-docs.cjs", "--dir", outDir], {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+      });
+      expect(check).toMatch(/staged set matches docs\/manifest\.json/);
+
+      const manifestPath = path.join(outDir, "manifest.json");
+      const staged = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as {
+        documents: Array<Record<string, unknown>>;
+      };
+      staged.documents.push({
+        id: "ghost",
+        path: "docs/ghost.md",
+        title: "Ghost",
+        status: "current",
+        audience: "developers",
+        sha256: "0".repeat(64),
+      });
+      fs.writeFileSync(manifestPath, JSON.stringify(staged, null, 2));
+
+      let failed = false;
+      try {
+        execFileSync(process.execPath, ["scripts/check-docs.cjs", "--dir", outDir], {
+          cwd: REPO_ROOT,
+          stdio: "pipe",
+        });
+      } catch {
+        failed = true;
+      }
+      expect(failed, "a staged document the registry does not declare must fail the check").toBe(true);
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  }, 60_000);
 
   it("migration version reflects successful application including baseline", () => {
     const sqlite = new Database(":memory:");

@@ -1,0 +1,37 @@
+{
+  "manifestId": "foleyard-docs",
+  "documents": [
+    { "id": "index", "path": "docs/index.md", "title": "Documentation index", "status": "current", "audience": "developers" },
+    { "id": "quickstart", "path": "docs/quickstart.md", "title": "Quickstart", "status": "current", "audience": "users" },
+    { "id": "development", "path": "docs/development.md", "title": "Development", "status": "current", "audience": "developers" },
+    { "id": "library", "path": "docs/library.md", "title": "Library", "status": "current", "audience": "users+developers" },
+    { "id": "scanning", "path": "docs/scanning.md", "title": "Scanning", "status": "current", "audience": "developers" },
+    { "id": "metadata", "path": "docs/metadata.md", "title": "Metadata", "status": "current", "audience": "developers" },
+    { "id": "playback", "path": "docs/playback.md", "title": "Playback and waveforms", "status": "current", "audience": "users+developers" },
+    { "id": "search", "path": "docs/search.md", "title": "Search", "status": "current", "audience": "developers" },
+    { "id": "collections", "path": "docs/collections.md", "title": "Collections", "status": "current", "audience": "users+developers" },
+    { "id": "filesystem", "path": "docs/filesystem.md", "title": "Filesystem", "status": "current", "audience": "developers" },
+    { "id": "settings", "path": "docs/settings.md", "title": "Settings", "status": "current", "audience": "developers" },
+    { "id": "database", "path": "docs/database.md", "title": "Database", "status": "current", "audience": "developers" },
+    { "id": "extensions", "path": "docs/extensions.md", "title": "Bundled extensions", "status": "historical", "audience": "developers" },
+    { "id": "extensions-v2", "path": "docs/extensions-v2.md", "title": "Extension authoring (v2 API)", "status": "current", "audience": "developers" },
+    { "id": "extensions-v2-migration", "path": "docs/extensions-v2-migration.md", "title": "Extension v1 to v2 retirement", "status": "current", "audience": "developers" },
+    { "id": "extensions-v2-make-pack", "path": "docs/extensions-v2-make-pack.md", "title": "Make Pack v2 walkthrough", "status": "current", "audience": "developers" },
+    { "id": "extensions-v2-troubleshooting", "path": "docs/extensions-v2-troubleshooting.md", "title": "Extension v2 troubleshooting", "status": "current", "audience": "developers" },
+    { "id": "commands", "path": "docs/commands.md", "title": "Commands", "status": "current", "audience": "developers" },
+    { "id": "events", "path": "docs/events.md", "title": "Events", "status": "current", "audience": "developers" },
+    { "id": "runtime", "path": "docs/runtime.md", "title": "Runtime introspection", "status": "current", "audience": "developers" },
+    { "id": "expected-failures", "path": "docs/expected-failures.md", "title": "Expected failures", "status": "current", "audience": "developers" },
+    { "id": "architecture/application", "path": "docs/architecture/application.md", "title": "Application architecture", "status": "current", "audience": "developers" },
+    { "id": "architecture/desktop", "path": "docs/architecture/desktop.md", "title": "Desktop architecture", "status": "current", "audience": "developers" },
+    { "id": "architecture/yard-core", "path": "docs/architecture/yard-core.md", "title": "yard-core architecture", "status": "current", "audience": "developers" },
+    { "id": "architecture/extensions", "path": "docs/architecture/extensions.md", "title": "Extension architecture", "status": "current", "audience": "developers" },
+    { "id": "adr/filesystem-access", "path": "docs/adr/filesystem-access.md", "title": "Filesystem access ADR", "status": "current", "audience": "developers" },
+    { "id": "adr/new-surface-promotion", "path": "docs/adr/new-surface-promotion.md", "title": "New surface promotion ADR", "status": "current", "audience": "developers" },
+    { "id": "readme", "path": "README.md", "title": "Product overview", "status": "current", "audience": "users" }
+  ],
+  "examples": [
+    { "id": "core/query-library", "runnableIn": "repository" },
+    { "id": "extensions-v2/minimal", "runnableIn": "repository" }
+  ]
+}

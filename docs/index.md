@@ -9,7 +9,8 @@
 
 This index routes readers to every live guide in the version-matched
 documentation set served by `GET /api/docs` and `GET /api/docs/[...id]`.
-The manifest is `DOCUMENT_REGISTRY` in `src/lib/documentation.ts`
+The registry is `docs/manifest.json` — the single place a document is
+declared; the application, `docs:prepare` and `docs:check` all read it
 (manifest ID `foleyard-docs`, product version tracked from the app's
 `package.json`, the single version source). In a development
 checkout documents resolve from the workspace root; in packaged builds

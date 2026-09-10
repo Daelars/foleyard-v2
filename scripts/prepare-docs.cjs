@@ -1,7 +1,8 @@
 // Stages version-matched documentation for packaged builds.
 //
-// Copies the DOCUMENT_REGISTRY files (plus README) from the repo root into a
-// staging directory and writes manifest.json with version provenance:
+// `docs/manifest.json` is the single registry (#236). This script copies
+// each manifest document (plus README) from the repo root into a staging
+// directory and writes a staged manifest.json with version provenance:
 // productVersion (root package.json), coreVersion
 // (packages/yard-core/package.json), buildId (.next/BUILD_ID when present),
 // sourceRevision (git HEAD or SOURCE_REVISION env), sourceDirty
@@ -18,42 +19,37 @@ const crypto = require("node:crypto");
 const { execSync } = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
+const REGISTRY_PATH = path.join(root, "docs", "manifest.json");
 
-// Same table as DOCUMENT_REGISTRY in src/lib/documentation.ts.
-const DOCUMENTS = [
-  { id: "index", relativePath: "docs/index.md", status: "current" },
-  { id: "quickstart", relativePath: "docs/quickstart.md", status: "current" },
-  { id: "development", relativePath: "docs/development.md", status: "current" },
-  { id: "library", relativePath: "docs/library.md", status: "current" },
-  { id: "scanning", relativePath: "docs/scanning.md", status: "current" },
-  { id: "metadata", relativePath: "docs/metadata.md", status: "current" },
-  { id: "playback", relativePath: "docs/playback.md", status: "current" },
-  { id: "search", relativePath: "docs/search.md", status: "current" },
-  { id: "collections", relativePath: "docs/collections.md", status: "current" },
-  { id: "filesystem", relativePath: "docs/filesystem.md", status: "current" },
-  { id: "settings", relativePath: "docs/settings.md", status: "current" },
-  { id: "database", relativePath: "docs/database.md", status: "current" },
-  { id: "extensions", relativePath: "docs/extensions.md", status: "current" },
-  { id: "extensions-v2", relativePath: "docs/extensions-v2.md", status: "current" },
-  { id: "extensions-v2-migration", relativePath: "docs/extensions-v2-migration.md", status: "current" },
-  { id: "extensions-v2-make-pack", relativePath: "docs/extensions-v2-make-pack.md", status: "current" },
-  { id: "extensions-v2-troubleshooting", relativePath: "docs/extensions-v2-troubleshooting.md", status: "current" },
-  { id: "commands", relativePath: "docs/commands.md", status: "current" },
-  { id: "events", relativePath: "docs/events.md", status: "current" },
-  { id: "runtime", relativePath: "docs/runtime.md", status: "current" },
-  { id: "architecture/application", relativePath: "docs/architecture/application.md", status: "current" },
-  { id: "architecture/desktop", relativePath: "docs/architecture/desktop.md", status: "current" },
-  { id: "architecture/yard-core", relativePath: "docs/architecture/yard-core.md", status: "current" },
-  { id: "architecture/extensions", relativePath: "docs/architecture/extensions.md", status: "current" },
-  { id: "adr/filesystem-access", relativePath: "docs/adr/filesystem-access.md", status: "current" },
-  { id: "adr/new-surface-promotion", relativePath: "docs/adr/new-surface-promotion.md", status: "current" },
-  { id: "readme", relativePath: "README.md", status: "current" },
-];
-
-const EXAMPLES = [
-  { id: "core/query-library", runnableIn: "repository" },
-  { id: "extensions-v2/minimal", runnableIn: "repository" },
-];
+function readRegistry() {
+  if (!fs.existsSync(REGISTRY_PATH)) {
+    console.error("prepare-docs: docs/manifest.json not found; it is the single registry");
+    process.exit(1);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8"));
+  } catch (error) {
+    console.error(`prepare-docs: docs/manifest.json is not valid JSON: ${error.message}`);
+    process.exit(1);
+  }
+  const documents = Array.isArray(parsed.documents) ? parsed.documents : [];
+  if (documents.length === 0) {
+    console.error("prepare-docs: docs/manifest.json declares no documents");
+    process.exit(1);
+  }
+  for (const doc of documents) {
+    if (typeof doc.id !== "string" || typeof doc.path !== "string") {
+      console.error(`prepare-docs: manifest entry needs id and path: ${JSON.stringify(doc)}`);
+      process.exit(1);
+    }
+  }
+  return {
+    manifestId: typeof parsed.manifestId === "string" ? parsed.manifestId : "foleyard-docs",
+    documents,
+    examples: Array.isArray(parsed.examples) ? parsed.examples : [],
+  };
+}
 
 function parseOutDir(argv) {
   for (let i = 0; i < argv.length; i++) {
@@ -81,6 +77,7 @@ function sha256(content) {
 }
 
 const outDir = parseOutDir(process.argv.slice(2));
+const registry = readRegistry();
 
 const productVersion = JSON.parse(
   fs.readFileSync(path.join(root, "package.json"), "utf8"),
@@ -98,28 +95,41 @@ const sourceRevision =
 const statusOutput = tryExec("git status --porcelain");
 const sourceDirty = statusOutput === null ? false : statusOutput.length > 0;
 
-const documents = DOCUMENTS.map((entry) => {
-  const abs = path.join(root, entry.relativePath);
+const seenIds = new Set();
+const documents = registry.documents.map((entry) => {
+  if (seenIds.has(entry.id)) {
+    console.error(`prepare-docs: duplicate document id "${entry.id}" in docs/manifest.json`);
+    process.exit(1);
+  }
+  seenIds.add(entry.id);
+  const abs = path.join(root, entry.path);
   if (!fs.existsSync(abs)) {
-    console.error(`prepare-docs: missing source file ${entry.relativePath}`);
+    console.error(`prepare-docs: missing source file ${entry.path} (id "${entry.id}")`);
     process.exit(1);
   }
   const content = fs.readFileSync(abs, "utf8");
-  const dest = path.join(outDir, entry.relativePath);
+  const dest = path.join(outDir, entry.path);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.copyFileSync(abs, dest);
-  return { ...entry, sha256: sha256(content) };
+  return {
+    id: entry.id,
+    path: entry.path,
+    title: typeof entry.title === "string" ? entry.title : entry.id,
+    status: typeof entry.status === "string" ? entry.status : "current",
+    audience: typeof entry.audience === "string" ? entry.audience : null,
+    sha256: sha256(content),
+  };
 });
 
 const manifest = {
-  manifestId: "foleyard-docs",
+  manifestId: registry.manifestId,
   productVersion,
   coreVersion,
   buildId,
   sourceRevision,
   sourceDirty,
   documents,
-  examples: EXAMPLES,
+  examples: registry.examples,
 };
 
 fs.mkdirSync(outDir, { recursive: true });

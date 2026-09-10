@@ -1,9 +1,15 @@
 /**
  * Version-matched documentation locator + allowlisted reader.
  * Feature status: shipped. Contract: internal.
- * Development resolves the checkout root independently of cwd.
- * Packaged builds resolve staged foleyard-docs/ resources.
- * Unknown IDs and traversal attempts are rejected; reads never execute examples.
+ *
+ * `docs/manifest.json` is the single registry: the application, the
+ * staging script and the check script all read it, so a document cannot
+ * be declared in one place and forgotten in another (#236). Development
+ * resolves the checkout root independently of cwd; packaged builds read
+ * the staged `foleyard-docs/manifest.json`.
+ *
+ * Unknown IDs and traversal attempts are rejected; reads never execute
+ * examples.
  */
 
 import fs from "node:fs";
@@ -16,39 +22,27 @@ export type DocumentStatus = "current" | "historical" | "experimental";
 export type DocumentEntry = {
   id: string;
   relativePath: string;
-  status: DocumentStatus;
   title: string;
+  status: DocumentStatus;
+  audience: string | null;
 };
 
-export const DOCUMENT_REGISTRY: DocumentEntry[] = [
-  { id: "index", relativePath: "docs/index.md", status: "current", title: "Documentation index" },
-  { id: "quickstart", relativePath: "docs/quickstart.md", status: "current", title: "Quickstart" },
-  { id: "development", relativePath: "docs/development.md", status: "current", title: "Development" },
-  { id: "library", relativePath: "docs/library.md", status: "current", title: "Library" },
-  { id: "scanning", relativePath: "docs/scanning.md", status: "current", title: "Scanning" },
-  { id: "metadata", relativePath: "docs/metadata.md", status: "current", title: "Metadata" },
-  { id: "playback", relativePath: "docs/playback.md", status: "current", title: "Playback and waveforms" },
-  { id: "search", relativePath: "docs/search.md", status: "current", title: "Search" },
-  { id: "collections", relativePath: "docs/collections.md", status: "current", title: "Collections" },
-  { id: "filesystem", relativePath: "docs/filesystem.md", status: "current", title: "Filesystem" },
-  { id: "settings", relativePath: "docs/settings.md", status: "current", title: "Settings" },
-  { id: "database", relativePath: "docs/database.md", status: "current", title: "Database" },
-  { id: "extensions", relativePath: "docs/extensions.md", status: "current", title: "Bundled extensions" },
-  { id: "extensions-v2", relativePath: "docs/extensions-v2.md", status: "current", title: "Extension authoring (v2 API)" },
-  { id: "extensions-v2-migration", relativePath: "docs/extensions-v2-migration.md", status: "current", title: "Extension v1 to v2 migration" },
-  { id: "extensions-v2-make-pack", relativePath: "docs/extensions-v2-make-pack.md", status: "current", title: "Make Pack v2 walkthrough" },
-  { id: "extensions-v2-troubleshooting", relativePath: "docs/extensions-v2-troubleshooting.md", status: "current", title: "Extension v2 troubleshooting" },
-  { id: "commands", relativePath: "docs/commands.md", status: "current", title: "Commands" },
-  { id: "events", relativePath: "docs/events.md", status: "current", title: "Events" },
-  { id: "runtime", relativePath: "docs/runtime.md", status: "current", title: "Runtime introspection" },
-  { id: "architecture/application", relativePath: "docs/architecture/application.md", status: "current", title: "Application architecture" },
-  { id: "architecture/desktop", relativePath: "docs/architecture/desktop.md", status: "current", title: "Desktop architecture" },
-  { id: "architecture/yard-core", relativePath: "docs/architecture/yard-core.md", status: "current", title: "yard-core architecture" },
-  { id: "architecture/extensions", relativePath: "docs/architecture/extensions.md", status: "current", title: "Extension architecture" },
-  { id: "adr/filesystem-access", relativePath: "docs/adr/filesystem-access.md", status: "current", title: "Filesystem access ADR" },
-  { id: "adr/new-surface-promotion", relativePath: "docs/adr/new-surface-promotion.md", status: "current", title: "New surface promotion ADR" },
-  { id: "readme", relativePath: "README.md", status: "current", title: "Product overview" },
-];
+export type DocumentationExample = {
+  id: string;
+  runnableIn: "repository";
+};
+
+export type DocumentationRegistry = {
+  manifestId: string;
+  documents: DocumentEntry[];
+  examples: DocumentationExample[];
+};
+
+const EMPTY_REGISTRY: DocumentationRegistry = {
+  manifestId: "foleyard-docs",
+  documents: [],
+  examples: [],
+};
 
 function resolveWorkspaceRoot(): string {
   // Module-relative resolution, independent of incidental cwd.
@@ -79,18 +73,82 @@ function resolveDocsRoot(): { root: string; packaged: boolean } {
   return { root: resolveWorkspaceRoot(), packaged: false };
 }
 
+function parseDocumentStatus(value: unknown): DocumentStatus {
+  if (value === "historical" || value === "experimental") return value;
+  return "current";
+}
+
+/** Read the registry from a staged root (`manifest.json`) or checkout (`docs/manifest.json`). */
+function readRegistry(root: string): DocumentationRegistry | null {
+  const candidates = [
+    path.join(root, "manifest.json"),
+    path.join(root, "docs", "manifest.json"),
+  ];
+  for (const manifestPath of candidates) {
+    if (!fs.existsSync(manifestPath)) continue;
+    try {
+      const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as {
+        manifestId?: unknown;
+        documents?: unknown;
+        examples?: unknown;
+      };
+      if (!Array.isArray(parsed.documents)) continue;
+      const documents = parsed.documents.flatMap((raw): DocumentEntry[] => {
+        if (!raw || typeof raw !== "object") return [];
+        const doc = raw as Record<string, unknown>;
+        const id = typeof doc.id === "string" ? doc.id : null;
+        const relativePath =
+          typeof doc.path === "string"
+            ? doc.path
+            : typeof doc.relativePath === "string"
+              ? doc.relativePath
+              : null;
+        if (!id || !relativePath) return [];
+        return [{
+          id,
+          relativePath,
+          title: typeof doc.title === "string" ? doc.title : id,
+          status: parseDocumentStatus(doc.status),
+          audience: typeof doc.audience === "string" ? doc.audience : null,
+        }];
+      });
+      const examples = Array.isArray(parsed.examples)
+        ? parsed.examples.flatMap((raw): DocumentationExample[] => {
+            if (!raw || typeof raw !== "object") return [];
+            const example = raw as Record<string, unknown>;
+            if (typeof example.id !== "string") return [];
+            return [{ id: example.id, runnableIn: "repository" as const }];
+          })
+        : [];
+      return {
+        manifestId:
+          typeof parsed.manifestId === "string" ? parsed.manifestId : "foleyard-docs",
+        documents,
+        examples,
+      };
+    } catch {
+      // A malformed manifest is reported by check-docs; the reader falls
+      // through to an empty registry rather than crashing a route.
+    }
+  }
+  return null;
+}
+
+export function getDocumentationRegistry(): DocumentationRegistry {
+  const { root } = resolveDocsRoot();
+  return readRegistry(root) ?? EMPTY_REGISTRY;
+}
+
 export function getDocumentationLocation() {
   const { root, packaged } = resolveDocsRoot();
+  const registry = readRegistry(root) ?? EMPTY_REGISTRY;
   return {
-    manifestId: "foleyard-docs",
+    manifestId: registry.manifestId,
     productVersion: (packageJson as { version: string }).version,
     matched: true,
     indexId: "index",
-    documentIds: DOCUMENT_REGISTRY.map((d) => d.id),
-    examples: [
-      { id: "core/query-library", runnableIn: "repository" as const },
-      { id: "extensions-v2/minimal", runnableIn: "repository" as const },
-    ],
+    documentIds: registry.documents.map((d) => d.id),
+    examples: registry.examples,
     ...(packaged ? {} : { localRoot: root }),
   };
 }
@@ -99,9 +157,9 @@ export function readDocumentation(documentId: string): { id: string; content: st
   if (typeof documentId !== "string" || !documentId || documentId.includes("..") || documentId.includes("\\") || documentId.startsWith("/")) {
     throw new Error(`Unknown document "${documentId}".`);
   }
-  const entry = DOCUMENT_REGISTRY.find((d) => d.id === documentId);
-  if (!entry) throw new Error(`Unknown document "${documentId}".`);
   const { root } = resolveDocsRoot();
+  const entry = (readRegistry(root) ?? EMPTY_REGISTRY).documents.find((d) => d.id === documentId);
+  if (!entry) throw new Error(`Unknown document "${documentId}".`);
   const abs = path.resolve(root, entry.relativePath);
   if (!abs.startsWith(path.resolve(root) + path.sep) && abs !== path.resolve(root)) {
     throw new Error(`Unknown document "${documentId}".`);
@@ -111,5 +169,6 @@ export function readDocumentation(documentId: string): { id: string; content: st
 }
 
 export function listDocumentIds(): string[] {
-  return DOCUMENT_REGISTRY.map((d) => d.id);
+  const { root } = resolveDocsRoot();
+  return (readRegistry(root) ?? EMPTY_REGISTRY).documents.map((d) => d.id);
 }

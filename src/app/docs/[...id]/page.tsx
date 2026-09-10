@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { DesktopTitleBar } from "@/components/DesktopTitleBar";
-import { DOCUMENT_REGISTRY, getDocumentationLocation } from "@/lib/documentation";
+import { getDocumentationLocation, getDocumentationRegistry } from "@/lib/documentation";
 import { DocsBrowser, DocsHeader } from "../docs-browser";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,8 @@ export default async function DocDetailPage({
 }) {
   const segments = (await params).id ?? [];
   const documentId = segments.join("/");
-  const entry = DOCUMENT_REGISTRY.find((d) => d.id === documentId);
+  const { documents } = getDocumentationRegistry();
+  const entry = documents.find((d) => d.id === documentId);
   if (!entry) notFound();
 
   const location = getDocumentationLocation();
@@ -25,14 +26,14 @@ export default async function DocDetailPage({
       <div className="relative flex min-h-0 flex-1 flex-col">
         <DesktopTitleBar />
         <main className="mx-auto min-h-0 w-full max-w-6xl flex-1 overflow-y-auto px-4 pb-10 pt-6 md:px-6">
-          <DocsHeader count={DOCUMENT_REGISTRY.length} />
+          <DocsHeader count={documents.length} />
           <p className="mt-1.5 max-w-2xl text-sm font-medium text-zinc-400">
             Every live guide in the version-matched set ({location.manifestId} v{location.productVersion}).
             Select a guide to read it; each has a shareable /docs link.
           </p>
           <div className="mt-6">
             <DocsBrowser
-              documents={DOCUMENT_REGISTRY}
+              documents={documents}
               location={{
                 manifestId: location.manifestId,
                 productVersion: location.productVersion,

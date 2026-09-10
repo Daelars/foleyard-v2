@@ -73,6 +73,13 @@ disabled and denied until explicit enable + approval. Bundled
 registration is isolated per port: a malformed definition is reported
 and skipped instead of aborting the route bundle that imported the host.
 
+`unregisterV2Extension(extensionId)` is the supported unload operation
+for bundled code (there is no hot reload and no third-party unload path).
+It removes the definition, its command handlers, its enablement row and
+its pending UI, and requests cancellation of its live jobs; subsequent
+`execute` calls fail as unknown, and a later re-registration must call
+`registerHandler` again because stale handlers are never retained.
+
 ### Lifecycle hooks
 
 A definition may declare `lifecycle` with `onEnabled` and `onDisabled`

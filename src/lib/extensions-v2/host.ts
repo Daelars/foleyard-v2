@@ -110,8 +110,19 @@ export function registerV2Extension(
   getV2Events().emit("contributions-changed", "*");
 }
 
-/** Unregister removes every contribution; adapters refresh on the hint. */
+/**
+ * Unregister removes the extension completely: its handlers, its jobs and
+ * its enablement, then the definition. A later re-registration must
+ * register handlers again — stale handlers can never execute. Bundled
+ * code has no hot-reload path; this is the supported unload operation
+ * (see the authoring guide).
+ */
 export function unregisterV2Extension(extensionId: string): void {
+  getAppV2Host().unregisterExtensionHandlers(extensionId);
+  getV2JobManager().cancelExtensionJobs(
+    extensionId,
+    `Extension "${extensionId}" was unregistered; register it again to run its commands.`,
+  );
   registry.unregister(extensionId);
   enabled.delete(extensionId);
   try {

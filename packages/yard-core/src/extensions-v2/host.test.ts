@@ -270,3 +270,22 @@ describe("ExtensionV2Host.execute", () => {
     expect(seen).toEqual(["direct", "job"]);
   });
 });
+
+describe("handler unregistration", () => {
+  it("removes one handler and reports whether it existed", () => {
+    const host = greetHost(services());
+    expect(host.hasHandler("fixture-greeter", "fixture-greeter.greet")).toBe(true);
+    expect(host.unregisterHandler("fixture-greeter", "fixture-greeter.greet")).toBe(true);
+    expect(host.unregisterHandler("fixture-greeter", "fixture-greeter.greet")).toBe(false);
+    expect(host.hasHandler("fixture-greeter", "fixture-greeter.greet")).toBe(false);
+  });
+
+  it("removes every handler owned by one extension", () => {
+    const host = greetHost(services());
+    expect(host.unregisterExtensionHandlers("fixture-greeter")).toEqual([
+      "fixture-greeter.greet",
+    ]);
+    expect(host.hasHandler("fixture-greeter", "fixture-greeter.greet")).toBe(false);
+    expect(host.unregisterExtensionHandlers("fixture-greeter")).toEqual([]);
+  });
+});

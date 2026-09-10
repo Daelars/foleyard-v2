@@ -245,6 +245,27 @@ export class ExtensionV2Host {
     return this.handlers.has(`${extensionId} ${commandId}`);
   }
 
+  /** Remove one handler; false when it was not registered. */
+  unregisterHandler(extensionId: string, commandId: string): boolean {
+    return this.handlers.delete(`${extensionId} ${commandId}`);
+  }
+
+  /**
+   * Remove every handler owned by one extension. Called when an extension
+   * is unregistered so a later re-registration cannot execute a stale
+   * handler; the extension must register its handlers again (#248).
+   */
+  unregisterExtensionHandlers(extensionId: string): string[] {
+    const prefix = `${extensionId} `;
+    const removed: string[] = [];
+    for (const key of [...this.handlers.keys()]) {
+      if (!key.startsWith(prefix)) continue;
+      this.handlers.delete(key);
+      removed.push(key.slice(prefix.length));
+    }
+    return removed;
+  }
+
   /**
    * Shared preflight for direct, HTTP, immediate, and job invocation.
    *

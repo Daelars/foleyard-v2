@@ -99,6 +99,47 @@ function tagExists(tagName) {
   }
 }
 
+function isAncestor(ancestor, descendant) {
+  try {
+    run("git", ["merge-base", "--is-ancestor", ancestor, descendant]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Push the release commit and tag. With `--cut` also fast-forward `main`
+ * to the released commit so `main` records exactly what shipped, then
+ * push the tag last so the release workflow builds from a commit that is
+ * already on `main`. Aborts when `main` has diverged; always returns to
+ * the original branch.
+ */
+function publishRelease(tagName, currentBranch, cut) {
+  run("git", ["push", "origin", "HEAD"], { stdio: "inherit" });
+
+  if (!cut) {
+    run("git", ["push", "origin", tagName], { stdio: "inherit" });
+    return;
+  }
+
+  run("git", ["fetch", "origin", "main"], { stdio: "inherit" });
+  if (!isAncestor("origin/main", "HEAD")) {
+    throw new Error(
+      "origin/main has commits this release does not contain; merge or rebase main before cutting.",
+    );
+  }
+
+  try {
+    run("git", ["checkout", "main"], { stdio: "inherit" });
+    run("git", ["merge", "--ff-only", currentBranch], { stdio: "inherit" });
+    run("git", ["push", "origin", "main"], { stdio: "inherit" });
+    run("git", ["push", "origin", tagName], { stdio: "inherit" });
+  } finally {
+    run("git", ["checkout", currentBranch], { stdio: "inherit" });
+  }
+}
+
 function updatePackageLock(nextVersion) {
   const lockPath = path.join(root, "package-lock.json");
 
@@ -120,7 +161,8 @@ function updatePackageLock(nextVersion) {
 function main() {
   const args = process.argv.slice(2);
   const bump = args.find((arg) => !arg.startsWith("--")) ?? "patch";
-  const shouldPush = args.includes("--push");
+  const shouldCut = args.includes("--cut");
+  const shouldPush = args.includes("--push") || shouldCut;
   const dryRun = args.includes("--dry-run");
 
   const resumeVersionBump = assertCleanOrResumableWorkingTree();
@@ -146,6 +188,9 @@ function main() {
     if (shouldPush) {
       console.log("[release] dry run; would push commit and tag");
     }
+    if (shouldCut) {
+      console.log("[release] dry run; would fast-forward main and push it");
+    }
     return;
   }
 
@@ -154,8 +199,8 @@ function main() {
     run("git", ["tag", "-a", tagName, "-m", `Release ${nextVersion}`], { stdio: "inherit" });
 
     if (shouldPush) {
-      run("git", ["push", "origin", "HEAD"], { stdio: "inherit" });
-      run("git", ["push", "origin", tagName], { stdio: "inherit" });
+      const currentBranch = run("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
+      publishRelease(tagName, currentBranch, shouldCut);
     }
 
     console.log(`[release] prepared ${tagName}`);
@@ -180,8 +225,8 @@ function main() {
   run("git", ["tag", "-a", tagName, "-m", `Release ${nextVersion}`], { stdio: "inherit" });
 
   if (shouldPush) {
-    run("git", ["push", "origin", "HEAD"], { stdio: "inherit" });
-    run("git", ["push", "origin", tagName], { stdio: "inherit" });
+    const currentBranch = run("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
+    publishRelease(tagName, currentBranch, shouldCut);
   }
 
   console.log(`[release] prepared ${tagName}`);

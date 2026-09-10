@@ -249,6 +249,22 @@ export function getAllFilesIncludingRemoved(context: FileRepositoryContext): Ind
       .all() as IndexedAudioFile[];
   }
 
+/**
+ * Narrow scan-cleanup projection: only the fields removal reconciliation
+ * consumes (path, library root, removed state). Raw select without Drizzle
+ * mapping; used by ScanRunner before discovery so a large library is not
+ * fully materialized through the repository mapping for every scan.
+ */
+export function getScanCleanupRows(context: FileRepositoryContext): Array<{
+  path: string;
+  libraryRoot: string | null;
+  removedAt: string | null;
+}> {
+    return context.sqlite
+      .prepare("SELECT path, library_root AS libraryRoot, removed_at AS removedAt FROM files")
+      .all() as Array<{ path: string; libraryRoot: string | null; removedAt: string | null }>;
+  }
+
 export function getFileById(context: FileRepositoryContext, id: string): IndexedAudioFile | null {
   return (context.db.select().from(schema.files).where(eq(schema.files.id, id)).get() ?? null) as IndexedAudioFile | null;
 }

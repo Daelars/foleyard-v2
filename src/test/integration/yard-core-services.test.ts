@@ -33,12 +33,14 @@ vi.mock("@/lib/db", () => ({
   getFilesByPaths: (paths: string[]) => state.files!.getFilesByPaths(paths),
   upsertFile: (record: never) => state.files!.upsertFile(record),
   batchTouchFiles: (entries: never, now: string) => state.files!.batchTouchFiles(entries, now),
+  batchTouchActiveFiles: (paths: string[], now: string) => state.files!.batchTouchActiveFiles(paths, now),
   batchUpsertFiles: (records: never, now: string) => state.files!.batchUpsertFiles(records, now),
   batchUpdateFileMetadata: (records: never, now: string) =>
     state.files!.batchUpdateFileMetadata(records, now),
   batchMarkRemoved: (paths: string[], removedAt: string, now: string) =>
     state.files!.batchMarkRemoved(paths, removedAt, now),
   reconcileMovedFiles: () => state.files!.reconcileMovedFiles(),
+  analyzeStatistics: () => state.files!.analyzeStatistics(),
   toggleFavorite: (id: string) => state.files!.toggleFavorite(id),
   getLibraryRoot: () => state.settings!.getLibraryRoot(),
   getLibraryRoots: () => state.settings!.getLibraryRoots(),

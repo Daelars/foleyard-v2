@@ -209,6 +209,7 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   ensureColumn(sqlite, "file_tags", "created_at", "created_at TEXT");
 
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_filename ON files(filename)`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_active_filename_id ON files(filename, id) WHERE removed_at IS NULL`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_removed_at ON files(removed_at)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_is_favorite ON files(is_favorite)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_directory ON files(directory)`);

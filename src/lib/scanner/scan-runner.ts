@@ -12,7 +12,7 @@ import type {
   SettingsRepository,
 } from "@yard-core";
 
-import type { FileSystemSeam, MetadataSeam, ExistingFileRecord, MetadataUpdateRecord } from "./types";
+import type { FileSystemSeam, MetadataSeam, MetadataUpdateRecord, ScanCleanupRow } from "./types";
 export type { FileSystemSeam, MetadataSeam } from "./types";
 import { createMetadataQueue } from "./metadata-queue";
 
@@ -122,7 +122,7 @@ export class ScanRunner implements ScannerService {
     metadataUpdates.splice(0, batch.length);
   }
 
-  private markRemovedFiles(allExistingFiles: ExistingFileRecord[], seenPaths: Set<string>, now: string) { return markRemovedFiles(this.phaseContext(), allExistingFiles, seenPaths, now); }
+  private markRemovedFiles(allExistingFiles: ScanCleanupRow[], seenPaths: Set<string>, now: string) { return markRemovedFiles(this.phaseContext(), allExistingFiles, seenPaths, now); }
 
   private async runScan(libraryRoots: string[]) {
     let metadataQueue: ReturnType<typeof createMetadataQueue> | null = null;
@@ -131,7 +131,10 @@ export class ScanRunner implements ScannerService {
 
     try {
       const seenPaths = new Set<string>();
-      const allExistingFiles = this.fileRepo.getAllFilesIncludingRemoved();
+      // Narrow scan-cleanup projection: removal reconciliation only needs
+      // path, library root and removed state, so a large library is not
+      // fully materialized through the repository mapping for every scan.
+      const allExistingFiles = this.fileRepo.getScanCleanupRows();
       lastScannedAt = new Date().toISOString();
       metadataQueue = createMetadataQueue(
         METADATA_CONCURRENCY,
@@ -157,6 +160,15 @@ export class ScanRunner implements ScannerService {
       this.markRemovedFiles(allExistingFiles.filter((file) => file.libraryRoot !== null && healthyRoots.has(file.libraryRoot)), seenPaths, lastScannedAt);
 
       finishScanStatus(this.status);
+      // Refresh SQLite query statistics after the import so browse queries
+      // get the ordered index plans the statistics were measured for. This
+      // runs outside the interactive request path; a failure is not worth
+      // failing the scan over.
+      try {
+        this.fileRepo.analyzeStatistics();
+      } catch (error) {
+        console.warn("Could not refresh query statistics after scan", error);
+      }
       this.emitProgress();
     } catch (error) {
       metadataQueue?.cancel();

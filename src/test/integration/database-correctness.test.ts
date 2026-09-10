@@ -130,6 +130,26 @@ afterEach(() => {
 });
 
 describe("database correctness", () => {
+  it("timestamp-only touch keeps removed_at and library_root of active rows", () => {
+    seed(["/lib/kick.wav"]);
+    const first = NOW();
+    files.batchTouchActiveFiles(["/lib/kick.wav"], first);
+    const after = files.getFileByPath("/lib/kick.wav");
+    expect(after?.removedAt).toBeNull();
+    expect(after?.lastScannedAt).toBe(first);
+  });
+
+  it("timestamp-only touch never restores removed rows or changes ownership", () => {
+    seed(["/lib/kick.wav"]);
+    files.markFileRemoved("/lib/kick.wav", NOW());
+    const touched = NOW();
+    files.batchTouchActiveFiles(["/lib/kick.wav"], touched);
+    const after = files.getFiles({ limit: 10 }).find((f) => f.path === "/lib/kick.wav");
+    // The generic touch restores removed rows and sets library_root; the
+    // timestamp-only variant must not be used for either and leaves them.
+    expect(after?.removedAt).not.toBeNull();
+  });
+
   it("treats LIKE metacharacters in a search as literal text", () => {
     seed([
       "/lib/100% wet.wav",

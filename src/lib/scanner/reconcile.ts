@@ -1,7 +1,7 @@
 import { mapConcurrent } from "@yard-core";
 import path from "node:path";
-import type { AudioFileTouchEntry, ScanFileRecord } from "@yard-core";
-import type { ExistingFileRecord, ScanPhaseContext } from "./types";
+import type { ScanFileRecord } from "@yard-core";
+import type { ScanCleanupRow, ScanPhaseContext } from "./types";
 import type { createMetadataQueue } from "./metadata-queue";
 
 function normalizeDirectory(rootPath: string, filePath: string) {
@@ -17,7 +17,7 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
     const existingByPath = new Map(
       context.fileRepo.getFilesByPaths(filePaths).map((file) => [file.path, file]),
     );
-    const touchEntries: AudioFileTouchEntry[] = [];
+    const touchActivePaths: string[] = [];
     const upsertRecords: ScanFileRecord[] = [];
 
     filePaths.forEach((filePath) => seenPaths.add(filePath));
@@ -55,7 +55,11 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
       context.status.indexed += 1;
 
       if (!changed && !ownershipChanged && existing) {
-        touchEntries.push({ path: filePath, lastScannedAt, libraryRoot: normalizedRoot });
+        // Already active with unchanged ownership: only the timestamps
+        // move. This keeps the browse indexes out of the write path and
+        // is equivalent to the generic touch for this state, where
+        // removed_at is already NULL and library_root is unchanged.
+        touchActivePaths.push(filePath);
         context.status.skippedUnchanged += 1;
         continue;
       }
@@ -84,7 +88,7 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
       }
     }
 
-    context.fileRepo.batchTouchFiles(touchEntries, lastScannedAt);
+    context.fileRepo.batchTouchActiveFiles(touchActivePaths, lastScannedAt);
     context.fileRepo.batchUpsertFiles(upsertRecords, lastScannedAt);
 
     for (const record of upsertRecords) {
@@ -92,8 +96,10 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
       // header cannot see required fields (B05): header-first is preserved
       // inside extractMetadata, so files with complete headers never pay
       // for a full read. Known files keep the cheap header-only refresh.
+      // Awaitable admission pauses discovery while the waiting list is at
+      // capacity instead of growing an unbounded backlog.
       const prior = existingByPath.get(record.path);
-      metadataQueue.enqueue({
+      await metadataQueue.enqueue({
         filePath: record.path,
         fileSize: record.fileSize ?? 0,
         filename: record.filename,
@@ -103,7 +109,7 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
     }
   }
 
-export function markRemovedFiles(context: ScanPhaseContext, allExistingFiles: ExistingFileRecord[], seenPaths: Set<string>, now: string) {
+export function markRemovedFiles(context: ScanPhaseContext, allExistingFiles: ScanCleanupRow[], seenPaths: Set<string>, now: string) {
     context.status.phase = "cleaning";
     context.emitProgress();
     const removedAt = new Date().toISOString();

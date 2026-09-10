@@ -58,24 +58,54 @@ export async function generateWaveform(filePath: string): Promise<WaveformPeaks>
     const counts = Array<number>(WAVEFORM_PEAK_COUNT).fill(0);
     const buffer = Buffer.alloc(Math.max(alignment, Math.floor(65536 / alignment) * alignment));
     let frame = 0;
-    while (frame < frames) {
-      const wanted = Math.min(buffer.length, (frames - frame) * alignment);
-      const { bytesRead } = await file.read(buffer, 0, wanted, dataStart + frame * alignment);
-      if (bytesRead !== wanted) return neutral();
-      for (let offset = 0; offset < bytesRead; offset += alignment, frame++) {
-        const bin = Math.min(WAVEFORM_PEAK_COUNT - 1, Math.floor(frame * WAVEFORM_PEAK_COUNT / frames));
-        for (let channel = 0; channel < channels; channel++) {
-          const pos = offset + channel * bytes;
-          const sample = format === 3
-            ? (bits === 32 ? buffer.readFloatLE(pos) : buffer.readDoubleLE(pos))
-            : bits === 8 ? (buffer[pos] - 128) / 128
-            : buffer.readIntLE(pos, bytes) / 2 ** (bits - 1);
-          peaks[bin] += Number.isFinite(sample) ? Math.min(1, Math.abs(sample)) : 0;
-          counts[bin]++;
+    if (format === 1 && bits === 16) {
+      // Specialized PCM16 reduction: decode through an Int16Array view and
+      // advance bin boundaries per run instead of per frame. Summation
+      // order (channel by channel, frame by frame) and per-channel counts
+      // stay identical to the generic loop below, so peaks match exactly.
+      // Other sample formats keep the generic path until measured.
+      while (frame < frames) {
+        const wanted = Math.min(buffer.length, (frames - frame) * alignment);
+        const { bytesRead } = await file.read(buffer, 0, wanted, dataStart + frame * alignment);
+        if (bytesRead !== wanted) return neutral();
+        const samples = new Int16Array(buffer.buffer, buffer.byteOffset, bytesRead / 2);
+        let offset = 0;
+        while (offset < samples.length) {
+          const framesInBuffer = (samples.length - offset) / channels;
+          const runEnd = Math.min(
+            frame + framesInBuffer,
+            Math.ceil((Math.min(WAVEFORM_PEAK_COUNT - 1, Math.floor(frame * WAVEFORM_PEAK_COUNT / frames)) + 1) * frames / WAVEFORM_PEAK_COUNT),
+          );
+          const bin = Math.min(WAVEFORM_PEAK_COUNT - 1, Math.floor(frame * WAVEFORM_PEAK_COUNT / frames));
+          for (; frame < runEnd; frame++) {
+            for (let channel = 0; channel < channels; channel++) {
+              peaks[bin] += Math.min(1, Math.abs(samples[offset++] / 32768));
+              counts[bin]++;
+            }
+          }
         }
+        await setImmediate();
       }
-      // Bound both allocation and work per turn even when many rows request peaks.
-      await setImmediate();
+    } else {
+      while (frame < frames) {
+        const wanted = Math.min(buffer.length, (frames - frame) * alignment);
+        const { bytesRead } = await file.read(buffer, 0, wanted, dataStart + frame * alignment);
+        if (bytesRead !== wanted) return neutral();
+        for (let offset = 0; offset < bytesRead; offset += alignment, frame++) {
+          const bin = Math.min(WAVEFORM_PEAK_COUNT - 1, Math.floor(frame * WAVEFORM_PEAK_COUNT / frames));
+          for (let channel = 0; channel < channels; channel++) {
+            const pos = offset + channel * bytes;
+            const sample = format === 3
+              ? (bits === 32 ? buffer.readFloatLE(pos) : buffer.readDoubleLE(pos))
+              : bits === 8 ? (buffer[pos] - 128) / 128
+              : buffer.readIntLE(pos, bytes) / 2 ** (bits - 1);
+            peaks[bin] += Number.isFinite(sample) ? Math.min(1, Math.abs(sample)) : 0;
+            counts[bin]++;
+          }
+        }
+        // Bound both allocation and work per turn even when many rows request peaks.
+        await setImmediate();
+      }
     }
     for (let i = 0; i < peaks.length; i++) peaks[i] = counts[i] ? peaks[i] / counts[i] : 0;
     const maximum = Math.max(...peaks, 0.001);

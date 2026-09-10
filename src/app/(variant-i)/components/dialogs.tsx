@@ -1,9 +1,9 @@
 "use client";
 
-// app-v3 adapters for the library dialogs: extension details, save search,
-// rename collection (src/app/library/dialogs.tsx) and the inline
-// similar-sounds dialog from src/app/page.tsx. Same props, callbacks and
-// validation guards, I-styled dialog construction.
+// app-v3 adapters for the library dialogs: save search, rename collection
+// (src/app/library/dialogs.tsx) and the inline similar-sounds dialog from
+// the previous root page. Same props, callbacks and validation guards,
+// I-styled dialog construction.
 import { useId } from "react";
 import { Save } from "lucide-react";
 
@@ -13,10 +13,7 @@ import {
   DialogFooter,
   DialogTitle,
   Field,
-  StatusBadge,
-  TagChip,
 } from "@/components/variant-i";
-import type { ExtensionGridItem } from "@/lib/extensions/types";
 
 export function V3SaveSearchDialog({
   open,
@@ -123,116 +120,6 @@ export function V3RenameCollectionDialog({
           </Button>
         </DialogFooter>
       </form>
-    </Dialog>
-  );
-}
-
-export function V3ExtensionDetailsDialog({
-  extension,
-  onOpenChange,
-  onRunCommand,
-}: {
-  extension: ExtensionGridItem | null;
-  onOpenChange: (open: boolean) => void;
-  onRunCommand: (extensionId: string, commandId: string) => void;
-}) {
-  const titleId = useId();
-
-  return (
-    <Dialog
-      open={extension !== null}
-      onClose={() => onOpenChange(false)}
-      labelledBy={titleId}
-      maxWidth="max-w-lg"
-    >
-      <div className="flex items-center gap-2">
-        <DialogTitle id={titleId}>
-          {extension?.name ?? "Extension details"}
-        </DialogTitle>
-        {extension ? (
-          <StatusBadge
-            status={extension.enabled ? "Enabled" : "Disabled"}
-            tone={extension.enabled ? "ready" : "unavailable"}
-          />
-        ) : null}
-      </div>
-      {extension ? (
-        <div className="mt-4 space-y-5 text-sm">
-          <div className="space-y-1">
-            <p className="text-zinc-400">{extension.description}</p>
-            <p className="font-mono text-xs text-zinc-500">
-              {extension.provider} · v{extension.version}
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-zinc-200">Commands</h3>
-            {extension.commands?.length ? (
-              <div className="flex flex-wrap gap-2">
-                {extension.commands.map((command) => (
-                  <button
-                    key={command.id}
-                    type="button"
-                    onClick={() => {
-                      onOpenChange(false);
-                      onRunCommand(extension.id, command.id);
-                    }}
-                    className="rounded-full border border-[var(--vi-edge)] bg-white/[0.03] px-2.5 py-1 font-mono text-xs text-zinc-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition-colors hover:border-[color-mix(in_oklab,var(--accent-fill)_50%,transparent)] hover:bg-[color-mix(in_oklab,var(--accent-fill)_10%,transparent)] hover:text-accent-text focus-visible:ring-2 focus-visible:ring-[var(--vi-focus)]"
-                    title={`Run: ${command.title}`}
-                  >
-                    {command.title}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-zinc-500">No commands exposed.</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-zinc-200">Permissions</h3>
-            {extension.permissions?.length ? (
-              <div className="flex flex-wrap gap-2">
-                {extension.permissions.map((permission) => (
-                  <TagChip key={permission}>{permission}</TagChip>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-zinc-500">
-                No permissions declared.
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-zinc-200">Surfaces</h3>
-            {extension.surfaces?.length ? (
-              <div className="flex flex-wrap gap-2">
-                {extension.surfaces.map((surface) => (
-                  <TagChip key={surface}>{surface}</TagChip>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-zinc-500">
-                No UI surfaces declared.
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-zinc-200">Settings</h3>
-            {extension.settingsCount ? (
-              <p className="text-xs text-zinc-500">
-                This extension exposes {extension.settingsCount} configurable settings.
-              </p>
-            ) : (
-              <p className="text-xs text-zinc-500">
-                This extension has no configurable settings yet.
-              </p>
-            )}
-          </div>
-        </div>
-      ) : null}
     </Dialog>
   );
 }

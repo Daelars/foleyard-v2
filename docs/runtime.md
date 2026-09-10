@@ -8,11 +8,10 @@
 ## What it does
 
 `GET /api/runtime` returns a read-only server snapshot (DTO `schemaVersion:
-1`) aggregating identity, capabilities, commands, extensions, events,
-extension points, settings refs, docs location, and limitations, for
-both extension systems. The v1 section covers no tools (all six
-retired); the v2 section covers the v2 registry (seven ports plus any
-active fixtures in development). The desktop
+1`) aggregating identity, capabilities, events, settings refs, docs
+location, v2 extensions and limitations. Version 1 is retired and absent
+from the snapshot; the v2 section covers the v2 registry (seven ports plus
+any active fixtures in development). The desktop
 side answers `desktop:get-runtime-info` with main-owned identity and the
 installed handler list. Help/About's "Export runtime info" merges both for a
 user-invoked diagnostic file. Everything is internal: no secrets, grant
@@ -22,8 +21,8 @@ are ever included.
 ## Responsibilities and boundaries
 
 - `src/lib/runtime-info.ts` (`getServerRuntimeSnapshot`) owns the server
-  snapshot. It registers extensions for identity only and overlays enabled
-  flags best-effort.
+  snapshot. It reads the v2 registry for identity only and overlays
+  approvals best-effort.
 - `electron/main/runtime-info.cjs` (`getDesktopIdentity`) owns desktop
   identity: platform, packaged state, app version, Next BUILD_ID,
   resources/docs paths, installed channels.
@@ -44,11 +43,8 @@ are ever included.
 | `providers` | server `present`; renderer `absent`; desktop `present` iff `FOLEYARD_DESKTOP=1` |
 | `database` | `getDatabaseVersionInfo()` probe — no handle, so `not-initialized` when unopened |
 | `capabilities` | `describeCapabilities` with real service/desktop composition |
-| `commands` | flattened catalog command descriptions (no functions) |
-| `extensions` | per-tool id/name/provider/version/`bundled`/registered/enabled/`per-command`/`internal`/apiVersion/permissions/commandIds/surfaces/docsId |
-| `events` / `extensionPoints` | `listEvents()` / `listExtensionPoints()` |
+| `events` | `listEvents()` |
 | `settingsSchemaRefs` | `["settings.md", "extensions.md#settings", "commands.md", "extensions-v2.md"]` |
-| `extensionSystems` | v1 (API 1) + v2 (API 2) identity with registered IDs |
 | `extensionsV2` | per-v2-extension id/name/version, `registered`, in-memory `enabled`, apiVersion, standing, declared vs effective permissions, `approvalsKnown`, command/contribution IDs, settings schema (defaults only), docs refs |
 | `eventsV2` | the five typed v2 contracts with host ownership |
 | `documentation` | manifest id, product version, index + document ids, runnable examples |
@@ -63,16 +59,14 @@ a live selection, so the snapshot reports declared
 `requiredCapabilities`, never live verdicts.
 
 DB handling: the snapshot path opens the existing database file with
-a short-lived read-only handle only to read `extension:*:enabled`
-flags and the `v2:approvals` row, and closes it before returning. A
-missing or unreadable file degrades explicitly instead: v1 flags
-stay at their default, v2 `approvalsKnown` reads false, and the
+a short-lived read-only handle only to read the `v2:approvals` row, and
+closes it before returning. A
+missing or unreadable file degrades explicitly instead:
+`approvalsKnown` reads false, and the
 `database` section reports `{ state: "not-initialized", migration:
 "unversioned" }` from the handle-free probe. Nothing the snapshot
-does creates, migrates, or writes the database. (An earlier revision
-read v1 flags through the read-write repository, which opened and
-migrated the file on first touch; `readRuntimeDatabaseFlags` in
-`src/lib/runtime-info.ts` now owns the read-only path.)
+does creates, migrates, or writes the database. `readRuntimeDatabaseFlags`
+in `src/lib/runtime-info.ts` owns the read-only path.
 
 Agent workflow (supported, read-only): fetch the exported snapshot →
 verify `identity` against the docs manifest (`foleyard-docs`, matched
@@ -116,7 +110,7 @@ only the exported snapshot (plus desktop identity) describes the running app.
 
 ```bash
 curl /api/runtime | jq '{version: .identity.version, db: .database, limitations}'
-curl /api/runtime | jq '{systems: .extensionSystems, v2: [.extensionsV2[].id]}'
+curl /api/runtime | jq '{v2: [.extensionsV2[].id]}'
 ```
 
 Expected (development web checkout, DB unopened):

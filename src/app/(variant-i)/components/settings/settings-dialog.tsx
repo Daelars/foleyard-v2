@@ -61,9 +61,6 @@ function V3SettingsDialogBody({
   onConvertToRegularCollection,
   onCreateTag,
   onDeleteTag,
-  extensions = [],
-  onToggleExtension,
-  onUpdateExtensionSetting,
   v2Settings,
   zoom = 100,
   onUpdateZoom,
@@ -144,12 +141,7 @@ function V3SettingsDialogBody({
 
         <div className={cn(activeTab !== "extensions" && "hidden")}>
           <TabPanel tabKey="extensions">
-            <V3SettingsExtensionsTab
-              extensions={extensions}
-              onToggleExtension={onToggleExtension}
-              onUpdateExtensionSetting={onUpdateExtensionSetting}
-              v2Settings={v2Settings}
-            />
+            <V3SettingsExtensionsTab v2Settings={v2Settings} />
           </TabPanel>
         </div>
 

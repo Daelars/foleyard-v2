@@ -2,101 +2,36 @@
 
 > Feature status: shipped
 > Contract: internal
-> Owner: `src/lib/extensions/host.ts` + `packages/yard-core/src/extensions/extension-host.ts`
+> Owner: `src/lib/extensions-v2/host.ts` + `packages/yard-core/src/extensions-v2/host.ts`
 > Applies to: docs manifest ID (`architecture/extensions`); development checkout when unbuilt
 
 ## What it does
 
-Traces the full path from a tool's static declaration to pixels: v1 was
-manifest → registration → transport → guarded host → service → UI; v2 is
+Traces the full path from a tool's static declaration to pixels:
 definition → registry → catalog/availability → host → operations →
-jobs/plans → UI. No v1 tools remain — all six retired to their v2 ports;
-the v1 trace below is the retired shape. There is no external discovery,
-loading, marketplace, or public authoring SDK on either path.
+jobs/plans → UI. Version 1 was removed from the app; the v2 engine is the
+only extension runtime. There is no external discovery, loading,
+marketplace, or public authoring SDK.
 
 ## Responsibilities and boundaries
 
-- Retired v1 tools owned static declarations (`COMMAND_DEFINITIONS`
-  shared by manifest and `registerCommands`) plus pure service logic
-  over the safe context.
-- `src/lib/extensions/registry.ts` owns the (now empty) registration table.
-- `execute/transport.ts` owns HTTP envelope validation (adapters removed).
-- `YardExtensionHost` owns per-execution registry construction, enabled
-  checks, guarded services, and selection validation.
-- The renderer owns all UI: generic settings controls and palette entries,
-  explicit context-menu adapter, bespoke dialogs/panels. Surfaces declare
-  intent; only some have generic adapters.
+- Each tool package owns its `definition.ts` (pure data) and
+  `handlers.ts` (operations over injected services); handlers never
+  import app internals, storage drivers, React, or Electron.
+- `packages/yard-core/src/extensions-v2/` owns the framework-free engine:
+  registry validation, catalog serialization, availability, permissions
+  and grants, host execution, jobs, plans, and the HTTP transport codec.
+- `src/lib/extensions-v2/host.ts` composes the production registry and
+  per-port handlers behind `getAppV2Host()`.
+- The renderer owns all UI: V3 adapters in
+  `src/app/(variant-i)/components/`, palette entries, context menus,
+  dialogs, and panels. Contributions declare intent; the renderer
+  resolves items per point through the shared availability evaluator.
 
 ## Runtime behavior
 
-End-to-end trace for `POST /api/extensions/execute { extensionId,
-commandId, selection, input, destinationGrant }`:
-
-1. **Registration.** `registerAllExtensions()` (idempotent; skipped if the id
-   is present) puts the `{ manifest, registerCommands }` definitions
-   into `extensionRegistry` — empty since full retirement, so every id
-   fails closed as `extension-not-found`.
-2. **Transport.** `validateTransportEnvelope` checks the envelope, then the
-   (now adapter-free) passthrough resolves: no hydration, no grant
-   checks, no result shapers remain on the v1 path.
-3. **Host.** `createAppExtensionHost(destinationGrant)` composes guarded
-   services (filesystem scoped to Library roots + the opaque grant,
-   repositories via `createExtensionServices`, settings access, optional
-   scan-progress callback). `YardExtensionHost.execute` builds a fresh
-   `YardCommandRegistry`, runs the tool's `registerCommands(context)`,
-   revalidates enabled state, selection (`requiresSelection`), and folder
-   scope, then executes.
-4. **Service.** Handlers run against the safe context (selection, permission
-   checker, guarded services, settings, command registry) — never raw DB,
-   routes, React, or Electron.
-5. **UI.** Values return as `{ ok: true, type: "value", value }` (shaped by
-   the adapter); `YardUiIntent` results return as `{ ok: true, type:
-   "ui-intent", intent }` for renderer dispatch to dialogs/settings.
-   Failures return `{ ok: false, reason, message }` with mapped HTTP status.
-
-`COMMAND_DEFINITIONS` sharing: each tool defines metadata once with
-`defineYardCommand`; `manifest.ts` spreads it into `commands` and
-`commands.ts` looks handlers up with `def(id)` — one source of truth.
-Catalog projection (`?view=catalog` → `projectCatalogEntry` →
-`describeYardCommand`) strips functions/validators into JSON-safe
-descriptions.
-
-Guarded host enforcement: `guardHostServices` wraps filesystem (writes need
-`files:write` or `drop:modify`), files (`markRemoved` needs
-`library:write`), and library/collections/tags/favorites mutations (Proxy
-allows read-pattern methods, denies the rest without the write permission).
-Transport grant checks are separate: even a permitted tool cannot write
-outside the presented `destinationGrant`. Limitation: trusted bundled Node
-code is not sandboxed against direct imports.
-
-UI intent map: intents flow command → execute response → renderer dispatch
-(dialogs, settings tabs). Context menus are explicit JSX plus one minimal
-adapter (`registerContextMenuCommand` /
-`listContextMenuCommands` in `ui-contributions.ts`).
-
-Settings controls: `toGridItem` projects each `YardSetting` with its live
-value; renderer renders generic controls by `type` (boolean/select/number/
-string/path); PATCH coerces + `validateSettingValue` before write.
-
-Palette projection: enabled tools' descriptions become
-`tool:<extensionId>:<commandId>` entries via `buildPaletteEntries`; six
-built-in `view:`/`transport:`/`file:` actions come from
-`APP_COMMAND_DESCRIPTORS` + shortcuts.
-
-Surfaces vs adapters (v1):
-
-| Declared surface | Generic adapter? | Reality |
-| --- | --- | --- |
-| `command-palette` | yes (`palette.command`) | tool entries projected |
-| `settings` | yes (`settings.controls`) | generic controls |
-| `context-menu` | minimal (`context-menu.file-command`) | explicit JSX + one command adapter |
-| `selection-actions` / `toolbar` / `drop-menu` | no | explicit app wiring only |
-| `sidebar` | no (`sidebar.panel` unavailable) | bespoke panels (Shelf), not mounted from surfaces |
-
-## The v2 execution path beside it
-
-End-to-end trace for `POST /api/extensions-v2/execute {
-extensionId, commandId, selection, input }`:
+End-to-end trace for `POST /api/extensions-v2/execute { extensionId,
+commandId, selection, input }`:
 
 1. **Registration.** Each `ensure*V2Registered()` puts its port's
    definition and handlers on the process-wide app host once
@@ -116,7 +51,7 @@ extensionId, commandId, selection, input }`:
    direct execution, job submit, and plan apply alike, then runs the
    handler with an engine-owned `runMode` and narrow operation
    services. Operation errors map to typed failure codes; a v2
-   failure never falls back to v1.
+   failure is final and never falls through to another system.
 4. **Services.** Handlers use paged Library reads, named selection
    sources (shelf reads `v2shelf:sound-shelf-v2`, recent reads the
    recent record), authorized file/archive output, namespaced
@@ -131,52 +66,56 @@ Module dependency direction (enforced by
 `node scripts/check-v2-boundaries.cjs` in CI): definitions →
 registry → catalog/availability → host → operations → jobs/plans;
 application adapters sit above core and below routes/components;
-`make-pack-v2` imports `yard-core` and relatives only. Diagrams live
+tool packages import `yard-core` and relatives only. Diagrams live
 in `public/extension-system-v2.html`.
 
 ## Contracts
 
-- Internal, API version 1: manifest/command/permission/setting/surface
-  vocabulary; host outcome/reason union; JSON-safe catalog descriptions.
-- No provider contracts (waveform/metadata/search) exist; extension points
-  mark them `unavailable`.
+- Internal, API version 2: definition vocabulary (commands, permissions,
+  scopes, settings, contributions, value schemas), failure codes,
+  catalog and outcome envelopes.
+- Destination and source access travel through grant stores; raw paths
+  never reach handlers.
+- No provider contracts (waveform/metadata/search) exist; extension
+  points mark them `unavailable`.
 
 ## Failure behavior and limitations
 
-- Transport failures precede host execution (400 messages); host
-  reasons map via `hostFailureStatus` (404/403/400/500).
+- Envelope failures precede execution; failure codes map through the
+  transport status table (400/403/404/413/500).
 - Null envelopes and unknown ids fail closed; nothing is fetched or loaded.
-- `extension.scan-progress` has no observer in the execute route.
+- Jobs are host-owned and cooperative; plans require host-stamped review
+  and expire. No generic undo.
 
 ## Source map (real file paths)
 
 - `packages/yard-tools/*-v2/src/{definition,handlers}.ts`
-- `packages/yard-core/src/extensions/{extension-host,extension-command-registry,extension-context,vocabulary}.ts`
-- `src/lib/extensions/{registry,runtime,host,catalog,ui-contributions,settings-store,kv-store}.ts`
-- `src/app/api/extensions/{route,execute/route,execute/transport,host-outcome}.ts`
-- `src/app/library/{use-extension-catalog,use-extension-ui,use-palette}.ts`
+- `packages/yard-core/src/extensions-v2/{registry,catalog,availability,permissions,grants,host,jobs,plans,transport,operations}.ts`
+- `src/lib/extensions-v2/host.ts` — production registry + enablement
+- `src/app/api/extensions-v2/**/route.ts` — HTTP surface
+- `src/app/(variant-i)/components/extensions/**` — V3 adapters
 - `src/components/CommandPalette/` + `src/app/library/use-palette.ts`
 
 ## Examples
 
 ```bash
-# Catalog (static metadata, JSON-safe)
-curl '/api/extensions?view=catalog' | jq '.extensions[0].commands[].id'
-# Execute (transport -> host -> service)
-curl -X POST /api/extensions/execute \
-  -H 'Content-Type: application/json' \
-  -d '{"extensionId":"folder-janitor","commandId":"folder-janitor.scan-library","input":{}}'
-# v2 catalog (effective permissions, serializable)
+# Catalog (effective permissions, serializable)
 curl /api/extensions-v2 | jq '.catalog.entries[].id'
-# v2 availability (reasons, never executes)
+# Availability (reasons, never executes)
 curl '/api/extensions-v2/availability?extensionId=make-pack-v2&commandId=make-pack-v2.from-shelf'
+# Execute
+curl -X POST /api/extensions-v2/execute \
+  -H 'Content-Type: application/json' \
+  -d '{"extensionId":"sound-shelf-v2","commandId":"sound-shelf-v2.list","selection":{"fileIds":[]}}'
+# Jobs and plans
+curl '/api/extensions-v2/jobs'
 ```
 
 ## Related documentation
 
 - `docs/extensions.md` — tool catalog and permission model
 - `docs/extensions-v2.md` — v2 authoring and runnable examples
-- `docs/commands.md` — 18-command table and error reasons
+- `docs/commands.md` — command inventory and failure codes
 - `docs/architecture/yard-core.md` — contracts underneath
 - `docs/architecture/application.md` — routes and state ownership
-- `public/extension-system-v2.html` — v1-vs-v2 and lifecycle diagrams
+- `public/extension-system-v2.html` — lifecycle diagrams

@@ -49,8 +49,7 @@ import { V3OrganizeView } from "./components/organize";
 import { V3SettingsDialog } from "./components/settings/settings-dialog";
 import { V3IconRail } from "./components/rail";
 import { Button, Dialog, DialogTitle, Kbd, VariantIProvider } from "@/components/variant-i";
-import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
-import { useExtensionCatalog } from "../library/use-extension-catalog";
+import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/shelf-events";
 import { useLibraryFiles } from "../library/use-library-files";
 import { useLibraryOrganization } from "../library/use-library-organization";
 import { useLibraryView } from "../library/use-library-view";
@@ -62,7 +61,6 @@ import { useTransport } from "../library/use-transport";
 import { usePalette } from "../library/use-palette";
 import { useShelfV2 as useShelf } from "../library/use-shelf-v2";
 import {
-  V3ExtensionDetailsDialog,
   V3RenameCollectionDialog,
   V3SaveSearchDialog,
   V3SimilarSoundsDialog,
@@ -128,17 +126,6 @@ function AppV3Content() {
   });
   const shelf = useShelf();
   const { loadShelfCount: loadSoundShelfCount, setShelfItems } = shelf;
-
-  const catalog = useExtensionCatalog({
-    onSoundShelfToggled: (enabled) => {
-      if (enabled) {
-        void shelf.loadShelfCount();
-      } else {
-        shelf.clearShelfState();
-      }
-    },
-  });
-  const { extensions } = catalog;
 
   const org = useLibraryOrganization({
     isCollectionSelected: (id) => selectedCollectionMirrorRef.current === id,
@@ -218,25 +205,13 @@ function AppV3Content() {
   }, [selection]);
 
   const { loadSettingsScan } = settingsScan;
-  const { loadExtensions } = catalog;
   const { loadOrganization } = org;
-  const { clearShelfState } = shelf;
   const loadInitialData = useCallback(async () => {
-    const [, loadedExtensions] = await Promise.all([
-      loadSettingsScan(),
-      loadExtensions(),
-      loadOrganization(),
-    ]);
-    if (
-      loadedExtensions?.some(
-        (extension) => extension.id === "sound-shelf" && extension.enabled,
-      )
-    ) {
-      void loadSoundShelfCount();
-    } else {
-      clearShelfState();
-    }
-  }, [loadSettingsScan, loadExtensions, loadOrganization, loadSoundShelfCount, clearShelfState]);
+    await Promise.all([loadSettingsScan(), loadOrganization()]);
+    // The v2 shelf list degrades to an empty count when the extension is
+    // disabled or its permission is not granted, so one call is safe.
+    void loadSoundShelfCount();
+  }, [loadSettingsScan, loadOrganization, loadSoundShelfCount]);
 
   const reloadAfterScan = useCallback(() => {
     const loaders: Partial<Record<RefetchSlice, () => Promise<unknown>>> = {
@@ -335,9 +310,7 @@ function AppV3Content() {
   } = bulk;
 
   const extUi = useExtensionUi({
-    showShelf,
     openSettings: settingsScan.openSettings,
-    requestClearShelf: shelf.requestClearShelf,
     getSelectedFile: () => selectionApiRef.current.get(),
     addToCollection: (collectionId, fileId) =>
       org.addToCollection(collectionId, fileId),
@@ -477,7 +450,6 @@ function AppV3Content() {
   );
 
   const palette = usePalette({
-    extensions,
     orderedFiles,
     v2ToolCommands: v2Palette.v2ToolCommands,
     runV2Command: v2Palette.runV2Command,
@@ -485,8 +457,8 @@ function AppV3Content() {
     autoplay: transport.autoplay,
     selectedFile,
     canStepQueue: transport.queueState.queue.length > 1,
-    shelfEnabled: extensions.some(
-      (extension) => extension.id === "sound-shelf" && extension.enabled,
+    shelfEnabled: v2Catalog.extensions.some(
+      (entry) => entry.id === SOUND_SHELF_V2_ID && entry.enabled,
     ),
     autoTagEnabled,
     showLibrary,
@@ -519,7 +491,6 @@ function AppV3Content() {
     addCurrentToShelf: () => {
       void extUi.handleAddCurrentToShelf();
     },
-    runCommand: extUi.handleRunCommand,
     playSound: (fileId) => {
       const match = orderedFiles.find((file) => file.id === fileId);
       if (match) {
@@ -585,8 +556,8 @@ function AppV3Content() {
     viewingSmartCollection,
     activeSmartCollectionId,
   } = useMemo(() => {
-    const shelfEnabled = extensions.find((e) => e.id === "sound-shelf")?.enabled ?? false;
-    const janitor = extensions.find((e) => e.id === "folder-janitor")?.enabled ?? false;
+    const shelfEnabled = v2Catalog.extensions.find((e) => e.id === SOUND_SHELF_V2_ID)?.enabled ?? false;
+    const janitor = v2Catalog.extensions.find((e) => e.id === FOLDER_JANITOR_V2_ID)?.enabled ?? false;
     const smart = v2Catalog.extensions.find((e) => e.id === "smart-collections-v2")?.enabled ?? false;
     const activeSmart = selectedCollection
       ? org.collections.find((c) => c.id === selectedCollection && c.isSmart) ?? null
@@ -598,7 +569,7 @@ function AppV3Content() {
       viewingSmartCollection: activeSmart !== null,
       activeSmartCollectionId: activeSmart?.id ?? null,
     };
-  }, [extensions, v2Catalog.extensions, selectedCollection, org.collections]);
+  }, [v2Catalog.extensions, selectedCollection, org.collections]);
 
   const nextTitle = transport.nextTitleFor(files, selectedFile?.id);
 
@@ -861,21 +832,12 @@ function AppV3Content() {
 
         {showExtensionsView ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <V3ExtensionGrid
-              extensions={extensions}
-              isLoading={catalog.isLoadingExtensions}
-              onOpenDetails={extUi.setSelectedExtension}
-              onToggleEnabled={catalog.handleToggleExtensionEnabled}
-              onRunCommand={extUi.handleRunCommand}
-              pendingExtensionId={catalog.pendingExtensionId}
-                trailing={
-                 <V3ToolsCards
-                    onRunExtension={runV2Extension}
-                    onEnabledToggle={() => v2Catalog.refresh()}
-                  />
-                }
-                trailingCount={v2Catalog.extensions.length}
+            <V3ExtensionGrid>
+              <V3ToolsCards
+                onRunExtension={runV2Extension}
+                onEnabledToggle={() => v2Catalog.refresh()}
               />
+            </V3ExtensionGrid>
             </div>
         ) : showOrganizeView ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1068,9 +1030,6 @@ function AppV3Content() {
         onConvertToRegularCollection={org.convertToRegularCollection}
         onCreateTag={org.createTag}
         onDeleteTag={org.deleteTag}
-        extensions={extensions}
-        onToggleExtension={catalog.handleToggleExtensionEnabled}
-        onUpdateExtensionSetting={catalog.handleUpdateExtensionSetting}
         v2Settings={<V3ExtensionsSection onEnabledToggle={() => v2Catalog.refresh()} />}
         zoom={settingsScan.zoom}
         onUpdateZoom={settingsScan.handleUpdateZoom}
@@ -1087,12 +1046,6 @@ function AppV3Content() {
         onSaveRoot={settingsScan.saveLibraryRoot}
         onStartScan={settingsScan.startLibraryScan}
         onComplete={settingsScan.handleCompleteOnboarding}
-      />
-
-      <V3ExtensionDetailsDialog
-        extension={extUi.selectedExtension}
-        onOpenChange={extUi.handleCloseExtensionDetails}
-        onRunCommand={extUi.handleRunCommand}
       />
 
       <V3FolderJanitorDialog

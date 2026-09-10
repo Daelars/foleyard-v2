@@ -20,7 +20,7 @@ does not exist.
   record. Anything not in the catalog is not a supported event.
 - `electron/main/ipc-channels.cjs` (`CHANNEL_SPECS`) owns IPC channel kinds
   and payload field names — a registry, not a subscription API.
-- `src/lib/extensions/sound-shelf-events.ts` owns the shelf constant.
+- `src/lib/shelf-events.ts` owns the shelf constant.
 - `src/lib/desktop.ts` owns bridge-ready detection (`useSyncExternalStore`
   + setter trap + `desktop-bridge-ready` window event).
 - Scan progress has no subscription contract: the runner accepts an optional
@@ -98,16 +98,15 @@ const unsubscribe = getV2Events().subscribe("settings-changed", reread);
 - `electron/main/ipc-channels.cjs` — `CHANNEL_SPECS`, payload fields
 - `electron/preload.cjs` — IPC listener exposure
 - `src/lib/desktop.ts` — bridge types, late-injection trap
-- `src/lib/extensions/sound-shelf-events.ts` — `SOUND_SHELF_CHANGED_EVENT`
+- `src/lib/shelf-events.ts` — `SOUND_SHELF_CHANGED_EVENT`
 - `src/lib/scanner/run-scan.ts` — scan progress callback origin
-- `src/lib/extensions/host.ts` — `scanProgress.report` wiring
 
 ## Examples
 
 Subscribe to shelf changes (renderer-local only):
 
 ```ts
-import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
+import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/shelf-events";
 window.addEventListener(SOUND_SHELF_CHANGED_EVENT, refreshShelf);
 ```
 

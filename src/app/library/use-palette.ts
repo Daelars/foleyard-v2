@@ -17,12 +17,10 @@ import {
   type ShortcutAction,
   type ShortcutBindings,
 } from "@/components/Shortcuts/shortcuts";
-import type { ExtensionGridItem } from "@/lib/extensions/types";
-import { toolPaletteId } from "@/lib/commands";
 import type { FileRecord } from "./types";
 // App command descriptors (src/lib/commands.ts) map current palette IDs and
-// shortcut actions; tool entries below consume the same `tool:{ext}:{cmd}`
-// shape via toolPaletteId so palette, shortcuts and registry agree.
+// shortcut actions; v2 tool entries below consume the `v2tool:{ext}:{cmd}`
+// shape so palette and shortcuts agree.
 
 /** Split a palette entry id into its kind and payload. */
 export function parsePaletteEntryId(id: string): {
@@ -55,7 +53,6 @@ export function stepPaletteIndex(
 }
 
 export interface PaletteInput {
-  extensions: ExtensionGridItem[];
   orderedFiles: FileRecord[];
   isPlaying: boolean;
   autoplay: boolean;
@@ -76,7 +73,6 @@ export interface PaletteInput {
   toggleAutoplay: () => void;
   toggleFavoriteCurrent: () => void;
   addCurrentToShelf: () => void;
-  runCommand: (extensionId: string, commandId: string) => void;
   /** v2 palette entries (R6): resolved by the v2 bridge, dispatched via runV2Command. */
   v2ToolCommands?: PaletteToolCommand[];
   runV2Command?: (extensionId: string, commandId: string) => void;
@@ -146,28 +142,6 @@ export function usePalette(input: PaletteInput) {
     persistShortcutBindings({ ...DEFAULT_SHORTCUTS });
   }, []);
 
-  const paletteToolCommands = useMemo(
-    () =>
-      input.extensions.flatMap((extension) =>
-        extension.enabled
-          ? ((extension.commands ?? []).map((command) => ({
-              extensionId: extension.id,
-              extensionName: extension.name,
-              commandId: command.id,
-              title: command.title,
-              paletteId: toolPaletteId(extension.id, command.id),
-            })) as Array<{
-              extensionId: string;
-              extensionName: string;
-              commandId: string;
-              title: string;
-              paletteId: string;
-            }>)
-          : [],
-      ),
-    [input.extensions],
-  );
-
   const paletteSounds = useMemo(
     () =>
       input.orderedFiles.map((file) => ({
@@ -191,7 +165,6 @@ export function usePalette(input: PaletteInput) {
         isFavorite: input.selectedFile?.isFavorite ?? false,
         shelfEnabled: input.shelfEnabled,
         autoTagEnabled: input.autoTagEnabled,
-        toolCommands: paletteToolCommands,
         v2ToolCommands: input.v2ToolCommands ?? [],
         sounds: paletteSounds,
       }),
@@ -203,7 +176,6 @@ export function usePalette(input: PaletteInput) {
       input.canStepQueue,
       input.shelfEnabled,
       input.autoTagEnabled,
-      paletteToolCommands,
       input.v2ToolCommands,
       paletteSounds,
     ],
@@ -239,13 +211,6 @@ export function usePalette(input: PaletteInput) {
             actions.toggleFavoriteCurrent();
           } else if (rest === "add-to-shelf") {
             actions.addCurrentToShelf();
-          }
-          break;
-        }
-        case "tool": {
-          const split = rest.indexOf(":");
-          if (split !== -1) {
-            actions.runCommand(rest.slice(0, split), rest.slice(split + 1));
           }
           break;
         }

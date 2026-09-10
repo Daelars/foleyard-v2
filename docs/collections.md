@@ -78,7 +78,7 @@ its save-search replaces the retired v1 tool.
   `tag-repository.ts`, `favorite-repository.ts` — contracts
 - `packages/yard-core/src/services/organization/*` — organization services
 - `packages/yard-tools/sound-shelf-v2/` — Sound Shelf v2 bundled extension
-- `src/lib/extensions-v2/shelf.ts`, `src/lib/extensions/sound-shelf-events.ts` —
+- `src/lib/extensions-v2/shelf.ts`, `src/lib/shelf-events.ts` —
   shelf store and events
 - `packages/yard-tools/smart-collections-v2/` — criteria workflow tool
 

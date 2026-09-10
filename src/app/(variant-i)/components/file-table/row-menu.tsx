@@ -11,7 +11,6 @@ import type {
   FileTableFileRecord,
   FileTableFileTag,
 } from "@/components/FileTable/types";
-import type { ContextMenuCommandContribution } from "@/lib/extensions/ui-contributions";
 import type { V2ResolvedContribution } from "@yard-core";
 
 export function V3RowMenuItems({
@@ -26,8 +25,6 @@ export function V3RowMenuItems({
   allTags,
   onToggleFileTag,
   onRemoveFile,
-  contributedItems,
-  onContributedCommand,
   v2Items,
   onV2Command,
 }: {
@@ -42,8 +39,6 @@ export function V3RowMenuItems({
   allTags?: FileTableFileTag[];
   onToggleFileTag?: (fileId: string, tagId: string) => void;
   onRemoveFile?: (file: FileTableFileRecord) => Promise<void>;
-  contributedItems?: ContextMenuCommandContribution[];
-  onContributedCommand?: (contrib: ContextMenuCommandContribution, file: FileTableFileRecord) => void;
   v2Items?: V2ResolvedContribution[];
   onV2Command?: (item: V2ResolvedContribution) => void;
 }) {
@@ -115,20 +110,6 @@ export function V3RowMenuItems({
             <Trash2 />
             Remove from library
           </MenuItem>
-        </>
-      ) : null}
-      {contributedItems && contributedItems.length > 0 ? (
-        <>
-          <MenuSeparator />
-          {contributedItems.map((contrib) => (
-            <MenuItem
-              key={contrib.id}
-              icon={<Puzzle />}
-              onClick={() => onContributedCommand?.(contrib, file)}
-            >
-              {contrib.label}
-            </MenuItem>
-          ))}
         </>
       ) : null}
       {v2Items && v2Items.length > 0 && onV2Command ? (

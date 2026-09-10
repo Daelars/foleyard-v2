@@ -79,6 +79,17 @@ vi.mock("@/lib/metadata", () => ({
   ) => state.extractor!(filePath, options),
 }));
 
+const triggerState = vi.hoisted(() => ({
+  calls: [] as Array<{ startedAt: string }>,
+}));
+
+vi.mock("@/lib/extensions-v2/auto-tag-trigger", () => ({
+  triggerAutoTagAfterScan: (startedAt: string) => {
+    triggerState.calls.push({ startedAt });
+    return Promise.resolve({ submitted: 0, files: 0 });
+  },
+}));
+
 let sqlite: TestDatabase;
 let files: SqliteAudioFileRepository;
 let settings: SqliteSettingsRepository;
@@ -110,6 +121,7 @@ async function runScanToIdle(timeoutMs = 30000) {
 
 beforeEach(() => {
   wireDatabase();
+  triggerState.calls.length = 0;
   // The fake reports the real on-disk size: the queue writes fileSize back to
   // the row, and a lying size would mark every file changed on every scan.
   state.extractor = async (_path, options) => ({
@@ -144,6 +156,24 @@ describe("scanner", () => {
       const rows = files.getFiles({ limit: 10 });
       expect(rows.map((row) => row.path).sort()).toEqual([kick, snare].sort());
       expect(rows.map((row) => row.duration)).toEqual([120, 120]);
+    } finally {
+      scratch.dispose();
+    }
+  });
+
+  it("hands scan arrivals to the auto-tag trigger on completion", async () => {
+    const scratch = createScratchLibrary("foleyard-scan-trigger-");
+    try {
+      scratch.writeFile("kick.wav");
+      settings.setLibraryRoots([scratch.root]);
+
+      await runScanToIdle();
+      expect(triggerState.calls).toHaveLength(1);
+      expect(typeof triggerState.calls[0]!.startedAt).toBe("string");
+      // The arrivals query behind the trigger sees the scanned file.
+      expect(
+        files.getFileIdsScannedSince(triggerState.calls[0]!.startedAt),
+      ).toHaveLength(1);
     } finally {
       scratch.dispose();
     }

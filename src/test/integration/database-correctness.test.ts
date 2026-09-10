@@ -38,6 +38,7 @@ vi.mock("@/lib/db", () => ({
   getFiles: (...args: never[]) => state.files!.getFiles(...args),
   getFileCount: (...args: never[]) => state.files!.getFileCount(...args),
   getTagsForFiles: (ids: string[]) => state.tags!.getTagsForFiles(ids),
+  getAttachmentsForFiles: (ids: string[]) => state.tags!.getAttachmentsForFiles(ids),
   setFileTagBatch: (ids: string[], tagId: string, attach: boolean) =>
     state.files!.setFileTagBatch(ids, tagId, attach),
   toggleFavorite: (id: string) => state.files!.toggleFavorite(id),

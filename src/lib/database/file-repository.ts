@@ -27,6 +27,7 @@ getFileById(id: string): IndexedAudioFile | null { return reads.getFileById({ sq
 getFileByPath(filePath: string): IndexedAudioFile | null { return reads.getFileByPath({ sqlite: this.sqlite, db: this.db }, filePath); }
 getFilesByPaths(paths: string[]): IndexedAudioFile[] { return reads.getFilesByPaths({ sqlite: this.sqlite, db: this.db }, paths); }
 getFilesByIds(ids: string[]): IndexedAudioFile[] { return reads.getFilesByIds({ sqlite: this.sqlite, db: this.db }, ids); }
+getFileIdsScannedSince(sinceIso: string): string[] { return reads.getFileIdsScannedSince({ sqlite: this.sqlite, db: this.db }, sinceIso); }
 upsertFile(record: ScanFileRecord): void { return writes.upsertFile({ sqlite: this.sqlite, db: this.db }, record); }
 touchFileAsSeen(pathValue: string, lastScannedAt: string) { return writes.touchFileAsSeen({ sqlite: this.sqlite, db: this.db }, pathValue, lastScannedAt); }
 batchTouchFiles(entries: AudioFileTouchEntry[], now: string): void { return batch.batchTouchFiles({ sqlite: this.sqlite, db: this.db }, entries, now); }
@@ -64,6 +65,7 @@ export const getFileById = (id: string) => getFileRepo().getFileById(id);
 export const getFileByPath = (filePath: string) => getFileRepo().getFileByPath(filePath);
 export const getFilesByPaths = (paths: string[]) => getFileRepo().getFilesByPaths(paths);
 export const getFilesByIds = (ids: string[]) => getFileRepo().getFilesByIds(ids);
+export const getFileIdsScannedSince = (sinceIso: string) => getFileRepo().getFileIdsScannedSince(sinceIso);
 export const upsertFile = (record: ScanFileRecord) => getFileRepo().upsertFile(record);
 export const touchFileAsSeen = (path: string, scanned: string) => getFileRepo().touchFileAsSeen(path, scanned);
 export const batchTouchFiles = (entries: AudioFileTouchEntry[], now: string) => getFileRepo().batchTouchFiles(entries, now);

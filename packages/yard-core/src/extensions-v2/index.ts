@@ -189,6 +189,26 @@ export {
   type V2ExtendedOperationServices,
 } from "./extended-operations";
 export {
+  createV2AnalysisOperations,
+  denyV2AnalysisOperations,
+  type V2AnalysisFactoryArgs,
+  type V2AnalysisOperations,
+  type V2AnalysisPorts,
+  type V2ModelState,
+  type V2ModelStatus,
+} from "./analysis";
+export {
+  STUB_EMBEDDING_MODEL,
+  cosineSimilarity,
+  createV2EmbeddingOperations,
+  denyV2EmbeddingOperations,
+  liveFileViaLibrary,
+  type V2EmbeddingFactoryArgs,
+  type V2EmbeddingOperations,
+  type V2EmbeddingPorts,
+  type V2SimilarFile,
+} from "./embeddings";
+export {
   authorizeV2ReadablePath,
   authorizeV2WritablePath,
   screenV2CandidatePath,

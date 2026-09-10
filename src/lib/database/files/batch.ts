@@ -146,12 +146,17 @@ export function reconcileMovedFiles(context: FileRepositoryContext): number {
        SELECT ?, collection_id FROM file_collections WHERE file_id = ?`,
     );
     const copyTags = context.sqlite.prepare(
-      `INSERT OR IGNORE INTO file_tags (file_id, tag_id)
-       SELECT ?, tag_id FROM file_tags WHERE file_id = ?`,
+      `INSERT OR IGNORE INTO file_tags (file_id, tag_id, origin, confidence)
+       SELECT ?, tag_id, origin, confidence FROM file_tags WHERE file_id = ?`,
+    );
+    const copyEmbeddings = context.sqlite.prepare(
+      `INSERT OR IGNORE INTO file_embeddings (file_id, model, dim, vec)
+       SELECT ?, model, dim, vec FROM file_embeddings WHERE file_id = ?`,
     );
     const preserveFavorite = context.sqlite.prepare("UPDATE files SET is_favorite = 1 WHERE id = ?");
     const deleteOldCollections = context.sqlite.prepare("DELETE FROM file_collections WHERE file_id = ?");
     const deleteOldTags = context.sqlite.prepare("DELETE FROM file_tags WHERE file_id = ?");
+    const deleteOldEmbeddings = context.sqlite.prepare("DELETE FROM file_embeddings WHERE file_id = ?");
     const deleteOldFile = context.sqlite.prepare("DELETE FROM files WHERE id = ?");
 
     const reconcile = context.sqlite.transaction(() => {
@@ -176,6 +181,7 @@ export function reconcileMovedFiles(context: FileRepositoryContext): number {
         const activeFileId = matches[0].id;
         copyCollections.run(activeFileId, removedFile.id);
         copyTags.run(activeFileId, removedFile.id);
+        copyEmbeddings.run(activeFileId, removedFile.id);
 
         if (Boolean(removedFile.isFavorite)) {
           preserveFavorite.run(activeFileId);
@@ -183,6 +189,7 @@ export function reconcileMovedFiles(context: FileRepositoryContext): number {
 
         deleteOldCollections.run(removedFile.id);
         deleteOldTags.run(removedFile.id);
+        deleteOldEmbeddings.run(removedFile.id);
         deleteOldFile.run(removedFile.id);
         relinked += 1;
       }

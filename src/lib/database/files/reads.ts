@@ -1,5 +1,5 @@
-import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
-import type { AudioFile, IndexedAudioFile, FileSearchQuery } from "@yard-core";
+import { and, asc, count, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import type { AudioFile, IndexedAudioFile, FileSearchQuery, TagOrigin } from "@yard-core";
 import { normalizeDirectoryPath } from "@yard-core";
 import { chunkArray, filenameLike, SQLITE_MAX_VARIABLES } from "../sql-parameters";
 import * as schema from "@/lib/schema";
@@ -12,6 +12,16 @@ function tagIdSubselect(context: FileRepositoryContext, tagId: string) {
       .select({ fileId: schema.fileTags.fileId })
       .from(schema.fileTags)
       .where(eq(schema.fileTags.tagId, tagId)),
+  );
+}
+
+function tagOriginSubselect(context: FileRepositoryContext, origin: TagOrigin) {
+  return inArray(
+    schema.files.id,
+    context.db
+      .select({ fileId: schema.fileTags.fileId })
+      .from(schema.fileTags)
+      .where(eq(schema.fileTags.origin, origin)),
   );
 }
 
@@ -31,7 +41,7 @@ function buildCollectionFilters(context: FileRepositoryContext, options: FileSea
 }
 
 function buildFileFilters(context: FileRepositoryContext, options: FileSearchQuery) {
-  const { query, favorites, directory, libraryRoot, atLibraryRoot, tagId, showRemoved } = options;
+  const { query, favorites, directory, libraryRoot, atLibraryRoot, tagId, tagOrigin, showRemoved } = options;
   const filters = [];
 
   if (!showRemoved) {
@@ -51,6 +61,10 @@ function buildFileFilters(context: FileRepositoryContext, options: FileSearchQue
 
   if (tagId) {
     filters.push(tagIdSubselect(context, tagId));
+  }
+
+  if (tagOrigin) {
+    filters.push(tagOriginSubselect(context, tagOrigin));
   }
 
   if (query) {
@@ -107,6 +121,7 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
       libraryRoot,
       atLibraryRoot,
       tagId,
+      tagOrigin,
       showRemoved,
       limit = 500,
       offset = 0,
@@ -134,6 +149,7 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
           mtimeMs: schema.files.mtimeMs,
           isFavorite: schema.files.isFavorite,
           removedAt: schema.files.removedAt,
+          createdAt: schema.files.createdAt,
         })
         .from(schema.fileCollections)
         .innerJoin(schema.files, eq(schema.fileCollections.fileId, schema.files.id))
@@ -153,6 +169,7 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
       libraryRoot,
       atLibraryRoot,
       tagId,
+      tagOrigin,
       showRemoved,
     });
 
@@ -172,6 +189,7 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
         mtimeMs: schema.files.mtimeMs,
         isFavorite: schema.files.isFavorite,
         removedAt: schema.files.removedAt,
+        createdAt: schema.files.createdAt,
       })
       .from(schema.files)
       .where(filters.length ? and(...filters) : undefined)
@@ -232,8 +250,22 @@ export function getAllFilesIncludingRemoved(context: FileRepositoryContext): Ind
   }
 
 export function getFileById(context: FileRepositoryContext, id: string): IndexedAudioFile | null {
-    return (context.db.select().from(schema.files).where(eq(schema.files.id, id)).get() ?? null) as IndexedAudioFile | null;
-  }
+  return (context.db.select().from(schema.files).where(eq(schema.files.id, id)).get() ?? null) as IndexedAudioFile | null;
+}
+
+/**
+ * Live files touched by the scan that started at `sinceIso`: the
+ * post-scan auto-tag trigger's arrival list. Removed files never qualify.
+ */
+export function getFileIdsScannedSince(context: FileRepositoryContext, sinceIso: string): string[] {
+  return context.db
+    .select({ id: schema.files.id })
+    .from(schema.files)
+    .where(and(gte(schema.files.lastScannedAt, sinceIso), isNull(schema.files.removedAt)))
+    .orderBy(asc(schema.files.id))
+    .all()
+    .map((row) => row.id);
+}
 
 export function getFileByPath(context: FileRepositoryContext, filePath: string): IndexedAudioFile | null {
     return (context.db.select().from(schema.files).where(eq(schema.files.path, filePath)).get() ?? null) as IndexedAudioFile | null;

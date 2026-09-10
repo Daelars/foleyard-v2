@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, type ReactNode } from "react";
 import {
   GripVertical,
   Heart,
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/format";
 
 import { FileRowMenu } from "./file-row-menu";
+import { TagOriginMark } from "./tag-origin-mark";
 import { useShelfToggle } from "./use-shelf-toggle";
 import type { V2ResolvedContribution } from "@yard-core";
 
@@ -86,9 +87,17 @@ export const FileTableFileRow = memo(function FileTableFileRow({
 }) {
   const { toggleShelf } = useShelfToggle(file.id, inShelf);
 
-  const meta = [file.format, ...file.tags.map((tag) => tag.name)]
-    .filter((part): part is string => Boolean(part))
-    .join(" · ");
+  const metaParts: ReactNode[] = [];
+  if (file.format) {
+    metaParts.push(<span key="format">{file.format}</span>);
+  }
+  for (const tag of file.tags) {
+    metaParts.push(
+      <span key={tag.id}>
+        {tag.name} <TagOriginMark origin={tag.origin} confidence={tag.confidence} />
+      </span>,
+    );
+  }
   const extensionIndex = file.filename.lastIndexOf(".");
   const filenameWithoutExtension =
     extensionIndex > 0 && extensionIndex < file.filename.length - 1
@@ -155,9 +164,14 @@ export const FileTableFileRow = memo(function FileTableFileRow({
             >
               {highlightMatch(file.filename, searchQuery)}
             </span>
-            {meta ? (
+            {metaParts.length > 0 ? (
               <span className="mt-0.5 block truncate font-mono text-[11px] text-zinc-400">
-                {meta}
+                {metaParts.map((part, index) => (
+                  <span key={index === 0 ? "first" : `sep-${index}`}>
+                    {index > 0 ? <span className="text-zinc-600"> · </span> : null}
+                    {part}
+                  </span>
+                ))}
               </span>
             ) : null}
           </span>

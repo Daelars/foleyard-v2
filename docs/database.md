@@ -11,7 +11,7 @@ A single SQLite file (better-sqlite3 + Drizzle) stores the library index,
 organization data, and settings. Schema is created and evolved by hand-rolled
 SQL in `src/lib/database/migrations.ts`; there is no drizzle-kit workflow
 (the config would point at a nonexistent `./foleyard.db`, so it stays
-unwired by design). `CURRENT_SCHEMA_VERSION = 1` with a `schema_migrations`
+unwired by design). `CURRENT_SCHEMA_VERSION = 2` with a `schema_migrations`
 ledger records what was applied.
 
 There is no remote database, no public data SDK, and no external provider.
@@ -34,7 +34,9 @@ Tables in `src/lib/schema.ts` (mirrored by DDL in `migrations.ts`):
 | --- | --- |
 | `settings` | key/value store (library roots, onboarding, extension flags/values) |
 | `files` | indexed audio files + scan metadata, favorites, `removed_at` |
-| `tags` / `file_tags` | tags and file membership |
+| `tags` / `file_tags` | tags and file membership; each attachment carries `origin` (`manual`/`deterministic`/`semantic_ai`, default `manual`), nullable `confidence`, and `created_at` |
+| `tag_aliases` | retired tag names resolving to their surviving tag |
+| `file_embeddings` | per-file model vectors (`file_id`, `model`, `dim`, `vec` blob) for similarity search |
 | `collections` / `file_collections` | regular + smart Collections and membership |
 
 Connections set `busy_timeout = 5000`, `journal_mode = WAL`, and
@@ -68,7 +70,7 @@ Database paths (`src/lib/database-path.ts`):
 
 ## Contracts
 
-- Internal: `CURRENT_SCHEMA_VERSION = 1`; `schema_migrations(version,
+- Internal: `CURRENT_SCHEMA_VERSION = 2`; `schema_migrations(version,
   applied_at)` ledger; `DatabaseVersionInfo { state, migration,
   appliedVersion? }`.
 - `getDatabaseVersionInfo(sqlite?)` is a read-only probe: with no handle it

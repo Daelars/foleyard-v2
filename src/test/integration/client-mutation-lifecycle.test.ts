@@ -107,6 +107,7 @@ function baseInput(overrides: Partial<LibraryFilesInput> = {}): LibraryFilesInpu
     search: "",
     collectionId: null,
     tagId: null,
+    tagOrigin: null,
     directory: null,
     getTags: () => KNOWN_TAGS,
     getSelectedFile: () => null,

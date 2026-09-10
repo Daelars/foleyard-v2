@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { FileTableDirectory } from "@/components/FileTable/types";
+import type { TagOrigin } from "@yard-core";
 import { useFavorites } from "./use-favorites";
 import {
   applyBulkFavorite,
@@ -41,6 +42,7 @@ export interface LibraryFilesInput extends LibraryFilesCallbacks {
   search: string;
   collectionId: string | null;
   tagId: string | null;
+  tagOrigin: TagOrigin | null;
   directory: FileTableDirectory | null;
 }
 
@@ -165,6 +167,7 @@ export function useLibraryFiles(input: LibraryFilesInput) {
       search: input.search,
       collectionId: input.collectionId,
       tagId: input.tagId,
+      tagOrigin: input.tagOrigin,
       directory: input.directory,
       libraryRoots: input.libraryRoots,
       sort,
@@ -204,6 +207,7 @@ export function useLibraryFiles(input: LibraryFilesInput) {
     input.search,
     input.collectionId,
     input.tagId,
+    input.tagOrigin,
     input.directory,
     input.libraryRoots,
     sort,
@@ -368,7 +372,10 @@ export function useLibraryFiles(input: LibraryFilesInput) {
         const hasTag = prev.tags.some((tag) => tag.id === batch.tagId);
         if (batch.attached && !hasTag) {
           const known = tags.find((tag) => tag.id === batch.tagId);
-          return { ...prev, tags: [...prev.tags, known ?? { id: batch.tagId, name: "" }] };
+          return {
+            ...prev,
+            tags: [...prev.tags, { ...(known ?? { id: batch.tagId, name: "" }), origin: "manual" as const }],
+          };
         }
         if (!batch.attached && hasTag) {
           return { ...prev, tags: prev.tags.filter((tag) => tag.id !== batch.tagId) };

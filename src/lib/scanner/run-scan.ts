@@ -18,6 +18,7 @@ import {
   upsertFile,
 } from "@/lib/db";
 import { extractMetadata } from "@/lib/metadata";
+import { triggerAutoTagAfterScan } from "@/lib/extensions-v2/auto-tag-trigger";
 
 import { RealFileSystemSeam } from "./filesystem";
 import { ScanRunner } from "./scan-runner";
@@ -51,6 +52,14 @@ function getRunner(): ScanRunner {
       fs: new RealFileSystemSeam(),
       metadataExtractor: {
         extract: extractMetadata,
+      },
+      // Post-scan auto-tag (#194): fire and forget. The runner fires
+      // onComplete even for failed runs because arrivals that landed
+      // are real; a failing trigger itself must never fail the scan.
+      onComplete: ({ startedAt }) => {
+        void triggerAutoTagAfterScan(startedAt).catch((error) => {
+          console.error("Auto-tag trigger failed after scan", error);
+        });
       },
     });
   }

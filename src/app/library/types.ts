@@ -1,3 +1,5 @@
+import type { TagOrigin } from "@yard-core";
+
 export interface FileRecord {
   id: string;
   filename: string;
@@ -8,7 +10,7 @@ export interface FileRecord {
   fileSize: number | null;
   mtimeMs?: number | null;
   isFavorite: boolean;
-  tags: { id: string; name: string }[];
+  tags: { id: string; name: string; origin?: TagOrigin; confidence?: number | null }[];
 }
 
 export interface CollectionRecord {

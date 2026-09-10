@@ -192,6 +192,7 @@ describe("v2 palette entries in the real CommandPalette", () => {
       canStepQueue: false,
       isFavorite: false,
       shelfEnabled: false,
+      autoTagEnabled: false,
       toolCommands: [
         {
           extensionId: "make-pack",

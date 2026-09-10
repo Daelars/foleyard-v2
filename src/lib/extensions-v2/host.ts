@@ -17,6 +17,8 @@ import { createV2LibraryPorts } from "./library-ports";
 import { createV2LibraryMutationPorts } from "./library-mutations";
 import { createV2FolderScanPorts } from "./maintenance";
 import { createV2CollectionPorts, createV2TagPorts } from "./organization";
+import { createV2EmbeddingPorts } from "./embeddings";
+import { createV2AnalysisPorts } from "./analysis";
 import { createV2ShelfPorts } from "./shelf";
 import { getV2SourceGrantStore } from "./source-grants";
 import { ensureMakePackV2Registered } from "./make-pack-v2";
@@ -25,6 +27,7 @@ import { ensureSmartCollectionsV2Registered } from "./smart-collections-v2";
 import { ensureFolderJanitorV2Registered } from "./folder-janitor-v2";
 import { ensureDropRulesV2Registered } from "./drop-rules-v2";
 import { ensureLibraryGathererV2Registered } from "./library-gatherer-v2";
+import { ensureAutoTagV2Registered } from "./auto-tag-v2";
 import { getV2GrantedPermissions } from "./policy";
 import { createV2ExtensionStatePorts, createV2SettingsPorts } from "./settings-state";
 import { createRecentSelectionSource, createShelfSelectionSource } from "./sources";
@@ -125,6 +128,8 @@ function createOperations(binding: {
       mutations: createV2LibraryMutationPorts(),
       collections: createV2CollectionPorts(),
       tags: createV2TagPorts(),
+      embeddings: createV2EmbeddingPorts(),
+      analysis: createV2AnalysisPorts(),
       shelf: createV2ShelfPorts(),
       folders: createV2FolderScanPorts(),
       sources: getV2SourceGrantStore(),
@@ -196,3 +201,4 @@ ensureSmartCollectionsV2Registered();
 ensureFolderJanitorV2Registered();
 ensureDropRulesV2Registered();
 ensureLibraryGathererV2Registered();
+ensureAutoTagV2Registered();

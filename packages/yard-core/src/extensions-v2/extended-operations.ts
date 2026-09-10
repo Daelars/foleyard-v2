@@ -10,6 +10,18 @@ import {
   type V2TagPorts,
 } from "./organization";
 import {
+  createV2EmbeddingOperations,
+  denyV2EmbeddingOperations,
+  type V2EmbeddingOperations,
+  type V2EmbeddingPorts,
+} from "./embeddings";
+import {
+  createV2AnalysisOperations,
+  denyV2AnalysisOperations,
+  type V2AnalysisOperations,
+  type V2AnalysisPorts,
+} from "./analysis";
+import {
   createV2FolderOperations,
   denyV2FolderOperations,
   type V2FolderFactoryArgs,
@@ -70,6 +82,8 @@ export type V2ExtendedOperationServices = V2OperationServices & {
   libraryMutations: V2LibraryMutationOperations;
   collections: V2CollectionOperations;
   tags: V2TagOperations;
+  embeddings: V2EmbeddingOperations;
+  analysis: V2AnalysisOperations;
   shelf: V2ShelfOperations;
   folders: V2FolderOperations;
 };
@@ -82,6 +96,8 @@ export type V2ExtendedOperationFactoryArgs = {
   mutations?: V2LibraryMutationPorts;
   collections?: V2CollectionPorts;
   tags?: V2TagPorts;
+  embeddings?: V2EmbeddingPorts;
+  analysis?: V2AnalysisPorts;
   shelf?: V2ShelfPorts;
   folders?: V2FolderScanPorts;
   /** Readable grants for folders outside the Library roots. */
@@ -135,6 +151,17 @@ export function createV2ExtendedOperations(
     }),
     collections: createV2CollectionOperations(organizationArgs),
     tags: createV2TagOperations(organizationArgs),
+    embeddings: createV2EmbeddingOperations({
+      extensionId: args.extensionId,
+      effectivePermissions: args.effectivePermissions,
+      ...(args.embeddings ? { embeddings: args.embeddings } : {}),
+      isLiveFile: organizationArgs.isLiveFile,
+    }),
+    analysis: createV2AnalysisOperations({
+      extensionId: args.extensionId,
+      effectivePermissions: args.effectivePermissions,
+      ...(args.analysis ? { analysis: args.analysis } : {}),
+    }),
     shelf: createV2ShelfOperations({
       extensionId: args.extensionId,
       effectivePermissions: args.effectivePermissions,
@@ -159,6 +186,8 @@ export function denyAllV2ExtendedOperations(extensionId: string): V2ExtendedOper
     libraryMutations: denyV2LibraryMutationOperations(extensionId),
     collections: denied.collections,
     tags: denied.tags,
+    embeddings: denyV2EmbeddingOperations(extensionId),
+    analysis: denyV2AnalysisOperations(extensionId),
     shelf: denyV2ShelfOperations(extensionId),
     folders: denyV2FolderOperations(extensionId),
   };

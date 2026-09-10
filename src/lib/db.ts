@@ -24,6 +24,7 @@ export {
   getAllFilesIncludingRemoved,
   getFileById,
   getFileByPath,
+  getFileIdsScannedSince,
   getFilesByIds,
   getFilesByPaths,
   getFileCount,
@@ -51,15 +52,24 @@ export {
 } from "@/lib/database/settings-repository";
 export {
   attachTagToFile,
+  attachTagToFileWithOrigin,
   createTag,
   deleteTag,
   detachTagFromFile,
   getAllTags,
+  getAttachmentsForFiles,
   getTagsForFile,
   getTagsForFiles,
   renameTag,
   updateTagColor,
 } from "@/lib/database/tag-repository";
+
+export {
+  deleteEmbeddingsForFile,
+  getFileEmbedding,
+  listEmbeddingIds,
+  upsertFileEmbedding,
+} from "@/lib/database/embedding-repository";
 
 import { sqlite } from "@/lib/database/connection";
 import { SqliteAudioFileRepository } from "@/lib/database/file-repository";

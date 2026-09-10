@@ -26,6 +26,7 @@ export class ScanRunner implements ScannerService {
   private fs: FileSystemSeam;
   private metadataExtractor: MetadataSeam;
   private onProgress?: (status: ScanStatus) => void;
+  private onComplete?: (completion: { startedAt: string }) => void;
 
   private status = createScanStatus();
 
@@ -38,6 +39,12 @@ export class ScanRunner implements ScannerService {
     fs: FileSystemSeam;
     metadataExtractor: MetadataSeam;
     onProgress?: (status: ScanStatus) => void;
+    /**
+     * Fires once per finished run, success or failure: arrivals that
+     * landed before a failure are real, and deterministic tagging is
+     * idempotent, so there is nothing to gain by skipping failed runs.
+     */
+    onComplete?: (completion: { startedAt: string }) => void;
   }) {
     this.fileRepo = deps.fileRepo;
     this.settingsRepo = deps.settingsRepo;
@@ -45,6 +52,7 @@ export class ScanRunner implements ScannerService {
     this.fs = deps.fs;
     this.metadataExtractor = deps.metadataExtractor;
     this.onProgress = deps.onProgress;
+    this.onComplete = deps.onComplete;
   }
 
   getStatus(): ScanStatus {
@@ -119,11 +127,12 @@ export class ScanRunner implements ScannerService {
   private async runScan(libraryRoots: string[]) {
     let metadataQueue: ReturnType<typeof createMetadataQueue> | null = null;
     const metadataUpdates: MetadataUpdateRecord[] = [];
+    let lastScannedAt = new Date().toISOString();
 
     try {
       const seenPaths = new Set<string>();
       const allExistingFiles = this.fileRepo.getAllFilesIncludingRemoved();
-      const lastScannedAt = new Date().toISOString();
+      lastScannedAt = new Date().toISOString();
       metadataQueue = createMetadataQueue(
         METADATA_CONCURRENCY,
         (record) => {
@@ -156,6 +165,7 @@ export class ScanRunner implements ScannerService {
       this.emitProgress();
     } finally {
       this.status.running = false;
+      this.onComplete?.({ startedAt: lastScannedAt });
       this.emitProgress();
     }
   }

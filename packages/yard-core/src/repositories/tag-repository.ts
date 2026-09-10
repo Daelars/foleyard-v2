@@ -1,4 +1,4 @@
-import type { Tag } from "../domain/tag";
+import type { FileTagAttachment, Tag, TagOrigin } from "../domain/tag";
 
 export interface TagRepository {
   getAllTags(): Tag[];
@@ -8,4 +8,19 @@ export interface TagRepository {
   updateTagColor(tagId: string, color: string | null): void;
   attachTagToFile(fileId: string, tagId: string): void;
   detachTagFromFile(fileId: string, tagId: string): void;
+  /** Attach with provenance; a stored manual origin is never downgraded. */
+  attachTagToFileWithOrigin(
+    fileId: string,
+    tagId: string,
+    origin: TagOrigin,
+    confidence?: number | null,
+  ): void;
+  /** Every attachment of a file with its provenance. */
+  getAttachmentsForFile(fileId: string): FileTagAttachment[];
+  /** Remove every attachment of one origin across the library; returns the count removed. */
+  detachAttachmentsByOrigin(origin: TagOrigin): number;
+  /** Record a retired name against its surviving tag; normalized lowercase. */
+  addTagAlias(tagId: string, alias: string): void;
+  /** Resolve a retired name to its surviving tag id, or null. */
+  resolveTagAlias(alias: string): string | null;
 }

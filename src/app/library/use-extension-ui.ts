@@ -1,29 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { interpretExtensionUiIntent } from "@/lib/extensions/ui-intent";
-import { isDesktopApp } from "@/lib/desktop";
 import type { ExtensionGridItem } from "@/lib/extensions/types";
 import type { YardExtensionHostOutcome } from "@yard-core";
 import type { FileRecord } from "./types";
 
-/** Pack dialog default format from the make-pack extension settings. */
-export function resolveMakePackDefaultFormat(
-  extensions: ExtensionGridItem[],
-): "zip" | "folder" {
-  const value = extensions
-    .find((e) => e.id === "make-pack")
-    ?.settings?.find((s) => s.id === "default-format")?.value;
-  return value === "zip" || value === "folder" ? value : "zip";
-}
-
-export type PackSource = "selection" | "shelf" | "recent";
-
 export interface ExtensionUiCallbacks {
   showShelf: () => void;
-  enterLibraryView: () => void;
   openSettings: () => void;
   requestClearShelf: () => void;
   getSelectedFile: () => FileRecord | null;
@@ -31,15 +17,14 @@ export interface ExtensionUiCallbacks {
   addToShelf: (fileIds: string[]) => Promise<unknown>;
   saveSearch: (name: string) => Promise<boolean>;
   renameCollection: (id: string, name: string) => Promise<unknown>;
-  /** Read-only catalog data for pack defaults. */
-  extensions: ExtensionGridItem[];
 }
 
 /**
- * Extension UI state: tool dialogs, pack intents, save-search and rename
- * dialogs, and hosted-command dispatch with UI-intent handling. Navigation
- * and domain mutations arrive through explicit callbacks; this hook owns only
- * its dialog state.
+ * Extension UI state: tool dialogs, save-search and rename dialogs, and
+ * hosted-command dispatch with UI-intent handling. Navigation and domain
+ * mutations arrive through explicit callbacks; this hook owns only its
+ * dialog state. Make Pack retired to v2: its dialog and intents live on
+ * the v2 path now.
  */
 export function useExtensionUi(callbacks: ExtensionUiCallbacks) {
   const [selectedExtension, setSelectedExtension] =
@@ -50,8 +35,6 @@ export function useExtensionUi(callbacks: ExtensionUiCallbacks) {
   >("library");
   const [folderJanitorFolderPath, setFolderJanitorFolderPath] = useState("");
   const [gatherOpen, setGatherOpen] = useState(false);
-  const [packSource, setPackSource] = useState<PackSource | null>(null);
-  const [packFileIds, setPackFileIds] = useState<string[]>([]);
   const [showSaveSearch, setShowSaveSearch] = useState(false);
   const [renamingCollection, setRenamingCollection] = useState<{
     id: string;
@@ -95,17 +78,6 @@ export function useExtensionUi(callbacks: ExtensionUiCallbacks) {
               setFolderJanitorOpen(true);
             },
             openLibraryGatherer: () => setGatherOpen(true),
-            openMakePack: ({ source, fileIds }) => {
-              if (source === "shelf" && !isDesktopApp()) {
-                toast.error(
-                  "Make Pack needs the desktop app to choose an output folder",
-                );
-                return;
-              }
-              actions.enterLibraryView();
-              setPackSource(source);
-              setPackFileIds(fileIds);
-            },
             openSettings: () => actions.openSettings(),
           });
 
@@ -124,41 +96,35 @@ export function useExtensionUi(callbacks: ExtensionUiCallbacks) {
     [],
   );
 
-  const handleScanFolder = useCallback(
-    (folderPath: string) => {
-      void executeHostedCommand(
-        "folder-janitor",
-        "folder-janitor.scan-folder",
-        { folderPath },
-      );
-    },
-    [executeHostedCommand],
-  );
+  const handleScanFolder = useCallback((folderPath: string) => {
+    setFolderJanitorTarget("folder");
+    setFolderJanitorFolderPath(folderPath);
+    setFolderJanitorOpen(true);
+  }, []);
+
+  // v2 dialog openers (renderer-owned, mirroring the Make Pack v2 run
+  // path): v2 scan/gather commands return values and plans, never
+  // UI intents, so palette/row/menu invocations open the dialogs that
+  // orchestrate them instead of invoking headless.
+  const openJanitorLibrary = useCallback(() => {
+    setFolderJanitorTarget("library");
+    setFolderJanitorFolderPath("");
+    setFolderJanitorOpen(true);
+  }, []);
+
+  const openGatherDialog = useCallback(() => {
+    setGatherOpen(true);
+  }, []);
 
   const handleRunCommand = useCallback(
     (extensionId: string, commandId: string) => {
-      if (extensionId === "sound-shelf" && commandId === "sound-shelf.clear") {
+      if (extensionId === "sound-shelf-v2" && commandId === "sound-shelf-v2.clear") {
         callbacksRef.current.showShelf();
         callbacksRef.current.requestClearShelf();
         return;
       }
       void executeHostedCommand(extensionId, commandId);
     },
-    [executeHostedCommand],
-  );
-
-  const handleMakePackFile = useCallback(
-    (file: FileRecord) =>
-      executeHostedCommand(
-        "make-pack",
-        "make-pack.from-selection",
-        { fileIds: [file.id] },
-      ),
-    [executeHostedCommand],
-  );
-
-  const handleMakePackShelf = useCallback(
-    () => executeHostedCommand("make-pack", "make-pack.from-shelf"),
     [executeHostedCommand],
   );
 
@@ -210,15 +176,6 @@ export function useExtensionUi(callbacks: ExtensionUiCallbacks) {
     if (!open) setGatherOpen(false);
   }, []);
 
-  const handleClosePack = useCallback((open: boolean) => {
-    if (!open) setPackSource(null);
-  }, []);
-
-  const makePackDefaultFormat = useMemo(
-    () => resolveMakePackDefaultFormat(callbacks.extensions),
-    [callbacks.extensions],
-  );
-
   return {
     selectedExtension,
     setSelectedExtension,
@@ -227,25 +184,21 @@ export function useExtensionUi(callbacks: ExtensionUiCallbacks) {
     folderJanitorTarget,
     folderJanitorFolderPath,
     gatherOpen,
-    packSource,
-    packFileIds,
     showSaveSearch,
     setShowSaveSearch,
     renamingCollection,
     setRenamingCollection,
     openRenameCollection,
-    makePackDefaultFormat,
     executeHostedCommand,
     handleScanFolder,
+    openJanitorLibrary,
+    openGatherDialog,
     handleRunCommand,
-    handleMakePackFile,
-    handleMakePackShelf,
     handleAddToCollection,
     handleAddCurrentToShelf,
     submitSaveSearch,
     submitRenameCollection,
     handleCloseExtensionDetails,
     handleCloseGather,
-    handleClosePack,
   };
 }

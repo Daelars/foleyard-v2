@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useV2ExtensionEntries } from "./use-v2-extension-entries";
+import { V2_RUN_LABELS } from "./run-labels";
 import { V2SettingControl, type V2ExtensionSettingsEntry } from "./settings";
 
 /**
@@ -17,9 +18,14 @@ import { V2SettingControl, type V2ExtensionSettingsEntry } from "./settings";
  * generations read as one list; the info button opens a details
  * dialog mirroring `ExtensionDetailsDialog` in
  * `src/app/library/dialogs.tsx` (description, permissions with
- * approval, settings, actions).
+ * approval, settings, actions). Every extension with a run label in
+ * `V2_RUN_LABELS` gets a run button opening its dialog or view.
  */
-export function V2ToolsCards({ onRunPack }: { onRunPack?: () => void }) {
+export function V2ToolsCards({
+  onRunExtension,
+}: {
+  onRunExtension?: (extensionId: string) => void;
+}) {
   const { entries, loading, toggle, updateSetting, reset, approve } =
     useV2ExtensionEntries();
   const [detailsId, setDetailsId] = useState<string | null>(null);
@@ -30,7 +36,9 @@ export function V2ToolsCards({ onRunPack }: { onRunPack?: () => void }) {
   const details = entries.find((entry) => entry.id === detailsId) ?? null;
   return (
     <>
-      {entries.map((entry) => (
+      {entries.map((entry) => {
+        const runLabel = V2_RUN_LABELS[entry.id];
+        return (
         <div
           key={entry.id}
           className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition-colors hover:bg-white/[0.06]"
@@ -55,17 +63,17 @@ export function V2ToolsCards({ onRunPack }: { onRunPack?: () => void }) {
             </p>
           </div>
 
-          {entry.id === "make-pack-v2" && onRunPack ? (
+          {runLabel && onRunExtension ? (
             <Button
               variant="ghost"
               className="hidden h-8 shrink-0 gap-1.5 rounded-lg border border-accent-fill/40 bg-accent-fill/10 px-2.5 text-[11px] text-accent-text hover:bg-accent-fill/15 hover:text-accent-text sm:inline-flex"
               onClick={(e) => {
                 e.stopPropagation();
-                onRunPack();
+                onRunExtension(entry.id);
               }}
             >
               <ArrowUpRight className="size-3 shrink-0" />
-              <span className="truncate">Make pack</span>
+              <span className="truncate">{runLabel}</span>
             </Button>
           ) : null}
 
@@ -91,7 +99,8 @@ export function V2ToolsCards({ onRunPack }: { onRunPack?: () => void }) {
             className="shrink-0"
           />
         </div>
-      ))}
+        );
+      })}
 
       <V2ExtensionDetailsDialog
         entry={details}
@@ -105,11 +114,14 @@ export function V2ToolsCards({ onRunPack }: { onRunPack?: () => void }) {
         onApprove={(permissions) =>
           details && void approve(details.id, permissions)
         }
-        onRunPack={
-          details?.id === "make-pack-v2" && onRunPack
-            ? () => {
-                setDetailsId(null);
-                onRunPack();
+        onRun={
+          details && V2_RUN_LABELS[details.id] && onRunExtension
+            ? {
+                label: V2_RUN_LABELS[details.id] as string,
+                run: () => {
+                  setDetailsId(null);
+                  onRunExtension(details.id);
+                },
               }
             : undefined
         }
@@ -124,14 +136,14 @@ function V2ExtensionDetailsDialog({
   onUpdateSetting,
   onReset,
   onApprove,
-  onRunPack,
+  onRun,
 }: {
   entry: V2ExtensionSettingsEntry | null;
   onOpenChange: (open: boolean) => void;
   onUpdateSetting: (settingId: string, value: unknown) => void;
   onReset: () => void;
   onApprove: (permissions: string[]) => void;
-  onRunPack?: () => void;
+  onRun?: { label: string; run: () => void };
 }) {
   const denied =
     entry?.declaredPermissions.filter(
@@ -155,10 +167,10 @@ function V2ExtensionDetailsDialog({
             <div
               className={cn(
                 "items-start gap-5",
-                onRunPack && "grid md:grid-cols-[auto_minmax(0,1fr)]",
+                onRun && "grid md:grid-cols-[auto_minmax(0,1fr)]",
               )}
             >
-              {onRunPack ? (
+              {onRun ? (
                 <div className="min-w-0 space-y-2">
                   <h3 className="text-sm font-semibold text-zinc-200">
                     Actions
@@ -166,11 +178,11 @@ function V2ExtensionDetailsDialog({
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={onRunPack}
+                      onClick={onRun.run}
                       className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-zinc-300 ring-1 ring-white/10 transition-colors hover:border-accent-fill/50 hover:bg-accent-fill/10 hover:text-accent-text hover:ring-accent-fill/30"
-                      title="Run: Make pack"
+                      title={`Run: ${onRun.label}`}
                     >
-                      Make pack
+                      {onRun.label}
                     </button>
                   </div>
                 </div>

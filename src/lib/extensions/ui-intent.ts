@@ -7,13 +7,7 @@ export type FolderJanitorOpenScanPayload =
 export type ExtensionUiIntentActions = {
   openFolderJanitor(payload: FolderJanitorOpenScanPayload): void;
   openLibraryGatherer(): void;
-  openMakePack(payload: MakePackOpenPayload): void;
   openSettings(): void;
-};
-
-export type MakePackOpenPayload = {
-  source: "selection" | "shelf" | "recent";
-  fileIds: string[];
 };
 
 function isFolderJanitorPayload(
@@ -32,20 +26,6 @@ function isFolderJanitorPayload(
     "folderPath" in payload &&
     typeof payload.folderPath === "string" &&
     payload.folderPath.length > 0
-  );
-}
-
-function isMakePackPayload(payload: unknown): payload is MakePackOpenPayload {
-  return (
-    typeof payload === "object" &&
-    payload !== null &&
-    "source" in payload &&
-    (payload.source === "selection" ||
-      payload.source === "shelf" ||
-      payload.source === "recent") &&
-    "fileIds" in payload &&
-    Array.isArray(payload.fileIds) &&
-    payload.fileIds.every((fileId) => typeof fileId === "string")
   );
 }
 
@@ -76,23 +56,6 @@ const uiIntentHandlers = new Map<string, ExtensionUiIntentHandler>([
     "library-gatherer.open",
     (_payload, actions) => {
       actions.openLibraryGatherer();
-      return true;
-    },
-  ],
-  [
-    "make-pack.open",
-    (payload, actions) => {
-      if (!isMakePackPayload(payload)) {
-        return false;
-      }
-      actions.openMakePack(payload);
-      return true;
-    },
-  ],
-  [
-    "drop-rules.open-settings",
-    (_payload, actions) => {
-      actions.openSettings();
       return true;
     },
   ],

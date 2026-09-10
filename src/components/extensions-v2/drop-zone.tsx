@@ -1,15 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 
-import type { V2ResolvedContribution } from "@yard-core";
+import type { ExtensionV2Catalog } from "@yard-core";
 
 import {
-  fetchV2Catalog,
-  fetchV2ExtensionStates,
   invokeV2Command,
   resolveV2UiPoint,
+  type V2UiState,
 } from "@/lib/extensions-v2/contributions";
 import { V2DropMenu, type V2DropOffer } from "./menus";
 
@@ -22,36 +21,24 @@ import { V2DropMenu, type V2DropOffer } from "./menus";
  * production resolver with capability checks, and invocation runs the
  * single v2 execution path. No fixture imitation — the menu only
  * appears for validated drops on the real workspace.
+ *
+ * Pure resolution over the already-loaded catalog (same snapshot the
+ * page holds for the palette and sidebar), so mounting the workspace
+ * adds no extra catalog fetches.
  */
-export function V2LibraryDropZone({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<V2ResolvedContribution[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const [catalogResult, statesResult] = await Promise.all([
-        fetchV2Catalog(),
-        fetchV2ExtensionStates(),
-      ]);
-      if (cancelled || !catalogResult.ok) return;
-      const enabled = new Set(
-        (statesResult.ok ? statesResult.extensions : [])
-          .filter((entry) => entry.enabled)
-          .map((entry) => entry.id),
-      );
-      setItems(
-        resolveV2UiPoint(
-          catalogResult.catalog,
-          "drop-menu",
-          { fileIds: [] },
-          { enabled, capabilities: {} },
-        ),
-      );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+export function V2LibraryDropZone({
+  children,
+  catalog,
+  uiState,
+}: {
+  children: React.ReactNode;
+  catalog: ExtensionV2Catalog | null;
+  uiState: V2UiState;
+}) {
+  const items = useMemo(
+    () => resolveV2UiPoint(catalog, "drop-menu", { fileIds: [] }, uiState),
+    [catalog, uiState],
+  );
 
   const handleInvoke = useCallback((offer: V2DropOffer) => {
     void invokeV2Command({

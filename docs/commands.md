@@ -7,10 +7,12 @@
 
 ## What it does
 
-Commands are the executable surface of the six bundled tools: 18 declared
-commands, each with metadata (id, title, scope, destructive flag, selection
-needs, owning runtime, required capabilities) shared between the manifest and
-handler registration via `COMMAND_DEFINITIONS`. The app adds six built-in
+Commands are the executable surface of the bundled tools: each v2 command
+carries metadata (id, title, scope, destructive flag, selection needs,
+owning runtime, required capabilities) declared in its package
+`definition.ts` and registered against the v2 host. The v1 command catalog
+is empty — all six v1 tools retired to their v2 ports (see
+`docs/extensions-v2-migration.md`). The app adds six built-in
 palette actions (view/transport shortcuts) described in
 `src/lib/commands.ts`. There is no public command SDK and no external command
 source.
@@ -31,37 +33,29 @@ source.
 
 ## Runtime behavior
 
-All 18 commands (`executionOwner` is `extension-host` for all):
+The v1 catalog is empty (`executionOwner` was `extension-host` for all of
+them). All six v1 tools retired to their v2 ports:
 
-| Command id | Title | Scope | Destructive | Selection | Capabilities |
-| --- | --- | --- | --- | --- | --- |
-| `sound-shelf.add-selected` | Add to Shelf | selection | no | required | `shelf.write` |
-| `sound-shelf.remove-selected` | Remove from Shelf | selection | no | required | `shelf.write` |
-| `sound-shelf.clear` | Clear Shelf | global | no | — | `shelf.write` |
-| `sound-shelf.list` | List Shelf | global | no | — | `shelf.read` |
-| `make-pack.from-selection` | Make Pack from Selection | selection | no | required | `pack.export` |
-| `make-pack.from-shelf` | Make Pack from Shelf | global | no | — | `pack.export` |
-| `make-pack.from-recent` | Make Pack from Recent Sounds | global | no | — | `pack.export` |
-| `drop-rules.open-settings` | Configure Drop Rules | global | no | — | `drop.configure` |
-| `drop-rules.preview` | Preview Drop Rules | drop | no | required | `drop.apply` |
-| `drop-rules.apply` | Apply Drop Rules | drop | no | required | `drop.apply` |
-| `drop-rules.prepare-drag` | Prepare Drag | drop | no | required | `drop.apply` |
-| `folder-janitor.scan-library` | Scan Library Mess | global | no | — | `janitor.scan` |
-| `folder-janitor.scan-folder` | Scan Folder Mess | folder | no | folder path | `janitor.scan` |
-| `folder-janitor.remove-files` | Remove Files from Index | selection | no | required | `library.write` |
-| `folder-janitor.delete-folders` | Delete Empty Folders | global | **yes** | — | `files.delete` |
-| `library-gatherer.preview-gather` | Preview Library Gather | global | no | — | `gather.preview` |
-| `library-gatherer.gather` | Gather Library | global | no | — | `gather.write` |
-| `smart-collections.save-search` | Save Search as Smart Collection | global | no | — | `collections.write` |
+| Retired v1 command | v2 port |
+| --- | --- |
+| `sound-shelf.{add-selected,remove-selected,clear,list}` | `sound-shelf-v2.*` through `POST /api/extensions-v2/execute` |
+| `folder-janitor.{scan-library,scan-folder,remove-files,delete-folders}` | `folder-janitor-v2.*` through `POST /api/extensions-v2/execute` |
+| `smart-collections.save-search` | `smart-collections-v2.save-search` |
+| `make-pack.from-{selection,shelf,recent}` | `make-pack-v2.from-*` |
+| `drop-rules.{open-settings,preview,apply,prepare-drag}` | `drop-rules-v2.*` |
+| `library-gatherer.{preview-gather,gather}` | `library-gatherer-v2.*` |
+
+Retired v1 command ids are unknown to `POST /api/extensions/execute`
+(404) — a v2 failure never falls back to v1.
 
 Execution model: `POST /api/extensions/execute` validates the envelope
 (`extensionId`/`commandId` non-empty strings, well-typed `selection`,
-string `destinationGrant`), resolves a transport adapter (or passthrough for
-commands needing no hydration), then `createAppExtensionHost
+string `destinationGrant`), passes the body through (no command adapters
+remain), then `createAppExtensionHost
 (destinationGrant).execute(...)` builds a fresh registry, checks
 registration + enabled state, registers handlers, revalidates selection /
-folder requirements, executes, and returns a value or UI intent. Folder scans
-cap at `MAX_SCAN_FOLDER_FILES = 5000` per directory.
+folder requirements, executes, and returns a value or UI intent. With an
+empty registry every id fails closed as `extension-not-found` (404).
 
 Palette: `tool:` ids plus six built-in shortcut actions from
 `APP_COMMAND_DESCRIPTORS` — `view:toggle-playback` (Space),
@@ -71,11 +65,11 @@ Palette: `tool:` ids plus six built-in shortcut actions from
 
 ## The v2 commands beside them
 
-Three v2 commands run through their own engine
-(`POST /api/extensions-v2/execute`, API version 2, internal).
-They belong to Make Pack v2 (`make-pack-v2`), disabled by default.
-The 18-command table above stays the complete v1 catalog; v1
-commands never route through v2.
+Seven v2 ports run through their own engine
+(`POST /api/extensions-v2/execute`, API version 2, internal),
+each disabled by default with its own settings namespace (see
+`docs/extensions-v2-migration.md`). The retired-v1 table above is the
+complete v1 catalog; v1 commands never route through v2.
 
 | Command id | Title | Scope | Selection |
 | --- | --- | --- | --- |
@@ -115,19 +109,17 @@ Host failure reasons → HTTP (`hostFailureStatus`):
 | `validation-failed` | 400 | missing selection/folder, bad input, envelope |
 | `execution-failed` | 500 | handler threw |
 
-Transport failures (400/403/404 with plain messages): missing
-`destinationDirectory`, ungranted destination (`destinationGrant` required),
-source outside Library roots, empty pack sources, `folderPath` required,
-`paths`/`name`+`query`/`fileId` validation. Palette availability is
+Transport failures (400 with plain messages): malformed envelope
+(non-object body, empty `extensionId`/`commandId`, mistyped `selection` or
+`destinationGrant`). Palette availability is
 best-effort display; execution always revalidates, so a visible-but-failing
 command returns the reason above instead of running.
 
 ## Source map (real file paths)
 
-- `packages/yard-tools/*/src/command-definitions.ts` — 18 definitions
-- `packages/yard-tools/*/src/commands.ts` — handlers + input validators
+- `packages/yard-tools/*-v2/src/definition.ts` — v2 command declarations
 - `packages/yard-core/src/extensions/{extension-command-registry,extension-host}.ts`
-- `src/app/api/extensions/execute/{route,transport}.ts` — POST + adapters
+- `src/app/api/extensions/execute/{route,transport}.ts` — POST + envelope validation
 - `src/app/api/extensions/host-outcome.ts` — reason → status mapping
 - `src/lib/commands.ts` — `APP_COMMAND_DESCRIPTORS`, `toolPaletteId`
 - `src/components/CommandPalette/command-palette.ts` — entry builder
@@ -138,16 +130,16 @@ command returns the reason above instead of running.
 Execute a command:
 
 ```bash
-curl -X POST /api/extensions/execute \
+curl -X POST /api/extensions-v2/execute \
   -H 'Content-Type: application/json' \
-  -d '{"extensionId":"sound-shelf","commandId":"sound-shelf.clear"}'
+  -d '{"extensionId":"sound-shelf-v2","commandId":"sound-shelf-v2.clear","selection":{"fileIds":[]}}'
 ```
 
 Palette tool id for the same family:
 
 ```ts
 import { toolPaletteId } from "@/lib/commands";
-toolPaletteId("sound-shelf", "sound-shelf.list"); // "tool:sound-shelf:sound-shelf.list"
+toolPaletteId("sound-shelf-v2", "sound-shelf-v2.list"); // "tool:sound-shelf-v2:sound-shelf-v2.list"
 ```
 
 ## Related documentation

@@ -20,8 +20,9 @@ the Sound Shelf — a bundled extension surface distinct from Collections.
   (finding B09).
 - Tags are named labels on files (`fileTags`); favorites are a boolean on
   the file row (`isFavorite`, toggled via `toggleFavorite`/`setFavorites`).
-- Sound Shelf is a bundled yard-tools extension (`packages/yard-tools/sound-shelf/`,
-  `src/lib/extensions/sound-shelf-store.ts`), not a Collection type: it
+- Sound Shelf is a bundled yard-tools v2 extension
+  (`packages/yard-tools/sound-shelf-v2/`, store `v2shelf:sound-shelf-v2`
+  in `src/lib/extensions-v2/shelf.ts`), not a Collection type: it
   stages working sets with its own store and events. Do not conflate them.
 - Collection terminology throughout; "playlist" is avoided per domain language.
 
@@ -37,10 +38,11 @@ Persistence lives in `src/lib/database/collection-repository.ts` and
 `src/app/library/use-collections.ts` (Collections), `src/app/library/use-tags.ts`
 (tags), `src/app/library/use-favorites.ts` (favorites),
 `src/app/library/use-library-organization.ts` (combined organizing surface),
-and `src/app/library/use-shelf.ts` (Sound Shelf). Smart counts are derived
+and `src/app/library/use-shelf-v2.ts` (Sound Shelf). Smart counts are derived
 in `src/app/library/smart-collection-counts.ts`; bulk operations in
-`src/app/library/use-bulk-actions.ts`. The bundled smart-collections tool
-(`packages/yard-tools/smart-collections/`) assists criteria workflows.
+`src/app/library/use-bulk-actions.ts`. The smart-collections-v2 tool
+(`packages/yard-tools/smart-collections-v2/`) assists criteria workflows;
+its save-search replaces the retired v1 tool.
 
 ## Contracts
 
@@ -70,15 +72,15 @@ in `src/app/library/smart-collection-counts.ts`; bulk operations in
 - `src/app/library/use-collections.ts`, `src/app/library/use-tags.ts`,
   `src/app/library/use-favorites.ts`, `src/app/library/use-library-organization.ts`,
   `src/app/library/use-bulk-actions.ts`, `src/app/library/smart-collection-counts.ts`,
-  `src/app/library/use-shelf.ts` — client state
+  `src/app/library/use-shelf-v2.ts` — client state
 - `src/lib/smart-collection-filter.ts` — `extractSmartQuery`
 - `packages/yard-core/src/repositories/collection-repository.ts`,
   `tag-repository.ts`, `favorite-repository.ts` — contracts
 - `packages/yard-core/src/services/organization/*` — organization services
-- `packages/yard-tools/sound-shelf/` — Sound Shelf bundled extension
-- `src/lib/extensions/sound-shelf-store.ts`, `src/lib/extensions/sound-shelf-events.ts` —
+- `packages/yard-tools/sound-shelf-v2/` — Sound Shelf v2 bundled extension
+- `src/lib/extensions-v2/shelf.ts`, `src/lib/extensions/sound-shelf-events.ts` —
   shelf store and events
-- `packages/yard-tools/smart-collections/` — criteria workflow tool
+- `packages/yard-tools/smart-collections-v2/` — criteria workflow tool
 
 ## Examples
 

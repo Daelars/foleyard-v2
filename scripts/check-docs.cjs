@@ -10,8 +10,9 @@
 // - relative .md links inside live docs resolve (only relative .md links;
 //   http(s)/anchors skipped; historical audits are exempt from source-path
 //   checks but inter-audit links must resolve),
-// - structured command IDs in docs/commands.md resolve against the six
-//   packages/yard-tools/*/src/command-definitions.ts files.
+// - structured command IDs in docs/commands.md resolve against the
+//   packages/yard-tools/*-v2/src/definition.ts files (v1 retired fully;
+//   v2 command IDs are the exported const string values containing a dot).
 //
 // Usage: node scripts/check-docs.cjs --dir <staged-dir>
 // (also accepts --out or a positional dir; defaults to
@@ -221,22 +222,25 @@ for (const auditsDir of ["docs/audit-2026-09", "docs/audits"]) {
   }
 }
 
-// 7. Command IDs in docs/commands.md resolve against command-definitions.ts.
+// 7. Command IDs in docs/commands.md resolve against v2 definition.ts files.
 const definitionsFiles = [];
 const toolsDir = path.join(root, "packages", "yard-tools");
 if (fs.existsSync(toolsDir)) {
   for (const tool of fs.readdirSync(toolsDir)) {
-    const candidate = path.join(toolsDir, tool, "src", "command-definitions.ts");
+    if (!tool.endsWith("-v2")) continue;
+    const candidate = path.join(toolsDir, tool, "src", "definition.ts");
     if (fs.existsSync(candidate)) definitionsFiles.push(candidate);
   }
 }
 const definedCommands = new Set();
 for (const file of definitionsFiles) {
   const source = fs.readFileSync(file, "utf8");
-  for (const match of source.matchAll(/id:\s*"([^"]+)"/g)) definedCommands.add(match[1]);
+  for (const match of source.matchAll(/export\s+const\s+[A-Z0-9_]+\s*=\s*"([^"]+)"/g)) {
+    if (match[1].includes(".")) definedCommands.add(match[1]);
+  }
 }
 if (definedCommands.size === 0) {
-  errors.push("no command IDs found in packages/yard-tools/*/src/command-definitions.ts");
+  errors.push("no command IDs found in packages/yard-tools/*-v2/src/definition.ts");
 }
 const extensionPrefixes = new Set(
   [...definedCommands].map((id) => id.split(".")[0]),
@@ -257,7 +261,7 @@ if (fs.existsSync(commandsDoc)) {
     }
   }
   console.log(
-    `check-docs: ${definedCommands.size} defined commands in ${definitionsFiles.length} command-definitions.ts files, ${resolvedRefs} command references in docs/commands.md resolved.`,
+    `check-docs: ${definedCommands.size} defined commands in ${definitionsFiles.length} v2 definition.ts files, ${resolvedRefs} command references in docs/commands.md resolved.`,
   );
 } else {
   errors.push("staged docs/commands.md not found; cannot verify command IDs");

@@ -45,6 +45,10 @@ vi.mock("@/lib/extensions-v2/settings-state", () => {
     writeV2SettingsRow: (key: string, value: unknown) => {
       rows.set(key, value);
     },
+    deleteV2SettingsRow: (key: string) => {
+      rows.delete(key);
+    },
+    listV2SettingsKeys: (prefix: string) => [...rows.keys()].filter((key) => key.startsWith(prefix)),
     createV2SettingsPorts: () => ({
       readRaw: (key: string) => rows.get(key),
       writeRaw: (key: string, value: unknown) => {

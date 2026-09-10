@@ -4,13 +4,20 @@ import { mutationError } from "@/lib/api/errors";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, parsePageInteger } from "@/lib/api/pagination";
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteFiles } from '@/lib/files/delete-files';
-import { attachTagToFile, detachTagFromFile, getAttachmentsForFiles, getFileCount, getFiles, getTagsForFiles, setFavorites, setFileTagBatch, toggleFavorite } from '@/lib/db';
+import { attachTagToFile, detachTagFromFile, getAttachmentsForFiles, getFileCount, getFiles, getFilesByIds, getTagsForFiles, setFavorites, setFileTagBatch, toggleFavorite } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+/** Upper bound for one ids-hydration read so a huge id list cannot OOM the route. */
+export const MAX_HYDRATE_IDS = 1000;
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
+  const idsParam = searchParams.get('ids');
+  if (idsParam !== null) {
+    return hydrateByIds(idsParam);
+  }
   const query = searchParams.get('q');
   const favorites = searchParams.get('favorites');
   const collectionId = searchParams.get('collectionId');
@@ -57,11 +64,23 @@ export async function GET(request: NextRequest) {
     sortDir,
   });
 
+  const filesWithTags = withTags(files);
+
+  return NextResponse.json({
+    files: filesWithTags,
+    limit,
+    offset,
+    favoritesTotal: getFileCount({ favorites: true }),
+    hasMore: files.length === limit,
+  });
+}
+
+function withTags<T extends { id: string }>(files: T[]) {
   const fileIds = files.map((f) => f.id);
   const tagsByFile = getTagsForFiles(fileIds);
   const attachmentsByFile = getAttachmentsForFiles(fileIds);
 
-  const filesWithTags = files.map((file) => {
+  return files.map((file) => {
     const origins = new Map(
       (attachmentsByFile.get(file.id) ?? []).map((entry) => [entry.tagId, entry]),
     );
@@ -75,14 +94,35 @@ export async function GET(request: NextRequest) {
       }),
     };
   });
+}
 
-  return NextResponse.json({
-    files: filesWithTags,
-    limit,
-    offset,
-    favoritesTotal: getFileCount({ favorites: true }),
-    hasMore: files.length === limit,
-  });
+/**
+ * Hydrate an explicit id list into file records in request order,
+ * skipping ids that left the index or were removed. Serves the Sound
+ * Shelf v2 view: the v2 list command owns membership and repair, this
+ * route only maps ids to records.
+ */
+function hydrateByIds(idsParam: string) {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const part of idsParam.split(",")) {
+    const id = part.trim();
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  if (ids.length > MAX_HYDRATE_IDS) {
+    return errorResponse(`ids must contain at most ${MAX_HYDRATE_IDS} entries`, 400);
+  }
+  const byId = new Map(getFilesByIds(ids).map((file) => [file.id, file]));
+  const files = ids
+    .map((id) => byId.get(id) ?? null)
+    .filter(
+      (file): file is NonNullable<ReturnType<typeof byId.get>> =>
+        file !== null && file.removedAt === null,
+    );
+  return NextResponse.json({ files: withTags(files) });
 }
 
 export async function PATCH(request: NextRequest) {

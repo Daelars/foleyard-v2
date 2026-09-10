@@ -94,9 +94,9 @@ still describes the v1 path only.
   desktop file/path surface
 - `src/app/api/directories/route.ts` — directory browsing
 - `src/lib/directory-navigation.ts` — navigation helpers
-- `packages/yard-tools/drop-rules/` — Drop Rules staging + apply-now grant flow
-- `packages/yard-tools/folder-janitor/` — Janitor deletion rechecks
-- `packages/yard-tools/library-gatherer/`, `packages/yard-tools/make-pack/` —
+- `packages/yard-tools/drop-rules-v2/` — Drop Rules staging + apply-now grant flow
+- `packages/yard-tools/folder-janitor-v2/` — Janitor deletion rechecks
+- `packages/yard-tools/library-gatherer-v2/`, `packages/yard-tools/make-pack-v2/` —
   grant-scoped destinations
 - `docs/adr/filesystem-access.md` — design authority for this guide
 

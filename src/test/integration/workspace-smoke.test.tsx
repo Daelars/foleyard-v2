@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
-import { existsSync } from "node:fs";
-import { act, screen, fireEvent, render, waitFor, within } from "@testing-library/react";
+import { act, screen, fireEvent, render, waitFor } from "@testing-library/react";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -165,7 +164,7 @@ async function executeViaRoute(url: string, init?: RequestInit) {
 describe("component and layout smoke", () => {
   // Full-workspace mounts under v8 coverage are slow on CI runners; the
   // default 5s test timeout flakes. The smoke asserts behavior, not speed.
-  it("selects files in the workspace and packs the shelf through to disk", { timeout: 30000 }, async () => {
+  it("selects files in the workspace and shelves them through the real route", { timeout: 30000 }, async () => {
     const scratch = createScratchLibrary("foleyard-workspace-");
     try {
       const kickPath = scratch.writeFile("library/kick.wav");
@@ -196,6 +195,10 @@ describe("component and layout smoke", () => {
 
       const grant = await scratch.grant("dest");
 
+      // In-memory sound-shelf-v2 behind the stubbed v2 execute endpoint:
+      // the engine is stubbed at the transport boundary while the bulk
+      // bar, shelf slice, shelf view, and files hydration stay real.
+      const shelfIds: string[] = [];
       const fetchStub = stubFetch(async (url: string, init?: RequestInit) => {
         const method = init?.method ?? "GET";
         if (url === "/api/settings") {
@@ -205,7 +208,11 @@ describe("component and layout smoke", () => {
           return { ok: true, json: async () => ({ running: false }) };
         }
         if (url.startsWith("/api/files")) {
-          return { ok: true, json: async () => ({ files: rows, hasMore: false, favoritesTotal: 0 }) };
+          const idsParam = new URL(url, "http://localhost").searchParams.get("ids");
+          const hydrated = idsParam
+            ? rows.filter((row) => idsParam.split(",").includes(row.id))
+            : rows;
+          return { ok: true, json: async () => ({ files: hydrated, hasMore: false, favoritesTotal: 0 }) };
         }
         if (url.startsWith("/api/directories")) {
           return { ok: true, json: async () => ({ directories: [] }) };
@@ -217,15 +224,55 @@ describe("component and layout smoke", () => {
           return { ok: true, json: async () => ({ tags: [{ id: tagId, name: "Loud" }] }) };
         }
         if (url === "/api/extensions") {
+          return { ok: true, json: async () => ({ extensions: [] }) };
+        }
+        if (url === "/api/extensions-v2") {
+          return { ok: true, json: async () => ({ ok: true, catalog: { entries: [] } }) };
+        }
+        if (url === "/api/extensions-v2/extensions") {
           return {
             ok: true,
             json: async () => ({
-              extensions: [
-                { id: "sound-shelf", name: "Sound Shelf", enabled: true, commands: [] },
-                { id: "make-pack", name: "Make Pack", enabled: true, commands: [] },
-              ],
+              ok: true,
+              extensions: [{ id: "sound-shelf-v2", enabled: true }],
             }),
           };
+        }
+        if (url === "/api/extensions-v2/execute" && method === "POST") {
+          const body = JSON.parse(String(init?.body ?? "{}")) as {
+            commandId?: string;
+            selection?: { fileIds?: string[] };
+          };
+          if (body.commandId === "sound-shelf-v2.add-selected") {
+            for (const id of body.selection?.fileIds ?? []) {
+              if (!shelfIds.includes(id)) shelfIds.push(id);
+            }
+            return {
+              ok: true,
+              json: async () => ({
+                ok: true,
+                outcome: {
+                  kind: "immediate",
+                  invocationId: "vinv_smoke_add",
+                  value: { added: body.selection?.fileIds?.length ?? 0, removed: 0, total: shelfIds.length },
+                },
+              }),
+            };
+          }
+          if (body.commandId === "sound-shelf-v2.list") {
+            return {
+              ok: true,
+              json: async () => ({
+                ok: true,
+                outcome: {
+                  kind: "immediate",
+                  invocationId: "vinv_smoke_list",
+                  value: { ids: [...shelfIds], repaired: [], total: shelfIds.length },
+                },
+              }),
+            };
+          }
+          return { ok: true, json: async () => ({ ok: true, outcome: { kind: "immediate", value: {} } }) };
         }
         if (url === "/api/extensions/execute" && method === "POST") {
           return executeViaRoute("http://localhost/api/extensions/execute", init);
@@ -304,37 +351,21 @@ describe("component and layout smoke", () => {
         onUpdateDownloadProgress: () => noopUnsubscribe,
       };
 
-      // Shelving the selection, then packing the shelf: the tool runs
-      // through the real execute route to real files on disk.
+      // Shelving the selection runs the sound-shelf-v2 command through
+      // the v2 execute endpoint; the shelf view then hydrates those ids
+      // through /api/files.
       fireEvent.click(screen.getByRole("button", { name: "Add to Shelf" }));
       await waitFor(() => {
         expect(
           fetchStub.calls.filter(
-            (c) => c.url === "/api/extensions/execute" && (c.init?.method ?? "GET") === "POST",
+            (c) => c.url === "/api/extensions-v2/execute" && (c.init?.method ?? "GET") === "POST",
           ).length,
         ).toBeGreaterThanOrEqual(1);
       });
       fireEvent.click(screen.getByRole("button", { name: "Shelf" }));
       expect(await screen.findByText(/sounds under review/i)).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "Pack Shelf" }));
-
-      const dialog = await screen.findByRole("dialog");
-      fireEvent.click(within(dialog).getByRole("button", { name: "Choose" }));
-      const destInput = within(dialog).getByPlaceholderText("/path/to/output/folder");
-      await waitFor(() => {
-        expect((destInput as HTMLInputElement).value).toBe(grant.path);
-      });
-      const packName = within(dialog).getByPlaceholderText("My Sound Pack");
-      fireEvent.change(packName, { target: { value: "test-pack" } });
-      fireEvent.click(within(dialog).getByRole("button", { name: /^make pack$/i }));
-
-      await waitFor(
-        () => {
-          expect(screen.getByText(/2 sounds packed to/i)).toBeTruthy();
-        },
-        { timeout: 15000 },
-      );
-      expect(existsSync(`${grant.path}/test-pack.zip`)).toBe(true);
+      expect(await screen.findByText("kick.wav")).toBeTruthy();
+      expect(await screen.findByText("snare.wav")).toBeTruthy();
     } finally {
       scratch.dispose();
     }

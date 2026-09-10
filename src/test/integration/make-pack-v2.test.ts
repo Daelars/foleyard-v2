@@ -760,9 +760,9 @@ describe("make-pack-v2 production registration and routes", () => {
       const text = readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
       // Forbidden: the v1 extension engine (registry, commands, UI
       // intents, v1 transport/client) and the v1 ZIP/service modules.
-      // Allowed: persisted-record storage contracts
-      // (`sound-shelf-store`, `make-pack-recent-store`), which the
-      // named source adapters read directly per the R8 contract.
+      // Allowed: persisted-record storage contracts (the v2 shelf
+      // ports, `make-pack-recent-store`), which the named source
+      // adapters read directly per the R8 contract.
       expect(text, relative).not.toMatch(/@foleyard\/make-pack"/);
       expect(text, relative).not.toMatch(/extensions\/registry/);
       expect(text, relative).not.toMatch(/extensions\/ui-intent/);

@@ -30,6 +30,11 @@ import { ensureLibraryGathererV2Registered } from "./library-gatherer-v2";
 import { ensureAutoTagV2Registered } from "./auto-tag-v2";
 import { getV2GrantedPermissions } from "./policy";
 import { createV2ExtensionStatePorts, createV2SettingsPorts } from "./settings-state";
+import {
+  adoptRetiredV1Enablement,
+  listPersistedEnabled,
+  writePersistedEnabled,
+} from "./enablement";
 import { createRecentSelectionSource, createShelfSelectionSource } from "./sources";
 
 /**
@@ -43,7 +48,50 @@ import { createRecentSelectionSource, createShelfSelectionSource } from "./sourc
  */
 
 const registry = new ExtensionV2Registry();
-const enabled = new Set<string>();
+
+/**
+ * Enablement lives on `globalThis`, not module state. Next compiles
+ * each route into its own bundle, so plain module-level state can
+ * split per route subtree in development: enabling in one bundle
+ * would still read disabled in another. The process is the sharing
+ * boundary (one realm), which is exactly what the process-wide host
+ * needs. The set hydrates once per boot from persisted
+ * `v2:enablement:*` rows (see enablement.ts), so enablement survives
+ * reloads; a missing database falls back to memory-only, disabled by
+ * default, exactly like the pre-persistence behavior.
+ */
+const V2_ENABLED_KEY = "__foleyardV2Enabled" as const;
+
+let bootLoaded = false;
+
+function ensureEnablementLoaded(): void {
+  if (bootLoaded) return;
+  bootLoaded = true;
+  try {
+    // Retirement adoption first: retired v1 tools hand their
+    // enablement and approvals to their v2 port exactly once.
+    adoptRetiredV1Enablement(
+      (v2ExtensionId) => getV2Registry().get(v2ExtensionId)?.permissions ?? [],
+    );
+    for (const extensionId of listPersistedEnabled()) {
+      enabled.add(extensionId);
+    }
+  } catch {
+    // Missing or broken settings storage: memory-only enablement,
+    // disabled by default, same as before persistence existed.
+  }
+}
+
+function getEnabledSet(): Set<string> {
+  const scope = globalThis as Record<string, unknown>;
+  const existing = scope[V2_ENABLED_KEY];
+  if (existing instanceof Set) return existing as Set<string>;
+  const created = new Set<string>();
+  scope[V2_ENABLED_KEY] = created;
+  return created;
+}
+
+const enabled: Set<string> = getEnabledSet();
 
 export function getV2Registry(): ExtensionV2Registry {
   return registry;
@@ -65,15 +113,22 @@ export function registerV2Extension(
 export function unregisterV2Extension(extensionId: string): void {
   registry.unregister(extensionId);
   enabled.delete(extensionId);
+  try {
+    writePersistedEnabled(extensionId, false);
+  } catch {
+    // Persistence failure keeps the in-memory state; harmless for fixtures.
+  }
   getV2Events().emit("contributions-changed", "*");
 }
 
 export function isV2ExtensionEnabled(extensionId: string): boolean {
+  ensureEnablementLoaded();
   return enabled.has(extensionId);
 }
 
-/** V2 extensions are opt-in and disabled by default. */
+/** V2 extensions are disabled by default and persist explicit enablement. */
 export function setV2ExtensionEnabled(extensionId: string, value: boolean): void {
+  ensureEnablementLoaded();
   const before = enabled.has(extensionId);
   if (value) {
     enabled.add(extensionId);
@@ -86,6 +141,11 @@ export function setV2ExtensionEnabled(extensionId: string, value: boolean): void
       extensionId,
       `Extension "${extensionId}" was disabled; enable it to run its commands.`,
     );
+  }
+  try {
+    writePersistedEnabled(extensionId, value);
+  } catch {
+    // Persistence failure keeps the in-memory state; the next toggle retries.
   }
   // Renderer adapters refresh on this hint and drop cached resolutions;
   // disposal is idempotent, so a no-op toggle is still safe to emit.
@@ -145,18 +205,6 @@ export function extendedOperationsOf(context: { operations: V2OperationServices 
 function authorizeV2Grant(grantId: string, extensionId: string): { ok: true } | { ok: false; message: string } {
   const authorized = getV2GrantStore().authorize(grantId, extensionId);
   return authorized.ok ? { ok: true } : { ok: false, message: authorized.message };
-}
-
-export function createAppV2Host(): ExtensionV2Host {
-  return new ExtensionV2Host({
-    registry,
-    isEnabled: isV2ExtensionEnabled,
-    capabilities: {},
-    grantedPermissions: (extensionId) => getV2GrantedPermissions(extensionId),
-    ports: createV2LibraryPorts(),
-    createOperations,
-    authorizeGrant: authorizeV2Grant,
-  });
 }
 
 /**

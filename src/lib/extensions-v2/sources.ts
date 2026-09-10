@@ -1,7 +1,9 @@
 import type { V2NamedSelectionSource } from "@yard-core";
 
-import { getRecentMakePackFileIds } from "@/lib/extensions/make-pack-recent-store";
-import { DbSoundShelfStore } from "@/lib/extensions/sound-shelf-store";
+import { SOUND_SHELF_V2_ID } from "@foleyard/sound-shelf-v2";
+
+import { getRecentMakePackFileIds } from "./recent-source-store";
+import { createV2ShelfPorts } from "./shelf";
 
 /**
  * Application-owned named selection sources for Make Pack v2
@@ -37,9 +39,9 @@ function describeFailure(source: string, error: unknown): Error {
 }
 
 /**
- * Sound Shelf source. Reads the persisted Shelf record; the same
- * store the v1 Sound Shelf workflow writes, read directly — no v1
- * command execution, no v1 transport.
+ * Sound Shelf source. Reads the persisted v2 Shelf record; the same
+ * store the sound-shelf-v2 workflow writes, read directly — no v1
+ * command execution, no v1 transport, no v1 store.
  */
 export function createShelfSelectionSource(
   readIds: () => string[] = readShelfIds,
@@ -79,7 +81,7 @@ export function createRecentSelectionSource(
 }
 
 function readShelfIds(): string[] {
-  return new DbSoundShelfStore().getFileIds();
+  return createV2ShelfPorts().readIds(SOUND_SHELF_V2_ID);
 }
 
 function readRecentIds(): string[] {

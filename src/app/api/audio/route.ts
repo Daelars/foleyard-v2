@@ -5,7 +5,7 @@ import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getFileById, getLibraryRoots } from "@/lib/db";
-import { recordRecentMakePackFile } from "@/lib/extensions/make-pack-recent-store";
+import { recordRecentMakePackFile } from "@/lib/extensions-v2/recent-source-store";
 import { resolveExistingPathWithinRoots } from "@/lib/filesystem-boundary";
 
 export const runtime = "nodejs";

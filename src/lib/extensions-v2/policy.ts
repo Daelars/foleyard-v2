@@ -25,16 +25,36 @@ import { readV2SettingsRow, writeV2SettingsRow } from "./settings-state";
 
 const APPROVALS_KEY = "v2:approvals";
 
-const approvals = new V2PermissionApprovals();
-let bootLoaded = false;
+// State lives on globalThis, not module state: Next compiles each route
+// into its own bundle, so plain module-level state can split per route
+// subtree in development (approving in one bundle would still read
+// denied in another). The process is the sharing boundary, exactly as
+// the v2 host's enablement set does it.
+const V2_APPROVALS_KEY = "__foleyardV2Approvals" as const;
+
+type ApprovalStore = {
+  approvals: V2PermissionApprovals;
+  bootLoaded: boolean;
+};
+
+function getStore(): ApprovalStore {
+  const scope = globalThis as Record<string, unknown>;
+  const existing = scope[V2_APPROVALS_KEY] as ApprovalStore | undefined;
+  if (existing) return existing;
+  const created: ApprovalStore = { approvals: new V2PermissionApprovals(), bootLoaded: false };
+  scope[V2_APPROVALS_KEY] = created;
+  return created;
+}
+
+const store = getStore();
 
 function ensureLoaded(): void {
-  if (bootLoaded) return;
-  bootLoaded = true;
+  if (store.bootLoaded) return;
+  store.bootLoaded = true;
   try {
     const stored = readV2SettingsRow(APPROVALS_KEY);
     if (stored !== undefined) {
-      approvals.restore({ approvals: (stored as { approvals?: unknown }).approvals ?? stored });
+      store.approvals.restore({ approvals: (stored as { approvals?: unknown }).approvals ?? stored });
     }
   } catch {
     // Corrupt approvals deny by default; an explicit re-approval recovers.
@@ -43,7 +63,7 @@ function ensureLoaded(): void {
 
 function persist(): void {
   try {
-    writeV2SettingsRow(APPROVALS_KEY, { approvals: approvals.snapshot() });
+    writeV2SettingsRow(APPROVALS_KEY, { approvals: store.approvals.snapshot() });
   } catch {
     // Approval persistence is diagnostic transport: a write failure must
     // never fail the approval change itself. The next change retries.
@@ -53,7 +73,7 @@ function persist(): void {
 /** Approved (unexpired) permissions for an extension; empty by default. */
 export function getV2GrantedPermissions(extensionId: string): ExtensionV2Permission[] {
   ensureLoaded();
-  return approvals.grantedPermissions(extensionId);
+  return store.approvals.grantedPermissions(extensionId);
 }
 
 /** Record an explicit approval. Never called implicitly by the host. Persists, then notifies. */
@@ -63,14 +83,14 @@ export function setV2Approval(
   options?: { expiresAt?: string },
 ): void {
   ensureLoaded();
-  approvals.setApproval(extensionId, permissions, options);
+  store.approvals.setApproval(extensionId, permissions, options);
   persist();
   getV2Events().emit("approvals-changed", extensionId, { keys: [...permissions] });
 }
 
 export function revokeV2Approval(extensionId: string): void {
   ensureLoaded();
-  approvals.revoke(extensionId);
+  store.approvals.revoke(extensionId);
   persist();
   getV2Events().emit("approvals-changed", extensionId);
 }

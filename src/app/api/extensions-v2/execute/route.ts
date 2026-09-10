@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { handleV2HttpExecute } from "@yard-core";
-import { createAppV2Host } from "@/lib/extensions-v2/host";
+import { getAppV2Host } from "@/lib/extensions-v2/host";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +20,6 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
-  const response = await handleV2HttpExecute(createAppV2Host(), body);
+  const response = await handleV2HttpExecute(getAppV2Host(), body);
   return NextResponse.json(response.body, { status: response.status });
 }

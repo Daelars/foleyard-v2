@@ -7,13 +7,20 @@
 
 ## What it does
 
-Six bundled tools ship in-process under `packages/yard-tools/*`. Each
-declares a manifest (identity, commands, permissions, settings, surfaces),
-registers command handlers through `registerCommands(context)`, and runs
-through the guarded extension host. There is no marketplace, no install flow,
-no remote loading, and no third-party code loader — "bundled" is the only
-source, and versions come from each tool's own `package.json` (currently
-`1.0.0`).
+No v1 tools remain: all six bundled tools retired from v1 to their v2
+ports (see `docs/extensions-v2-migration.md`). The v1 registration table
+(`src/lib/extensions/registry.ts`) is empty, the execute route fails
+closed on every id (404), and the catalog projections return no entries.
+This document records the retired v1 shape; the live system is v2
+(`docs/extensions-v2.md`).
+
+Retirement order: Smart Collections and Make Pack first, then Drop Rules
+and Library Gatherer, then Sound Shelf and Folder Janitor. Each pair's
+enablement, approvals and listed settings were adopted once from the v1
+settings rows (see `src/lib/extensions-v2/enablement.ts`); the Sound Shelf
+contents moved from `extension:sound-shelf:items` to `v2shelf:sound-shelf-v2`.
+There is no marketplace, no install flow, no remote loading, and no
+third-party code loader — "bundled" is the only source.
 
 ## Responsibilities and boundaries
 
@@ -31,14 +38,15 @@ source, and versions come from each tool's own `package.json` (currently
 
 ## Runtime behavior
 
-Six bundled tools (18 commands total; details in `docs/commands.md`):
+The v1 catalog is empty (was 6 tools, 18 commands; details in
+`docs/commands.md`). Retired shape for reference:
 
 | Tool (id) | Commands | Permissions | Settings | Surfaces |
 | --- | --- | --- | --- | --- |
 | `sound-shelf` — Sound Shelf | 4 (`add-selected`, `remove-selected`, `clear`, `list`) | `library:read` | none | `context-menu`, `sidebar` |
-| `make-pack` — Make Pack | 3 (`from-selection`, `from-shelf`, `from-recent`) | `library:read`, `files:read`, `files:copy`, `files:write` | `default-format` (select folder/zip), `include-manifest` | `context-menu`, `sidebar`, `selection-actions` |
-| `drop-rules` — Drop Rules | 4 (`open-settings`, `preview`, `apply`, `prepare-drag`) | `library:read`, `files:read`, `files:copy`, `files:write`, `drop:read`, `drop:modify` | `copy-on-drop`, `rename-on-drop`, `rename-pattern`, `drag-out-folder`, `mark-used` | `settings` |
 | `folder-janitor` — Folder Janitor | 4 (`scan-library`, `scan-folder`, `remove-files`, `delete-folders`) | `library:read`, `files:read`, `files:write`, `files:delete` | `tiny-file-threshold-bytes`, `allowed-formats` | `settings` |
+| `make-pack` — Make Pack | 3 (`from-selection`, `from-shelf`, `from-recent`) | `library:read`, `files:read`, `files:copy`, `files:write` | `default-format`, `include-manifest` | `context-menu`, `sidebar`, `selection-actions` |
+| `drop-rules` — Drop Rules | 4 (`open-settings`, `preview`, `apply`, `prepare-drag`) | `library:read`, `files:read`, `files:copy`, `files:write`, `drop:read`, `drop:modify` | `copy-on-drop`, `rename-on-drop`, `rename-pattern`, `drag-out-folder`, `mark-used` | `settings` |
 | `library-gatherer` — Library Gatherer | 2 (`preview-gather`, `gather`) | `library:read`, `library:write`, `files:read`, `files:copy`, `files:write` | `preserve-folder-names`, `skip-duplicates` | `settings` |
 | `smart-collections` — Smart Collections | 1 (`save-search`) | `collections:read`, `collections:write`, `library:read` | none | `sidebar`, `settings` |
 
@@ -67,12 +75,13 @@ Intents are request/result protocol, not subscription events.
 ## The v2 system beside it
 
 A second extension system (API version 2, internal, bundled-only)
-runs beside these six tools without touching them. Its reference
-extension is Make Pack v2 (`make-pack-v2`, displayed as Make Pack
-v2): three commands, three settings in their own namespace, seven
-contributions, disabled by default with explicit enable and
+replaces these six tools. Its seven ports (`sound-shelf-v2`,
+`folder-janitor-v2`, `smart-collections-v2`, `make-pack-v2`,
+`drop-rules-v2`, `library-gatherer-v2`, `auto-tag-v2`) each ship in
+their own namespace, disabled by default with explicit enable and
 permission approval. v1 commands never route through v2. Nothing
-here changes meaning: the table above stays the complete v1 catalog.
+here changes meaning: the table above stays the complete (retired)
+v1 catalog.
 
 - `docs/extensions-v2.md` — authoring on the v2 API
 - `docs/extensions-v2-migration.md` — coexistence and cutover rules
@@ -102,27 +111,27 @@ here changes meaning: the table above stays the complete v1 catalog.
 
 ## Source map (real file paths)
 
-- `packages/yard-tools/*/src/{manifest,command-definitions,commands,permissions,settings,index}.ts`
+- `packages/yard-tools/*-v2/src/{definition,handlers}.ts` — the live v2 ports
 - `packages/yard-core/src/extensions/{vocabulary,extension-registry,extension-command-registry,extension-context,extension-host}.ts`
 - `src/lib/extensions/{registry,runtime,host,catalog,settings-store,kv-store}.ts`
 - `src/lib/extensions/ui-contributions.ts` — extension points + context-menu adapter
 - `src/app/api/extensions/route.ts` — grid, catalog, enable/setting PATCH
-- `src/app/api/extensions/execute/{route,transport}.ts` — execution + adapters
+- `src/app/api/extensions/execute/{route,transport}.ts` — execution + envelope validation
 
 ## Examples
 
-List the catalog projection:
+List the catalog projection (empty since full retirement):
 
 ```bash
 curl '/api/extensions?view=catalog' | jq '.extensions[].id'
 ```
 
-Toggle a tool off:
+Toggle a v2 tool on:
 
 ```bash
-curl -X PATCH /api/extensions \
+curl -X PATCH /api/extensions-v2/extensions/sound-shelf-v2 \
   -H 'Content-Type: application/json' \
-  -d '{"extensionId":"folder-janitor","enabled":false}'
+  -d '{"enabled":true}'
 ```
 
 There is no `examples/` gap: the runnable-in-repository examples are
@@ -131,7 +140,7 @@ There is no `examples/` gap: the runnable-in-repository examples are
 
 ## Related documentation
 
-- `docs/commands.md` — the 18-command table and execution model
+- `docs/commands.md` — the retired-command table and execution model
 - `docs/settings.md` — setting storage, validation, renderer prefs
 - `docs/events.md` — what is (and is not) an event
 - `docs/architecture/extensions.md` — registration → UI trace, v1 and v2

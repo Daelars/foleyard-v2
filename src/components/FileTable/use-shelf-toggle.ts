@@ -2,7 +2,13 @@
 
 import { useCallback } from "react";
 
+import {
+  SOUND_SHELF_V2_ADD,
+  SOUND_SHELF_V2_ID,
+  SOUND_SHELF_V2_REMOVE,
+} from "@foleyard/sound-shelf-v2";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
+import { invokeV2Command } from "@/lib/extensions-v2/contributions";
 
 /**
  * Batch shelf endpoint payload for one file. The add-selected and
@@ -11,26 +17,21 @@ import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
  */
 export function buildShelfToggleRequest(fileId: string, inShelf: boolean) {
   return {
-    extensionId: "sound-shelf",
-    commandId: inShelf
-      ? "sound-shelf.remove-selected"
-      : "sound-shelf.add-selected",
+    extensionId: SOUND_SHELF_V2_ID,
+    commandId: inShelf ? SOUND_SHELF_V2_REMOVE : SOUND_SHELF_V2_ADD,
     selection: { fileIds: [fileId] },
   };
 }
 
 export function useShelfToggle(fileId: string, inShelf: boolean) {
   const toggleShelf = useCallback(async () => {
-    const response = await fetch("/api/extensions/execute", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildShelfToggleRequest(fileId, inShelf)),
+    const invoked = await invokeV2Command({
+      extensionId: SOUND_SHELF_V2_ID,
+      commandId: inShelf ? SOUND_SHELF_V2_REMOVE : SOUND_SHELF_V2_ADD,
+      fileIds: [fileId],
     });
-    if (response.ok) {
-      const data = (await response.json()) as { ok?: boolean };
-      if (data?.ok !== false) {
-        window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
-      }
+    if (invoked.ok) {
+      window.dispatchEvent(new CustomEvent(SOUND_SHELF_CHANGED_EVENT));
     }
   }, [fileId, inShelf]);
 

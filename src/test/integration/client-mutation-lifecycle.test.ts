@@ -35,7 +35,7 @@ import {
   restoreTag,
 } from "@/app/library/use-tags";
 import { consumeFavoritesTotal } from "@/app/library/use-favorites";
-import { toShelfFileIds } from "@/app/library/use-shelf";
+import { toShelfFileIds } from "@/app/library/use-shelf-v2";
 import { resolveBulkRemove } from "@/app/library/use-bulk-actions";
 import {
   applyEnterView,
@@ -52,7 +52,6 @@ import {
   resolveSmartCollectionQuery,
 } from "@/app/library/use-library-view";
 import { resolveNextTitle } from "@/app/library/use-transport";
-import { resolveMakePackDefaultFormat } from "@/app/library/use-extension-ui";
 import { resolveScanToast } from "@/app/library/use-settings-scan";
 import {
   clampPaletteIndex,
@@ -556,13 +555,12 @@ describe("client mutation lifecycle", () => {
     };
     expect(applyNavigateDirectory(initialLibraryViewState, dir).currentView).toBe("directory");
 
-    // Route slices: transport titles, pack defaults, scan toasts, palette ids.
+    // Route slices: transport titles, scan toasts, palette ids.
     const queue = [file("a"), file("b"), file("c")];
     expect(
       resolveNextTitle({ files: queue, queue: ["a", "b", "c"], cursor: 0, selectedFileId: "a" }),
     ).toBe("b");
     expect(resolveNextTitle({ files: queue, queue: ["a"], cursor: 0, selectedFileId: "a" })).toBeNull();
-    expect(resolveMakePackDefaultFormat([])).toBe("zip");
     expect(
       resolveScanToast({ phase: "done", error: null, errors: 0 } as never),
     ).toMatchObject({ kind: "success" });

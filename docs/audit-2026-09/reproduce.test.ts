@@ -5,41 +5,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { LibraryGathererService } from "../../packages/yard-tools/library-gatherer/src/service";
 import { createYardExtensionContext } from "../../packages/yard-core/src/extensions/extension-context";
 import { YardCommandRegistry } from "../../packages/yard-core/src/extensions/extension-command-registry";
 import { initializeDatabaseSchema } from "../../src/lib/database/migrations";
 import { SqliteAudioFileRepository } from "../../src/lib/database/file-repository";
 import { rollbackBulkTags } from "../../src/app/library/file-query";
-import { registerCommands as registerDropCommands } from "../../packages/yard-tools/drop-rules/src/commands";
-import { permissions as dropPermissions } from "../../packages/yard-tools/drop-rules/src/permissions";
-
-it("E04: Drop Rules apply ignores host filesystem denial", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-audit-drop-"));
-  try {
-    const source = path.join(root, "source.wav"), destination = path.join(root, "ungranted");
-    fs.writeFileSync(source, "sample");
-    const commands = new YardCommandRegistry();
-    const input = { targetDirectory: destination, files: [{ id: "unindexed", path: source, filename: "source.wav" }] };
-    const context = createYardExtensionContext({ permissions: dropPermissions, input, selection: { fileIds: ["unindexed"] }, services: { commands, filesystem: { resolveReadablePath: async () => null, resolveWritablePath: async () => null } } });
-    registerDropCommands(context);
-    await commands.execute("drop-rules.apply", input);
-    expect(fs.readdirSync(destination).some(name => name.endsWith(".wav"))).toBe(true);
-  } finally { fs.rmSync(root, { recursive: true, force: true }); }
-});
-
-it("B01: gather overwrites an existing destination of a different size", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-audit-"));
-  try {
-    const source = path.join(root, "source"), destination = path.join(root, "dest");
-    fs.mkdirSync(source); fs.mkdirSync(destination);
-    fs.writeFileSync(path.join(source, "hit.wav"), "NEW");
-    fs.writeFileSync(path.join(destination, "hit.wav"), "ORIGINAL AUDIO");
-    const context = createYardExtensionContext({ services: { commands: new YardCommandRegistry() }, permissions: ["library:read", "library:write", "files:read", "files:copy", "files:write"] });
-    await new LibraryGathererService(context).gather({ sourceDirectories: [source], destinationDirectory: destination, preserveFolderNames: false });
-    expect(fs.readFileSync(path.join(destination, "hit.wav"), "utf8")).toBe("NEW");
-  } finally { fs.rmSync(root, { recursive: true, force: true }); }
-});
 
 it("E01: a context with no permissions can invoke the supplied write service", () => {
   let changed = false;

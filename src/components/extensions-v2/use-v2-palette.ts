@@ -1,27 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 
-import type { V2ResolvedContribution } from "@yard-core";
+import type { ExtensionV2Catalog } from "@yard-core";
+import {
+  FOLDER_JANITOR_V2_DELETE_FOLDERS,
+  FOLDER_JANITOR_V2_ID,
+  FOLDER_JANITOR_V2_SCAN_FOLDER,
+  FOLDER_JANITOR_V2_SCAN_LIBRARY,
+} from "@foleyard/folder-janitor-v2";
+import { LIBRARY_GATHERER_V2_ID } from "@foleyard/library-gatherer-v2";
 
 import {
-  fetchV2Catalog,
-  fetchV2ExtensionStates,
   invokeV2Command,
   resolveV2UiPoint,
+  type V2UiState,
 } from "@/lib/extensions-v2/contributions";
 
 /**
  * Bridge between the v2 catalog and the existing command palette
  * (Application context, R6).
  *
- * Resolves `palette`-point contributions for the current selection
- * and invokes them through the single v2 execution path. Entries keep
- * v1 palette IDs untouched — v2 entries use the `v2tool:` prefix and
- * dispatch through `runV2Command`, so v1 entries and shortcuts keep
- * working. Unavailable entries are omitted here (the palette filters
- * by query); the dedicated `V2PaletteSection` shows reasons.
+ * Pure resolution over the already-loaded catalog: the caller passes
+ * the `useV2Catalog` snapshot, so selection changes re-resolve locally
+ * instead of refetching the catalog and states on every selection.
+ * Entries keep v1 palette IDs untouched — v2 entries use the `v2tool:`
+ * prefix and dispatch through `runV2Command`, so v1 entries and
+ * shortcuts keep working. Unavailable entries are omitted here (the
+ * palette filters by query); the dedicated `V2PaletteSection` shows
+ * reasons.
  */
 export type V2PaletteBridgeCommand = {
   extensionId: string;
@@ -30,43 +38,55 @@ export type V2PaletteBridgeCommand = {
   title: string;
 };
 
-export function useV2PaletteBridge(selectedIds: string[]): {
+export type V2PaletteDialogOpeners = {
+  /** Open the janitor report dialog (library target). */
+  onOpenJanitor?: () => void;
+  /** Open the gather dialog (grant orchestration lives there). */
+  onOpenGather?: () => void;
+};
+
+export function useV2PaletteBridge(
+  selectedIds: string[],
+  catalog: ExtensionV2Catalog | null,
+  uiState: V2UiState,
+  openers: V2PaletteDialogOpeners = {},
+): {
   v2ToolCommands: V2PaletteBridgeCommand[];
   runV2Command: (extensionId: string, commandId: string) => void;
 } {
-  const [items, setItems] = useState<V2ResolvedContribution[]>([]);
   const selectionKey = selectedIds.join("\0");
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const [catalogResult, statesResult] = await Promise.all([
-        fetchV2Catalog(),
-        fetchV2ExtensionStates(),
-      ]);
-      if (cancelled || !catalogResult.ok) return;
-      const enabled = new Set(
-        (statesResult.ok ? statesResult.extensions : [])
-          .filter((entry) => entry.enabled)
-          .map((entry) => entry.id),
-      );
-      const fileIds = selectionKey.split("\0").filter(Boolean);
-      setItems(
-        resolveV2UiPoint(
-          catalogResult.catalog,
-          "palette",
-          { fileIds },
-          { enabled, capabilities: {} },
-        ).filter((item) => item.availability.available),
-      );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectionKey]);
+  const items = useMemo(
+    () =>
+      resolveV2UiPoint(
+        catalog,
+        "palette",
+        { fileIds: selectionKey.split("\0").filter(Boolean) },
+        uiState,
+      ).filter((item) => item.availability.available),
+    [catalog, selectionKey, uiState],
+  );
 
+  const { onOpenJanitor, onOpenGather } = openers;
   const runV2Command = useCallback(
     (extensionId: string, commandId: string) => {
+      // Dialog-owned tools (same routing as row/menu invocation):
+      // janitor scans/deletes and gather need their dialogs; only
+      // index removals run headless from here.
+      if (
+        extensionId === FOLDER_JANITOR_V2_ID &&
+        (commandId === FOLDER_JANITOR_V2_SCAN_LIBRARY ||
+          commandId === FOLDER_JANITOR_V2_SCAN_FOLDER ||
+          commandId === FOLDER_JANITOR_V2_DELETE_FOLDERS) &&
+        onOpenJanitor
+      ) {
+        onOpenJanitor();
+        return;
+      }
+      if (extensionId === LIBRARY_GATHERER_V2_ID && onOpenGather) {
+        onOpenGather();
+        return;
+      }
       const fileIds = selectionKey.split("\0").filter(Boolean);
       void invokeV2Command({ extensionId, commandId, fileIds }).then((result) => {
         if (!result.ok) {
@@ -91,7 +111,7 @@ export function useV2PaletteBridge(selectedIds: string[]): {
         }
       });
     },
-    [selectionKey],
+    [selectionKey, onOpenJanitor, onOpenGather],
   );
 
   return {

@@ -8,7 +8,7 @@
 
 import type { FileRecord } from "../library/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PackagePlus, PanelLeft, Save, Search, X } from "lucide-react";
+import { PackagePlus, PanelLeft, Save, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { V3AudioPlayer, type AudioPlayerRef } from "./components/player";
@@ -18,6 +18,7 @@ import { V3LibraryDropZone } from "./components/extensions/drop-zone";
 import { V3SelectionActions } from "./components/extensions/selection-actions";
 import { V3ExtensionsSection } from "./components/extensions/settings-section";
 import { V3ToolsCards } from "./components/extensions/tools-cards";
+import { V3SearchField } from "./components/search-field";
 import dynamic from "next/dynamic";
 import { useV2PaletteBridge } from "@/components/extensions-v2/use-v2-palette";
 import { V3MakePackV2Dialog } from "./components/ext-flows/make-pack-v2";
@@ -58,7 +59,6 @@ import {
   Button,
   Dialog,
   DialogTitle,
-  Kbd,
   VariantIProvider,
 } from "@/components/variant-i";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/shelf-events";
@@ -243,6 +243,12 @@ function AppV3Content() {
     };
     navigateRef.current = selection.handleClearSelection;
   }, [selection]);
+
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const handleLoadMoreFiles = useCallback(
+    () => void loadMoreFiles(),
+    [loadMoreFiles],
+  );
 
   const { loadSettingsScan } = settingsScan;
   const { loadOrganization } = org;
@@ -534,6 +540,19 @@ function AppV3Content() {
     },
     [openPackV2, extUi.openJanitorLibrary, extUi.openGatherDialog],
   );
+  // Stable row-command handler for the memoized table (#259): selection
+  // membership is a Set lookup, and the identity only changes when the
+  // selection itself does.
+  const handleV2RowCommand = useCallback(
+    (item: V2ResolvedContribution, file: { id: string }) => {
+      const fileIds =
+        selectedIdSet.has(file.id) && selectedIdSet.size > 0
+          ? selectedIds
+          : [file.id];
+      invokeV2RowCommand(item, fileIds);
+    },
+    [invokeV2RowCommand, selectedIdSet, selectedIds],
+  );
   const resolveV2FileItems = useCallback(
     (fileId: string) =>
       resolveV2UiPoint(
@@ -775,37 +794,13 @@ function AppV3Content() {
               </Button>
 
               {!hideHeaderActions && (
-                <div className="relative flex flex-1 items-center">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
-                  <input
-                    ref={searchInputRef}
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search sounds by name, tag, or format…"
-                    aria-label="Search sounds"
-                    className="h-10 w-full min-w-0 rounded-lg border border-(--vi-edge) bg-(--vi-well) pl-9 pr-36 text-[13px] text-zinc-100 shadow-(--vi-sink) outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-zinc-600 hover:border-(--vi-edge-hi) focus:border-[color-mix(in_oklab,var(--accent-fill)_60%,transparent)] focus:shadow-[var(--vi-sink),0_0_16px_color-mix(in_oklab,var(--accent-fill)_10%,transparent)] motion-reduce:transition-none"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery("")}
-                      className="absolute right-24 top-1/2 -translate-y-1/2 shrink-0 rounded-md px-2 py-1 font-mono text-[11px] text-zinc-500 hover:text-zinc-100"
-                    >
-                      Clear
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={openPalette}
-                    aria-label="Open command palette"
-                    title="Command palette (Ctrl+K)"
-                    className="absolute right-2.5 top-1/2 hidden -translate-y-1/2 shrink-0 items-center gap-1.5 rounded-md border border-(--vi-edge-hi) bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.02))] px-1.5 py-0.5 font-mono text-[10px] text-zinc-400 shadow-(--vi-lift) sm:flex"
-                  >
-                    <Kbd>⌘</Kbd>
-                    <Kbd>K</Kbd>
-                    <span className="ml-1 text-zinc-600">{files.length}</span>
-                  </button>
-                </div>
+                <V3SearchField
+                  value={searchQuery}
+                  onCommit={setSearchQuery}
+                  onOpenPalette={openPalette}
+                  fileCount={files.length}
+                  inputRef={searchInputRef}
+                />
               )}
               {smartCollectionsEnabled && searchQuery.trim() && (
                 <>
@@ -1060,20 +1055,12 @@ function AppV3Content() {
                       searchQuery={debouncedSearchQuery}
                       isLoading={isLoadingFiles}
                       hasMore={hasMoreFiles}
-                      onLoadMore={() => void loadMoreFiles()}
+                      onLoadMore={handleLoadMoreFiles}
                       showContainerBorder={currentView !== "favorites"}
                       soundShelfEnabled={soundShelfEnabled}
                       shelfFileIds={shelf.soundShelfFileIds}
                       resolveV2FileItems={resolveV2FileItems}
-                      onV2Command={(item, file) =>
-                        invokeV2RowCommand(
-                          item,
-                          selectedIds.includes(file.id) &&
-                            selectedIds.length > 0
-                            ? selectedIds
-                            : [file.id],
-                        )
-                      }
+                      onV2Command={handleV2RowCommand}
                       onRemoveFile={handleRemoveFileFromLibrary}
                       folderJanitorEnabled={folderJanitorEnabled}
                       onScanFolder={extUi.handleScanFolder}

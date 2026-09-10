@@ -70,6 +70,8 @@ export const V3FileTable = memo(function V3FileTable({
     [directories, files],
   );
   const shelfFileIdSet = useMemo(() => new Set(shelfFileIds), [shelfFileIds]);
+  // Set membership keeps per-row checks O(1) on large selections (#259).
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const rowMenu = useRowContextMenu<MenuTarget>();
 
   // Stable handlers so the memo'd row components keep their memo (an
@@ -299,7 +301,7 @@ export const V3FileTable = memo(function V3FileTable({
                 handleNativeDragStart={desktopActions.handleNativeDragStart}
                 isDragging={isDragging}
                 isSelected={isSelected}
-                isMultiSelected={selectedIds.includes(file.id)}
+                isMultiSelected={selectedIdSet.has(file.id)}
                 isSelectedFilePlaying={isSelectedFilePlaying}
                 onSelect={onSelect}
                 onToggleFavorite={onToggleFavorite}

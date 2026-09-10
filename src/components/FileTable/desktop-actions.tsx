@@ -13,6 +13,7 @@ export function useFileTableDesktopActions(
 ) {
   const [draggingFile, setDraggingFile] = useState<string | null>(null);
   const desktop = useDesktopApp();
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   useEffect(() => {
     const bridge = getDesktopBridge();
@@ -85,12 +86,12 @@ export function useFileTableDesktopActions(
       event.stopPropagation();
       event.dataTransfer.effectAllowed = "copy";
       event.dataTransfer.setData("text/plain", file.filename);
-      const dragIds = selectedIds.includes(file.id) ? selectedIds : [file.id];
-      if (!selectedIds.includes(file.id)) onSelect(file, index);
+      const dragIds = selectedIdSet.has(file.id) ? selectedIds : [file.id];
+      if (!selectedIdSet.has(file.id)) onSelect(file, index);
       setDraggingFile(file.id);
       getDesktopBridge()?.startDragFiles(dragIds);
     },
-    [desktop, onSelect, selectedIds],
+    [desktop, onSelect, selectedIds, selectedIdSet],
   );
 
   const handleDragEnd = useCallback(() => setDraggingFile(null), []);

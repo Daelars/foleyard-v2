@@ -185,7 +185,6 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
   const [viewState, setViewState] = useState<LibraryViewState>(
     initialLibraryViewState,
   );
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
   const shelfAvailable = callbacks.shelfAvailable ?? true;
@@ -208,14 +207,9 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
     setViewState((prev) => ({ ...prev, searchQuery: query }));
   }, []);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearchQuery(viewState.searchQuery);
-    }, 180);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [viewState.searchQuery]);
+  // The search field owns keystroke debouncing (#259): only the settled
+  // value reaches this store, so the files query consumes it directly.
+  const debouncedSearchQuery = searchQuery;
 
   const callbacksRef = useRef(callbacks);
   useEffect(() => {

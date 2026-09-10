@@ -183,6 +183,18 @@ export function usePalette(input: PaletteInput) {
 
   const activePaletteIndex = clampPaletteIndex(paletteIndex, paletteEntries.length);
 
+  // Latest values for the stable global key listeners (#259): entries and
+  // the cursor change on every file load and keypress, and re-subscribing
+  // `keydown` for each of them churned the listener on every render.
+  const paletteEntriesRef = useRef(paletteEntries);
+  const activePaletteIndexRef = useRef(activePaletteIndex);
+  const paletteOpenRef = useRef(paletteOpen);
+  useEffect(() => {
+    paletteEntriesRef.current = paletteEntries;
+    activePaletteIndexRef.current = activePaletteIndex;
+    paletteOpenRef.current = paletteOpen;
+  });
+
   const handlePaletteSelect = useCallback(
     (entry: PaletteEntry) => {
       const actions = inputRef.current;
@@ -243,7 +255,7 @@ export function usePalette(input: PaletteInput) {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        if (paletteOpen) {
+        if (paletteOpenRef.current) {
           closePalette();
         } else {
           openPalette();
@@ -251,7 +263,7 @@ export function usePalette(input: PaletteInput) {
         return;
       }
 
-      if (!paletteOpen) {
+      if (!paletteOpenRef.current) {
         return;
       }
 
@@ -262,28 +274,26 @@ export function usePalette(input: PaletteInput) {
         return;
       }
 
+      const length = paletteEntriesRef.current.length;
+
       if (event.key === "ArrowDown") {
         event.preventDefault();
         event.stopPropagation();
-        setPaletteIndex((index) =>
-          stepPaletteIndex(index, 1, paletteEntries.length),
-        );
+        setPaletteIndex((index) => stepPaletteIndex(index, 1, length));
         return;
       }
 
       if (event.key === "ArrowUp") {
         event.preventDefault();
         event.stopPropagation();
-        setPaletteIndex((index) =>
-          stepPaletteIndex(index, -1, paletteEntries.length),
-        );
+        setPaletteIndex((index) => stepPaletteIndex(index, -1, length));
         return;
       }
 
       if (event.key === "Enter") {
         const target = event.target as HTMLElement | null;
         const inPaletteInput = target === paletteInputRef.current;
-        const entry = paletteEntries[activePaletteIndex];
+        const entry = paletteEntriesRef.current[activePaletteIndexRef.current];
         if (entry && (inPaletteInput || target === document.body)) {
           event.preventDefault();
           event.stopPropagation();
@@ -294,7 +304,7 @@ export function usePalette(input: PaletteInput) {
 
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [paletteOpen, paletteEntries, activePaletteIndex, handlePaletteSelect, openPalette, closePalette]);
+  }, [handlePaletteSelect, openPalette, closePalette]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -302,7 +312,7 @@ export function usePalette(input: PaletteInput) {
         return;
       }
 
-      if (paletteOpen) {
+      if (paletteOpenRef.current) {
         return;
       }
 
@@ -341,7 +351,7 @@ export function usePalette(input: PaletteInput) {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [paletteOpen, shortcutBindings]);
+  }, [shortcutBindings]);
 
   return {
     paletteOpen,

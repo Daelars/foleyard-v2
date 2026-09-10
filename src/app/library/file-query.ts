@@ -137,6 +137,17 @@ export function applyBulkFavorite(
   if (ids.length === 0) {
     return files;
   }
+  // Single-item updates allocate one row instead of rebuilding the list
+  // (#259); unaffected rows keep their identity for the memoized table.
+  if (ids.length === 1) {
+    const index = files.findIndex((file) => file.id === ids[0]);
+    if (index === -1 || files[index].isFavorite === isFavorite) {
+      return files;
+    }
+    const next = files.slice();
+    next[index] = { ...files[index], isFavorite };
+    return next;
+  }
   const targets = new Set(ids);
   return files.map((file) =>
     targets.has(file.id) && file.isFavorite !== isFavorite
@@ -156,12 +167,9 @@ export function applyBulkTag(
   if (fileIds.length === 0) {
     return files;
   }
-  const targets = new Set(fileIds);
   const known = tags.find((tag) => tag.id === tagId);
-  return files.map((file) => {
-    if (!targets.has(file.id)) {
-      return file;
-    }
+
+  const applyOne = (file: FileRecord): FileRecord => {
     const hasTag = file.tags.some((tag) => tag.id === tagId);
     if (attached && !hasTag) {
       // Hand toggles attach as manual on the server too, so stamp the
@@ -172,7 +180,26 @@ export function applyBulkTag(
       return { ...file, tags: file.tags.filter((tag) => tag.id !== tagId) };
     }
     return file;
-  });
+  };
+
+  // Single-item updates allocate one row instead of rebuilding the list
+  // (#259); unaffected rows keep their identity for the memoized table.
+  if (fileIds.length === 1) {
+    const index = files.findIndex((file) => file.id === fileIds[0]);
+    if (index === -1) {
+      return files;
+    }
+    const updated = applyOne(files[index]);
+    if (updated === files[index]) {
+      return files;
+    }
+    const next = files.slice();
+    next[index] = updated;
+    return next;
+  }
+
+  const targets = new Set(fileIds);
+  return files.map((file) => (targets.has(file.id) ? applyOne(file) : file));
 }
 
 /** Favourite flags captured before the optimistic update, keyed by file id. */
@@ -180,6 +207,10 @@ export function snapshotBulkFavorites(
   files: FileRecord[],
   ids: string[],
 ): Map<string, boolean> {
+  if (ids.length === 1) {
+    const file = files.find((entry) => entry.id === ids[0]);
+    return new Map(file ? [[file.id, file.isFavorite]] : []);
+  }
   const targets = new Set(ids);
   return new Map(
     files.filter((file) => targets.has(file.id)).map((file) => [file.id, file.isFavorite]),
@@ -191,6 +222,10 @@ export function snapshotBulkTags(
   files: FileRecord[],
   fileIds: string[],
 ): Map<string, FileRecord["tags"]> {
+  if (fileIds.length === 1) {
+    const file = files.find((entry) => entry.id === fileIds[0]);
+    return new Map(file ? [[file.id, file.tags]] : []);
+  }
   const targets = new Set(fileIds);
   return new Map(
     files.filter((file) => targets.has(file.id)).map((file) => [file.id, file.tags]),
@@ -208,6 +243,16 @@ export function rollbackBulkFavorite(
 ): FileRecord[] {
   if (previousById.size === 0) {
     return current;
+  }
+  if (previousById.size === 1) {
+    const [id, isFavorite] = previousById.entries().next().value as [string, boolean];
+    const index = current.findIndex((file) => file.id === id);
+    if (index === -1 || current[index].isFavorite === isFavorite) {
+      return current;
+    }
+    const next = current.slice();
+    next[index] = { ...current[index], isFavorite };
+    return next;
   }
   return current.map((file) =>
     previousById.has(file.id)
@@ -227,6 +272,16 @@ export function rollbackBulkTags(
 ): FileRecord[] {
   if (previousTagsById.size === 0) {
     return current;
+  }
+  if (previousTagsById.size === 1) {
+    const [id, tags] = previousTagsById.entries().next().value as [string, FileRecord["tags"]];
+    const index = current.findIndex((file) => file.id === id);
+    if (index === -1 || current[index].tags === tags) {
+      return current;
+    }
+    const next = current.slice();
+    next[index] = { ...current[index], tags };
+    return next;
   }
   return current.map((file) =>
     previousTagsById.has(file.id)

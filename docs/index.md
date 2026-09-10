@@ -19,7 +19,12 @@ they resolve from staged `foleyard-docs/` resources (or
 reads never execute examples, and a missing staged file returns a
 missing-from-build error rather than falling back. Staging is
 `node scripts/prepare-docs.cjs` and verification is
-`node scripts/check-docs.cjs`; both run in CI.
+`node scripts/check-docs.cjs`; both run in CI. The checker fails on
+missing repository paths, unresolved relative links, unknown docs ids
+referenced by capabilities/events/commands/definitions, missing example
+directories or READMEs, and any divergence between the manifest and the
+staged output; intentional historical references are allowlisted with a
+reason.
 
 ## Responsibilities and boundaries
 

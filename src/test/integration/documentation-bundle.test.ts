@@ -93,6 +93,35 @@ describe("documentation bundle contracts", () => {
         failed = true;
       }
       expect(failed, "a staged document the registry does not declare must fail the check").toBe(true);
+
+      // A served document that references a missing repository path already
+      // failed before the manifest drift; check that case on a clean stage.
+      const second = fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-docs-paths-"));
+      try {
+        execFileSync(process.execPath, ["scripts/prepare-docs.cjs", "--out", second], {
+          cwd: REPO_ROOT,
+          stdio: "pipe",
+        });
+        fs.appendFileSync(
+          path.join(second, "docs", "index.md"),
+          "\nSource: `src/does/not/exist.ts`\n",
+        );
+        let pathFailure = "";
+        try {
+          execFileSync(process.execPath, ["scripts/check-docs.cjs", "--dir", second], {
+            cwd: REPO_ROOT,
+            stdio: "pipe",
+          });
+        } catch (error) {
+          pathFailure = String((error as { stderr?: unknown }).stderr ?? error);
+        }
+        expect(pathFailure, "a missing source-map path must fail the check").toContain(
+          "missing repository path",
+        );
+        expect(pathFailure).toContain("src/does/not/exist.ts");
+      } finally {
+        fs.rmSync(second, { recursive: true, force: true });
+      }
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true });
     }

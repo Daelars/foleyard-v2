@@ -57,6 +57,18 @@ function relativeMarkdownLinks(markdown) {
   return targets;
 }
 
+function findV2DefinitionFiles() {
+  const files = [];
+  const toolsDir = path.join(root, "packages", "yard-tools");
+  if (!fs.existsSync(toolsDir)) return files;
+  for (const tool of fs.readdirSync(toolsDir)) {
+    if (!tool.endsWith("-v2")) continue;
+    const candidate = path.join(toolsDir, tool, "src", "definition.ts");
+    if (fs.existsSync(candidate)) files.push(candidate);
+  }
+  return files;
+}
+
 function listFilesRecursive(dir, extension) {
   const out = [];
   if (!fs.existsSync(dir)) return out;
@@ -222,16 +234,112 @@ for (const entry of registryDocuments) {
   }
 }
 
-// 7. Command IDs in docs/commands.md resolve against v2 definition.ts files.
-const definitionsFiles = [];
-const toolsDir = path.join(root, "packages", "yard-tools");
-if (fs.existsSync(toolsDir)) {
-  for (const tool of fs.readdirSync(toolsDir)) {
-    if (!tool.endsWith("-v2")) continue;
-    const candidate = path.join(toolsDir, tool, "src", "definition.ts");
-    if (fs.existsSync(candidate)) definitionsFiles.push(candidate);
+// 7. Repository paths referenced by served documents exist. Historical or
+// proposed references are allowlisted with a reason instead of skipped
+// silently.
+const HISTORICAL_PATH_ALLOWLIST = [
+  { prefix: "docs/audit-2026-09/", reason: "archived audit material in Daelars/foleyard-archive" },
+  { prefix: "docs/plans/", reason: "archived plans in Daelars/foleyard-archive" },
+  { prefix: "docs/audits/", reason: "historical audit material" },
+  { prefix: "src/definition.ts", reason: "package-relative path inside a generated extension" },
+  { prefix: "src/handlers.ts", reason: "package-relative path inside a generated extension" },
+  { prefix: "src/index.ts", reason: "package-relative path inside a generated extension" },
+  { prefix: "src/lib/extensions/", reason: "retired v1 sources recorded by the historical extensions guide" },
+  { prefix: "packages/yard-core/src/extensions/", reason: "retired v1 sources recorded by the historical extensions guide" },
+  { prefix: "docs/audits/foleyard-self-awareness-audit.md", reason: "historical audit" },
+];
+const PATH_PREFIX = /^(docs|src|packages|scripts|electron|examples|public)\/[A-Za-z0-9._/-]+$/;
+const ALLOWLISTED_PATHS = [];
+
+function checkPathsInFile(absPath, resolveRoot) {
+  const content = fs.readFileSync(absPath, "utf8");
+  const fromRelative = path.relative(resolveRoot, absPath).replace(/\\/g, "/");
+  for (const match of content.matchAll(/`([^`]+)`/g)) {
+    let token = match[1].trim();
+    if (token.includes("*") || token.includes("<") || token.includes(">")) continue;
+    if (token.includes("(") || token.includes(")")) continue;
+    if (token.includes("@") || token.includes(" ")) continue;
+    token = token.replace(/:\d+(?:-\d+)?$/, "").replace(/[.,;)]+$/, "");
+    if (!PATH_PREFIX.test(token)) continue;
+    const allow = HISTORICAL_PATH_ALLOWLIST.find((entry) => token.startsWith(entry.prefix));
+    if (allow) {
+      ALLOWLISTED_PATHS.push(`${token} (${allow.reason})`);
+      continue;
+    }
+    let candidate = token;
+    if (candidate.includes("{")) {
+      candidate = candidate.slice(0, candidate.indexOf("{")).replace(/\/$/, "");
+    }
+    const absolute = path.resolve(root, candidate);
+    const exists = fs.existsSync(absolute);
+    const isDirectory = candidate.endsWith("/");
+    if (!exists || (isDirectory && !fs.statSync(absolute).isDirectory())) {
+      errors.push(`missing repository path in ${fromRelative}: "${token}"`);
+    }
   }
 }
+for (const entry of registryDocuments) {
+  const stagedPath = path.join(stagedDir, entry.path);
+  if (fs.existsSync(stagedPath)) checkPathsInFile(stagedPath, stagedDir);
+}
+
+// 8. Docs ids referenced by capabilities, events, commands and definitions
+// resolve against the manifest registry.
+const docsIds = new Set(registryDocuments.map((entry) => entry.id));
+function checkDocsIds(sourceLabel, ids) {
+  for (const id of ids) {
+    if (!docsIds.has(id)) {
+      errors.push(`${sourceLabel} references unknown docs id "${id}"`);
+    }
+  }
+}
+const definitionsFiles = findV2DefinitionFiles();
+const capabilitiesSource = path.join(root, "src", "lib", "capabilities.ts");
+if (fs.existsSync(capabilitiesSource)) {
+  checkDocsIds(
+    "capabilities",
+    [...fs.readFileSync(capabilitiesSource, "utf8").matchAll(/docsId:\s*"([^"]+)"/g)].map((m) => m[1]),
+  );
+}
+const eventsSource = path.join(root, "src", "lib", "events.ts");
+if (fs.existsSync(eventsSource)) {
+  checkDocsIds(
+    "events",
+    [...fs.readFileSync(eventsSource, "utf8").matchAll(/docsId:\s*"([^"]+)"/g)].map((m) => m[1]),
+  );
+}
+for (const file of definitionsFiles) {
+  const source = fs.readFileSync(file, "utf8");
+  checkDocsIds(
+    `definitions (${path.basename(path.dirname(path.dirname(file)))})`,
+    [...source.matchAll(/docsId:\s*"([^"]+)"/g)].map((m) => m[1]),
+  );
+  for (const block of source.matchAll(/docsRefs:\s*\[([\s\S]*?)\]/g)) {
+    checkDocsIds(
+      `docsRefs (${path.basename(path.dirname(path.dirname(file)))})`,
+      [...block[1].matchAll(/id:\s*"([^"]+)"/g)].map((m) => m[1]),
+    );
+  }
+}
+
+// 9. Every example the manifest lists has a directory and a README.
+const examples = Array.isArray(registry?.examples) ? registry.examples : [];
+for (const example of examples) {
+  if (typeof example?.id !== "string") {
+    errors.push(`manifest example entry needs an id: ${JSON.stringify(example)}`);
+    continue;
+  }
+  const exampleDir = path.join(root, "examples", example.id);
+  if (!fs.existsSync(exampleDir) || !fs.statSync(exampleDir).isDirectory()) {
+    errors.push(`manifest example directory missing: examples/${example.id}`);
+    continue;
+  }
+  if (!fs.existsSync(path.join(exampleDir, "README.md"))) {
+    errors.push(`manifest example README missing: examples/${example.id}/README.md`);
+  }
+}
+
+// 10. Command IDs in docs/commands.md resolve against v2 definition.ts files.
 const definedCommands = new Set();
 for (const file of definitionsFiles) {
   const source = fs.readFileSync(file, "utf8");
@@ -274,5 +382,5 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `check-docs: OK — ${registryDocuments.length} registry sources, staged set matches docs/manifest.json, manifest identity (product ${productVersion}, core ${coreVersion}), ${linkCount} relative .md links checked, staged dir ${stagedDir}.`,
+  `check-docs: OK — ${registryDocuments.length} registry sources, staged set matches docs/manifest.json, manifest identity (product ${productVersion}, core ${coreVersion}), ${linkCount} relative .md links checked, ${ALLOWLISTED_PATHS.length} allowlisted historical references, staged dir ${stagedDir}.`,
 );

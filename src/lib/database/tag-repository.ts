@@ -217,6 +217,124 @@ export class SqliteTagRepository implements TagRepository {
     return rows;
   }
 
+  /**
+   * SQL coverage aggregate over active files (#257): counts, per-tag counts,
+   * per-origin tagged-file counts and the full tag vocabulary in one pass of
+   * grouped queries, independent of Library size.
+   */
+  coverageAggregate(): {
+    total: number;
+    tagged: number;
+    tags: Record<string, number>;
+    origins: Record<"manual" | "deterministic" | "semantic_ai", number>;
+    allTags: string[];
+  } {
+    const total = (
+      this.sqlite
+        .prepare("SELECT COUNT(*) AS n FROM files WHERE removed_at IS NULL")
+        .get() as { n: number }
+    ).n;
+    const tagged = (
+      this.sqlite
+        .prepare(
+          "SELECT COUNT(DISTINCT ft.file_id) AS n FROM file_tags ft JOIN files f ON f.id = ft.file_id WHERE f.removed_at IS NULL",
+        )
+        .get() as { n: number }
+    ).n;
+    const tagRows = this.sqlite
+      .prepare(
+        "SELECT t.name AS name, COUNT(*) AS n FROM file_tags ft JOIN tags t ON t.id = ft.tag_id JOIN files f ON f.id = ft.file_id WHERE f.removed_at IS NULL GROUP BY t.id",
+      )
+      .all() as Array<{ name: string; n: number }>;
+    const originRows = this.sqlite
+      .prepare(
+        "SELECT ft.origin AS origin, COUNT(DISTINCT ft.file_id) AS n FROM file_tags ft JOIN files f ON f.id = ft.file_id WHERE f.removed_at IS NULL GROUP BY ft.origin",
+      )
+      .all() as Array<{ origin: string; n: number }>;
+    const tags: Record<string, number> = {};
+    for (const row of tagRows) tags[row.name] = row.n;
+    const origins = { manual: 0, deterministic: 0, semantic_ai: 0 };
+    for (const row of originRows) {
+      if (row.origin in origins) origins[row.origin as keyof typeof origins] = row.n;
+    }
+    return { total, tagged, tags, origins, allTags: this.getAllTags().map((tag) => tag.name) };
+  }
+
+  /**
+   * One page of coverage members plus the full match count (#257). Members
+   * are active files matching a tag name or origin, in the library order
+   * (filename, id), with each file's attachments read in one bounded query.
+   */
+  coverageMemberPage(input: {
+    tag?: string;
+    origin?: "manual" | "deterministic" | "semantic_ai";
+    skip: number;
+    limit: number;
+  }): {
+    members: Array<{
+      fileId: string;
+      filename: string;
+      tags: Array<{ id: string; name: string; origin: TagOrigin; confidence: number | null }>;
+    }>;
+    matched: number;
+  } {
+    const conditions = ["f.removed_at IS NULL"];
+    const params: unknown[] = [];
+    let joins = "";
+    let groupBy = "";
+    if (input.tag || input.origin) {
+      joins = "JOIN file_tags ft ON ft.file_id = f.id";
+      groupBy = "GROUP BY f.id";
+      if (input.tag) {
+        joins += " JOIN tags t ON t.id = ft.tag_id";
+        conditions.push("lower(t.name) = lower(?)");
+        params.push(input.tag);
+      }
+      if (input.origin) {
+        conditions.push("ft.origin = ?");
+        params.push(input.origin);
+      }
+    }
+    const where = conditions.join(" AND ");
+    const matched = (
+      this.sqlite
+        .prepare(
+          `SELECT COUNT(DISTINCT f.id) AS n FROM files f ${joins} WHERE ${where}`,
+        )
+        .get(...params) as { n: number }
+    ).n;
+    const rows = this.sqlite
+      .prepare(
+        `SELECT f.id AS id, f.filename AS filename FROM files f ${joins} WHERE ${where} ${groupBy} ORDER BY f.filename, f.id LIMIT ? OFFSET ?`,
+      )
+      .all(...params, input.limit, input.skip) as Array<{ id: string; filename: string }>;
+
+    const byFile = new Map<
+      string,
+      Array<{ id: string; name: string; origin: TagOrigin; confidence: number | null }>
+    >();
+    if (rows.length > 0) {
+      for (const attachment of this.getAttachmentsWithTagsForFiles(rows.map((row) => row.id))) {
+        const list = byFile.get(attachment.fileId) ?? [];
+        list.push({
+          id: attachment.tagId,
+          name: attachment.tagName,
+          origin: (attachment.origin ?? "manual") as TagOrigin,
+          confidence: attachment.confidence ?? null,
+        });
+        byFile.set(attachment.fileId, list);
+      }
+    }
+    return {
+      members: rows.map((row) => ({
+        fileId: row.id,
+        filename: row.filename,
+        tags: byFile.get(row.id) ?? [],
+      })),
+      matched,
+    };
+  }
+
   addTagAlias(tagId: string, alias: string): void {
     const clean = alias.trim().toLowerCase();
     if (!clean) throw new Error("Alias must not be blank");
@@ -300,6 +418,10 @@ function getTagRepo(): SqliteTagRepository {
 }
 
 export const getAllTags = () => getTagRepo().getAllTags();
+export const coverageAggregate = () => getTagRepo().coverageAggregate();
+export const coverageMemberPage = (
+  input: Parameters<SqliteTagRepository["coverageMemberPage"]>[0],
+) => getTagRepo().coverageMemberPage(input);
 export const getTagsForFile = (fileId: string) => getTagRepo().getTagsForFile(fileId);
 export const getTagsForFiles = (fileIds: string[]) => getTagRepo().getTagsForFiles(fileIds);
 export const getAttachmentsForFiles = (fileIds: string[]) =>

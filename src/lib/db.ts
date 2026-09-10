@@ -60,6 +60,8 @@ export {
   attachTagToFile,
   attachTagToFileWithOrigin,
   attachTagsBatch,
+  coverageAggregate,
+  coverageMemberPage,
   createTag,
   deleteTag,
   detachAttachmentsByOrigin,

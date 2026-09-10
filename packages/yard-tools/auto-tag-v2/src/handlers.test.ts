@@ -96,6 +96,7 @@ type World = {
   host: ExtensionV2Host;
   attachments: Attachment[];
   attachBatches: Attachment[][];
+  aggregateCalls: { coverage: number; memberPage: number };
   created: string[];
   tagsByName: Map<string, string>;
   vectors: Map<string, { dim: number; vec: Uint8Array }>;
@@ -110,6 +111,7 @@ function world(overrides?: {
   seedTags?: string[];
   embedAudio?: (fileId: string) => Promise<{ dim: number; vec: number[] }>;
   files?: IndexedAudioFile[];
+  aggregatePorts?: boolean;
 }): World {
   const definition = createAutoTagV2Definition();
   const registry = new ExtensionV2Registry();
@@ -135,6 +137,7 @@ function world(overrides?: {
   const tagsByName = new Map<string, string>();
   const attachments: Attachment[] = [];
   const attachBatches: Attachment[][] = [];
+  const aggregateCalls = { coverage: 0, memberPage: 0 };
   const created: string[] = [];
   const stateStore = new Map<string, unknown>();
   const vectors = new Map<string, { dim: number; vec: Uint8Array }>();
@@ -233,6 +236,40 @@ function world(overrides?: {
     resolveAlias: () => null,
     renamePreservingAlias: () => {},
     merge: () => ({ moved: 0 }),
+    ...(overrides?.aggregatePorts
+      ? {
+          coverage: () => {
+            aggregateCalls.coverage += 1;
+            return {
+              total: files.length,
+              tagged: new Set(attachments.map((entry) => entry.fileId)).size,
+              tags: { thunder: 2 },
+              origins: { manual: 1, deterministic: 1, semantic_ai: 0 },
+              allTags: [...tagsByName.keys()],
+            };
+          },
+          memberPage: (input: { tag?: string; origin?: string; skip: number; limit: number }) => {
+            aggregateCalls.memberPage += 1;
+            return {
+              members: [
+                {
+                  fileId: "f1",
+                  filename: "thunder-close_take01.wav",
+                  tags: [
+                    {
+                      id: "t1",
+                      name: input.tag ?? "thunder",
+                      origin: (input.origin as "manual") ?? "manual",
+                      confidence: null,
+                    },
+                  ],
+                },
+              ].slice(input.skip, input.skip + input.limit),
+              matched: 2,
+            };
+          },
+        }
+      : {}),
   };
   const analysisPorts: V2AnalysisPorts = {
     modelStatus: () => ({ ...modelState }),
@@ -305,6 +342,7 @@ function world(overrides?: {
     host,
     attachments,
     attachBatches,
+    aggregateCalls,
     created,
     tagsByName,
     vectors,
@@ -988,5 +1026,51 @@ describe("auto-tag-v2 one-pass scans (#229)", () => {
     expect(w.scanCalls.pages).toBe(3);
     await w.host.execute({ ...candidatesCommand, input: {} });
     expect(w.scanCalls.pages).toBe(3);
+  });
+});
+
+describe("auto-tag-v2 SQL aggregates (#257)", () => {
+  const coverageCommand = {
+    extensionId: AUTO_TAG_V2_ID,
+    commandId: AUTO_TAG_V2_COVERAGE_SUMMARY,
+    selection: { fileIds: [] },
+  };
+  const originsCommand = {
+    extensionId: AUTO_TAG_V2_ID,
+    commandId: AUTO_TAG_V2_LIST_ORIGINS,
+    selection: { fileIds: [] },
+  };
+
+  it("answers list-origins from the coverage ports without walking the library", async () => {
+    const w = world({ aggregatePorts: true });
+    w.scanCalls.pages = 0;
+
+    const value = immediateValue<{ summary: string; entries: string[] }>(
+      await w.host.execute({ ...originsCommand, input: { origin: "all", limit: 1 } }),
+    );
+
+    expect(w.scanCalls.pages).toBe(0);
+    expect(w.aggregateCalls.coverage).toBe(1);
+    expect(w.aggregateCalls.memberPage).toBe(1);
+    const summary = JSON.parse(value.summary) as { total: number; matching: number };
+    expect(summary.total).toBe(3);
+    expect(summary.matching).toBe(2);
+    expect(value.entries).toHaveLength(1);
+  });
+
+  it("answers the board summary from the coverage aggregate alone", async () => {
+    const w = world({ aggregatePorts: true });
+    w.scanCalls.pages = 0;
+
+    const value = immediateValue<{ summary: string }>(
+      await w.host.execute({ ...coverageCommand, input: {} }),
+    );
+
+    expect(w.scanCalls.pages).toBe(0);
+    expect(w.aggregateCalls.coverage).toBe(1);
+    expect(w.aggregateCalls.memberPage).toBe(0);
+    const summary = JSON.parse(value.summary) as { total: number; members: string[] };
+    expect(summary.total).toBe(3);
+    expect(summary.members).toEqual([]);
   });
 });

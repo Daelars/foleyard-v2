@@ -2,6 +2,8 @@ import {
   attachFileToCollection,
   attachTagToFileWithOrigin,
   attachTagsBatch,
+  coverageAggregate,
+  coverageMemberPage,
   createSmartCollection,
   createTag,
   deleteCollection,
@@ -139,6 +141,9 @@ export function createV2TagPorts(deps: V2OrganizationDeps = {}): V2TagPorts {
       }
       notify();
     },
+    coverage: () => (ports?.coverage ? ports.coverage() : coverageAggregate()),
+    memberPage: (input) =>
+      ports?.memberPage ? ports.memberPage(input) : coverageMemberPage(input),
     detach: (fileId, tagId) => {
       if (ports) ports.detach(fileId, tagId);
       else detachTagFromFile(fileId, tagId);

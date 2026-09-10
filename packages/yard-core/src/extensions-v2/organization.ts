@@ -52,6 +52,15 @@ export type V2TagPorts = {
     origin?: TagOrigin;
     confidence?: number | null;
   }>): void;
+  /** SQL-backed coverage aggregate over active files (#257). */
+  coverage?(): V2CoverageAggregate;
+  /** One page of coverage members plus the full match count (#257). */
+  memberPage?(input: {
+    tag?: string;
+    origin?: "manual" | "deterministic" | "semantic_ai";
+    skip: number;
+    limit: number;
+  }): { members: V2CoverageMember[]; matched: number };
   detach(fileId: string, tagId: string): void;
   detachByOrigin?(origin: Exclude<TagOrigin, "manual">): number;
   resolveAlias?(alias: string): string | null;
@@ -60,6 +69,27 @@ export type V2TagPorts = {
 };
 
 export type V2TagAttachment = FileTagAttachment & { tagName: string };
+
+/** One active file with its attachments, for coverage member pages. */
+export type V2CoverageMember = {
+  fileId: string;
+  filename: string;
+  tags: Array<{
+    id: string;
+    name: string;
+    origin: TagOrigin;
+    confidence: number | null;
+  }>;
+};
+
+/** Coverage counts over active files, computed in SQL by capable hosts. */
+export type V2CoverageAggregate = {
+  total: number;
+  tagged: number;
+  tags: Record<string, number>;
+  origins: Record<"manual" | "deterministic" | "semantic_ai", number>;
+  allTags: string[];
+};
 
 export type V2CollectionOperations = {
   list(): Collection[];
@@ -87,6 +117,15 @@ export type V2TagOperations = {
     origin?: TagOrigin;
     confidence?: number | null;
   }>): void;
+  /** SQL-backed coverage aggregate over active files (#257). */
+  coverage?(): V2CoverageAggregate;
+  /** One page of coverage members plus the full match count (#257). */
+  memberPage?(input: {
+    tag?: string;
+    origin?: "manual" | "deterministic" | "semantic_ai";
+    skip: number;
+    limit: number;
+  }): { members: V2CoverageMember[]; matched: number };
   detach(fileId: string, tagId: string): void;
   detachByOrigin(origin: Exclude<TagOrigin, "manual">): number;
   resolveAlias(alias: string): string | null;
@@ -321,6 +360,36 @@ export function createV2TagOperations(args: V2OrganizationFactoryArgs): V2TagOpe
       }
       args.notify?.("tags");
     },
+    // The SQL aggregate ports only exist when the host provides them, so a
+    // fixture host falls through to the handler's one-pass fallback.
+    ...(args.tags?.coverage
+      ? {
+          coverage(): V2CoverageAggregate {
+            require("tags:read");
+            return args.tags!.coverage!();
+          },
+        }
+      : {}),
+    ...(args.tags?.memberPage
+      ? {
+          memberPage(input: {
+            tag?: string;
+            origin?: "manual" | "deterministic" | "semantic_ai";
+            skip: number;
+            limit: number;
+          }): { members: V2CoverageMember[]; matched: number } {
+            require("tags:read");
+            return args.tags!.memberPage!({
+              ...(input.tag !== undefined
+                ? { tag: checkName(input.tag, "Tag name", V2_MAX_TAG_NAME_LENGTH) }
+                : {}),
+              ...(input.origin !== undefined ? { origin: input.origin } : {}),
+              skip: Math.max(0, Math.floor(input.skip)),
+              limit: Math.max(1, Math.min(100, Math.floor(input.limit))),
+            });
+          },
+        }
+      : {}),
     detach(fileId: string, tagId: string): void {
       require("tags:write");
       liveTarget(fileId);

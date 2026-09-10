@@ -960,11 +960,17 @@ type AttachmentView = {
   confidence: number | null;
 };
 
-type LibraryScanCollector = {
-  matches: (file: IndexedAudioFile, attachments: V2TagAttachment[]) => boolean;
-  serialize: (file: IndexedAudioFile, attachments: V2TagAttachment[]) => string;
-  skip: number;
-  limit: number;
+type CoverageMemberTag = {
+  id: string;
+  name: string;
+  origin: "manual" | "deterministic" | "semantic_ai";
+  confidence: number | null;
+};
+
+type CoverageMember = {
+  fileId: string;
+  filename: string;
+  tags: CoverageMemberTag[];
 };
 
 type LibraryScan = {
@@ -973,30 +979,67 @@ type LibraryScan = {
   tags: Record<string, number>;
   allTags: string[];
   origins: Record<"manual" | "deterministic" | "semantic_ai", number>;
-  entries: string[];
+  members: CoverageMember[];
   matched: number;
 };
 
+type LibraryScanFilter = {
+  tag?: string;
+  origin?: "manual" | "deterministic" | "semantic_ai";
+};
+
 /**
- * One active-library pass producing the coverage aggregate plus, when a
- * collector is supplied, a page of matching entries and the full match
- * count. Coverage, origins, and members all read from this single walk.
+ * Coverage aggregate plus, when a filter and page are supplied, a page of
+ * matching members and the full match count (#257). A host that exposes the
+ * SQL coverage/member ports answers from grouped queries and one bounded
+ * member read; otherwise the single active-library pass below produces the
+ * same values so fixture hosts and tests behave identically.
  */
 function aggregateLibrary(
   ctx: V2HandlerContext,
-  collector?: LibraryScanCollector,
+  filter?: LibraryScanFilter,
+  page?: { skip: number; limit: number },
 ): LibraryScan {
   const { tags } = extendedOperationsOf(ctx);
+  if (tags.coverage && (!filter || (page && tags.memberPage))) {
+    const coverage = tags.coverage();
+    if (!filter || !page || !tags.memberPage) {
+      return { ...coverage, members: [], matched: 0 };
+    }
+    const result = tags.memberPage({
+      ...(filter.tag ? { tag: filter.tag } : {}),
+      ...(filter.origin ? { origin: filter.origin } : {}),
+      skip: page.skip,
+      limit: page.limit,
+    });
+    return {
+      ...coverage,
+      members: result.members.map((member) => ({
+        fileId: member.fileId,
+        filename: member.filename,
+        tags: member.tags.map((tag) => ({
+          id: tag.id,
+          name: tag.name,
+          origin: tag.origin,
+          confidence: tag.confidence,
+        })),
+      })),
+      matched: result.matched,
+    };
+  }
+
   const tagCounts: Record<string, number> = {};
   const origins = { manual: 0, deterministic: 0, semantic_ai: 0 };
-  const entries: string[] = [];
+  const members: CoverageMember[] = [];
+  const skip = page?.skip ?? 0;
+  const limit = page?.limit ?? 0;
   let matched = 0;
   let total = 0;
   let tagged = 0;
   let cursor: string | null = null;
   do {
-    const page = ctx.operations.library.listPage(cursor, 500);
-    const files = page.files.filter((file) => file.removedAt === null);
+    const batch = ctx.operations.library.listPage(cursor, 500);
+    const files = batch.files.filter((file) => file.removedAt === null);
     const attachments = tags.attachmentsForFiles(files.map((file) => file.id));
     const byFile = new Map<string, V2TagAttachment[]>();
     for (const attachment of attachments) {
@@ -1014,14 +1057,30 @@ function aggregateLibrary(
         seenOrigins.add(attachment.origin);
       }
       for (const origin of seenOrigins) origins[origin as keyof typeof origins] += 1;
-      if (collector?.matches(file, fileAttachments)) {
-        if (matched >= collector.skip && entries.length < collector.limit) {
-          entries.push(collector.serialize(file, fileAttachments));
-        }
-        matched += 1;
+      if (!filter) continue;
+      const matches =
+        (!filter.tag ||
+          fileAttachments.some(
+            (attachment) => attachment.tagName.toLowerCase() === filter.tag!.toLowerCase(),
+          )) &&
+        (!filter.origin ||
+          fileAttachments.some((attachment) => attachment.origin === filter.origin));
+      if (!matches) continue;
+      if (matched >= skip && members.length < limit) {
+        members.push({
+          fileId: file.id,
+          filename: file.filename,
+          tags: fileAttachments.map((attachment) => ({
+            id: attachment.tagId,
+            name: attachment.tagName,
+            origin: attachment.origin,
+            confidence: attachment.confidence,
+          })),
+        });
       }
+      matched += 1;
     }
-    cursor = page.nextCursor;
+    cursor = batch.nextCursor;
   } while (cursor);
   return {
     total,
@@ -1029,7 +1088,7 @@ function aggregateLibrary(
     tags: tagCounts,
     allTags: tags.list().map((tag) => tag.name),
     origins,
-    entries,
+    members,
     matched,
   };
 }
@@ -1115,27 +1174,17 @@ export function runCoverageSummary(ctx: V2HandlerContext) {
   const limit = Math.max(1, Math.min(100, typeof input.limit === "number" ? Math.floor(input.limit) : 50));
   const scan = aggregateLibrary(
     ctx,
-    selectedTag
-      ? {
-          matches: (_file, attachments) =>
-            attachments.some((attachment) => attachment.tagName.toLowerCase() === selectedTag),
-          serialize: (file, attachments) =>
-            JSON.stringify({
-              id: file.id,
-              filename: file.filename,
-              tags: attachments.map((attachment) => ({
-                id: attachment.tagId,
-                name: attachment.tagName,
-                origin: attachment.origin,
-                confidence: attachment.confidence,
-              })),
-            }),
-          skip,
-          limit,
-        }
-      : undefined,
+    selectedTag ? { tag: selectedTag } : undefined,
+    { skip, limit },
   );
   const configuredRules = readRules(ctx);
+  const members = scan.members.map((member) =>
+    JSON.stringify({
+      id: member.fileId,
+      filename: member.filename,
+      tags: member.tags,
+    }),
+  );
   return immediateV2Result({
     summary: JSON.stringify({
       total: scan.total,
@@ -1143,8 +1192,8 @@ export function runCoverageSummary(ctx: V2HandlerContext) {
       tags: scan.tags,
       allTags: scan.allTags,
       origins: scan.origins,
-      members: scan.entries,
-      nextCursor: skip + scan.entries.length < scan.matched ? String(skip + scan.entries.length) : "",
+      members,
+      nextCursor: skip + members.length < scan.matched ? String(skip + members.length) : "",
       configuredRules,
     }),
   });
@@ -1159,28 +1208,23 @@ export function runListOrigins(ctx: V2HandlerContext) {
   const limit = Math.max(1, Math.min(100, typeof input.limit === "number" ? Math.floor(input.limit) : 50));
   const arrivals = latestArrival(ctx);
   const firedByFile = new Map(arrivals?.files.map((file) => [file.id, file.firedRules]) ?? []);
-  const scan = aggregateLibrary(ctx, {
-    matches: (_file, attachments) =>
-      origin === "all" || attachments.some((attachment) => attachment.origin === origin),
-    serialize: (file, attachments) =>
-      JSON.stringify({
-        id: file.id,
-        filename: file.filename,
-        tags: attachments.map((attachment) => ({
-          id: attachment.tagId,
-          name: attachment.tagName,
-          origin: attachment.origin,
-          confidence: attachment.confidence,
-        })),
-        firedRules: firedByFile.get(file.id) ?? [],
-      }),
-    skip,
-    limit,
-  });
+  const scan = aggregateLibrary(
+    ctx,
+    { ...(origin !== "all" ? { origin } : {}) },
+    { skip, limit },
+  );
+  const entries = scan.members.map((member) =>
+    JSON.stringify({
+      id: member.fileId,
+      filename: member.filename,
+      tags: member.tags,
+      firedRules: firedByFile.get(member.fileId) ?? [],
+    }),
+  );
   return immediateV2Result({
     summary: JSON.stringify({ total: scan.total, origins: scan.origins, matching: scan.matched }),
-    entries: scan.entries,
-    nextCursor: skip + scan.entries.length < scan.matched ? String(skip + scan.entries.length) : "",
+    entries,
+    nextCursor: skip + entries.length < scan.matched ? String(skip + entries.length) : "",
   });
 }
 

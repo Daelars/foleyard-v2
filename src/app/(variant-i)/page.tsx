@@ -1,9 +1,9 @@
 // Foleyard's root workspace surface.
 //
 // The app rebuilt with the variant I component library: the same hooks,
-// data, navigation, views, dialogs and workflows as the retired
-// `src/app/prototype/legacy-app/page.tsx`, with route-local presentation
-// adapters rendering the I treatment.
+// data, navigation, views, dialogs and workflows as the retired previous
+// workspace, with route-local presentation adapters rendering the I
+// treatment.
 "use client";
 
 import type { FileRecord } from "../library/types";

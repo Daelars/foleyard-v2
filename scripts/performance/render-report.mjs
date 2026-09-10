@@ -28,11 +28,12 @@ const block=`<!-- BENCHMARK RESULTS START -->
 <section class="panel"><h3>Do the indexes slow down scans?</h3><p>For 10,000 metadata updates, the scratch database took ${ms(s.metadataWrite10000['without-sort-indexes'].median)} with existing indexes, ${ms(s.metadataWrite10000['filename-only'].median)} with the filename index, and ${ms(s.metadataWrite10000['with-sort-indexes'].median)} with both proposed indexes. The duration index has a visible write cost.</p><p>Unchanged-row touches also maintain the new partial indexes because the current SQL rewrites removed_at. With both indexes, limiting a proven-unchanged touch to its timestamps reduced this batch from ${ms(s.touch10000ByIndex['with-sort-indexes'].median)} to ${ms(s.unchangedTouchCandidate.median)}. Pair that change with the browse indexes.</p></section>
 <section class="panel"><h3>Rust verdict: defer the switch</h3><p>The unchanged algorithm in a persistent Node worker took ${ms(r.waveformWorker.elapsedMs.median)} versus ${ms(r.waveformMain.elapsedMs.median)} on the main thread. That is not a substantial throughput win. The specialized TypeScript loop is the stronger result. Rust was not benchmarked, so this does not establish how fast Rust would be.</p><p>Only reconsider a Rust worker after these changes if measured CPU or preview latency still misses your target. Worker event-loop samples here are inconclusive on Windows; idle timer scheduling makes them unsuitable evidence of a responsiveness win.</p></section>
 <h2>What these numbers cover</h2><p class="note">${r.cpu.trim()}, Node ${r.node}, Windows. Three scan rounds; generally five repeats for the other cases. Generated audio and scratch SQLite only, warm OS cache. The PCM experiment handles canonical PCM16 stereo; it is not a replacement for the full parser. Browsing timings exclude HTTP, tags and rendering. Compressed audio was measured separately: one-minute MP3 ${ms(r.compressed.mp3.waveform.elapsedMs.median)}, FLAC ${ms(r.compressed.flac.waveform.elapsedMs.median)}. No cold-disk, network-storage or real-library measurements.</p>
-<p class="note">Run again: <code>npm run bench:performance</code>. Full plan: <code>docs/performance-improvement-plan.md</code>. Raw samples: <code>src/app/prototype/performance/benchmark-results.json</code>.</p>
+<p class="note">Run again: <code>npm run bench:performance</code>. Full plan: <code>docs/performance-improvement-plan.md</code>. Raw samples: <code>benchmarks/performance/benchmark-results.json</code>.</p>
 </div>
 <!-- BENCHMARK RESULTS END -->`;
-const file='src/app/prototype/performance/index.html';
-let html=await readFile(file,'utf8');
+const template='scripts/performance/report-template.html';
+const out='benchmarks/performance/report.html';
+let html=await readFile(template,'utf8');
 html=html.replace(/<!-- BENCHMARK RESULTS START -->[\s\S]*?<!-- BENCHMARK RESULTS END -->\s*/,'');
 html=html.replace('</nav>','</nav>\n'+block);
 if(!html.includes('data-view="results"'))html=html.replace('<nav aria-label="Explore performance" role="tablist">','<nav aria-label="Explore performance"><button aria-selected="false" data-view="results">00 · Measurements &amp; plan</button>');
@@ -43,8 +44,8 @@ html=html.replace('<h1>Where does the time go?</h1>','<h1>Make browsing and prev
 html=html.replace('Fix queueing first. Measure a worker for waveform processing next. A Rust rewrite of file streaming has no supporting measurements yet.','Local benchmarks found gains in cache admission, PCM processing and SQLite queries. Here is the evidence and the TypeScript implementation plan.');
 html=html.replace('No library access, production changes or measured Rust speedup.','Scratch benchmarks and synthetic interaction only. No real-library access, production changes or measured Rust speedup.');
 html=html.replaceAll('aria-selected','aria-pressed');
-await writeFile(file,html);
-await writeFile('src/app/prototype/performance/benchmark-results.json',JSON.stringify(r,null,2));
+await writeFile(out,html);
+await writeFile('benchmarks/performance/benchmark-results.json',JSON.stringify(r,null,2));
 const markdownTable=rows.map(([name,before,after,note])=>`| ${name} | ${ms(before)} | ${ms(after)} | ${ratio(before,after)} | ${note} |`).join('\n');
 const plan=`# TypeScript performance improvement plan
 
@@ -60,7 +61,7 @@ Keep TypeScript. Implement cache admission and PCM loop improvements first, then
 | --- | ---: | ---: | ---: | --- |
 ${markdownTable}
 
-Machine: ${r.cpu.trim()}, ${r.logicalCpus} logical CPUs, Node ${r.node}, ${r.platform}. See [raw samples](../src/app/prototype/performance/benchmark-results.json) and [benchmark instructions](../scripts/performance/README.md). Fixtures and databases remain under the ignored benchmarks/performance directory. The normal library and its settings were never opened.
+Machine: ${r.cpu.trim()}, ${r.logicalCpus} logical CPUs, Node ${r.node}, ${r.platform}. See [raw samples](../benchmarks/performance/benchmark-results.json) and [benchmark instructions](../scripts/performance/README.md). Fixtures and databases remain under the ignored benchmarks/performance directory. The normal library and its settings were never opened.
 
 Three scan rounds of 1,000 generated 0.1-second WAVs produced medians of ${ms(scan('new-index'))} for a new index, ${ms(scan('unchanged'))} unchanged, and ${ms(scan('one-percent-changed'))} with 1% modified. New index means empty SQLite, not cold storage. Metadata-only throughput was ${ms(r.metadataConcurrency['16'].elapsedMs.median)} at concurrency 16, ${ms(r.metadataConcurrency['32'].elapsedMs.median)} at 32, and ${ms(r.metadataConcurrency['64'].elapsedMs.median)} at 64. The small 16-to-32 difference is insufficient to change the default from 16.
 
@@ -132,4 +133,4 @@ Keep source fingerprints and environment details with future runs. Use the exist
 - docs/search.md says /api/files returns the matching count; this checkout returns hasMore and favoritesTotal, with two tag hydration reads. The benchmark's generic count timing is not a measurement of that endpoint's count work.
 `;
 await writeFile('docs/performance-improvement-plan.md',plan);
-console.log('Updated HTML, raw sample snapshot and docs/performance-improvement-plan.md');
+console.log('Updated benchmarks/performance/report.html, raw sample snapshot and docs/performance-improvement-plan.md');

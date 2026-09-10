@@ -2,23 +2,28 @@
 
 > Feature status: shipped
 > Contract: internal
-> Owner: `src/app/page.tsx` + `src/app/library/`
+> Owner: `src/app/(variant-i)/page.tsx` + `src/app/library/`
 > Applies to: docs manifest ID (`architecture/application`); development checkout when unbuilt
 
 ## What it does
 
-The renderer is a Next.js app whose route shell (`src/app/page.tsx`) composes
-dedicated hooks in `src/app/library/` for files, view, selection,
-organization, bulk actions, extension catalog/UI, transport, palette, shelf,
-and settings/scan, plus explicit dialog mounts for the three tool dialogs.
-HTTP routes under `src/app/api/**` are the only server surface; server
-adapters (transport, filesystem boundary, extension services) sit between
-routes and repositories. There is no public SDK and no external loading.
+The renderer is a Next.js app whose root route shell
+(`src/app/(variant-i)/page.tsx`) composes dedicated hooks in
+`src/app/library/` for files, view, selection, organization, bulk actions,
+extension catalog/UI, transport, palette, shelf, and settings/scan, plus
+explicit dialog mounts for the tool dialogs. Presentation comes from the
+Variant I component library (`src/components/variant-i/`) through
+route-local adapters in `src/app/(variant-i)/components/`. The previous
+workspace is parked, dev-only, at `src/app/prototype/legacy-app/page.tsx`
+until its deletion. HTTP routes under `src/app/api/**` are the only server
+surface; server adapters (transport, filesystem boundary, extension
+services) sit between routes and repositories. There is no public SDK and
+no external loading.
 
 ## Responsibilities and boundaries
 
-- `src/app/page.tsx` owns composition only: hook wiring, view memos,
-  dialog mounts. Fetching, polling, and mutation logic live in
+- `src/app/(variant-i)/page.tsx` owns composition only: hook wiring, view
+  memos, dialog mounts. Fetching, polling, and mutation logic live in
   `src/app/library/*` hooks.
 - `src/app/library/` hooks each own one slice: `use-library-files`,
   `use-library-view`, `use-library-organization`, `use-selection`,
@@ -99,7 +104,10 @@ No global store; no EventBus.
 
 ## Source map (real file paths)
 
-- `src/app/page.tsx` — composition shell
+- `src/app/(variant-i)/page.tsx` — root composition shell
+- `src/app/(variant-i)/components/**` — route-local Variant I adapters
+- `src/components/variant-i/**` — canonical component library + styles
+- `src/app/prototype/legacy-app/page.tsx` — parked previous surface (dev-only, slated for deletion)
 - `src/app/library/{use-library-files,use-library-view,use-library-organization,use-selection,use-bulk-actions,use-collections,use-tags,use-favorites,use-shelf,use-transport,use-palette,use-extension-catalog,use-extension-ui,use-settings-scan,dialogs,file-query,refetch-map,types}.ts(x)`
 - `src/app/api/**/route.ts` — HTTP surface
 - `src/app/api/extensions/execute/transport.ts` — transport adapters

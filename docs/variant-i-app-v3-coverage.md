@@ -1,5 +1,11 @@
 # Variant I app-v3 coverage report
 
+> Promotion note (10 September 2026): the surface moved from
+> `/prototype/app-v3` to `/` under `src/app/(variant-i)/`, and the retired
+> pre-variant-I workspace is parked at `/prototype/legacy-app`. See
+> `docs/adr/new-surface-promotion.md`. This report remains the migration
+> and verification record.
+
 Prepared 9 September 2026. Records how `/prototype/app-v3` rebuilds the
 current app (`/`) with the extracted variant I library
 (`src/components/variant-i/`), and how `/prototype/variant-i-library`

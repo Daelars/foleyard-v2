@@ -1,6 +1,9 @@
+// RETIRED — the pre-variant-I workspace, parked under the prototype gate
+// for comparison while the new surface at `/` settles. Slated for deletion
+// with the rest of the old component tree.
 "use client";
 
-import type { FileRecord } from "./library/types";
+import type { FileRecord } from "../../library/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PackagePlus, PanelLeft, Save, Search, X } from "lucide-react";
 import { toast } from "sonner";
@@ -45,23 +48,23 @@ import { IconRail } from "@/components/IconRail";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
-import { useExtensionCatalog } from "./library/use-extension-catalog";
-import { useLibraryFiles } from "./library/use-library-files";
-import { useLibraryOrganization } from "./library/use-library-organization";
-import { useLibraryView } from "./library/use-library-view";
-import { useSelection } from "./library/use-selection";
-import { useBulkActions } from "./library/use-bulk-actions";
-import { useSettingsScan } from "./library/use-settings-scan";
-import { useExtensionUi } from "./library/use-extension-ui";
-import { useTransport } from "./library/use-transport";
-import { usePalette } from "./library/use-palette";
-import { useShelfV2 } from "./library/use-shelf-v2";
+import { useExtensionCatalog } from "../../library/use-extension-catalog";
+import { useLibraryFiles } from "../../library/use-library-files";
+import { useLibraryOrganization } from "../../library/use-library-organization";
+import { useLibraryView } from "../../library/use-library-view";
+import { useSelection } from "../../library/use-selection";
+import { useBulkActions } from "../../library/use-bulk-actions";
+import { useSettingsScan } from "../../library/use-settings-scan";
+import { useExtensionUi } from "../../library/use-extension-ui";
+import { useTransport } from "../../library/use-transport";
+import { usePalette } from "../../library/use-palette";
+import { useShelfV2 } from "../../library/use-shelf-v2";
 import {
   ExtensionDetailsDialog,
   RenameCollectionDialog,
   SaveSearchDialog,
-} from "./library/dialogs";
-import { SCAN_SETTLE_SLICES, type RefetchSlice } from "./library/refetch-map";
+} from "../../library/dialogs";
+import { SCAN_SETTLE_SLICES, type RefetchSlice } from "../../library/refetch-map";
 
 export default function Home() {
   return <HomeContent />;

@@ -1,12 +1,12 @@
-// PROTOTYPE ONLY — `/prototype/app-v3`.
+// Foleyard's root workspace surface.
 //
-// The current app (`/`) rebuilt with the variant I component library: the
-// same hooks, data, navigation, views, dialogs and workflows as
-// `src/app/page.tsx`, with route-local presentation adapters rendering the
-// I treatment. The original app stays untouched for comparison.
+// The app rebuilt with the variant I component library: the same hooks,
+// data, navigation, views, dialogs and workflows as the retired
+// `src/app/prototype/legacy-app/page.tsx`, with route-local presentation
+// adapters rendering the I treatment.
 "use client";
 
-import type { FileRecord } from "../../library/types";
+import type { FileRecord } from "../library/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PackagePlus, PanelLeft, Save, Search, X } from "lucide-react";
 import { toast } from "sonner";
@@ -50,24 +50,24 @@ import { V3SettingsDialog } from "./components/settings/settings-dialog";
 import { V3IconRail } from "./components/rail";
 import { Button, Dialog, DialogTitle, Kbd, VariantIProvider } from "@/components/variant-i";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/extensions/sound-shelf-events";
-import { useExtensionCatalog } from "../../library/use-extension-catalog";
-import { useLibraryFiles } from "../../library/use-library-files";
-import { useLibraryOrganization } from "../../library/use-library-organization";
-import { useLibraryView } from "../../library/use-library-view";
-import { useSelection } from "../../library/use-selection";
-import { useBulkActions } from "../../library/use-bulk-actions";
-import { useSettingsScan } from "../../library/use-settings-scan";
-import { useExtensionUi } from "../../library/use-extension-ui";
-import { useTransport } from "../../library/use-transport";
-import { usePalette } from "../../library/use-palette";
-import { useShelfV2 as useShelf } from "../../library/use-shelf-v2";
+import { useExtensionCatalog } from "../library/use-extension-catalog";
+import { useLibraryFiles } from "../library/use-library-files";
+import { useLibraryOrganization } from "../library/use-library-organization";
+import { useLibraryView } from "../library/use-library-view";
+import { useSelection } from "../library/use-selection";
+import { useBulkActions } from "../library/use-bulk-actions";
+import { useSettingsScan } from "../library/use-settings-scan";
+import { useExtensionUi } from "../library/use-extension-ui";
+import { useTransport } from "../library/use-transport";
+import { usePalette } from "../library/use-palette";
+import { useShelfV2 as useShelf } from "../library/use-shelf-v2";
 import {
   V3ExtensionDetailsDialog,
   V3RenameCollectionDialog,
   V3SaveSearchDialog,
   V3SimilarSoundsDialog,
 } from "./components/dialogs";
-import { SCAN_SETTLE_SLICES, type RefetchSlice } from "../../library/refetch-map";
+import { SCAN_SETTLE_SLICES, type RefetchSlice } from "../library/refetch-map";
 
 export default function AppV3() {
   return <AppV3Content />;
@@ -604,9 +604,6 @@ function AppV3Content() {
 
   return (
     <VariantIProvider className="relative flex h-full flex-col overflow-hidden bg-canvas font-sans">
-      <p className="shrink-0 border-b border-white/10 bg-black/40 px-4 py-1.5 text-center font-mono text-[11px] text-accent-text">
-        PROTOTYPE — app-v3 renders the current app with the variant I component library.
-      </p>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--accent-fill)_13%,transparent),transparent_38%),radial-gradient(circle_at_bottom_right,color-mix(in_oklab,var(--accent-fill)_6%,transparent),transparent_40%)]" />
       <div className="relative flex min-h-0 flex-1">
 

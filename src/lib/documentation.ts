@@ -44,6 +44,7 @@ export const DOCUMENT_REGISTRY: DocumentEntry[] = [
   { id: "architecture/yard-core", relativePath: "docs/architecture/yard-core.md", status: "current", title: "yard-core architecture" },
   { id: "architecture/extensions", relativePath: "docs/architecture/extensions.md", status: "current", title: "Extension architecture" },
   { id: "adr/filesystem-access", relativePath: "docs/adr/filesystem-access.md", status: "current", title: "Filesystem access ADR" },
+  { id: "adr/new-surface-promotion", relativePath: "docs/adr/new-surface-promotion.md", status: "current", title: "New surface promotion ADR" },
   { id: "readme", relativePath: "README.md", status: "current", title: "Product overview" },
 ];
 

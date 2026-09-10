@@ -210,6 +210,12 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
 
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_filename ON files(filename)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_active_filename_id ON files(filename, id) WHERE removed_at IS NULL`);
+  // Duration order including NULL placement (#255): non-null durations first
+  // ascending (NULLS LAST) and last descending (NULLS FIRST). Tiebreakers
+  // follow the duration direction so both directions are index-only.
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_active_duration ON files(duration, filename, id) WHERE removed_at IS NULL`);
+  // Library-root plus directory lookups and the distinct-directory scan (#255).
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_active_root_directory ON files(library_root, directory) WHERE removed_at IS NULL`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_removed_at ON files(removed_at)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_is_favorite ON files(is_favorite)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_directory ON files(directory)`);

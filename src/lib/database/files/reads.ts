@@ -96,14 +96,12 @@ function buildFileOrderBy(options: FileSearchQuery) {
   const descending = options.sortDir === "desc";
 
   if (options.sortKey === "duration") {
-    return [
-      descending
-        ? sql`${schema.files.duration} IS NULL DESC`
-        : sql`${schema.files.duration} IS NULL ASC`,
-      descending ? desc(schema.files.duration) : asc(schema.files.duration),
-      asc(schema.files.filename),
-      asc(schema.files.id),
-    ];
+    // NULLS LAST/FIRST matches the previous `duration IS NULL` expression and
+    // is index-supported by idx_files_active_duration (#255). The tiebreakers
+    // follow the duration direction so a reverse index scan satisfies both.
+    return descending
+      ? [sql`${schema.files.duration} DESC NULLS FIRST`, desc(schema.files.filename), desc(schema.files.id)]
+      : [sql`${schema.files.duration} ASC NULLS LAST`, asc(schema.files.filename), asc(schema.files.id)];
   }
 
   return [

@@ -50,11 +50,22 @@ temp-sorting. Pinned by
 reports `extensionLibrarySweep` active versus including-removed over the
 100k fixture.
 
-Still deferred (item 5/6 of the original sequence): the duration index
-(write-cost tradeoff needs a realistic import benchmark), cursor
-pagination (indexed pages are now ~3 ms; contract/client change not
-justified by these numbers), workers and Rust (the specialized loop
-delivered the measured gain without them).
+**Browse indexes (added with #255)** — two partial indexes land with
+the schema: `idx_files_active_duration (duration, filename, id) WHERE
+removed_at IS NULL` serves duration order in both directions with the
+query's null placement (`NULLS LAST` ascending, `NULLS FIRST`
+descending), and `idx_files_active_root_directory (library_root,
+directory) WHERE removed_at IS NULL` serves directory filters and the
+distinct-directory scan. Pinned by
+`src/test/integration/browse-indexes.test.ts`; the benchmark reports
+`durationIndex` and `directoryBrowse` plans and timings. Both indexes
+are partial over active rows, so scans pay write cost only for rows
+that remain active; the harness scan-stage numbers monitor the change.
+
+Still deferred (item 5/6 of the original sequence): cursor pagination
+(indexed pages are now ~3 ms; contract/client change not justified by
+these numbers), workers and Rust (the specialized loop delivered the
+measured gain without them).
 
 ## Decision
 

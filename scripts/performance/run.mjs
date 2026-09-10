@@ -151,8 +151,8 @@ async function main() {
   console.log('Waveforms and cache complete. Measuring 100k-row browsing.');await save();
   const {sqlite}=createDatabaseConnection(path.join(root,'queries.sqlite'));
   const repository=new SqliteAudioFileRepository(sqlite);
-  const insert=sqlite.prepare('INSERT INTO files(id,path,filename,library_root,format,duration,mtime_ms) VALUES(?,?,?,?,?,?,?)');
-  sqlite.transaction(()=>{for(let i=0;i<100000;i++)insert.run(String(i).padStart(8,'0'),`/fixture/${i}.wav`,`clip-${String((i*7919)%100000).padStart(8,'0')}.wav`,'/fixture','wav',i%300,1);})();
+  const insert=sqlite.prepare('INSERT INTO files(id,path,filename,library_root,directory,format,duration,mtime_ms) VALUES(?,?,?,?,?,?,?,?)');
+  sqlite.transaction(()=>{for(let i=0;i<100000;i++)insert.run(String(i).padStart(8,'0'),`/fixture/dir${i%50}/${i}.wav`,`clip-${String((i*7919)%100000).padStart(8,'0')}.wav`,'/fixture',`/dir${i%50}`,'wav',i%300,1);})();
   const queries={ first:{limit:100,offset:0},deep:{limit:100,offset:90000},search:{limit:100,query:'123'},duration:{limit:100,sortKey:'duration',sortDir:'asc'} };
   const expected=Object.fromEntries(Object.entries(queries).map(([name,options])=>[name,repository.getFiles(options).map(f=>f.id)]));
   report.queries={};
@@ -185,6 +185,24 @@ async function main() {
   report.extensionLibrarySweep.plans={
     active:sqlite.prepare('EXPLAIN QUERY PLAN SELECT id,filename FROM files WHERE removed_at IS NULL ORDER BY filename ASC,id ASC LIMIT 500').all(),
     includingRemoved:sqlite.prepare('EXPLAIN QUERY PLAN SELECT id,filename FROM files ORDER BY filename ASC,id ASC LIMIT 500').all(),
+  };
+  // Browse indexes (#255): the schema's partial indexes serve duration order
+  // (both directions, null placement included) and the distinct-directory
+  // scan without temp sorts. The `composite-index` stage above measured the
+  // pre-#255 plan and stays in the report as the baseline.
+  const durationAsc=sqlite.prepare(`SELECT ${columns} FROM files WHERE removed_at IS NULL ORDER BY duration ASC NULLS LAST,filename ASC,id ASC LIMIT 100`);
+  const durationDesc=sqlite.prepare(`SELECT ${columns} FROM files WHERE removed_at IS NULL ORDER BY duration DESC NULLS FIRST,filename DESC,id DESC LIMIT 100`);
+  assert.deepEqual(durationAsc.all().map(f=>f.id),expected.duration);
+  assert.deepEqual(durationDesc.all().map(f=>f.id),[...expected.duration].reverse());
+  report.queries.durationIndex={
+    asc:{plan:sqlite.prepare(`EXPLAIN QUERY PLAN ${durationAsc.source}`).all(),ms:await repeat(()=>durationAsc.all())},
+    desc:{plan:sqlite.prepare(`EXPLAIN QUERY PLAN ${durationDesc.source}`).all(),ms:await repeat(()=>durationDesc.all())},
+  };
+  const directoryDistinct=sqlite.prepare(`SELECT DISTINCT directory FROM files WHERE library_root = '/fixture' AND directory IS NOT NULL AND removed_at IS NULL`);
+  report.queries.directoryBrowse={
+    plan:sqlite.prepare(`EXPLAIN QUERY PLAN ${directoryDistinct.source}`).all(),
+    rows:directoryDistinct.all().length,
+    ms:await repeat(()=>directoryDistinct.all()),
   };
   sqlite.close();await save();
   await writeFile('benchmarks/performance/latest.json',JSON.stringify(report,null,2));

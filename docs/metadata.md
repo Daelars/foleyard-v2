@@ -64,9 +64,8 @@ persists results through the file repository writes.
 
 ## Examples
 
-There is no `examples/` directory in this repo. No runnable example covers
-metadata extraction; `core/query-library` reads post-extraction state
-against the checkout.
+No runnable example covers metadata extraction; `core/query-library`
+reads post-extraction state against the checkout.
 
 ## Related documentation
 

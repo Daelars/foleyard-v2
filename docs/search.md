@@ -72,8 +72,8 @@ route also returns the matching count (`getFileCount`) for pagination UI.
 
 ## Examples
 
-There is no `examples/` directory in this repo. The runnable-in-repository
-example `core/query-library` exercises a library query against the checkout.
+The runnable-in-repository example `core/query-library` exercises a
+library query against the checkout.
 
 ## Related documentation
 

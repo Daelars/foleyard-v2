@@ -11,7 +11,7 @@ This repository uses a multi-context domain layout.
 
 `CONTEXT-MAP.md` at the repository root links these contexts.
 
-System-wide decisions live under `docs/adr/`. Context-specific decisions live under `<context>/docs/adr/`.
+System-wide decisions live under `docs/adr/`; this repository keeps ADRs for every context there rather than under the context package.
 
 Before changing an area, read its context document and relevant ADRs. Use the glossary's terms in issue titles, specs, tests, and implementation. If a needed term is missing, record the gap for `$domain-modeling`.
 

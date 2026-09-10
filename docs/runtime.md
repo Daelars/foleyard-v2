@@ -26,7 +26,7 @@ are ever included.
 - `electron/main/runtime-info.cjs` (`getDesktopIdentity`) owns desktop
   identity: platform, packaged state, app version, Next BUILD_ID,
   resources/docs paths, installed channels.
-- `src/components/settings/about-tab.tsx` (`handleExportRuntimeInfo`) owns
+- `src/app/(variant-i)/components/settings/about-tab.tsx` (`handleExportRuntimeInfo`) owns
   the user-invoked export: fetches `/api/runtime`, appends desktop info, and
   downloads `foleyard-runtime-info.json`.
 - The renderer is never observed server-side: renderer capabilities report
@@ -103,7 +103,7 @@ only the exported snapshot (plus desktop identity) describes the running app.
 - `electron/main/ipc.cjs` — `desktop:get-runtime-info` handler
 - `electron/preload.cjs` — `getRuntimeInfo` bridge method
 - `src/lib/desktop.ts` — bridge types
-- `src/components/settings/about-tab.tsx` — export action
+- `src/app/(variant-i)/components/settings/about-tab.tsx` — export action
 - `src/lib/documentation.ts` — docs location section
 
 ## Examples

@@ -85,6 +85,7 @@ the absolute path under the docs root, and reads it as UTF-8.
 | Commands | `commands` | current |
 | Events | `events` | current |
 | Runtime introspection | `runtime` | current |
+| Expected failures | `expected-failures` | current |
 | Application architecture | `architecture/application` | current |
 | Desktop architecture | `architecture/desktop` | current |
 | yard-core architecture | `architecture/yard-core` | current |

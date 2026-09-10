@@ -38,8 +38,6 @@ commandId, selection, input }`:
    (sound-shelf, folder-janitor, smart-collections, make-pack,
    drop-rules, library-gatherer, auto-tag). Registration never
    enables and never approves.
-   Dev fixtures register only with `FOLEYARD_V2_DEV_FIXTURES=1`
-   outside production.
 2. **Transport.** The codec validates the envelope and limits (256
    KiB body, 64 KiB input, 500 IDs), resolves ownership before
    hydration, and returns `{ ok, error }` with the documented status
@@ -66,8 +64,7 @@ Module dependency direction (enforced by
 `node scripts/check-v2-boundaries.cjs` in CI): definitions →
 registry → catalog/availability → host → operations → jobs/plans;
 application adapters sit above core and below routes/components;
-tool packages import `yard-core` and relatives only. Diagrams live
-in `public/extension-system-v2.html`.
+tool packages import `yard-core` and relatives only.
 
 ## Contracts
 
@@ -118,4 +115,4 @@ curl '/api/extensions-v2/jobs'
 - `docs/commands.md` — command inventory and failure codes
 - `docs/architecture/yard-core.md` — contracts underneath
 - `docs/architecture/application.md` — routes and state ownership
-- `public/extension-system-v2.html` — lifecycle diagrams
+- `docs/extensions-v2-migration.md` — v1 retirement record

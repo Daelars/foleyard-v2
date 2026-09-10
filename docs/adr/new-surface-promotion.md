@@ -3,24 +3,19 @@
 The workspace surface was rebuilt component-for-component with the Variant I
 component library (`src/components/variant-i/`) and verified against the
 previous app with real library data, a live desktop session, and
-fixed-viewport visual evidence (see `docs/variant-i-app-v3-coverage.md`).
+fixed-viewport visual evidence (the coverage record is archived in the
+`Daelars/foleyard-archive` checkout).
 The rebuilt surface now serves `/` from `src/app/(variant-i)/page.tsx`, with
 route-local presentation adapters in `src/app/(variant-i)/components/` and
 the library stylesheet owned by `src/components/variant-i/styles.css`.
 
-The previous workspace is parked under the prototype gate at
-`/prototype/legacy-app` (`src/app/prototype/legacy-app/page.tsx`) for one
-comparison window. It remains dev-only, resolves to not-found in packaged
-builds, and is deleted with the rest of the retired component tree. The
-prototype gate and packaging exclusions are unchanged.
+The previous workspace and its component tree were deleted after the
+comparison window; the promoted surface is the only product surface.
 
 Consequences:
 
 - Variant I is the canonical component language. New work targets the root
-  surface and the library; fixes are not double-landed on the parked page.
-- Theme lint and the component rules now apply to the promoted files.
-- The retired page and the old component tree remain compilable until their
-  deletion ticket, so the comparison route keeps rendering during the
-  window.
-- Component-library and variant-i-library prototypes remain as reference
-  specimens until the retirement cleanup.
+  surface and the library.
+- Theme lint and the component rules apply to the promoted files.
+- The component-library prototype remains as a reference specimen under
+  `src/app/prototype/**`, dev-only and excluded from packaged builds.

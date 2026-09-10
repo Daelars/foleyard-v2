@@ -22,7 +22,7 @@ peak waveform generated locally with FFmpeg.
 
 ## Runtime behavior
 
-`AudioPlayer` composes `player-shell.tsx` with `use-audio-element.ts`
+`AudioPlayer` composes `player.tsx` with `use-audio-element.ts`
 (element lifecycle), `use-audio-playback.ts` (play/pause/seek state),
 `use-transport-queue.ts` + `transport-queue.ts` (queue order),
 `use-waveform-peaks.ts` (peak fetching via `src/lib/client-waveform.ts`),
@@ -34,7 +34,7 @@ serves `Range` bytes (`parseByteRange`, suffix ranges supported, 206
 partial / 200 full) with the per-extension MIME map, and — as a side
 effect — records the file as a recent Make Pack candidate
 (`recordRecentMakePackFile` in
-`src/lib/extensions/make-pack-recent-store.ts`).
+`src/lib/extensions-v2/recent-source-store.ts`).
 `GET /api/waveform?id=…&peaks=N` (N in 32–512, default 180) resolves the
 same way, calls `getWaveformPeaks` (`src/lib/waveform-cache.ts`), decodes
 via `src/lib/waveform-decoder.ts`, generates with FFmpeg
@@ -77,7 +77,7 @@ must not be read as a playback guarantee for every browser.
 
 ## Source map (real file paths)
 
-- `src/components/AudioPlayer/player-shell.tsx`, `use-audio-element.ts`,
+- `src/app/(variant-i)/components/player.tsx`, `use-audio-element.ts`,
   `use-audio-playback.ts`, `use-transport-queue.ts`, `transport-queue.ts`,
   `use-waveform-peaks.ts`, `use-volume-preferences.ts`, `volume-control.tsx`,
   `favorite-button.tsx`, `collection-menu.tsx`, `types.ts`
@@ -87,13 +87,12 @@ must not be read as a playback guarantee for every browser.
   `src/lib/waveform-decoder.ts`, `src/lib/client-waveform.ts` — cache, FFmpeg
   generation, decoding, client fetch
 - `packages/yard-core/src/services/library/scan-types.ts` — `SUPPORTED_AUDIO_EXTENSIONS`
-- `src/lib/extensions/make-pack-recent-store.ts` — recent side effect store
+- `src/lib/extensions-v2/recent-source-store.ts` — recent side effect store
 
 ## Examples
 
-There is no `examples/` directory in this repo. No runnable example covers
-playback; peaks can be inspected via `GET /api/waveform?id=<id>` in a
-development checkout.
+No runnable example covers playback; peaks can be inspected via
+`GET /api/waveform?id=<id>` in a development checkout.
 
 ## Related documentation
 

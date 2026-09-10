@@ -59,8 +59,8 @@ phases:
   file list (#137).
 - I03 (expected-to-fail): order-dependent root ownership — overlapping
   roots attribute files by scan order (#139).
-- Extension-host transport caps scans at 5,000 files silently (finding
-  B06, expected-to-fail).
+- The old 5,000-file transport cap (finding B06, #138) is fixed; a large
+  scan is no longer silently truncated.
 
 ## Source map (real file paths)
 
@@ -79,8 +79,8 @@ phases:
 
 ## Examples
 
-There is no `examples/` directory in this repo. No runnable example covers
-scanning; `core/query-library` queries post-scan state against the checkout.
+No runnable example covers scanning; `core/query-library` queries
+post-scan state against the checkout.
 
 ## Related documentation
 

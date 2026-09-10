@@ -1,17 +1,17 @@
-# Bundled extensions
+# Bundled extensions (retired v1 shape)
 
-> Feature status: shipped
+> Feature status: historical — records the retired v1 engine, not current behaviour
 > Contract: internal
-> Owner: `src/lib/extensions/registry.ts` + `packages/yard-tools/*/src/manifest.ts`
-> Applies to: docs manifest ID (`extensions`); development checkout when unbuilt
+> Owner: none; the v1 sources were deleted (see `docs/extensions-v2-migration.md`)
+> Applies to: docs manifest ID (`extensions`); historical reference only
 
 ## What it does
 
 No v1 tools remain: all six bundled tools retired from v1 to their v2
-ports (see `docs/extensions-v2-migration.md`). The v1 registration table
-(`src/lib/extensions/registry.ts`) is empty, the execute route fails
-closed on every id (404), and the catalog projections return no entries.
-This document records the retired v1 shape; the live system is v2
+ports (see `docs/extensions-v2-migration.md`). The v1 sources named below
+were deleted with the retirement; this document records the retired shape
+for the record. The execute route fails closed (404) and the catalog
+projections return no v1 entries. The live system is v2
 (`docs/extensions-v2.md`).
 
 Retirement order: Smart Collections and Make Pack first, then Drop Rules
@@ -27,14 +27,15 @@ third-party code loader — "bundled" is the only source.
 - `packages/yard-tools/<tool>/src/` owns `manifest.ts`,
   `command-definitions.ts`, `commands.ts`, `permissions.ts`, `settings.ts`,
   `service.ts`, `types.ts`. Tools depend on `yard-core` contracts only.
-- `src/lib/extensions/registry.ts` owns the static six-entry registration
-  table (`registerAllExtensions`, idempotent) and the settings-grid
-  projection (`toGridItem`).
-- `src/lib/extensions/catalog.ts` owns the JSON-safe catalog projection
-  (`projectCatalogEntry`, `?view=catalog`).
-- `src/lib/extensions/host.ts` owns host construction with guarded services.
-- `packages/yard-core` owns the vocabulary, registries, context, and host.
-  API version is `YARD_EXTENSION_API_VERSION = 1`, standing `internal`.
+- `src/lib/extensions/registry.ts` (deleted) owned the static six-entry
+  registration table (`registerAllExtensions`, idempotent) and the
+  settings-grid projection (`toGridItem`).
+- `src/lib/extensions/catalog.ts` (deleted) owned the JSON-safe catalog
+  projection (`projectCatalogEntry`, `?view=catalog`).
+- `src/lib/extensions/host.ts` (deleted) owned host construction with
+  guarded services.
+- `packages/yard-core` owned the vocabulary, registries, context, and host.
+  API version was `YARD_EXTENSION_API_VERSION = 1`, standing `internal`.
 
 ## Runtime behavior
 
@@ -92,7 +93,7 @@ Nothing here changes meaning: the table above stays the complete
 
 - Internal, API version 1: `YardExtensionManifest`, `YardCommand`,
   `YardPermission`, `YardSetting`, `YardSurface`, `YardExtensionDefinition`
-  (`packages/yard-core/src/extensions/vocabulary.ts`).
+  (formerly `packages/yard-core/src/extensions/vocabulary.ts`, deleted).
 - Catalog entries are JSON-safe by construction; `assertSerializableCatalog`
   throws on function leakage.
 - `permissionModel: "host-enforced"` is reported on catalog/runtime entries.
@@ -109,39 +110,24 @@ Nothing here changes meaning: the table above stays the complete
 - `sidebar.panel` surfaces do not mount panels generically; sidebar/shelf UI
   is explicit app wiring.
 
-## Source map (real file paths)
+## Source map (historical)
 
-- `packages/yard-tools/*-v2/src/{definition,handlers}.ts` — the live v2 ports
-- `packages/yard-core/src/extensions/{vocabulary,extension-registry,extension-command-registry,extension-context,extension-host}.ts`
-- `src/lib/extensions/{registry,runtime,host,catalog,settings-store,kv-store}.ts`
-- `src/lib/extensions/ui-contributions.ts` — extension points + context-menu adapter
-- `src/app/api/extensions/route.ts` — grid, catalog, enable/setting PATCH
-- `src/app/api/extensions/execute/{route,transport}.ts` — execution + envelope validation
+The v1 sources this document recorded (`packages/yard-core/src/extensions/*`,
+`src/lib/extensions/*`, `src/app/api/extensions/*`) were deleted with the
+retirement and are recoverable from git history and the
+`Daelars/foleyard-archive` checkout. The live v2 sources are mapped in
+`docs/extensions-v2.md`.
 
 ## Examples
 
-List the catalog projection (empty since full retirement):
-
-```bash
-curl '/api/extensions?view=catalog' | jq '.extensions[].id'
-```
-
-Toggle a v2 tool on:
-
-```bash
-curl -X PATCH /api/extensions-v2/extensions/sound-shelf-v2 \
-  -H 'Content-Type: application/json' \
-  -d '{"enabled":true}'
-```
-
-There is no `examples/` gap: the runnable-in-repository examples are
-`extensions/selected-ids`, `core/query-library`, and
-`extensions-v2/minimal` (see `docs/index.md`).
+The v1 catalog and execute routes are gone; the calls this guide used to
+show now 404. Use the v2 routes in `docs/extensions-v2.md` and the
+`extensions-v2/minimal` runnable example.
 
 ## Related documentation
 
-- `docs/commands.md` — the retired-command table and execution model
+- `docs/extensions-v2.md` — the live extension API
+- `docs/extensions-v2-migration.md` — the retirement record
 - `docs/settings.md` — setting storage, validation, renderer prefs
 - `docs/events.md` — what is (and is not) an event
-- `docs/architecture/extensions.md` — registration → UI trace, v1 and v2
-- `docs/runtime.md` — v1/v2 identity side by side in the snapshot
+- `docs/architecture/extensions.md` — registration → UI trace

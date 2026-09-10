@@ -33,7 +33,7 @@ Contracts live here; adapters live in the app:
 
 ## Runtime behavior
 
-Barrel (`src/index.ts`) re-exports: `domain/*`, the v2 extension API
+Barrel (`packages/yard-core/src/index.ts`) re-exports: `domain/*`, the v2 extension API
 (`extensions-v2/*`), `errors/yard-core-error`, `repositories/*`,
 `services/library/*`, `services/organization/*`,
 `services/search/filter-service`, filename helpers (`sanitizeFilename`,

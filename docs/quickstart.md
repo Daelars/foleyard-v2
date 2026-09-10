@@ -62,10 +62,10 @@ and tags. Each step links to the guide that documents it in full.
 ## Source map (real file paths)
 
 - `src/app/library/use-library-view.ts` — library view coordination
-- `src/app/library/use-library-files.ts` — file list loading (largest unexecuted file, 252 stmts)
+- `src/app/library/use-library-files.ts` — file list loading
 - `src/app/library/use-settings-scan.ts` — settings scan controls
 - `src/hooks/use-scan-polling.ts` — 2 s scan polling
-- `src/components/AudioPlayer/player-shell.tsx` — player composition
+- `src/app/(variant-i)/components/player.tsx` — player composition
 
 ## Examples
 
@@ -75,9 +75,8 @@ There is no extension authoring in this path (see
 loop above works, Make Pack v2 is worth a look: Settings,
 Extensions, enable it, approve its permissions, and pack a few
 sounds (see `docs/extensions-v2-make-pack.md`). The runnable-in-repository
-examples are `extensions/selected-ids`, `core/query-library`, and
-`extensions-v2/minimal` (reported by `getDocumentationLocation()`);
-all three run against the checkout.
+examples are `core/query-library` and `extensions-v2/minimal` (reported
+by `getDocumentationLocation()`); both run against the checkout.
 
 ## Related documentation
 

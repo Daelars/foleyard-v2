@@ -8,8 +8,9 @@
 ## What it does
 
 Defines the contributor loop: install, run, check, test, cover, and build
-the app, with fixture-isolated tests and two pinned ledgers
-(`docs/expected-failures.md`, `docs/test-coverage-baseline.md`).
+the app, with fixture-isolated tests, the expected-failures ledger
+(`docs/expected-failures.md`) and the coverage thresholds in
+`vitest.config.ts`.
 
 ## Responsibilities and boundaries
 
@@ -95,11 +96,9 @@ B05 (header-only first parse), B06 (silent 5,000-file scan cap), B08
 service permissions via `guardHostServices`), E04 (drop-rules write with
 no writable path).
 
-Coverage baseline (`docs/test-coverage-baseline.md`, measured 5 Sep 2026 on
-`feat/123-coverage-baseline`): 37.77% statements, 31.94% branches, 34.65%
-functions, 38.58% lines; 71 files, 413 tests passing. 96 of 225 reported
-files are wholly unexecuted (1,981 statements), led by
-`src/app/library/use-library-files.ts` (252 statements).
+The September 2026 coverage snapshot and target-shape plan moved to the
+`Daelars/foleyard-archive` checkout. The live suite, `vitest.config.ts`
+thresholds and `bun run test:coverage` are the source of truth.
 
 ## Source map (real file paths)
 
@@ -113,12 +112,10 @@ files are wholly unexecuted (1,981 statements), led by
 
 ## Examples
 
-The runnable-in-repository examples are `extensions/selected-ids`,
-`core/query-library`, and `extensions-v2/minimal`.
+The runnable-in-repository examples are `core/query-library` and
+`extensions-v2/minimal`.
 
 ## Related documentation
 
 - `RELEASE.md` — local desktop build, release prepare/publish, auto-update requirements
-- `docs/expected-failures.md` — the 12-entry ledger this guide summarizes
-- `docs/test-coverage-baseline.md` — measured baseline, unexecuted files, re-measure command
-- `docs/test-suite-target-shape.md` — intended suite shape
+- `docs/expected-failures.md` — the 8-entry ledger this guide summarizes

@@ -205,9 +205,9 @@ node scripts/scaffold-extension-v2.cjs --name my-tool
 bunx vitest run packages/yard-tools/my-tool --no-coverage
 ```
 
-Expected: the scaffold writes `package.json`, `src/definition.ts`,
-`src/handlers.ts`, `src/index.ts`, a vitest suite, and a README;
-the generated suite passes 3/3. The definition holds one global
+Expected: the scaffold writes the package files (`package.json`,
+`src/definition.ts`, `src/handlers.ts`, `src/index.ts`), a vitest
+suite, and a README; the generated suite passes 3/3. The definition holds one global
 command (`my-tool.describe`), one setting, and palette plus settings
 contributions. Remove the directory when done experimenting; bundled
 packages register through explicit static registration (see above),

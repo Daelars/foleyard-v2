@@ -14,11 +14,10 @@ extension catalog/UI, transport, palette, shelf, and settings/scan, plus
 explicit dialog mounts for the tool dialogs. Presentation comes from the
 Variant I component library (`src/components/variant-i/`) through
 route-local adapters in `src/app/(variant-i)/components/`. The previous
-workspace is parked, dev-only, at `src/app/prototype/legacy-app/page.tsx`
-until its deletion. HTTP routes under `src/app/api/**` are the only server
-surface; server adapters (transport, filesystem boundary, extension
-services) sit between routes and repositories. There is no public SDK and
-no external loading.
+workspace was deleted, so this surface is the only one. HTTP routes under
+`src/app/api/**` are the only server surface; server adapters (transport,
+filesystem boundary, extension services) sit between routes and
+repositories. There is no public SDK and no external loading.
 
 ## Responsibilities and boundaries
 
@@ -106,8 +105,7 @@ open/close state. No global store; no EventBus.
 - `src/app/(variant-i)/page.tsx` — root composition shell
 - `src/app/(variant-i)/components/**` — route-local Variant I adapters
 - `src/components/variant-i/**` — canonical component library + styles
-- `src/app/prototype/legacy-app/page.tsx` — parked previous surface (dev-only, slated for deletion)
-- `src/app/library/{use-library-files,use-library-view,use-library-organization,use-selection,use-bulk-actions,use-collections,use-tags,use-favorites,use-shelf,use-transport,use-palette,use-extension-catalog,use-extension-ui,use-settings-scan,dialogs,file-query,refetch-map,types}.ts(x)`
+- `src/app/library/{use-library-files,use-library-view,use-library-organization,use-collections,use-tags,use-favorites,use-selection,use-bulk-actions,use-shelf-v2,use-transport,use-palette,use-extension-ui,use-settings-scan,smart-collection-counts,file-query,refetch-map,types}.ts(x)`
 - `src/app/api/**/route.ts` — HTTP surface
 - `src/lib/filesystem-boundary.ts` — path authorization
 - `src/lib/db.ts` — service composition + repository wiring

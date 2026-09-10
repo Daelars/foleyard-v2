@@ -84,9 +84,8 @@ its save-search replaces the retired v1 tool.
 
 ## Examples
 
-There is no `examples/` directory in this repo. The runnable-in-repository
-example `extensions/selected-ids` passes selected file IDs to an extension
-command against the checkout.
+No runnable example covers Collections; the v2 extension examples live
+under `examples/extensions-v2/`.
 
 ## Related documentation
 

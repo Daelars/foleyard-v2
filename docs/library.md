@@ -33,8 +33,8 @@ Browsing reads through `src/lib/database/files/reads.ts` (Drizzle),
 filtered by query, favorites, Collection, tag, directory, and library
 root, with pagination. Removal is soft by default (`removedAt` set);
 permanent delete unlinks the file (see `docs/filesystem.md`) and marks it
-removed. The `use-library-files.ts` hook (252 statements, largest
-unexecuted file) loads and coordinates the file list on the client.
+removed. The `use-library-files.ts` hook loads and coordinates the file
+list on the client.
 
 ## Contracts
 
@@ -73,8 +73,9 @@ unexecuted file) loads and coordinates the file list on the client.
 
 ## Examples
 
-There is no `examples/` directory in this repo. The runnable-in-repository
-example `core/query-library` exercises a library query against the checkout.
+The runnable-in-repository example `core/query-library` exercises a
+library query against the checkout; `examples/extensions-v2/minimal`
+covers extension authoring instead.
 
 ## Related documentation
 

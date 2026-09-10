@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import type { AudioFile, IndexedAudioFile, FileSearchQuery, TagOrigin } from "@yard-core";
 import { normalizeDirectoryPath } from "@yard-core";
+import { decodeFileCursor, fileKeysetFilter } from "../file-cursor";
 import { filenameSearch } from "../filename-search";
 import { chunkArray, SQLITE_MAX_VARIABLES } from "../sql-parameters";
 import * as schema from "@/lib/schema";
@@ -27,7 +28,7 @@ function tagOriginSubselect(context: FileRepositoryContext, origin: TagOrigin) {
 }
 
 function buildCollectionFilters(context: FileRepositoryContext, options: FileSearchQuery) {
-  const { collectionId, tagId, showRemoved } = options;
+  const { collectionId, tagId, showRemoved, cursor } = options;
   const collectionFilters = [eq(schema.fileCollections.collectionId, collectionId as string)];
 
   if (tagId) {
@@ -38,12 +39,32 @@ function buildCollectionFilters(context: FileRepositoryContext, options: FileSea
     collectionFilters.push(isNull(schema.files.removedAt));
   }
 
+  if (cursor) {
+    const decoded = decodeFileCursor(cursor);
+    const expectedKey = options.sortKey ?? "filename";
+    const expectedDir = options.sortDir === "desc" ? -1 : 1;
+    if (!decoded || decoded.key !== expectedKey || decoded.dir !== expectedDir) {
+      throw new Error("Invalid file cursor for this ordering.");
+    }
+    collectionFilters.push(fileKeysetFilter(decoded));
+  }
+
   return collectionFilters;
 }
 
 function buildFileFilters(context: FileRepositoryContext, options: FileSearchQuery) {
-  const { query, favorites, directory, libraryRoot, atLibraryRoot, tagId, tagOrigin, showRemoved } = options;
+  const { query, favorites, directory, libraryRoot, atLibraryRoot, tagId, tagOrigin, showRemoved, cursor } = options;
   const filters = [];
+
+  if (cursor) {
+    const decoded = decodeFileCursor(cursor);
+    const expectedKey = options.sortKey ?? "filename";
+    const expectedDir = options.sortDir === "desc" ? -1 : 1;
+    if (!decoded || decoded.key !== expectedKey || decoded.dir !== expectedDir) {
+      throw new Error("Invalid file cursor for this ordering.");
+    }
+    filters.push(fileKeysetFilter(decoded));
+  }
 
   if (!showRemoved) {
     filters.push(isNull(schema.files.removedAt));
@@ -126,11 +147,19 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
       offset = 0,
       sortKey,
       sortDir,
+      cursor,
     } = options ?? {};
     const orderBy = buildFileOrderBy({ sortKey, sortDir });
 
     if (collectionId) {
-      const collectionFilters = buildCollectionFilters(context, { collectionId, tagId, showRemoved });
+      const collectionFilters = buildCollectionFilters(context, {
+        collectionId,
+        tagId,
+        showRemoved,
+        sortKey,
+        sortDir,
+        cursor,
+      });
 
       const rows = context.db
         .select({
@@ -170,6 +199,9 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
       tagId,
       tagOrigin,
       showRemoved,
+      sortKey,
+      sortDir,
+      cursor,
     });
 
     return context.db

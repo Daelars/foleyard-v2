@@ -2,6 +2,7 @@ import { errorResponse } from "@/lib/api/errors";
 import { readMutationBody } from "@/lib/api/body";
 import { mutationError } from "@/lib/api/errors";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, parsePageInteger } from "@/lib/api/pagination";
+import { encodeFileCursor } from "@/lib/database/file-cursor";
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteFiles } from '@/lib/files/delete-files';
 import { attachTagToFile, detachTagFromFile, getAttachmentsForFiles, getFileCount, getFiles, getFilesByIds, getTagsForFiles, setFavorites, setFileTagBatch, toggleFavorite } from '@/lib/db';
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
   const sortDir = searchParams.get('sortDir') ?? 'asc';
   const limit = parsePageInteger(searchParams.get('limit'), DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
   const offset = parsePageInteger(searchParams.get('offset'), 0, 0);
+  const cursor = searchParams.get('cursor');
 
   if (limit === null || offset === null) {
     return errorResponse(`limit must be an integer from 1 to ${MAX_PAGE_SIZE}; offset must be a non-negative integer`, 400);
@@ -48,21 +50,42 @@ export async function GET(request: NextRequest) {
     return errorResponse('origin must be manual, deterministic, or semantic_ai', 400);
   }
 
-  const files = getFiles({
-    query: query ?? undefined,
-    favorites: favorites === 'true',
-    collectionId,
-    directory,
-    libraryRoot,
-    atLibraryRoot,
-    tagId,
-    tagOrigin: origin,
-    showRemoved,
-    limit,
-    offset,
-    sortKey,
-    sortDir,
-  });
+  // Fetch one extra row so `hasMore` is exact at page boundaries, then page
+  // via keyset cursor when one is supplied and offset otherwise (#256).
+  let probe;
+  try {
+    probe = getFiles({
+      query: query ?? undefined,
+      favorites: favorites === 'true',
+      collectionId,
+      directory,
+      libraryRoot,
+      atLibraryRoot,
+      tagId,
+      tagOrigin: origin,
+      showRemoved,
+      limit: limit + 1,
+      offset: cursor ? 0 : offset,
+      ...(cursor ? { cursor } : {}),
+      sortKey,
+      sortDir,
+    });
+  } catch (error) {
+    return errorResponse(error instanceof Error ? error.message : 'Invalid cursor', 400);
+  }
+  const hasMore = probe.length > limit;
+  const files = hasMore ? probe.slice(0, limit) : probe;
+  const last = files[files.length - 1];
+  const nextCursor =
+    hasMore && last
+      ? encodeFileCursor({
+          key: sortKey,
+          dir: sortDir === 'desc' ? -1 : 1,
+          filename: last.filename,
+          id: last.id,
+          duration: last.duration,
+        })
+      : null;
 
   const filesWithTags = withTags(files);
 
@@ -70,8 +93,9 @@ export async function GET(request: NextRequest) {
     files: filesWithTags,
     limit,
     offset,
+    nextCursor,
     favoritesTotal: getFileCount({ favorites: true }),
-    hasMore: files.length === limit,
+    hasMore,
   });
 }
 

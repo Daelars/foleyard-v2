@@ -277,7 +277,12 @@ describe("client mutation lifecycle", () => {
       loading = result.current.loadFiles();
     });
     initialPage.resolve(
-      okJson({ files: [file("f1"), file("f2")], hasMore: true, favoritesTotal: 0 }),
+      okJson({
+        files: [file("f1"), file("f2")],
+        hasMore: true,
+        favoritesTotal: 0,
+        nextCursor: "cursor-1",
+      }),
     );
     await act(async () => {
       await loading;
@@ -296,22 +301,27 @@ describe("client mutation lifecycle", () => {
       reloading = result.current.loadFiles();
     });
     freshPage.resolve(
-      okJson({ files: [file("g1"), file("g2")], hasMore: true, favoritesTotal: 0 }),
+      okJson({
+        files: [file("g1"), file("g2")],
+        hasMore: true,
+        favoritesTotal: 0,
+        nextCursor: "cursor-2",
+      }),
     );
     await act(async () => {
       await reloading;
     });
 
     // A newer page starts; the stale first page lands mid-flight and must be
-    // inert — no lock release, no second request for the same offset.
+    // inert — no lock release, no second request for the same cursor.
     const newerPage = deferred<JsonResponse>();
     fetch.gets.push(newerPage);
     act(() => {
       void result.current.loadMoreFiles();
     });
-    const offset2Calls = () =>
-      fetch.calls.filter((c) => c.url.includes("offset=2")).length;
-    expect(offset2Calls(), "one newer page is legitimately in flight").toBe(2);
+    const cursorCalls = (cursor: string) =>
+      fetch.calls.filter((c) => c.url.includes(`cursor=${cursor}`)).length;
+    expect(cursorCalls("cursor-2"), "one newer page is legitimately in flight").toBe(1);
     stalePage.resolve(okJson({ files: [file("stale")], hasMore: true }));
     await flush();
 
@@ -321,9 +331,9 @@ describe("client mutation lifecycle", () => {
       void result.current.loadMoreFiles();
     });
     expect(
-      offset2Calls(),
-      "a stale page must not unlock another request for the same offset",
-    ).toBe(2);
+      cursorCalls("cursor-2"),
+      "a stale page must not unlock another request for the same cursor",
+    ).toBe(1);
 
     newerPage.resolve(okJson({ files: [file("p1")], hasMore: false }));
     duplicatePage.resolve(okJson({ files: [file("p1")], hasMore: false }));

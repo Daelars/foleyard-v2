@@ -19,29 +19,60 @@ import { createV2LibraryPorts } from "@/lib/extensions-v2/library-ports";
 // instead of a full scan plus temp B-tree.
 
 describe("v2 library port paging", () => {
-  it("asks the repository for active files only", () => {
+  it("asks the repository for active files only, with one probe row", () => {
     getFilesMock.mockReturnValue([]);
 
     createV2LibraryPorts().listPage(null, 500);
 
     expect(getFilesMock).toHaveBeenCalledWith({
-      limit: 500,
+      limit: 501,
       offset: 0,
       showRemoved: false,
+      sortKey: "filename",
+      sortDir: "asc",
     });
   });
 
-  it("keeps cursors in active-row space", () => {
-    getFilesMock.mockReturnValue([{ id: "a" }, { id: "b" }]);
+  it("walks every active row exactly once through opaque keyset cursors (#256)", () => {
+    const sqlite = new Database(":memory:");
+    initializeDatabaseSchema(sqlite);
+    const repository = new SqliteAudioFileRepository(sqlite);
+    const insert = sqlite.prepare(
+      "INSERT INTO files(id,path,filename,library_root,format,duration,mtime_ms,removed_at) VALUES(?,?,?,?,?,?,?,?)",
+    );
+    sqlite.transaction(() => {
+      for (let index = 0; index < 2500; index += 1) {
+        insert.run(
+          `f${String(index).padStart(5, "0")}`,
+          `/lib/${index}.wav`,
+          `clip-${String((index * 7919) % 2500).padStart(5, "0")}.wav`,
+          "/lib",
+          "wav",
+          index % 300,
+          1,
+          null,
+        );
+      }
+    })();
+    getFilesMock.mockImplementation((options) => repository.getFiles(options));
 
-    const page = createV2LibraryPorts().listPage("10", 2);
+    const port = createV2LibraryPorts();
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const page = port.listPage(cursor, 500);
+      expect(page.files.length).toBeLessThanOrEqual(500);
+      seen.push(...page.files.map((file) => file.id));
+      cursor = page.nextCursor;
+      pages += 1;
+      expect(pages).toBeLessThan(10);
+    } while (cursor);
 
-    expect(getFilesMock).toHaveBeenCalledWith({
-      limit: 2,
-      offset: 10,
-      showRemoved: false,
-    });
-    expect(page.nextCursor).toBe("12");
+    expect(pages).toBe(5);
+    expect(seen).toHaveLength(2500);
+    expect(new Set(seen).size).toBe(2500);
+    sqlite.close();
   });
 });
 

@@ -52,6 +52,8 @@ interface FilesPage {
   files?: FileRecord[];
   favoritesTotal?: number;
   hasMore?: boolean;
+  /** Opaque keyset cursor for the next page (#256). */
+  nextCursor?: string | null;
 }
 
 /**
@@ -77,7 +79,7 @@ export function useLibraryFiles(input: LibraryFilesInput) {
 
   const filesRequestIdRef = useRef(0);
   const filesQueryRef = useRef<string | null>(null);
-  const filesNextOffsetRef = useRef(0);
+  const filesNextCursorRef = useRef<string | null>(null);
   const isLoadingMoreFilesRef = useRef(false);
   const directoriesRequestIdRef = useRef(0);
 
@@ -122,7 +124,7 @@ export function useLibraryFiles(input: LibraryFilesInput) {
     const requestId = filesRequestIdRef.current + 1;
     filesRequestIdRef.current = requestId;
     filesQueryRef.current = null;
-    filesNextOffsetRef.current = 0;
+    filesNextCursorRef.current = null;
     isLoadingMoreFilesRef.current = false;
     setHasMoreFiles(false);
 
@@ -201,7 +203,8 @@ export function useLibraryFiles(input: LibraryFilesInput) {
         return;
       }
       filesQueryRef.current = described.query;
-      filesNextOffsetRef.current = pageFiles.length;
+      filesNextCursorRef.current =
+        typeof data.nextCursor === "string" ? data.nextCursor : null;
       setFiles(pageFiles);
       setHasMoreFiles(data.hasMore === true && pageFiles.length > 0);
       noteFavoritesTotal(data.favoritesTotal);    } catch {
@@ -226,17 +229,25 @@ export function useLibraryFiles(input: LibraryFilesInput) {
   ]);
 
   const loadMoreFiles = useCallback(async () => {
-    // Pagination reuses the stored list query (filters plus sort), so the
-    // next page continues the server's global order.
+    // Pagination reuses the stored list query (filters plus sort) and its
+    // opaque keyset cursor, so the next page continues the server's global
+    // order without a deep OFFSET (#256).
     const query = filesQueryRef.current;
-    if (query === null || !hasMoreFiles || isLoadingFiles || isLoadingMoreFilesRef.current) {
+    const cursor = filesNextCursorRef.current;
+    if (
+      query === null ||
+      cursor === null ||
+      !hasMoreFiles ||
+      isLoadingFiles ||
+      isLoadingMoreFilesRef.current
+    ) {
       return;
     }
     isLoadingMoreFilesRef.current = true;
     const requestId = filesRequestIdRef.current;
     const params = new URLSearchParams(query);
     params.set("limit", String(pageLimit()));
-    params.set("offset", String(filesNextOffsetRef.current));
+    params.set("cursor", cursor);
     try {
       const response = await fetch(`/api/files?${params.toString()}`);
       if (!response.ok) {
@@ -247,7 +258,8 @@ export function useLibraryFiles(input: LibraryFilesInput) {
       if (filesRequestIdRef.current !== requestId) {
         return;
       }
-      filesNextOffsetRef.current += pageFiles.length;
+      filesNextCursorRef.current =
+        typeof data.nextCursor === "string" ? data.nextCursor : null;
       setFiles((current) => [...current, ...pageFiles]);
       setHasMoreFiles(data.hasMore === true && pageFiles.length > 0);
     } catch {

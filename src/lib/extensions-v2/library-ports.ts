@@ -4,6 +4,7 @@ import {
   getFiles,
   getFilesByIds,
 } from "@/lib/db";
+import { decodeFileCursor, encodeFileCursor } from "@/lib/database/file-cursor";
 import type { IndexedAudioFile, V2LibraryPorts, V2LibraryReadPorts } from "@yard-core";
 
 /**
@@ -33,13 +34,33 @@ export function createV2LibraryPorts(): V2LibraryPorts & V2LibraryReadPorts {
     getFileById: (id) => getFileById(id),
     getFilesByIds: (ids) => getFilesByIds(ids),
     listPage: (cursor, limit) => {
-      const offset = cursor ? Number.parseInt(cursor, 10) : 0;
-      const start = Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
-      const page = getFiles({ limit, offset: start, showRemoved: false });
-      const next = start + page.length;
+      // Opaque keyset cursors (#256): the decoded ordering drives the query,
+      // and one probe row makes `nextCursor` exact at page boundaries.
+      const decoded = cursor ? decodeFileCursor(cursor) : null;
+      const sortKey = decoded?.key ?? "filename";
+      const sortDir = decoded?.dir === -1 ? "desc" : "asc";
+      const probe = getFiles({
+        limit: limit + 1,
+        offset: 0,
+        showRemoved: false,
+        sortKey,
+        sortDir,
+        ...(cursor ? { cursor } : {}),
+      });
+      const files = probe.length > limit ? probe.slice(0, limit) : probe;
+      const last = files[files.length - 1];
       return {
-        files: page.map(toIndexed),
-        nextCursor: page.length < limit ? null : String(next),
+        files: files.map(toIndexed),
+        nextCursor:
+          probe.length > limit && last
+            ? encodeFileCursor({
+                key: sortKey,
+                dir: sortDir === "desc" ? -1 : 1,
+                filename: last.filename,
+                id: last.id,
+                duration: last.duration,
+              })
+            : null,
       };
     },
     collectionExists: (id) => collectionExists(id),

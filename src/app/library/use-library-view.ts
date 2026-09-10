@@ -165,6 +165,12 @@ export function deriveRailView(view: LibraryView): RailView | null {
 export interface LibraryViewCallbacks {
   /** Called on every navigation so the route clears multi-select. */
   onNavigate?: () => void;
+  /**
+   * Sound Shelf is extension-owned. When false, a shelf view that is somehow
+   * current (extension disabled while open) falls back to the Library instead
+   * of running its load path against a disabled extension.
+   */
+  shelfAvailable?: boolean;
 }
 
 /**
@@ -182,8 +188,20 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
-  const { currentView, selectedCollection, selectedTagId, tagOrigin, selectedDirectory } =
-    viewState;
+  const shelfAvailable = callbacks.shelfAvailable ?? true;
+
+  const {
+    currentView: storedView,
+    selectedCollection,
+    selectedTagId,
+    tagOrigin,
+    selectedDirectory,
+  } = viewState;
+  // Shelf is extension-owned: while it is unavailable the stored shelf view
+  // reads as the Library, so nothing loads it, without an effect or extra
+  // state. Re-enabling the extension restores whatever the stored view was.
+  const currentView =
+    !shelfAvailable && storedView === "shelf" ? "all" : storedView;
   const searchQuery = viewState.searchQuery;
   const autoTagPage = viewState.autoTagPage;
   const setSearchQuery = useCallback((query: string) => {
@@ -223,9 +241,10 @@ export function useLibraryView(callbacks: LibraryViewCallbacks = {}) {
   }, [notifyNavigated]);
 
   const showShelf = useCallback(() => {
+    if (!shelfAvailable) return;
     setViewState((prev) => applyShowShelf(prev));
     notifyNavigated();
-  }, [notifyNavigated]);
+  }, [notifyNavigated, shelfAvailable]);
 
   const showOrganize = useCallback(() => {
     setViewState((prev) => applyShowOrganize(prev));

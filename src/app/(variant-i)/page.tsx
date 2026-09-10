@@ -21,8 +21,14 @@ import { V3ToolsCards } from "./components/extensions/tools-cards";
 import { V3AutoTagBoard } from "./components/auto-tag/auto-tag";
 import { useV2PaletteBridge } from "@/components/extensions-v2/use-v2-palette";
 import { V3MakePackV2Dialog } from "./components/ext-flows/make-pack-v2";
-import { MAKE_PACK_V2_ID, type MakePackV2Source } from "@/components/extensions/make-pack-v2/use-make-pack-v2";
-import { AUTO_TAG_V2_FIND_SIMILAR, AUTO_TAG_V2_ID } from "@foleyard/auto-tag-v2";
+import {
+  MAKE_PACK_V2_ID,
+  type MakePackV2Source,
+} from "@/components/extensions/make-pack-v2/use-make-pack-v2";
+import {
+  AUTO_TAG_V2_FIND_SIMILAR,
+  AUTO_TAG_V2_ID,
+} from "@foleyard/auto-tag-v2";
 import {
   FOLDER_JANITOR_V2_DELETE_FOLDERS,
   FOLDER_JANITOR_V2_ID,
@@ -48,7 +54,13 @@ import { V3FileTable } from "./components/file-table/file-table";
 import { V3OrganizeView } from "./components/organize";
 import { V3SettingsDialog } from "./components/settings/settings-dialog";
 import { V3IconRail } from "./components/rail";
-import { Button, Dialog, DialogTitle, Kbd, VariantIProvider } from "@/components/variant-i";
+import {
+  Button,
+  Dialog,
+  DialogTitle,
+  Kbd,
+  VariantIProvider,
+} from "@/components/variant-i";
 import { SOUND_SHELF_CHANGED_EVENT } from "@/lib/shelf-events";
 import { useLibraryFiles } from "../library/use-library-files";
 import { useLibraryOrganization } from "../library/use-library-organization";
@@ -94,8 +106,18 @@ function AppV3Content() {
   const transport = useTransport();
   const { playIds, enqueue } = transport;
 
+  const v2Catalog = useV2Catalog();
+  const soundShelfEnabled = useMemo(
+    () =>
+      v2Catalog.extensions.some(
+        (entry) => entry.id === SOUND_SHELF_V2_ID && entry.enabled,
+      ),
+    [v2Catalog.extensions],
+  );
+
   const view = useLibraryView({
     onNavigate: () => navigateRef.current(),
+    shelfAvailable: soundShelfEnabled,
   });
   const {
     currentView,
@@ -319,8 +341,10 @@ function AppV3Content() {
     renameCollection: (id, name) => org.renameCollection(id, name),
   });
 
-  const v2Catalog = useV2Catalog();
-  const [packV2, setPackV2] = useState<{ source: MakePackV2Source; fileIds: string[] } | null>(null);
+  const [packV2, setPackV2] = useState<{
+    source: MakePackV2Source;
+    fileIds: string[];
+  } | null>(null);
   const [similarV2, setSimilarV2] = useState<null | {
     source: string;
     state: "unavailable" | "empty" | "ready";
@@ -328,55 +352,83 @@ function AppV3Content() {
   }>(null);
   const v2UiState: V2UiState = useMemo(
     () => ({
-      enabled: new Set(v2Catalog.extensions.filter((entry) => entry.enabled).map((entry) => entry.id)),
+      enabled: new Set(
+        v2Catalog.extensions
+          .filter((entry) => entry.enabled)
+          .map((entry) => entry.id),
+      ),
       capabilities: {},
     }),
     [v2Catalog.extensions],
   );
 
-  const v2Palette = useV2PaletteBridge(selectedIds, v2Catalog.catalog, v2UiState, {
-    onOpenJanitor: extUi.openJanitorLibrary,
-    onOpenGather: extUi.openGatherDialog,
-  });
+  const v2Palette = useV2PaletteBridge(
+    selectedIds,
+    v2Catalog.catalog,
+    v2UiState,
+    {
+      onOpenJanitor: extUi.openJanitorLibrary,
+      onOpenGather: extUi.openGatherDialog,
+    },
+  );
   const makePackV2Enabled = useMemo(
-    () => v2Catalog.extensions.some((entry) => entry.id === MAKE_PACK_V2_ID && entry.enabled),
+    () =>
+      v2Catalog.extensions.some(
+        (entry) => entry.id === MAKE_PACK_V2_ID && entry.enabled,
+      ),
     [v2Catalog.extensions],
   );
   const autoTagEnabled = useMemo(
-    () => v2Catalog.extensions.some((entry) => entry.id === AUTO_TAG_V2_ID && entry.enabled),
+    () =>
+      v2Catalog.extensions.some(
+        (entry) => entry.id === AUTO_TAG_V2_ID && entry.enabled,
+      ),
     [v2Catalog.extensions],
   );
-  const openPackV2 = useCallback((source: MakePackV2Source, fileIds: string[]) => {
-    setPackV2({ source, fileIds });
-  }, []);
+  const openPackV2 = useCallback(
+    (source: MakePackV2Source, fileIds: string[]) => {
+      setPackV2({ source, fileIds });
+    },
+    [],
+  );
   // Tools-grid run dispatch: every card opens its dialog or view per the
   // package README. Drop Rules v2 has no run action (drop zone +
   // settings surface instead).
-  const runV2Extension = useCallback((extensionId: string) => {
-    if (extensionId === MAKE_PACK_V2_ID) {
-      openPackV2("recent", []);
-      return;
-    }
-    if (extensionId === SOUND_SHELF_V2_ID) {
-      showShelf();
-      return;
-    }
-    if (extensionId === SMART_COLLECTIONS_V2_ID) {
-      extUi.setShowSaveSearch(true);
-      return;
-    }
-    if (extensionId === FOLDER_JANITOR_V2_ID) {
-      extUi.openJanitorLibrary();
-      return;
-    }
-    if (extensionId === LIBRARY_GATHERER_V2_ID) {
-      extUi.openGatherDialog();
-      return;
-    }
-    if (extensionId === AUTO_TAG_V2_ID) {
-      showAutoTag();
-    }
-  }, [openPackV2, showShelf, showAutoTag, extUi.setShowSaveSearch, extUi.openJanitorLibrary, extUi.openGatherDialog]);
+  const runV2Extension = useCallback(
+    (extensionId: string) => {
+      if (extensionId === MAKE_PACK_V2_ID) {
+        openPackV2("recent", []);
+        return;
+      }
+      if (extensionId === SOUND_SHELF_V2_ID) {
+        showShelf();
+        return;
+      }
+      if (extensionId === SMART_COLLECTIONS_V2_ID) {
+        extUi.setShowSaveSearch(true);
+        return;
+      }
+      if (extensionId === FOLDER_JANITOR_V2_ID) {
+        extUi.openJanitorLibrary();
+        return;
+      }
+      if (extensionId === LIBRARY_GATHERER_V2_ID) {
+        extUi.openGatherDialog();
+        return;
+      }
+      if (extensionId === AUTO_TAG_V2_ID) {
+        showAutoTag();
+      }
+    },
+    [
+      openPackV2,
+      showShelf,
+      showAutoTag,
+      extUi.setShowSaveSearch,
+      extUi.openJanitorLibrary,
+      extUi.openGatherDialog,
+    ],
+  );
   const invokeV2RowCommand = useCallback(
     (item: V2ResolvedContribution, fileIds: string[]) => {
       if (item.extensionId === MAKE_PACK_V2_ID) {
@@ -409,24 +461,52 @@ function AppV3Content() {
           toast.error(result.message);
           return;
         }
-        const body = result.body as { ok?: boolean; error?: { message?: string } };
+        const body = result.body as {
+          ok?: boolean;
+          error?: { message?: string };
+        };
         if (!body?.ok) {
           toast.error(body?.error?.message ?? "Extension command failed.");
           return;
         }
-        if (item.extensionId === AUTO_TAG_V2_ID && item.commandId === AUTO_TAG_V2_FIND_SIMILAR) {
-          const outcome = (result.body as { outcome?: { kind?: string; value?: Record<string, unknown> } }).outcome;
-          const value = outcome?.kind === "immediate" ? outcome.value : undefined;
+        if (
+          item.extensionId === AUTO_TAG_V2_ID &&
+          item.commandId === AUTO_TAG_V2_FIND_SIMILAR
+        ) {
+          const outcome = (
+            result.body as {
+              outcome?: { kind?: string; value?: Record<string, unknown> };
+            }
+          ).outcome;
+          const value =
+            outcome?.kind === "immediate" ? outcome.value : undefined;
           const matches = Array.isArray(value?.matches)
             ? value.matches.flatMap((entry) => {
                 if (typeof entry !== "string") return [];
-                try { return [JSON.parse(entry) as { fileId: string; filename: string; score: number }]; }
-                catch { return []; }
+                try {
+                  return [
+                    JSON.parse(entry) as {
+                      fileId: string;
+                      filename: string;
+                      score: number;
+                    },
+                  ];
+                } catch {
+                  return [];
+                }
               })
             : [];
           setSimilarV2({
-            source: typeof value?.targetFilename === "string" ? value.targetFilename : "Selected sound",
-            state: value?.unavailable === true ? "unavailable" : matches.length ? "ready" : "empty",
+            source:
+              typeof value?.targetFilename === "string"
+                ? value.targetFilename
+                : "Selected sound",
+            state:
+              value?.unavailable === true
+                ? "unavailable"
+                : matches.length
+                  ? "ready"
+                  : "empty",
             matches,
           });
           return;
@@ -438,13 +518,23 @@ function AppV3Content() {
   );
   const resolveV2FileItems = useCallback(
     (fileId: string) =>
-      resolveV2UiPoint(v2Catalog.catalog, "context-menu", { fileIds: [fileId] }, v2UiState),
+      resolveV2UiPoint(
+        v2Catalog.catalog,
+        "context-menu",
+        { fileIds: [fileId] },
+        v2UiState,
+      ),
     [v2Catalog.catalog, v2UiState],
   );
   const bulkV2Items = useMemo(
     () =>
       selectedIds.length > 0
-        ? resolveV2UiPoint(v2Catalog.catalog, "selection-actions", { fileIds: selectedIds }, v2UiState)
+        ? resolveV2UiPoint(
+            v2Catalog.catalog,
+            "selection-actions",
+            { fileIds: selectedIds },
+            v2UiState,
+          )
         : [],
     [v2Catalog.catalog, selectedIds, v2UiState],
   );
@@ -518,17 +608,18 @@ function AppV3Content() {
     setPaletteIndex,
   } = palette;
 
-  const selectedCollectionName = useMemo(() =>
-    currentView === "collection"
-      ? (org.collections.find((c) => c.id === selectedCollection)?.name ?? null)
-      : null,
-  [currentView, org.collections, selectedCollection]);
+  const selectedCollectionName = useMemo(
+    () =>
+      currentView === "collection"
+        ? (org.collections.find((c) => c.id === selectedCollection)?.name ??
+          null)
+        : null,
+    [currentView, org.collections, selectedCollection],
+  );
 
   const showExtensionsView = currentView === "extensions";
-  const showShelfView = currentView === "shelf";
   const showOrganizeView = currentView === "organize";
   const showAutoTagView = currentView === "auto-tag";
-  const hideHeaderActions = showExtensionsView || showShelfView || showOrganizeView || showAutoTagView;
 
   const railView = view.railView;
 
@@ -543,27 +634,30 @@ function AppV3Content() {
             ? "Organize"
             : currentView === "auto-tag"
               ? "Auto tag"
-            : currentView === "collection"
-              ? (selectedCollectionName ?? "Library")
-              : currentView === "directory"
-                ? (selectedDirectory?.label ?? "Library")
-                : "Library";
+              : currentView === "collection"
+                ? (selectedCollectionName ?? "Library")
+                : currentView === "directory"
+                  ? (selectedDirectory?.label ?? "Library")
+                  : "Library";
 
   const {
-    soundShelfEnabled,
     folderJanitorEnabled,
     smartCollectionsEnabled,
     viewingSmartCollection,
     activeSmartCollectionId,
   } = useMemo(() => {
-    const shelfEnabled = v2Catalog.extensions.find((e) => e.id === SOUND_SHELF_V2_ID)?.enabled ?? false;
-    const janitor = v2Catalog.extensions.find((e) => e.id === FOLDER_JANITOR_V2_ID)?.enabled ?? false;
-    const smart = v2Catalog.extensions.find((e) => e.id === "smart-collections-v2")?.enabled ?? false;
+    const janitor =
+      v2Catalog.extensions.find((e) => e.id === FOLDER_JANITOR_V2_ID)
+        ?.enabled ?? false;
+    const smart =
+      v2Catalog.extensions.find((e) => e.id === "smart-collections-v2")
+        ?.enabled ?? false;
     const activeSmart = selectedCollection
-      ? org.collections.find((c) => c.id === selectedCollection && c.isSmart) ?? null
+      ? (org.collections.find(
+          (c) => c.id === selectedCollection && c.isSmart,
+        ) ?? null)
       : null;
     return {
-      soundShelfEnabled: shelfEnabled,
       folderJanitorEnabled: janitor,
       smartCollectionsEnabled: smart,
       viewingSmartCollection: activeSmart !== null,
@@ -571,314 +665,324 @@ function AppV3Content() {
     };
   }, [v2Catalog.extensions, selectedCollection, org.collections]);
 
+  const showShelfView = currentView === "shelf";
+  const hideHeaderActions =
+    showExtensionsView || showShelfView || showOrganizeView || showAutoTagView;
+
   const nextTitle = transport.nextTitleFor(files, selectedFile?.id);
 
   return (
     <VariantIProvider className="relative flex h-full flex-col overflow-hidden bg-canvas font-sans">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--accent-fill)_13%,transparent),transparent_38%),radial-gradient(circle_at_bottom_right,color-mix(in_oklab,var(--accent-fill)_6%,transparent),transparent_40%)]" />
       <div className="relative flex min-h-0 flex-1">
+        <V3IconRail
+          className="hidden md:flex"
+          activeView={railView}
+          favoritesCount={favoritesCount}
+          shelfCount={shelf.soundShelfItemCount}
+          onSelectLibrary={showLibrary}
+          onSelectFavorites={showFavorites}
+          onSelectShelf={showShelf}
+          showShelf={soundShelfEnabled}
+          onSelectExtensions={handleShowExtensions}
+          onSelectOrganize={showOrganize}
+          showAutoTag={autoTagEnabled}
+          onSelectAutoTag={showAutoTag}
+          onOpenSettings={settingsScan.openSettings}
+          settingsActive={settingsScan.showSettings}
+        />
 
-      <V3IconRail
-        className="hidden md:flex"
-        activeView={railView}
-        favoritesCount={favoritesCount}
-        shelfCount={shelf.soundShelfItemCount}
-        onSelectLibrary={showLibrary}
-        onSelectFavorites={showFavorites}
-        onSelectShelf={showShelf}
-        onSelectExtensions={handleShowExtensions}
-        onSelectOrganize={showOrganize}
-        showAutoTag={autoTagEnabled}
-        onSelectAutoTag={showAutoTag}
-        onOpenSettings={settingsScan.openSettings}
-        settingsActive={settingsScan.showSettings}
-      />
+        <Dialog
+          open={view.showMobileSidebar}
+          onClose={() => view.closeMobileSidebar()}
+          labelledBy="app-v3-mobile-nav-title"
+          maxWidth="w-auto"
+        >
+          <div className="w-full max-w-[200px]">
+            <DialogTitle id="app-v3-mobile-nav-title">
+              <span className="sr-only">Navigation Menu</span>
+            </DialogTitle>
+            <V3IconRail
+              activeView={railView}
+              favoritesCount={favoritesCount}
+              shelfCount={shelf.soundShelfItemCount}
+              onSelectLibrary={() => {
+                showLibrary();
+                view.closeMobileSidebar();
+              }}
+              onSelectFavorites={() => {
+                showFavorites();
+                view.closeMobileSidebar();
+              }}
+              onSelectShelf={() => {
+                showShelf();
+                view.closeMobileSidebar();
+              }}
+              showShelf={soundShelfEnabled}
+              onSelectExtensions={() => {
+                handleShowExtensions();
+                view.closeMobileSidebar();
+              }}
+              onSelectOrganize={() => {
+                showOrganize();
+                view.closeMobileSidebar();
+              }}
+              showAutoTag={autoTagEnabled}
+              onSelectAutoTag={() => {
+                showAutoTag();
+                view.closeMobileSidebar();
+              }}
+              onOpenSettings={() => {
+                settingsScan.openSettings();
+                view.closeMobileSidebar();
+              }}
+              settingsActive={settingsScan.showSettings}
+            />
+          </div>
+        </Dialog>
 
-      <Dialog
-        open={view.showMobileSidebar}
-        onClose={() => view.closeMobileSidebar()}
-        labelledBy="app-v3-mobile-nav-title"
-        maxWidth="w-auto"
-      >
-        <div className="w-full max-w-[200px]">
-          <DialogTitle id="app-v3-mobile-nav-title" >
-            <span className="sr-only">Navigation Menu</span>
-          </DialogTitle>
-          <V3IconRail
-            activeView={railView}
-            favoritesCount={favoritesCount}
-            shelfCount={shelf.soundShelfItemCount}
-            onSelectLibrary={() => {
-              showLibrary();
-              view.closeMobileSidebar();
-            }}
-            onSelectFavorites={() => {
-              showFavorites();
-              view.closeMobileSidebar();
-            }}
-            onSelectShelf={() => {
-              showShelf();
-              view.closeMobileSidebar();
-            }}
-            onSelectExtensions={() => {
-              handleShowExtensions();
-              view.closeMobileSidebar();
-            }}
-            onSelectOrganize={() => {
-              showOrganize();
-              view.closeMobileSidebar();
-            }}
-            showAutoTag={autoTagEnabled}
-            onSelectAutoTag={() => {
-              showAutoTag();
-              view.closeMobileSidebar();
-            }}
-            onOpenSettings={() => {
-              settingsScan.openSettings();
-              view.closeMobileSidebar();
-            }}
-            settingsActive={settingsScan.showSettings}
-          />
-        </div>
-      </Dialog>
+        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-transparent">
+          <V3DesktopTitleBar />
 
-      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-transparent">
-        <V3DesktopTitleBar />
+          <header className="shrink-0 px-4 pt-4 md:px-5">
+            <div className="flex items-center gap-3">
+              <Button
+                tone="secondary"
+                size="icon"
+                className="size-10 shrink-0 rounded-xl md:hidden"
+                onClick={view.openMobileSidebar}
+                aria-label="Open navigation menu"
+              >
+                <PanelLeft className="size-4" />
+              </Button>
 
-        <header className="shrink-0 px-4 pt-4 md:px-5">
-          <div className="flex items-center gap-3">
-            <Button
-              tone="secondary"
-              size="icon"
-              className="size-10 shrink-0 rounded-xl md:hidden"
-              onClick={view.openMobileSidebar}
-              aria-label="Open navigation menu"
-            >
-              <PanelLeft className="size-4" />
-            </Button>
-
-            {!hideHeaderActions && (
-              <div className="relative flex flex-1 items-center">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
-                <input
-                  ref={searchInputRef}
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search sounds by name, tag, or format…"
-                  aria-label="Search sounds"
-                  className="h-10 w-full min-w-0 rounded-lg border border-[var(--vi-edge)] bg-[var(--vi-well)] pl-9 pr-36 text-[13px] text-zinc-100 shadow-[var(--vi-sink)] outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-zinc-600 hover:border-[var(--vi-edge-hi)] focus:border-[color-mix(in_oklab,var(--accent-fill)_60%,transparent)] focus:shadow-[var(--vi-sink),0_0_16px_color-mix(in_oklab,var(--accent-fill)_10%,transparent)] motion-reduce:transition-none"
-                />
-                {searchQuery && (
+              {!hideHeaderActions && (
+                <div className="relative flex flex-1 items-center">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    ref={searchInputRef}
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search sounds by name, tag, or format…"
+                    aria-label="Search sounds"
+                    className="h-10 w-full min-w-0 rounded-lg border border-(--vi-edge) bg-(--vi-well) pl-9 pr-36 text-[13px] text-zinc-100 shadow-(--vi-sink) outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-zinc-600 hover:border-(--vi-edge-hi) focus:border-[color-mix(in_oklab,var(--accent-fill)_60%,transparent)] focus:shadow-[var(--vi-sink),0_0_16px_color-mix(in_oklab,var(--accent-fill)_10%,transparent)] motion-reduce:transition-none"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-24 top-1/2 -translate-y-1/2 shrink-0 rounded-md px-2 py-1 font-mono text-[11px] text-zinc-500 hover:text-zinc-100"
+                    >
+                      Clear
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-24 top-1/2 -translate-y-1/2 shrink-0 rounded-md px-2 py-1 font-mono text-[11px] text-zinc-500 hover:text-zinc-100"
+                    onClick={openPalette}
+                    aria-label="Open command palette"
+                    title="Command palette (Ctrl+K)"
+                    className="absolute right-2.5 top-1/2 hidden -translate-y-1/2 shrink-0 items-center gap-1.5 rounded-md border border-(--vi-edge-hi) bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.02))] px-1.5 py-0.5 font-mono text-[10px] text-zinc-400 shadow-(--vi-lift) sm:flex"
                   >
-                    Clear
+                    <Kbd>⌘</Kbd>
+                    <Kbd>K</Kbd>
+                    <span className="ml-1 text-zinc-600">{files.length}</span>
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={openPalette}
-                  aria-label="Open command palette"
-                  title="Command palette (Ctrl+K)"
-                  className="absolute right-2.5 top-1/2 hidden -translate-y-1/2 shrink-0 items-center gap-1.5 rounded-md border border-[var(--vi-edge-hi)] bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.02))] px-1.5 py-0.5 font-mono text-[10px] text-zinc-400 shadow-[var(--vi-lift)] sm:flex"
-                >
-                  <Kbd>⌘</Kbd>
-                  <Kbd>K</Kbd>
-                  <span className="ml-1 text-zinc-600">{files.length}</span>
-                </button>
-              </div>
-            )}
-            {smartCollectionsEnabled && searchQuery.trim() && (
-              <>
-                {viewingSmartCollection && (
+                </div>
+              )}
+              {smartCollectionsEnabled && searchQuery.trim() && (
+                <>
+                  {viewingSmartCollection && (
+                    <Button
+                      tone="secondary"
+                      size="sm"
+                      className="hidden h-10 shrink-0 gap-2 rounded-xl sm:inline-flex"
+                      onClick={() => {
+                        if (activeSmartCollectionId) {
+                          void org.updateCollectionFilter(
+                            activeSmartCollectionId,
+                            JSON.stringify({ q: searchQuery.trim() }),
+                          );
+                        }
+                      }}
+                    >
+                      <Save className="size-4" />
+                      Update Search
+                    </Button>
+                  )}
                   <Button
                     tone="secondary"
                     size="sm"
                     className="hidden h-10 shrink-0 gap-2 rounded-xl sm:inline-flex"
-                    onClick={() => {
-                      if (activeSmartCollectionId) {
-                        void org.updateCollectionFilter(
-                          activeSmartCollectionId,
-                          JSON.stringify({ q: searchQuery.trim() }),
-                        );
-                      }
-                    }}
+                    onClick={() => extUi.setShowSaveSearch(true)}
                   >
                     <Save className="size-4" />
-                    Update Search
+                    Save Search
                   </Button>
-                )}
-                <Button
-                  tone="secondary"
-                  size="sm"
-                  className="hidden h-10 shrink-0 gap-2 rounded-xl sm:inline-flex"
-                  onClick={() => extUi.setShowSaveSearch(true)}
+                </>
+              )}
+            </div>
+          </header>
+
+          <div className="mt-4 mb-4 px-4 pt-4 md:px-5">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-2">
+              <h1 className="text-5xl font-extrabold tracking-tighter text-zinc-50">
+                {viewHeading}
+              </h1>
+              <span className="flex-1" />
+              {!showExtensionsView &&
+              !showShelfView &&
+              !showOrganizeView &&
+              !showAutoTagView ? (
+                <div
+                  className="flex items-center gap-1"
+                  role="group"
+                  aria-label="Filter by tag origin"
                 >
-                  <Save className="size-4" />
-                  Save Search
-                </Button>
-              </>
-            )}
-
-          </div>
-        </header>
-
-        <div className="mt-4 mb-4 px-4 pt-4 md:px-5">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-2">
-            <h1 className="text-5xl font-extrabold tracking-tighter text-zinc-50">
-              {viewHeading}
-            </h1>
-            <span className="flex-1" />
-            {!showExtensionsView && !showShelfView && !showOrganizeView && !showAutoTagView ? (
-              <div
-                className="flex items-center gap-1"
-                role="group"
-                aria-label="Filter by tag origin"
-              >
-                {(
-                  [
-                    { value: null, label: "All" },
-                    { value: "manual", label: "Manual" },
-                    { value: "deterministic", label: "Rules" },
-                    { value: "semantic_ai", label: "AI" },
-                  ] as const
-                ).map((option) => (
-                  <button
-                    key={option.label}
-                    type="button"
-                    onClick={() => handleFilterTagOrigin(option.value)}
-                    aria-pressed={tagOrigin === option.value}
-                    className={
-                      tagOrigin === option.value
-                        ? "rounded-md bg-[color-mix(in_oklab,var(--accent-fill)_15%,transparent)] px-2 py-1 font-mono text-[11px] font-bold text-accent-text"
-                        : "rounded-md px-2 py-1 font-mono text-[11px] text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-100"
-                    }
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {showShelfView ? (
-              <div className="flex flex-wrap items-center gap-2">
-                {makePackV2Enabled && files.length > 0 ? (
-                  <Button
-                    type="button"
-                    tone="secondary"
-                    size="sm"
-                    className="h-9 gap-2 rounded-xl px-3"
-                    onClick={() => openPackV2("shelf", [])}
-                  >
-                    <PackagePlus className="size-4" />
-                    Pack Shelf v2
-                  </Button>
-                ) : null}
-                {files.length > 0 ? (
-                  shelf.confirmClearShelf ? (
-                    <>
-                      <Button
-                        type="button"
-                        tone="danger"
-                        size="sm"
-                        className="h-9 gap-2 rounded-xl px-3"
-                        onClick={() => {
-                          shelf.cancelClearShelf();
-                          void shelf.clearShelf();
-                        }}
-                      >
-                        Sure?
-                      </Button>
+                  {(
+                    [
+                      { value: null, label: "All" },
+                      { value: "manual", label: "Manual" },
+                      { value: "deterministic", label: "Rules" },
+                      { value: "semantic_ai", label: "AI" },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.label}
+                      type="button"
+                      onClick={() => handleFilterTagOrigin(option.value)}
+                      aria-pressed={tagOrigin === option.value}
+                      className={
+                        tagOrigin === option.value
+                          ? "rounded-md bg-[color-mix(in_oklab,var(--accent-fill)_15%,transparent)] px-2 py-1 font-mono text-[11px] font-bold text-accent-text"
+                          : "rounded-md px-2 py-1 font-mono text-[11px] text-zinc-500 hover:bg-white/6 hover:text-zinc-100"
+                      }
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {showShelfView ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {makePackV2Enabled && files.length > 0 ? (
+                    <Button
+                      type="button"
+                      tone="secondary"
+                      size="sm"
+                      className="h-9 gap-2 rounded-xl px-3"
+                      onClick={() => openPackV2("shelf", [])}
+                    >
+                      <PackagePlus className="size-4" />
+                      Pack Shelf v2
+                    </Button>
+                  ) : null}
+                  {files.length > 0 ? (
+                    shelf.confirmClearShelf ? (
+                      <>
+                        <Button
+                          type="button"
+                          tone="danger"
+                          size="sm"
+                          className="h-9 gap-2 rounded-xl px-3"
+                          onClick={() => {
+                            shelf.cancelClearShelf();
+                            void shelf.clearShelf();
+                          }}
+                        >
+                          Sure?
+                        </Button>
+                        <Button
+                          type="button"
+                          tone="ghost"
+                          size="sm"
+                          className="h-9 gap-2 rounded-xl px-3"
+                          onClick={() => shelf.cancelClearShelf()}
+                          aria-label="Cancel clear shelf"
+                        >
+                          <X className="size-4" />
+                        </Button>
+                      </>
+                    ) : (
                       <Button
                         type="button"
                         tone="ghost"
                         size="sm"
                         className="h-9 gap-2 rounded-xl px-3"
-                        onClick={() => shelf.cancelClearShelf()}
-                        aria-label="Cancel clear shelf"
+                        onClick={() => shelf.requestClearShelf()}
                       >
                         <X className="size-4" />
+                        Clear
                       </Button>
-                    </>
-                  ) : (
-                    <Button
-                      type="button"
-                      tone="ghost"
-                      size="sm"
-                      className="h-9 gap-2 rounded-xl px-3"
-                      onClick={() => shelf.requestClearShelf()}
-                    >
-                      <X className="size-4" />
-                      Clear
-                    </Button>
-                  )
-                ) : null}
-              </div>
+                    )
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            {showExtensionsView ||
+            showShelfView ||
+            showOrganizeView ||
+            showAutoTagView ? (
+              <p className="mt-1.5 text-sm font-medium text-zinc-400">
+                {showExtensionsView
+                  ? "Optional workflows. Flip one on and it joins the workspace."
+                  : showOrganizeView
+                    ? "Collections and tags in one place."
+                    : showAutoTagView
+                      ? "Automatic tagging coverage, candidates, and similar sounds."
+                      : "Sounds under review."}
+              </p>
             ) : null}
           </div>
-          {showExtensionsView || showShelfView || showOrganizeView || showAutoTagView ? (
-            <p className="mt-1.5 text-sm font-medium text-zinc-400">
-              {showExtensionsView
-                ? "Optional workflows. Flip one on and it joins the workspace."
-                : showOrganizeView
-                  ? "Collections and tags in one place."
-                  : showAutoTagView
-                    ? "Automatic tagging coverage, candidates, and similar sounds."
-                    : "Sounds under review."}
-            </p>
-          ) : null}
-        </div>
 
-        {showExtensionsView ? (
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <V3ExtensionGrid>
-              <V3ToolsCards
-                onRunExtension={runV2Extension}
-                onEnabledToggle={() => v2Catalog.refresh()}
-              />
-            </V3ExtensionGrid>
+          {showExtensionsView ? (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <V3ExtensionGrid>
+                <V3ToolsCards
+                  onRunExtension={runV2Extension}
+                  onEnabledToggle={() => v2Catalog.refresh()}
+                />
+              </V3ExtensionGrid>
             </div>
-        ) : showOrganizeView ? (
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <V3OrganizeView
-              collections={org.collections}
-              tags={org.tags}
-              selectedTagId={selectedTagId}
-              smartCounts={org.smartCounts}
-              onOpenCollection={handleOpenCollection}
-              onRequestSmartCount={(id) => void org.loadSmartCount(id)}
-              onCreateCollection={org.createCollection}
-              onRenameCollection={org.renameCollection}
-              onDeleteCollection={org.deleteCollection}
-              onUpdateCollectionColor={org.updateCollectionColor}
-              onCreateTag={org.createTag}
-              onRenameTag={org.renameTag}
-              onDeleteTag={org.deleteTag}
-              onUpdateTagColor={org.updateTagColor}
-              onSelectTag={handleFilterTag}
-            />
-          </div>
-        ) : showAutoTagView ? (
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5">
-            <V3AutoTagBoard
-              enabled={autoTagEnabled}
-              page={autoTagPage}
-              onPageChange={setAutoTagPage}
-              onOpenExtensionControls={view.showExtensions}
-            />
-          </div>
-        ) : (
-          <>
-            {selectedIds.length > 1 ? (
-              <div className="px-4 pt-3 md:px-5">
-                <V3SelectionBulkBar
-                  count={selectedIds.length}
-                  tags={org.tags}
-                  soundShelfEnabled={soundShelfEnabled}
-                  onSaveAll={() => void handleBulkSaveAll()}
-                  onAddToQueue={handleBulkAddToQueue}
-                  onAddToShelf={() => void handleBulkAddToShelf()}
+          ) : showOrganizeView ? (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <V3OrganizeView
+                collections={org.collections}
+                tags={org.tags}
+                selectedTagId={selectedTagId}
+                smartCounts={org.smartCounts}
+                onOpenCollection={handleOpenCollection}
+                onRequestSmartCount={(id) => void org.loadSmartCount(id)}
+                onCreateCollection={org.createCollection}
+                onRenameCollection={org.renameCollection}
+                onDeleteCollection={org.deleteCollection}
+                onUpdateCollectionColor={org.updateCollectionColor}
+                onCreateTag={org.createTag}
+                onRenameTag={org.renameTag}
+                onDeleteTag={org.deleteTag}
+                onUpdateTagColor={org.updateTagColor}
+                onSelectTag={handleFilterTag}
+              />
+            </div>
+          ) : showAutoTagView ? (
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5">
+              <V3AutoTagBoard
+                enabled={autoTagEnabled}
+                page={autoTagPage}
+                onPageChange={setAutoTagPage}
+                onOpenExtensionControls={view.showExtensions}
+              />
+            </div>
+          ) : (
+            <>
+              {selectedIds.length > 1 ? (
+                <div className="px-4 pt-3 md:px-5">
+                  <V3SelectionBulkBar
+                    count={selectedIds.length}
+                    tags={org.tags}
+                    soundShelfEnabled={soundShelfEnabled}
+                    onSaveAll={() => void handleBulkSaveAll()}
+                    onAddToQueue={handleBulkAddToQueue}
+                    onAddToShelf={() => void handleBulkAddToShelf()}
                     onTag={(tagId) => void handleBulkTag(tagId)}
                     onRemove={() => setConfirmBulkRemove({ stage: "choose" })}
                     bulkRemove={confirmBulkRemove}
@@ -895,7 +999,9 @@ function AppV3Content() {
                           <V3SelectionActions
                             items={bulkV2Items}
                             selectionCount={selectedIds.length}
-                            onInvoke={(item) => invokeV2RowCommand(item, selectedIds)}
+                            onInvoke={(item) =>
+                              invokeV2RowCommand(item, selectedIds)
+                            }
                           />
                         ) : null}
                         {makePackV2Enabled ? (
@@ -913,53 +1019,58 @@ function AppV3Content() {
                       </>
                     }
                   />
+                </div>
+              ) : null}
+              <div className="flex min-h-0 flex-1">
+                <V3LibraryDropZone
+                  catalog={v2Catalog.catalog}
+                  uiState={v2UiState}
+                >
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                    <V3FileTable
+                      files={orderedFiles}
+                      directories={directories}
+                      currentDirectory={selectedDirectory}
+                      currentCollectionName={selectedCollectionName}
+                      onNavigate={navigateDirectory}
+                      onNavigateLibrary={showLibrary}
+                      selectedFileId={selectedFile?.id ?? null}
+                      selectedIds={selectedIds}
+                      isSelectedFilePlaying={transport.isPlayerPlaying}
+                      onSelect={handleSelectFile}
+                      onToggleFavorite={handleToggleFavorite}
+                      searchQuery={debouncedSearchQuery}
+                      isLoading={isLoadingFiles}
+                      hasMore={hasMoreFiles}
+                      onLoadMore={() => void loadMoreFiles()}
+                      showContainerBorder={currentView !== "favorites"}
+                      soundShelfEnabled={soundShelfEnabled}
+                      shelfFileIds={shelf.soundShelfFileIds}
+                      resolveV2FileItems={resolveV2FileItems}
+                      onV2Command={(item, file) =>
+                        invokeV2RowCommand(
+                          item,
+                          selectedIds.includes(file.id) &&
+                            selectedIds.length > 0
+                            ? selectedIds
+                            : [file.id],
+                        )
+                      }
+                      onRemoveFile={handleRemoveFileFromLibrary}
+                      folderJanitorEnabled={folderJanitorEnabled}
+                      onScanFolder={extUi.handleScanFolder}
+                      allTags={org.tags}
+                      onToggleFileTag={handleToggleFileTag}
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onFlipSort={flipSort}
+                    />
+                  </div>
+                </V3LibraryDropZone>
               </div>
-            ) : null}
-            <div className="flex min-h-0 flex-1">
-              <V3LibraryDropZone catalog={v2Catalog.catalog} uiState={v2UiState}>
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <V3FileTable
-                files={orderedFiles}
-                directories={directories}
-                currentDirectory={selectedDirectory}
-                currentCollectionName={selectedCollectionName}
-                onNavigate={navigateDirectory}
-                onNavigateLibrary={showLibrary}
-                selectedFileId={selectedFile?.id ?? null}
-                selectedIds={selectedIds}
-                isSelectedFilePlaying={transport.isPlayerPlaying}
-                onSelect={handleSelectFile}
-                onToggleFavorite={handleToggleFavorite}
-                searchQuery={debouncedSearchQuery}
-                isLoading={isLoadingFiles}
-                hasMore={hasMoreFiles}
-                onLoadMore={() => void loadMoreFiles()}
-                showContainerBorder={currentView !== "favorites"}
-                soundShelfEnabled={soundShelfEnabled}
-                shelfFileIds={shelf.soundShelfFileIds}
-                resolveV2FileItems={resolveV2FileItems}
-                onV2Command={(item, file) =>
-                  invokeV2RowCommand(
-                    item,
-                    selectedIds.includes(file.id) && selectedIds.length > 0 ? selectedIds : [file.id],
-                  )
-                }
-                onRemoveFile={handleRemoveFileFromLibrary}
-                folderJanitorEnabled={folderJanitorEnabled}
-                onScanFolder={extUi.handleScanFolder}
-                allTags={org.tags}
-                onToggleFileTag={handleToggleFileTag}
-                sortKey={sortKey}
-                sortDir={sortDir}
-                onFlipSort={flipSort}
-              />
-              </div>
-              </V3LibraryDropZone>
-            </div>
-          </>
-        )}
-
-      </main>
+            </>
+          )}
+        </main>
       </div>
 
       <V3AudioPlayer
@@ -1030,7 +1141,9 @@ function AppV3Content() {
         onConvertToRegularCollection={org.convertToRegularCollection}
         onCreateTag={org.createTag}
         onDeleteTag={org.deleteTag}
-        v2Settings={<V3ExtensionsSection onEnabledToggle={() => v2Catalog.refresh()} />}
+        v2Settings={
+          <V3ExtensionsSection onEnabledToggle={() => v2Catalog.refresh()} />
+        }
         zoom={settingsScan.zoom}
         onUpdateZoom={settingsScan.handleUpdateZoom}
         shortcutBindings={shortcutBindings}
@@ -1053,7 +1166,9 @@ function AppV3Content() {
         onOpenChange={extUi.setFolderJanitorOpen}
         initialTarget={extUi.folderJanitorTarget}
         initialFolderPath={
-          extUi.folderJanitorTarget === "folder" ? extUi.folderJanitorFolderPath : undefined
+          extUi.folderJanitorTarget === "folder"
+            ? extUi.folderJanitorFolderPath
+            : undefined
         }
       />
 
@@ -1061,7 +1176,6 @@ function AppV3Content() {
         open={extUi.gatherOpen}
         onOpenChange={extUi.handleCloseGather}
       />
-
 
       <V3MakePackV2Dialog
         open={packV2 !== null}
@@ -1074,7 +1188,9 @@ function AppV3Content() {
 
       <V3SimilarSoundsDialog
         open={similarV2 !== null}
-        onOpenChange={(open) => { if (!open) setSimilarV2(null); }}
+        onOpenChange={(open) => {
+          if (!open) setSimilarV2(null);
+        }}
         state={similarV2}
       />
 

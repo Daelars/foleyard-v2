@@ -17,6 +17,7 @@ export function IconRail({
   onSelectOrganize,
   onSelectAutoTag,
   showAutoTag = false,
+  showShelf = false,
   onOpenSettings,
   settingsActive = false,
   className,
@@ -26,11 +27,12 @@ export function IconRail({
   shelfCount: number;
   onSelectLibrary: () => void;
   onSelectFavorites: () => void;
-  onSelectShelf: () => void;
+  onSelectShelf?: () => void;
   onSelectExtensions: () => void;
   onSelectOrganize: () => void;
   onSelectAutoTag?: () => void;
   showAutoTag?: boolean;
+  showShelf?: boolean;
   onOpenSettings: () => void;
   settingsActive?: boolean;
   className?: string;
@@ -73,14 +75,18 @@ export function IconRail({
       active: activeView === "favorites",
       onSelect: onSelectFavorites,
     },
-    {
-      id: "shelf",
-      label: "Shelf",
-      icon: <ListMusic className="size-5" />,
-      badge: shelfCount,
-      active: activeView === "shelf",
-      onSelect: onSelectShelf,
-    },
+    ...(showShelf && onSelectShelf
+      ? [
+          {
+            id: "shelf",
+            label: "Shelf",
+            icon: <ListMusic className="size-5" />,
+            badge: shelfCount,
+            active: activeView === "shelf",
+            onSelect: onSelectShelf,
+          },
+        ]
+      : []),
     {
       id: "organize",
       label: "Organize",

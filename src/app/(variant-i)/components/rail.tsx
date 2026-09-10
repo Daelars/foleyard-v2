@@ -19,6 +19,7 @@ export function V3IconRail({
   onSelectOrganize,
   onSelectAutoTag,
   showAutoTag = false,
+  showShelf = false,
   onOpenSettings,
   settingsActive = false,
   className,
@@ -28,11 +29,12 @@ export function V3IconRail({
   shelfCount: number;
   onSelectLibrary: () => void;
   onSelectFavorites: () => void;
-  onSelectShelf: () => void;
+  onSelectShelf?: () => void;
   onSelectExtensions: () => void;
   onSelectOrganize: () => void;
   onSelectAutoTag?: () => void;
   showAutoTag?: boolean;
+  showShelf?: boolean;
   onOpenSettings: () => void;
   settingsActive?: boolean;
   className?: string;
@@ -78,14 +80,18 @@ export function V3IconRail({
       active: activeView === "favorites",
       onSelect: onSelectFavorites,
     },
-    {
-      id: "shelf",
-      label: "Shelf",
-      icon: <ListMusic />,
-      badge: shelfCount,
-      active: activeView === "shelf",
-      onSelect: onSelectShelf,
-    },
+    ...(showShelf && onSelectShelf
+      ? [
+          {
+            id: "shelf",
+            label: "Shelf",
+            icon: <ListMusic />,
+            badge: shelfCount,
+            active: activeView === "shelf",
+            onSelect: onSelectShelf,
+          },
+        ]
+      : []),
     {
       id: "organize",
       label: "Organize",

@@ -107,7 +107,7 @@ export function buildPaletteEntries(input: PaletteBuildInput): PaletteEntry[] {
   push(
     { id: "view:shelf", label: "Go to Shelf", section: "view", hint: "view" },
     ["Go to Shelf"],
-    true,
+    input.shelfEnabled,
   );
   push(
     { id: "view:organize", label: "Go to Organize", section: "view", hint: "view" },

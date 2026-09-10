@@ -326,30 +326,31 @@ export function denyV2OrganizationOperations(extensionId: string): {
   collections: V2CollectionOperations;
   tags: V2TagOperations;
 } {
-  const deny = (): never => {
-    throw denied("collections:read", extensionId);
+  // Closed hosts still report the permission the operation actually
+  // requires, so approval and diagnostics key on the declared vocabulary.
+  const deny = (permission: ExtensionV2Permission): never => {
+    throw denied(permission, extensionId);
   };
-  const denyAsync = (): never => deny();
   const collections: V2CollectionOperations = {
-    list: () => deny(),
-    get: () => deny(),
-    createSmart: () => denyAsync(),
-    updateSmartFilter: () => deny(),
-    attachFile: () => deny(),
-    detachFile: () => deny(),
-    deleteCollection: () => deny(),
+    list: () => deny("collections:read"),
+    get: () => deny("collections:read"),
+    createSmart: () => deny("collections:write"),
+    updateSmartFilter: () => deny("collections:write"),
+    attachFile: () => deny("collections:write"),
+    detachFile: () => deny("collections:write"),
+    deleteCollection: () => deny("collections:write"),
   };
   const tags: V2TagOperations = {
-    list: () => deny(),
-    tagsForFile: () => deny(),
-    attachmentsForFiles: () => deny(),
-    create: () => denyAsync(),
-    attach: () => deny(),
-    detach: () => deny(),
-    detachByOrigin: () => deny(),
-    resolveAlias: () => deny(),
-    renamePreservingAlias: () => deny(),
-    merge: () => deny(),
+    list: () => deny("tags:read"),
+    tagsForFile: () => deny("tags:read"),
+    attachmentsForFiles: () => deny("tags:read"),
+    create: () => deny("tags:write"),
+    attach: () => deny("tags:write"),
+    detach: () => deny("tags:write"),
+    detachByOrigin: () => deny("tags:write"),
+    resolveAlias: () => deny("tags:write"),
+    renamePreservingAlias: () => deny("tags:write"),
+    merge: () => deny("tags:write"),
   };
   return { collections, tags };
 }

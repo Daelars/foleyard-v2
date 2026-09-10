@@ -575,7 +575,7 @@ describe("v2 disable and disposal", () => {
     expect(runs).toBe(1);
   });
 
-  it("disposes job-owned incomplete output while unrelated files survive", async () => {
+  it("leaves job-owned and unrelated files in place when cancellation settles", async () => {
     const manager = new V2JobManager({ clock: tickClock() });
     const grants = new V2GrantStore(() => "2026-09-06T00:00:00.000Z");
     const grant = grants.issue("ext", "/grant");
@@ -620,7 +620,9 @@ describe("v2 disable and disposal", () => {
     release.resolve();
     const done = await manager.waitFor(submitted.record.jobId);
     expect(done.state).toBe("cancelled");
-    // The runner disposes its owned incomplete output after owned work settles.
+    // Disposal is explicit: the runner owns `workspace.dispose()` after
+    // its work settles, and cancellation never deletes tracked files by
+    // itself. Unrelated files are never touched either way.
     expect(bytes.has("/grant/partial.mp3")).toBe(true);
     expect(bytes.has("/grant/unrelated.txt")).toBe(true);
   });

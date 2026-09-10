@@ -43,8 +43,7 @@ import { createRecentSelectionSource, createShelfSelectionSource } from "./sourc
  * One execution path for HTTP and direct invocation: the thin Next
  * route wrappers forward to the transport codec with this host. v1
  * endpoints, adapters, and packages are untouched and never routed
- * through here. Make Pack v2 registers in `make-pack-v2.ts` (#171);
- * development fixtures register only in tests.
+ * through here. Make Pack v2 registers in `make-pack-v2.ts` (#171).
  */
 
 const registry = new ExtensionV2Registry();
@@ -116,7 +115,7 @@ export function unregisterV2Extension(extensionId: string): void {
   try {
     writePersistedEnabled(extensionId, false);
   } catch {
-    // Persistence failure keeps the in-memory state; harmless for fixtures.
+    // Persistence failure keeps the in-memory state.
   }
   getV2Events().emit("contributions-changed", "*");
 }

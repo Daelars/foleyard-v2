@@ -251,11 +251,11 @@ export function createV2FolderOperations(args: V2FolderFactoryArgs): V2FolderOpe
 
 /** Deny-closed folder services for hosts without folder ports. */
 export function denyV2FolderOperations(extensionId: string): V2FolderOperations {
-  const deny = async (): Promise<never> => {
-    throw denied("files:read", extensionId);
+  const deny = async (permission: ExtensionV2Permission): Promise<never> => {
+    throw denied(permission, extensionId);
   };
   return {
-    listFolder: () => deny(),
-    deleteEmptyFolder: () => deny(),
+    listFolder: () => deny("files:read"),
+    deleteEmptyFolder: () => deny("files:delete"),
   };
 }

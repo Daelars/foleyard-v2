@@ -58,10 +58,14 @@ bun run example:v2-minimal
 ```
 
 The scaffold writes a valid minimal package (definition, handlers,
-tests, README with the static-registration snippet). Preview
-contributions and invoke commands in the dev-only workbench at
-`/prototype/ext-v2-workbench` with `FOLEYARD_V2_DEV_FIXTURES=1`.
-The full authoring contract lives in `docs/extensions-v2.md`.
+tests, README with the static-registration snippet). The full
+authoring contract lives in `docs/extensions-v2.md`.
+
+Archive artifacts (audit reports, plans, HTML explainers) live in the
+separate `Daelars/foleyard-archive` checkout. Review them in `next dev`
+at `/prototype/archive`; the viewer resolves `FOLEYARD_ARCHIVE_DIR`
+first, then the sibling `../foleyard-archive` checkout. Content in that
+checkout never ships and is never read by production builds.
 
 ## Contracts
 
@@ -71,26 +75,25 @@ The full authoring contract lives in `docs/extensions-v2.md`.
 
 ## Failure behavior and limitations
 
-Expected-failures ledger (`docs/expected-failures.md`, 12 entries — a PR
+Expected-failures ledger (`docs/expected-failures.md`, 8 entries — a PR
 that fixes a finding flips its test to `it` and removes the entry in the
-same change; deleting a test without fixing fails CI).
-Fixed in this cycle and removed from the ledger: B01 (gather overwrite),
-B05 (header-only first parse), B08 (null/malformed envelopes now 400 via
-`validateTransportEnvelope`), E01-transport (host-enforced service
-permissions via `guardHostServices`):
+same change; deleting a test without fixing fails CI):
 
 1. B03 — database-correctness: collection-branch count disagreement (#137)
 2. B09 — database-correctness: unchunked, non-atomic smart conversion (#137)
-3. B06 — extension-host-transport: silent 5,000-file scan cap (#138)
-4. E04 — filesystem-boundary: drop-rules write with no writable path (#135)
-5. E01 — filesystem-boundary: unpermitted service reachability (#135)
-6. B12 — data-loss-prevention: export deletes a manifest sidecar (#136)
-7. B02 — data-loss-prevention: distinct recordings inherit tags (#136)
-8. B10 — data-loss-prevention: removal undone by rescan (#136)
-9. I03 — scanner: order-dependent root ownership (#139)
-10. B04 — client-mutation-lifecycle: late tag failure erases newer edit (#140)
-11. B04 — client-mutation-lifecycle: stale deletion restores old root (#140)
-12. B11 — client-mutation-lifecycle: stale page unlocks duplicate request (#140)
+3. B02 — data-loss-prevention: distinct recordings inherit tags (#136)
+4. B10 — data-loss-prevention: removal undone by rescan (#136)
+5. I03 — scanner: order-dependent root ownership (#139)
+6. B04 — client-mutation-lifecycle: late tag failure erases newer edit (#140)
+7. B04 — client-mutation-lifecycle: stale deletion restores old root (#140)
+8. B11 — client-mutation-lifecycle: stale page unlocks duplicate request (#140)
+
+Previously fixed and removed from the ledger: B01 (gather overwrite),
+B05 (header-only first parse), B06 (silent 5,000-file scan cap), B08
+(null/malformed envelopes now 400 via `validateTransportEnvelope`), B12
+(export deletes a manifest sidecar), E01 and E01-transport (host-enforced
+service permissions via `guardHostServices`), E04 (drop-rules write with
+no writable path).
 
 Coverage baseline (`docs/test-coverage-baseline.md`, measured 5 Sep 2026 on
 `feat/123-coverage-baseline`): 37.77% statements, 31.94% branches, 34.65%

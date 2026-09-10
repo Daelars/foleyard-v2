@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   Accordion,
+  Alert,
   BulkBar,
   Button,
   Checkbox,
@@ -12,12 +13,14 @@ import {
   DialogTitle,
   IconButton,
   PlayButton,
+  Progress,
   QueueCard,
   Radio,
   Scrubber,
   Select,
   ShortcutRow,
   Slider,
+  StatusBadge,
   Switch,
   Tabs,
   TagEditor,
@@ -29,27 +32,9 @@ import {
 // radios report real values, selects open a viewport-fixed popup and pick
 // by keyboard, tabs switch with aria-selection, sliders and scrubbers
 // respond to arrow keys, the bulk bar stages removal with a separate
-// confirm step, and dialogs/tags/queues/toasts keep their callbacks.
+// confirm step, and dialogs/tags/queues keep their callbacks.
 
 describe("Button", () => {
-  it("renders tones and sizes with native attributes", () => {
-    const { container } = render(
-      <>
-        <Button tone="primary">Primary</Button>
-        <Button tone="secondary" size="sm" disabled>
-          Secondary
-        </Button>
-        <IconButton label="Play">
-          <svg aria-hidden />
-        </IconButton>
-      </>,
-    );
-    expect(screen.getByRole("button", { name: "Primary" })).toBeTruthy();
-    const secondary = screen.getByRole("button", { name: "Secondary" });
-    expect((secondary as HTMLButtonElement).disabled).toBe(true);
-    expect(container.querySelector("button[aria-label='Play']")).toBeTruthy();
-  });
-
   it("busy buttons disable and expose aria-busy", () => {
     const onClick = vi.fn();
     render(
@@ -63,48 +48,48 @@ describe("Button", () => {
     fireEvent.click(button);
     expect(onClick).not.toHaveBeenCalled();
   });
-});
 
-describe("PlayButton", () => {
-  it("labels from the playing state and fires onClick", () => {
-    const onClick = vi.fn();
-    const { rerender } = render(
-      <PlayButton playing={false} label="Play rain.wav" onClick={onClick} />,
+  it("icon and play/pause controls keep their accessible names and actions", () => {
+    const onPlay = vi.fn();
+    render(
+      <>
+        <IconButton label="Reveal in Explorer">reveal</IconButton>
+        <PlayButton playing label="Pause" onClick={onPlay} />
+        <PlayButton playing={false} label="Play" onClick={onPlay} />
+      </>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Play rain.wav" }));
-    expect(onClick).toHaveBeenCalledTimes(1);
-    rerender(
-      <PlayButton playing label="Pause rain.wav" onClick={onClick} />,
-    );
-    expect(screen.getByRole("button", { name: "Pause rain.wav" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(onPlay).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "Play" }).querySelector("polygon"),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Pause" }).querySelectorAll("rect"),
+    ).toHaveLength(2);
   });
 });
 
 describe("Switch / Checkbox / Radio", () => {
-  it("switch reports the next checked value", () => {
-    const onCheckedChange = vi.fn();
-    render(<Switch label="Auto-tag" checked={false} onCheckedChange={onCheckedChange} />);
-    fireEvent.click(screen.getByRole("switch", { name: "Auto-tag" }));
-    expect(onCheckedChange).toHaveBeenCalledWith(true);
-  });
-
-  it("checkbox toggles through its label", () => {
-    const onChange = vi.fn();
-    render(<Checkbox label="Enable semantic tagging" checked onChange={onChange} />);
-    fireEvent.click(screen.getByLabelText("Enable semantic tagging"));
-    expect(onChange).toHaveBeenCalledWith(false);
-  });
-
-  it("radio fires per option and keeps the name group", () => {
-    const onChange = vi.fn();
+  it("switch, checkbox, and radio report real values", () => {
+    const onSwitchChange = vi.fn();
+    const onCheckboxChange = vi.fn();
+    const onRadioChange = vi.fn();
     render(
       <>
-        <Radio name="f" label="All files" checked={false} onChange={() => onChange("all")} />
-        <Radio name="f" label="Untagged" checked onChange={() => onChange("untagged")} />
+        <Switch label="Auto-tag" checked={false} onCheckedChange={onSwitchChange} />
+        <Checkbox label="Enable semantic tagging" checked onChange={onCheckboxChange} />
+        <Radio name="f" label="All files" checked={false} onChange={() => onRadioChange("all")} />
+        <Radio name="f" label="Untagged" checked onChange={() => onRadioChange("untagged")} />
       </>,
     );
+    fireEvent.click(screen.getByRole("switch", { name: "Auto-tag" }));
+    expect(onSwitchChange).toHaveBeenCalledWith(true);
+
+    fireEvent.click(screen.getByLabelText("Enable semantic tagging"));
+    expect(onCheckboxChange).toHaveBeenCalledWith(false);
+
     fireEvent.click(screen.getByLabelText("All files"));
-    expect(onChange).toHaveBeenCalledWith("all");
+    expect(onRadioChange).toHaveBeenCalledWith("all");
     const untagged = screen.getByLabelText("Untagged") as HTMLInputElement;
     expect(untagged.name).toBe("f");
     expect(untagged.checked).toBe(true);
@@ -230,6 +215,9 @@ describe("BulkBar", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /From library/ }));
     expect(onStageChange).toHaveBeenCalledWith({ confirm: "library" });
+    expect(
+      screen.getByRole("button", { name: /From library/ }).textContent,
+    ).toContain("Default");
 
     rerender(
       <BulkBar
@@ -244,20 +232,6 @@ describe("BulkBar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sure?" }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onStageChange).not.toHaveBeenCalledWith(null);
-  });
-
-  it("marks the configured removal default", () => {
-    render(
-      <BulkBar
-        count={1}
-        removeDefault="disk"
-        stage="choose"
-        onStageChange={() => {}}
-        onClear={() => {}}
-      />,
-    );
-    const disk = screen.getByRole("button", { name: /From disk/ });
-    expect(disk.textContent).toContain("Default");
   });
 });
 
@@ -342,6 +316,32 @@ describe("TagEditor", () => {
   });
 });
 
+describe("Feedback", () => {
+  it("reports status, alerts, progress, and dismisses toasts", () => {
+    const onDismiss = vi.fn();
+    render(
+      <>
+        <StatusBadge status="Ready" tone="ready" />
+        <Alert tone="warning" title="Disk almost full" body="Free space before scanning." />
+        <Progress percent={42} top="Scanning library" bottom="42 of 100" />
+        <Toast
+          tone="error"
+          title="Scan failed"
+          message="Check the library root."
+          onDismiss={onDismiss}
+        />
+      </>,
+    );
+    expect(screen.getByText("Ready")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Disk almost full");
+    expect(
+      screen.getByRole("progressbar", { name: "Scanning library" }).getAttribute("aria-valuenow"),
+    ).toBe("42");
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss: Scan failed" }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("Accordion", () => {
   it("expands and collapses rows (first row starts open)", () => {
     render(
@@ -374,16 +374,5 @@ describe("Dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
     fireEvent.click(screen.getByRole("alertdialog").parentElement!);
     expect(onClose).toHaveBeenCalled();
-  });
-});
-
-describe("Toast", () => {
-  it("dismisses through its button", () => {
-    const onDismiss = vi.fn();
-    render(
-      <Toast tone="success" title="Scan finished" message="Tagged 12 files." onDismiss={onDismiss} />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss: Scan finished" }));
-    expect(onDismiss).toHaveBeenCalled();
   });
 });

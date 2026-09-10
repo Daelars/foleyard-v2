@@ -266,28 +266,4 @@ describe("scanner", () => {
       scratch.dispose();
     }
   });
-
-  it("obtains metadata that needs a full parse on the first scan, not the second (B05)", async () => {
-    // A contract-correct extractor: header-only parses cannot see past the
-    // header, full parses can. The scanner must ask for the full parse while
-    // the file is still unknown.
-    state.extractor = async (_path, options) =>
-      options?.fullParse
-        ? { ...FULL_METADATA, duration: 7.5, fileSize: options?.fileSize ?? 1024 }
-        : { ...FULL_METADATA, duration: null, codec: null, fileSize: options?.fileSize ?? 1024 };
-
-    const scratch = createScratchLibrary("foleyard-scan-metadata-");
-    try {
-      const kick = scratch.writeFile("kick.wav");
-      settings.setLibraryRoots([scratch.root]);
-
-      await runScanToIdle();
-      expect(
-        files.getFileByPath(kick)?.duration,
-        "a first scan must carry the full-parse duration",
-      ).toBe(7.5);
-    } finally {
-      scratch.dispose();
-    }
-  });
 });

@@ -77,6 +77,11 @@ describe("v2 route names and status map", () => {
     expect(V2_FAILURE_STATUS["payload-too-large"]).toBe(413);
     expect(V2_FAILURE_STATUS["handler-failed"]).toBe(500);
     expect(V2_FAILURE_STATUS["result-invalid"]).toBe(500);
+    expect(V2_FAILURE_STATUS["plan-unknown"]).toBe(404);
+    expect(V2_FAILURE_STATUS["plan-expired"]).toBe(400);
+    expect(V2_FAILURE_STATUS["plan-altered"]).toBe(400);
+    expect(V2_FAILURE_STATUS["plan-consumed"]).toBe(400);
+    expect(V2_FAILURE_STATUS["review-required"]).toBe(400);
   });
 
   it("encodes jobs as 202 and immediate outcomes as 200", () => {
@@ -143,11 +148,6 @@ describe("direct and HTTP agreement", () => {
     {
       name: "unknown command",
       body: { extensionId: "fixture-greeter", commandId: "fixture-greeter.missing" },
-      expectCode: "command-unknown",
-    },
-    {
-      name: "unowned command",
-      body: { extensionId: "fixture-greeter", commandId: "second-fixture.other" },
       expectCode: "command-unknown",
     },
     {

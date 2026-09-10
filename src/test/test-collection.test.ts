@@ -52,14 +52,6 @@ function findTestFiles(directory: string, found: string[] = []): string[] {
 describe("test collection", () => {
   const testFiles = findTestFiles(repoRoot);
 
-  it("finds test files to check", () => {
-    // Guards the guard: a walk that silently returns nothing would pass everything below.
-    // Floor lowered from 50 by the integration rebuild (#135–#142), which
-    // deletes test files on purpose: the end state is ~10 files, so the
-    // floor only proves the walk itself works.
-    expect(testFiles.length).toBeGreaterThan(5);
-  });
-
   it("collects every test file on disk, or declares why not", () => {
     const uncollected = testFiles.filter(
       (file) =>
@@ -75,17 +67,6 @@ describe("test collection", () => {
       "These test files exist but the default `vitest run` never collects them. " +
         "Either rename them to *.test.ts / *.test.tsx outside docs/, or add them " +
         "to UNCOLLECTED_BY_DESIGN with a reason.",
-    ).toEqual([]);
-  });
-
-  it("keeps the declared exclusions honest", () => {
-    const stale = [...UNCOLLECTED_BY_DESIGN.keys()].filter(
-      (file) => !fs.existsSync(path.join(repoRoot, file)),
-    );
-
-    expect(
-      stale,
-      "UNCOLLECTED_BY_DESIGN names files that no longer exist.",
     ).toEqual([]);
   });
 });

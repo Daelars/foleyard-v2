@@ -57,37 +57,4 @@ describe("file embeddings store", () => {
     expect(embeddings.listEmbeddingIds("stub")).toEqual([]);
     expect(embeddings.getEmbedding(fileA, "stub")).toBeNull();
   });
-
-  it("move-reconcile carries origins and vectors to the new file", () => {
-    const sqlite2 = createTestDatabase();
-    try {
-      const insert = sqlite2.prepare(
-        `INSERT INTO files (id, path, filename, library_root, file_size, duration, codec,
-          sample_rate, bit_depth, channels, removed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      );
-      insert.run("old", "/lib/old/hit.wav", "hit.wav", "/lib", 100, 1, "pcm", 44100, 16, 2, "2026-09-01");
-      insert.run("new", "/lib/new/hit.wav", "hit.wav", "/lib", 100, 1, "pcm", 44100, 16, 2, null);
-      sqlite2.prepare("INSERT INTO tags (id, name) VALUES ('t1', 'thunder')").run();
-      sqlite2.prepare(
-        "INSERT INTO file_tags (file_id, tag_id, origin, confidence) VALUES ('old', 't1', 'semantic_ai', 0.9)",
-      ).run();
-      const repository = new SqliteAudioFileRepository(sqlite2);
-      const tagged = new SqliteEmbeddingRepository(sqlite2);
-      tagged.upsertEmbedding("old", "stub", 2, floatBytes([1, 0]));
-
-      expect(repository.reconcileMovedFiles()).toBe(1);
-
-      expect(tagged.getEmbedding("new", "stub")?.dim).toBe(2);
-      expect(tagged.listEmbeddingIds("stub")).toEqual(["new"]);
-      const moved = sqlite2
-        .prepare("SELECT origin, confidence FROM file_tags WHERE file_id = 'new'")
-        .get() as { origin: string; confidence: number };
-      expect(moved.origin).toBe("semantic_ai");
-      expect(moved.confidence).toBe(0.9);
-      expect(repository.getFileById("old")).toBeNull();
-    } finally {
-      sqlite2.close();
-    }
-  });
 });

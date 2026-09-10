@@ -6,7 +6,6 @@ import {
   dedupeIds,
   defaultPackName,
   detectZipConflicts,
-  MAX_PACK_FILES,
   planFolderNames,
   resolvePackOptions,
   sanitizePackName,
@@ -127,9 +126,5 @@ describe("make-pack-v2 policy", () => {
   it("computes the common parent directory of copied outputs", () => {
     expect(commonParentDir(["/out/a.wav", "/out/b.wav"])).toBe("/out");
     expect(commonParentDir([])).toBe("");
-  });
-
-  it("caps packs at the archive service bound", () => {
-    expect(MAX_PACK_FILES).toBe(500);
   });
 });

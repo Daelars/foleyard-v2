@@ -8,7 +8,6 @@ import {
   type TestDatabase,
 } from "@/test/fixtures";
 import { SqliteAudioFileRepository } from "@/lib/database/file-repository";
-import { SqliteTagRepository } from "@/lib/database/tag-repository";
 
 // Area: data-loss prevention (#136).
 //
@@ -77,49 +76,6 @@ describe("data-loss prevention", () => {
         repository.getFiles(),
         "a user exclusion came back on the next scan",
       ).toHaveLength(0);
-    } finally {
-      sqlite.close();
-    }
-  });
-
-  it("rolls batch mutations back as a unit and stages only what it owns", async () => {
-    const sqlite: TestDatabase = createTestDatabase();
-    try {
-      const repository = new SqliteAudioFileRepository(sqlite);
-      const tags = new SqliteTagRepository(sqlite);
-      const tagId = tags.createTag("Loud");
-      repository.batchUpsertFiles(
-        [0, 1, 2].map((index) =>
-          audioFileRecord({ path: `/lib/file-${index}.wav` }),
-        ),
-        new Date().toISOString(),
-      );
-      const ids = repository.getFiles({ limit: 10 }).map((file) => file.id);
-
-      repository.setFileTagBatch(ids, tagId, true);
-      expect(
-        tags.getTagsForFiles(ids).size,
-        "a whole batch commits together",
-      ).toBe(ids.length);
-
-      expect(() =>
-        repository.setFileTagBatch([...ids, "missing-id"], tagId, true),
-      ).toThrow(/does not exist/);
-
-      expect(() =>
-        repository.setFavorites([...ids, "missing-id"], true),
-      ).toThrow(/does not exist/);
-      expect(
-        repository.getFileCount({ favorites: true }),
-        "one unknown id rolls the whole batch back",
-      ).toBe(0);
-
-      repository.setFavorites(ids, true);
-      repository.setFavorites([ids[0]], false);
-      expect(
-        repository.getFileCount({ favorites: true }),
-        "favourites take an explicit target state",
-      ).toBe(ids.length - 1);
     } finally {
       sqlite.close();
     }

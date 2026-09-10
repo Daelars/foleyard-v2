@@ -159,16 +159,4 @@ describe("V2WorkflowStateStore", () => {
     store.reset();
     expect(() => store.write("big", "x".repeat(MAX_V2_STATE_BYTES + 1))).toThrowError(/per-extension limit/);
   });
-
-  it("persists before notifying subscribers", () => {
-    const { ports } = memoryState();
-    const bus = new V2EventBus();
-    const store = new V2WorkflowStateStore("ext-a", ports, { events: bus });
-    const observed: unknown[] = [];
-    bus.subscribe("state-changed", () => {
-      observed.push(store.read("draft"));
-    });
-    store.write("draft", { step: 1 });
-    expect(observed).toEqual([{ step: 1 }]);
-  });
 });

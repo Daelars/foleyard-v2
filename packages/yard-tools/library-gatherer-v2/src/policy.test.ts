@@ -15,13 +15,16 @@ import {
 
 describe("audio matching", () => {
   const allowed = audioExtensionSet();
-  it("matches known audio extensions case-insensitively", () => {
-    expect(isAudioFile("Kick.WAV", allowed)).toBe(true);
-    expect(isAudioFile("loop.flac", allowed)).toBe(true);
-  });
-  it("rejects non-audio and extensionless files", () => {
-    expect(isAudioFile("notes.txt", allowed)).toBe(false);
-    expect(isAudioFile("README", allowed)).toBe(false);
+  it("matches known audio extensions case-insensitively and rejects non-audio", () => {
+    const cases: Array<[string, boolean]> = [
+      ["Kick.WAV", true],
+      ["loop.flac", true],
+      ["notes.txt", false],
+      ["README", false],
+    ];
+    for (const [name, expected] of cases) {
+      expect(isAudioFile(name, allowed)).toBe(expected);
+    }
   });
   it("honors a custom extension list", () => {
     const custom = audioExtensionSet([".xyz"]);
@@ -41,10 +44,8 @@ describe("extensionOf / splitName / baseName", () => {
 });
 
 describe("plannedOutputName", () => {
-  it("prefixes the source folder name when preserving", () => {
+  it("prefixes the source folder name only when preserving", () => {
     expect(plannedOutputName("kick.wav", "Pack A", true)).toBe("Pack A - kick.wav");
-  });
-  it("keeps the bare filename when not preserving", () => {
     expect(plannedOutputName("kick.wav", "Pack A", false)).toBe("kick.wav");
   });
 });

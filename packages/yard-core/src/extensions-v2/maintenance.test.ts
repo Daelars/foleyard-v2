@@ -77,7 +77,7 @@ describe("v2 folder permission confinement", () => {
     const denied = denyV2FolderOperations("folder-janitor-v2");
     await expect(denied.listFolder({ path: "/lib" })).rejects.toThrowError(/"files:read"/);
     await expect(denied.deleteEmptyFolder({ path: "/lib/empty" })).rejects.toThrowError(
-      /"files:read"/,
+      /"files:delete"/,
     );
   });
 });

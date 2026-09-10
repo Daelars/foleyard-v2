@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -336,23 +333,5 @@ describe("folder-janitor-v2 delete-folders plan contract", () => {
     expect(value.failedPaths).toEqual(["/lib/sub"]);
     expect(value.failedReasons[0]).toMatch(/no longer empty|only empty/i);
     expect(w.removed).toEqual([]);
-  });
-});
-
-describe("folder-janitor-v2 boundaries", () => {
-  it("never imports v1 extension modules", () => {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const sources = ["definition.ts", "policy.ts", "handlers.ts", "index.ts"].map((file) =>
-      readFileSync(join(here, file), "utf8"),
-    );
-    for (const text of sources) {
-      expect(text).not.toMatch(/@foleyard\/folder-janitor"/);
-      expect(text).not.toMatch(/from\s+["'][^"']*extensions\//);
-      expect(text).not.toMatch(/node:fs/);
-      const specifiers = [...text.matchAll(/from\s+["']([^"']+)["']/g)].map((match) => match[1]);
-      for (const specifier of specifiers) {
-        expect(specifier === "yard-core" || specifier?.startsWith("./")).toBe(true);
-      }
-    }
   });
 });

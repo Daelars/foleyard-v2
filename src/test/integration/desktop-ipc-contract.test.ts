@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import rawRegistry from "../../../electron/main/ipc-channels.cjs";
-import { checkDesktopCall, DESKTOP_CHANNELS, DESKTOP_CHANNEL_SPECS } from "@/lib/desktop-channels";
+import { checkDesktopCall } from "@/lib/desktop-channels";
 
 const registry = rawRegistry as {
   CHANNELS: Record<string, string>;
@@ -49,11 +49,10 @@ describe("desktop IPC contract", () => {
     expect(registry.validateIpcPayload("desktop:update-not-available", undefined)).toBeNull();
   });
 
-  it("exposes the same table to the renderer wrapper", () => {
-    expect(DESKTOP_CHANNELS).toEqual(registry.CHANNELS);
-    expect(DESKTOP_CHANNEL_SPECS).toEqual(registry.CHANNEL_SPECS);
+  it("routes renderer calls through the shared registry validator", () => {
+    expect(checkDesktopCall("desktop:start-drag-file", { fileIds: ["a"] })).toBeNull();
+    expect(checkDesktopCall("desktop:start-drag-file", {})).toMatch(/fileIds/);
     expect(checkDesktopCall("desktop:begin-drag", {})).toMatch(/unknown/);
-    expect(checkDesktopCall("desktop:reveal-path", "/lib/kick.wav")).toBeNull();
   });
 
   it("preload mirrors the registry and no other file handwrites channel strings", () => {

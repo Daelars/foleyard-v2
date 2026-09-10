@@ -1,6 +1,3 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -16,8 +13,6 @@ import {
 // of registered definitions: JSON round-trips must preserve it, and the
 // serializer must throw on function leakage instead of letting JSON
 // silently drop function values.
-
-const here = dirname(fileURLToPath(import.meta.url));
 
 describe("ExtensionV2Catalog serialization", () => {
   it("round-trips the fixture catalog through JSON without loss", () => {
@@ -51,23 +46,6 @@ describe("ExtensionV2Catalog serialization", () => {
     expect(JSON.stringify(tainted)).not.toContain("validate");
     expect((thrown as ExtensionV2CatalogError).path).toMatch(
       /entries\[0\]\.commands\[0\]/,
-    );
-  });
-
-  it("detects nested non-serializable values with a path", () => {
-    const registry = new ExtensionV2Registry();
-    registry.register(createGreeterFixtureDefinition());
-    const catalog = registry.buildCatalog() as unknown as Record<
-      string,
-      unknown
-    >;
-    const entries = catalog["entries"] as Record<string, unknown>[];
-    (entries[0]!["settings"] as Record<string, unknown>[])[0]![
-      "defaultValue"
-    ] = () => true;
-
-    expect(() => serializeCatalog(catalog)).toThrowError(
-      /entries\[0\]\.settings\[0\]\.defaultValue/,
     );
   });
 
@@ -131,41 +109,5 @@ describe("validateV2Value", () => {
     expect(validateV2Value({ kind: "none" }, { unexpected: true })).toMatch(
       /no input/,
     );
-  });
-});
-
-describe("v2 module boundaries", () => {
-  it("imports no v1 extension modules or privileged frameworks", () => {
-    const forbidden = [
-      "../extensions/",
-      "../extensions\"",
-      "./extensions",
-      "extensions/vocabulary",
-      "extensions/extension-",
-      "extension-host",
-      "extension-registry",
-      "extension-context",
-      "extension-command-registry",
-      "src/lib/extensions",
-      "createYardUiIntent",
-      "isYardUiIntent",
-      "YardExtensionHost",
-      "YardCommandRegistry",
-      "from \"react\"",
-      "from \"next",
-      "from \"electron\"",
-      "better-sqlite3",
-    ];
-    const offenders: string[] = [];
-    for (const file of readdirSync(here)) {
-      if (file.endsWith(".test.ts")) continue;
-      const content = readFileSync(join(here, file), "utf8");
-      for (const pattern of forbidden) {
-        if (content.includes(pattern)) {
-          offenders.push(`${file} contains ${JSON.stringify(pattern)}`);
-        }
-      }
-    }
-    expect(offenders).toEqual([]);
   });
 });

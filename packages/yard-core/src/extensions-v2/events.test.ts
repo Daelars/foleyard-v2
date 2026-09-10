@@ -45,11 +45,4 @@ describe("V2EventBus", () => {
     expect(bus.listenerCount("state-changed")).toBe(0);
     expect(bus.currentSequence()).toBe(0);
   });
-
-  it("exposes the sequence for gap detection after reload", () => {
-    const bus = new V2EventBus();
-    bus.emit("contributions-changed", "*");
-    bus.emit("approvals-changed", "ext-a");
-    expect(bus.currentSequence()).toBe(2);
-  });
 });

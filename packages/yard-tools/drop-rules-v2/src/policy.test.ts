@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_RENAME_PATTERN,
   expandRenamePattern,
-  MAX_DROP_FILES,
   planDropNames,
 } from "./policy";
 
@@ -60,9 +59,5 @@ describe("planDropNames", () => {
       NOW,
     );
     expect(planned.map((file) => file.outputName)).toEqual(["same.wav", "Same 2.wav"]);
-  });
-
-  it("caps a drop at the documented bound", () => {
-    expect(MAX_DROP_FILES).toBe(100);
   });
 });

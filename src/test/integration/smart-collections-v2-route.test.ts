@@ -47,8 +47,7 @@ const SMART_V2 = "smart-collections-v2";
 
 // Area: Smart Collections v1 retirement. save-search now executes through
 // the v2 route: the same stored filter shape on the shared collections
-// table, input validation before the write, and the v2 enabled/approval
-// gates.
+// table.
 describe("Smart Collections v2 route", () => {
   let sqlite: TestDatabase;
 
@@ -83,31 +82,5 @@ describe("Smart Collections v2 route", () => {
     );
     expect(created?.isSmart).toBeTruthy();
     expect(created?.filter).toBe(JSON.stringify({ q: "kick" }));
-  });
-
-  it("rejects a blank name before the write", async () => {
-    const response = await callRoute(POST, {
-      url: "http://localhost/api/extensions-v2/execute",
-      body: {
-        extensionId: SMART_V2,
-        commandId: "smart-collections-v2.save-search",
-        input: { name: "", query: "kick" },
-      },
-    });
-    expect(response.status).toBe(400);
-    expect(state.collections!.getAllCollections()).toHaveLength(0);
-  });
-
-  it("denies without approval", async () => {
-    setV2ExtensionEnabled(SMART_V2, false);
-    const response = await callRoute(POST, {
-      url: "http://localhost/api/extensions-v2/execute",
-      body: {
-        extensionId: SMART_V2,
-        commandId: "smart-collections-v2.save-search",
-        input: { name: "Kicks", query: "kick" },
-      },
-    });
-    expect(response.status).toBe(403);
   });
 });

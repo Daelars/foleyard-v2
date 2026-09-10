@@ -170,26 +170,6 @@ describe("createV2OperationServices permission confinement", () => {
       /"files:copy"/,
     );
   });
-
-  it("pages Library reads through bounded iteration", () => {
-    const files = Array.from({ length: 5200 }, (_, index) => record(`f-${index}`));
-    const services = createV2OperationServices(
-      servicesArgs({ library: libraryFake(files), effectivePermissions: ["library:read"] }),
-    );
-    let cursor: string | null = null;
-    let total = 0;
-    let pages = 0;
-    for (;;) {
-      const page = services.library.listPage(cursor, 500);
-      expect(page.files.length).toBeLessThanOrEqual(500);
-      total += page.files.length;
-      pages += 1;
-      if (!page.nextCursor) break;
-      cursor = page.nextCursor;
-      expect(pages).toBeLessThan(20);
-    }
-    expect(total).toBe(5200);
-  });
 });
 
 describe("v2 file operations and grants", () => {

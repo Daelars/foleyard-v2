@@ -318,6 +318,15 @@ describe("database correctness", () => {
     expect(explicit.status).toBe(200);
     expect(state.files!.getFileCount({ favorites: true })).toBe(0);
 
+    // The repository-level batch API takes an explicit target state too:
+    // favouriting a whole batch then clearing one leaves the rest favourited.
+    files.setFavorites(ids, true);
+    files.setFavorites([ids[0]], false);
+    expect(
+      files.getFileCount({ favorites: true }),
+      "favourites take an explicit target state",
+    ).toBe(ids.length - 1);
+
     const attached = await callRoute(patchFilesRoute, {
       method: "PATCH",
       url: "http://localhost/api/files",

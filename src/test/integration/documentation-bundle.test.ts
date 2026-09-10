@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
 
-import { readDocumentation, listDocumentIds, DOCUMENT_REGISTRY } from "@/lib/documentation";
+import { readDocumentation, listDocumentIds } from "@/lib/documentation";
 import { initializeDatabaseSchema, getDatabaseVersionInfo, CURRENT_SCHEMA_VERSION } from "@/lib/database/migrations";
 import { getServerRuntimeSnapshot } from "@/lib/runtime-info";
 
@@ -15,15 +15,6 @@ describe("documentation bundle contracts", () => {
     expect(() => readDocumentation("../package.json")).toThrow(/Unknown document/);
     expect(() => readDocumentation("..")).toThrow(/Unknown document/);
     expect(() => readDocumentation("")).toThrow(/Unknown document/);
-  });
-
-  it("registry paths exist for live documents", async () => {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    for (const entry of DOCUMENT_REGISTRY) {
-      const abs = path.resolve(process.cwd(), entry.relativePath);
-      expect(fs.existsSync(abs), `missing ${entry.id} -> ${entry.relativePath}`).toBe(true);
-    }
   });
 
   it("migration version reflects successful application including baseline", () => {

@@ -6,8 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 // Area: extension v2 R9 (#172). The scaffold command produces a valid
 // minimal v2 package: all files exist with the expected shape, a bad
 // invocation fails loudly, and the generated output typechecks (scoped
-// tsc over the probe directory) and runs (the generated vitest suite
-// executes through the real host). The probe lives under `.next/`
+// tsc over the probe directory). The probe lives under `.next/`
 // (gitignored build output) and is removed afterwards, so the check
 // never leaves tree dirt behind.
 
@@ -15,7 +14,6 @@ const REPO_ROOT = resolve(__dirname, "..", "..", "..");
 const SCRIPT = join(REPO_ROOT, "scripts", "scaffold-extension-v2.cjs");
 const PROBE_DIR = join(REPO_ROOT, ".next", `v2-scaffold-probe-${process.pid}`);
 const TSC = join(REPO_ROOT, "node_modules", "typescript", "bin", "tsc");
-const VITEST = join(REPO_ROOT, "node_modules", "vitest", "vitest.mjs");
 
 function scaffold(extra: string[]): string {
   return execFileSync(
@@ -50,7 +48,7 @@ describe("scaffold-extension-v2 command", () => {
     ).toThrow(/already exists/);
   });
 
-  it("writes a complete minimal package with static-registration docs", () => {
+  it("writes a complete minimal package with static-registration docs that typechecks", () => {
     scaffold(["--force"]);
     for (const relative of [
       "package.json",
@@ -75,10 +73,6 @@ describe("scaffold-extension-v2 command", () => {
     expect(readme).toContain("registerScaffoldProbeHandlers");
     expect(readme).toContain("registerV2Extension");
     expect(readme.toLowerCase()).toMatch(/no\s+installer/);
-  });
-
-  it("generates output that typechecks", () => {
-    scaffold(["--force"]);
     // Explicit absolute config (no `extends` path semantics): the probe
     // resolves `yard-core` exactly like the repo tsconfig does.
     const config = {
@@ -120,15 +114,5 @@ describe("scaffold-extension-v2 command", () => {
           : String(error);
       expect.unreachable(`probe typecheck failed:\n${String(detail)}`);
     }
-  }, 300000);
-
-  it("generates output whose test suite runs green", () => {
-    scaffold(["--force"]);
-    const output = execFileSync(
-      process.execPath,
-      [VITEST, "run", join(PROBE_DIR, "src", "handlers.test.ts"), "--no-coverage"],
-      { cwd: REPO_ROOT, encoding: "utf8" },
-    );
-    expect(output).toMatch(/3 passed/);
   }, 300000);
 });

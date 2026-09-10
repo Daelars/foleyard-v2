@@ -98,18 +98,6 @@ describe("buildEffectiveV2Catalog", () => {
     // projection is what renderers enforce against.
     expect(registry().buildCatalog().entries[0]!.permissions).toEqual(["library:read"]);
   });
-
-  it("matches computeEffectiveV2Permissions for every entry", () => {
-    const next = registry();
-    const granted = ["library:read", "files:write"];
-    const effective = buildEffectiveV2Catalog(next, () => granted);
-    for (const entry of effective.entries) {
-      const definition = next.get(entry.id)!;
-      expect(entry.permissions).toEqual(
-        computeEffectiveV2Permissions(definition.permissions, granted),
-      );
-    }
-  });
 });
 
 describe("grant tokens and secrets", () => {

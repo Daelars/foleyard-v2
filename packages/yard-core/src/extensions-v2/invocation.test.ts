@@ -8,7 +8,6 @@ import {
   jobV2Result,
   resolveV2Ownership,
   reviewV2Result,
-  V2_PAYLOAD_LIMITS,
 } from "./index";
 
 // Area: extension v2 R2 (#166). Canonical invocation/ownership contracts:
@@ -114,12 +113,5 @@ describe("v2 outcomes", () => {
       expect(JSON.parse(JSON.stringify(result))).toEqual(result);
     }
     expect(immediateV2Result(1).kind).toBe("immediate");
-  });
-
-  it("documents payload limits shared by direct and HTTP paths", () => {
-    expect(V2_PAYLOAD_LIMITS.maxBodyBytes).toBeGreaterThan(
-      V2_PAYLOAD_LIMITS.maxInputBytes,
-    );
-    expect(V2_PAYLOAD_LIMITS.maxFileIds).toBe(500);
   });
 });

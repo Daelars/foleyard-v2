@@ -118,7 +118,11 @@ describe("v2 organization permission confinement", () => {
   it("denies closed hosts without organization ports", () => {
     const denied = denyV2OrganizationOperations("smart-collections-v2");
     expect(() => denied.collections.list()).toThrowError(/"collections:read"/);
-    expect(() => denied.tags.list()).toThrowError(/"collections:read"/);
+    expect(() => denied.tags.list()).toThrowError(/"tags:read"/);
+    expect(() => denied.collections.createSmart("Night", "night")).toThrowError(
+      /"collections:write"/,
+    );
+    expect(() => denied.tags.create("night")).toThrowError(/"tags:write"/);
   });
 });
 

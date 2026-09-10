@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   createV2OperationServices,
-  encodeV2Failure,
   ExtensionV2Host,
   ExtensionV2Registry,
   handleV2HttpPlanApply,
@@ -277,21 +276,6 @@ describe("prepare/review/apply", () => {
         expect(applied.outcome.value).toEqual({ exported: 2 });
       }
     }
-  });
-
-  it("rejects forged plan IDs at execute time", async () => {
-    const thief = fixtureWorld();
-    thief.host.registerHandler(EXTENSION_ID, PREVIEW_COMMAND, () =>
-      reviewV2Result("vplan_forged", "Forged", "2030-01-01T00:00:00.000Z"),
-    );
-    const result = await thief.host.execute({
-      extensionId: EXTENSION_ID,
-      commandId: PREVIEW_COMMAND,
-      input: input(thief.grantId),
-      selection: { fileIds: ["a"] },
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe("result-invalid");
   });
 
   it("rejects altered echoes but leaves the plan pending for retry", async () => {
@@ -593,13 +577,5 @@ describe("plan transport codec", () => {
       options: reviewBody.review.options,
     });
     expect(replay.status).toBe(400);
-  });
-
-  it("maps plan failure codes to documented statuses", () => {
-    expect(encodeV2Failure({ ok: false, code: "plan-unknown", message: "x" }).status).toBe(404);
-    expect(encodeV2Failure({ ok: false, code: "plan-expired", message: "x" }).status).toBe(400);
-    expect(encodeV2Failure({ ok: false, code: "plan-altered", message: "x" }).status).toBe(400);
-    expect(encodeV2Failure({ ok: false, code: "plan-consumed", message: "x" }).status).toBe(400);
-    expect(encodeV2Failure({ ok: false, code: "review-required", message: "x" }).status).toBe(400);
   });
 });

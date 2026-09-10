@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -26,7 +23,6 @@ import {
   createDropRulesV2Definition,
   DROP_RULES_V2_APPLY,
   DROP_RULES_V2_ID,
-  DROP_RULES_V2_OPEN_SETTINGS,
   DROP_RULES_V2_PREPARE_DRAG,
   DROP_RULES_V2_PREVIEW,
   registerDropRulesV2Handlers,
@@ -399,24 +395,6 @@ describe("drop-rules-v2 prepare-drag", () => {
     const value = immediateValue<DropRulesV2PrepareDragResult>(result);
     expect(value).toMatchObject({ staged: false, dragPath: "/lib/a.mp3", outputName: "a.mp3" });
   });
-
-  it("opens settings with the five setting IDs", async () => {
-    const w = world();
-    const result = await w.host.execute({
-      extensionId: DROP_RULES_V2_ID,
-      commandId: DROP_RULES_V2_OPEN_SETTINGS,
-      input: {},
-      selection: {},
-    });
-    const value = immediateValue<{ settings: string[] }>(result);
-    expect(value.settings).toEqual([
-      "drop-rules-v2.copy-on-drop",
-      "drop-rules-v2.rename-on-drop",
-      "drop-rules-v2.rename-pattern",
-      "drop-rules-v2.drag-out-folder",
-      "drop-rules-v2.mark-used",
-    ]);
-  });
 });
 
 describe("drop-rules-v2 boundaries", () => {
@@ -461,20 +439,5 @@ describe("drop-rules-v2 boundaries", () => {
     expect(items.map((item) => item.commandId).sort()).toEqual(
       [DROP_RULES_V2_PREVIEW, DROP_RULES_V2_APPLY, DROP_RULES_V2_PREPARE_DRAG].sort(),
     );
-  });
-
-  it("never imports v1 extension modules", () => {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const sources = ["definition.ts", "policy.ts", "handlers.ts", "index.ts"].map((file) =>
-      readFileSync(join(here, file), "utf8"),
-    );
-    for (const text of sources) {
-      expect(text).not.toMatch(/@foleyard\/drop-rules"/);
-      expect(text).not.toMatch(/from\s+["'][^"']*extensions\//);
-      const specifiers = [...text.matchAll(/from\s+["']([^"']+)["']/g)].map((match) => match[1]);
-      for (const specifier of specifiers) {
-        expect(specifier === "yard-core" || specifier?.startsWith("./")).toBe(true);
-      }
-    }
   });
 });

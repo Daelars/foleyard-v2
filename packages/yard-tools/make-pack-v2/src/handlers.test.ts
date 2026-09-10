@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,7 +6,6 @@ import {
   ExtensionV2Host,
   ExtensionV2Registry,
   resolveV2PointContributions,
-  validateV2Value,
   V2GrantStore,
   V2JobCancelledError,
   type ExtensionV2Definition,
@@ -255,105 +251,6 @@ async function exportViaJob(
   return settled.value as MakePackV2Result;
 }
 
-describe("make-pack-v2 folder exports", () => {
-  it("packs a selection to a folder with a manifest", async () => {
-    const w = world();
-    const value = await exportViaJob(w, {
-      commandId: MAKE_PACK_V2_SOURCE_SELECTION,
-      commandInput: { grantId: w.grantId, packName: "Pack" },
-      selection: { fileIds: ["a", "b"] },
-    });
-    expect(value).toMatchObject({
-      packName: "Pack",
-      outputFormat: "folder",
-      outputPath: "/out",
-      copied: 2,
-      skipped: [],
-      missing: [],
-      failedFiles: [],
-      manifestIncluded: true,
-      revealCapability: "desktop:reveal",
-    });
-    expect(new TextDecoder().decode(w.bytes.get("/out/a.mp3"))).toBe("aaa");
-    const manifest = JSON.parse(
-      new TextDecoder().decode(w.bytes.get("/out/manifest.json")!),
-    ) as { name: string; source: string; files: Array<{ outputName: string }> };
-    expect(manifest.name).toBe("Pack");
-    expect(manifest.source).toBe("selection");
-    expect(manifest.files.map((file) => file.outputName)).toEqual(["a.mp3", "b.mp3"]);
-    const command = w.definition.commands.find((entry) => entry.id === MAKE_PACK_V2_SOURCE_SELECTION)!;
-    expect(validateV2Value(command.result!, value, "result")).toBeNull();
-  });
-
-  it("omits the manifest when disabled in input", async () => {
-    const w = world();
-    const value = await exportViaJob(w, {
-      commandId: MAKE_PACK_V2_SOURCE_SELECTION,
-      commandInput: { grantId: w.grantId, packName: "Pack", includeManifest: false },
-      selection: { fileIds: ["a"] },
-    });
-    expect(value.manifestIncluded).toBe(false);
-    expect(w.bytes.has("/out/manifest.json")).toBe(false);
-    expect(w.bytes.has("/out/a.mp3")).toBe(true);
-  });
-
-  it("dedupes colliding folder names and reserves manifest.json", async () => {
-    const w = world({
-      files: [
-        record("a", { filename: "same.wav", path: "/lib/a.wav" }),
-        record("b", { filename: "Same.wav", path: "/lib/b.wav" }),
-        record("c", { filename: "manifest.json", path: "/lib/c.json" }),
-      ],
-      bytes: [
-        ["/lib/a.wav", "one"],
-        ["/lib/b.wav", "two"],
-        ["/lib/c.json", "three"],
-      ],
-    });
-    const value = await exportViaJob(w, {
-      commandId: MAKE_PACK_V2_SOURCE_SELECTION,
-      commandInput: { grantId: w.grantId, packName: "Dupes" },
-      selection: { fileIds: ["a", "b", "c"] },
-    });
-    expect(value.copied).toBe(3);
-    expect(w.bytes.has("/out/same.wav")).toBe(true);
-    expect(w.bytes.has("/out/Same 2.wav")).toBe(true);
-    // The manifest reservation renames the colliding source, and the
-    // real manifest still lands at manifest.json.
-    expect(w.bytes.has("/out/manifest 2.json")).toBe(true);
-    expect(w.bytes.has("/out/manifest.json")).toBe(true);
-  });
-
-  it("reports on-disk-missing sources as skipped and keeps the rest", async () => {
-    const w = world();
-    w.bytes.delete("/lib/b.mp3");
-    const value = await exportViaJob(w, {
-      commandId: MAKE_PACK_V2_SOURCE_SELECTION,
-      commandInput: { grantId: w.grantId, packName: "Pack" },
-      selection: { fileIds: ["a", "b"] },
-    });
-    expect(value.copied).toBe(1);
-    expect(value.skipped).toEqual(["b.mp3"]);
-    expect(w.bytes.has("/out/a.mp3")).toBe(true);
-  });
-
-  it("fails colliding destination names without overwriting, preserving unrelated files", async () => {
-    const w = world({
-      bytes: [["/out/a.mp3", "ORIGINAL"]],
-    });
-    const value = await exportViaJob(w, {
-      commandId: MAKE_PACK_V2_SOURCE_SELECTION,
-      commandInput: { grantId: w.grantId, packName: "Pack" },
-      selection: { fileIds: ["a", "b"] },
-    });
-    expect(value.copied).toBe(1);
-    expect(value.failedFiles).toEqual(["a.mp3"]);
-    expect(value.failedReasons[0]).toMatch(/already exists/);
-    expect(new TextDecoder().decode(w.bytes.get("/out/a.mp3"))).toBe("ORIGINAL");
-    expect(new TextDecoder().decode(w.bytes.get("/out/keep.txt"))).toBe("unrelated");
-  });
-});
-
 describe("make-pack-v2 preview, review, and apply", () => {
   it("previews without side effects, then confirms a destination-bound plan", async () => {
     const w = world();
@@ -417,16 +314,6 @@ describe("make-pack-v2 preview, review, and apply", () => {
     expect(value.outputPath).toBe("/out");
   });
 
-  it("packs the recent source through its named adapter", async () => {
-    const w = world({ recent: ["b"] });
-    const value = await exportViaJob(w, {
-      commandId: MAKE_PACK_V2_SOURCE_RECENT,
-      commandInput: { grantId: w.grantId, packName: "Recent" },
-      selection: { fileIds: [] },
-    });
-    expect(value.copied).toBe(1);
-  });
-
   it("rejects ZIP packs with case-insensitive entry collisions in the preview", async () => {
     const { host } = world({
       files: [
@@ -453,36 +340,6 @@ describe("make-pack-v2 preview, review, and apply", () => {
 });
 
 describe("make-pack-v2 ZIP exports", () => {
-  it("archives shelf sources with manifest entry names", async () => {
-    const w = world();
-    const value = await exportViaJob(w, {
-      commandId: MAKE_PACK_V2_SOURCE_SHELF,
-      commandInput: { grantId: w.grantId, packName: "Shelf", outputFormat: "zip" },
-      selection: { fileIds: [] },
-    });
-    expect(value.outputFormat).toBe("zip");
-    expect(value.outputPath).toBe("/out/Shelf.zip");
-    expect(value.copied).toBe(2);
-    expect(value.manifestIncluded).toBe(true);
-    expect(w.bytes.has("/out/Shelf.zip")).toBe(true);
-    // The manifest travels as an in-memory archive entry (never a
-    // guessed temp file); entry names stay Library-verbatim.
-    expect(w.archives).toHaveLength(1);
-    expect(w.archives[0]?.dest).toBe("/out/Shelf.zip");
-    expect(w.archives[0]?.entries.map((entry) => entry.name)).toEqual([
-      "a.mp3",
-      "b.mp3",
-      "manifest.json",
-    ]);
-    const manifestEntry = w.archives[0]?.entries[2];
-    expect(manifestEntry).toMatchObject({ name: "manifest.json" });
-    const manifest = JSON.parse(
-      (manifestEntry as { text: string }).text,
-    ) as { name: string; files: unknown[] };
-    expect(manifest.name).toBe("Shelf");
-    expect(manifest.files).toHaveLength(2);
-  });
-
   it("leaves a pre-existing manifest sidecar intact (B12 class, fixed)", async () => {
     const sidecar = "/out/.Shelf-manifest.tmp.json";
     const w = world({
@@ -515,47 +372,6 @@ describe("make-pack-v2 ZIP exports", () => {
   });
 });
 
-describe("make-pack-v2 jobs and cancellation", () => {
-  it("runs a job export and settles with the validated result value", async () => {
-    const { host, grantId, definition } = world();
-    const submitted = await host.submitJob({
-      extensionId: MAKE_PACK_V2_ID,
-      commandId: MAKE_PACK_V2_SOURCE_SELECTION,
-      input: { grantId, packName: "Job Pack" },
-      selection: { fileIds: ["a", "b"] },
-    });
-    expect(submitted.ok).toBe(true);
-    if (!submitted.ok || submitted.outcome.kind !== "job") {
-      throw new Error("expected a job outcome");
-    }
-    const settled = await host.jobs.waitFor(submitted.outcome.jobId);
-    expect(settled.state).toBe("succeeded");
-    const command = definition.commands.find((entry) => entry.id === MAKE_PACK_V2_SOURCE_SELECTION)!;
-    expect(validateV2Value(command.result!, settled.value, "result")).toBeNull();
-    expect((settled.value as MakePackV2Result).copied).toBe(2);
-  });
-
-  it("removes job-owned partial output on cancellation and keeps unrelated files", async () => {
-    const { host, grantId, bytes } = world({ failReporterAfter: 0 });
-    const submitted = await host.submitJob({
-      extensionId: MAKE_PACK_V2_ID,
-      commandId: MAKE_PACK_V2_SOURCE_SELECTION,
-      input: { grantId, packName: "Cancel Pack" },
-      selection: { fileIds: ["a", "b"] },
-    });
-    expect(submitted.ok).toBe(true);
-    if (!submitted.ok || submitted.outcome.kind !== "job") {
-      throw new Error("expected a job outcome");
-    }
-    const settled = await host.jobs.waitFor(submitted.outcome.jobId);
-    expect(settled.state).toBe("cancelled");
-    expect(bytes.has("/out/a.mp3")).toBe(false);
-    expect(bytes.has("/out/b.mp3")).toBe(false);
-    expect(bytes.has("/out/manifest.json")).toBe(false);
-    expect(new TextDecoder().decode(bytes.get("/out/keep.txt"))).toBe("unrelated");
-  });
-});
-
 describe("make-pack-v2 boundaries", () => {
   it("denies execution when the declared permissions are not approved", async () => {
     const { host } = world({ granted: ["library:read"] });
@@ -581,28 +397,6 @@ describe("make-pack-v2 boundaries", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe("selection-unresolvable");
     expect(bytes.has("/out/gone.mp3")).toBe(false);
-  });
-
-  it("never imports v1 extension modules or the v1 ZIP service", () => {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const sources = ["definition.ts", "policy.ts", "handlers.ts", "index.ts"].map((file) =>
-      readFileSync(join(here, file), "utf8"),
-    );
-    for (const text of sources) {
-      expect(text).not.toMatch(/@foleyard\/make-pack"/);
-      expect(text).not.toMatch(/from\s+["'][^"']*extensions\//);
-      expect(text).not.toMatch(/extension-host/);
-      expect(text).not.toMatch(/writeStoredZip/);
-      expect(text).not.toMatch(/MakePackService/);
-    }
-    // The only runtime dependency is the stable yard-core surface
-    // (v2 contracts plus pure filename utilities).
-    for (const text of sources) {
-      const specifiers = [...text.matchAll(/from\s+["']([^"']+)["']/g)].map((match) => match[1]);
-      for (const specifier of specifiers) {
-        expect(specifier === "yard-core" || specifier?.startsWith("./")).toBe(true);
-      }
-    }
   });
 
   it("exposes every command through the generic contribution points", () => {

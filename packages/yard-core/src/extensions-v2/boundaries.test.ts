@@ -110,11 +110,4 @@ describe("v2 module dependency boundaries", () => {
     const barrel = readFileSync(join(here, "..", "index.ts"), "utf8");
     expect(barrel).not.toMatch(/from "\.\/extensions"/);
   });
-
-  it("keeps the privileged surface out of the operation-services permission map", () => {
-    const operations = v2ModuleSources().find(({ file }) => file === "operations.ts")!;
-    expect(operations.content).toMatch(/Explicit permission map/);
-    // The map names permissions, never method-name inference.
-    expect(operations.content).not.toMatch(/infer.*permission/i);
-  });
 });

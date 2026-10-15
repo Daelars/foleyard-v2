@@ -24,6 +24,7 @@ const crypto = require("node:crypto");
 
 const root = path.resolve(__dirname, "..");
 const REGISTRY_PATH = path.join(root, "docs", "manifest.json");
+const { resolveExamples } = require("./examples.cjs");
 
 function parseStagedDir(argv) {
   for (let i = 0; i < argv.length; i++) {
@@ -322,7 +323,8 @@ for (const file of definitionsFiles) {
   }
 }
 
-// 9. Every example the staged manifest lists has a directory and a README.
+// 9. Every example the staged manifest lists has a directory and a README,
+// and the staged list agrees with the single declaration (#310).
 const examples = Array.isArray(manifest?.examples) ? manifest.examples : [];
 for (const example of examples) {
   if (typeof example?.id !== "string") {
@@ -337,6 +339,21 @@ for (const example of examples) {
   if (!fs.existsSync(path.join(exampleDir, "README.md"))) {
     errors.push(`manifest example README missing: examples/${example.id}/README.md`);
   }
+}
+try {
+  const declaredExamples = resolveExamples(root).map((example) => example.id);
+  for (const example of examples) {
+    if (typeof example?.id === "string" && !declaredExamples.includes(example.id)) {
+      errors.push(`staged example "${example.id}" is not declared in examples/manifest.json`);
+    }
+  }
+  for (const id of declaredExamples) {
+    if (!examples.some((example) => example?.id === id)) {
+      errors.push(`declared example "${id}" is missing from the staged manifest`);
+    }
+  }
+} catch (error) {
+  errors.push(`examples/manifest.json: ${error.message}`);
 }
 
 // 10. Command IDs in docs/commands.md resolve against v2 definition.ts files.

@@ -35,6 +35,8 @@ bun run test           # npx vitest run
 bun run test:coverage  # npx vitest run --coverage
 bun run build          # next build (web); desktop via build:desktop
 node scripts/check-v2-boundaries.cjs  # v2 dependency boundary (also in CI)
+node scripts/check-generated-extension.cjs  # scaffold output passes CI gates (also in CI)
+node scripts/run-examples.cjs  # every declared runnable example (also in CI)
 bun run docs:prepare   # stage version-matched docs (also in CI)
 bun run docs:check     # verify staged docs (also in CI)
 ```
@@ -59,12 +61,17 @@ Authoring a v2 extension:
 ```bash
 node scripts/scaffold-extension-v2.cjs --name my-tool
 bunx vitest run packages/yard-tools/my-tool --no-coverage
+node scripts/check-generated-extension.cjs  # the scaffold output must pass CI gates
 bun run example:v2-minimal
 ```
 
 The scaffold writes a valid minimal package (definition, handlers,
 tests, README with the static-registration snippet). The full
 authoring contract lives in `docs/extensions-v2.md`.
+`node scripts/check-generated-extension.cjs` scaffolds a fresh package
+and runs the same gates CI enforces on it — typecheck, the v2
+dependency-boundary scan, and the generated package's own test suite —
+so the template cannot drift from the real v2 API unseen.
 
 Archive artifacts (audit reports, plans, HTML explainers) live in the
 separate `Daelars/foleyard-archive` checkout. Review them in `next dev`
@@ -111,14 +118,24 @@ thresholds and `bun run test:coverage` are the source of truth.
 - `src/test/fixtures.ts` — fixture isolation
 - `src/test/integration/` — integration suite incl. `it.fails` ledger tests
 - `scripts/check-expected-failures.cjs` — ledger count check (CI)
+- `scripts/check-generated-extension.cjs` — scaffold output CI gate (typecheck, boundaries, its own tests)
+- `examples/manifest.json` + `scripts/examples.cjs` — single runnable-example declaration and reconciliation
+- `scripts/run-examples.cjs` — executes every declared example (CI)
+- `scripts/scaffold-extension-v2.cjs` — v2 extension scaffold template
 - `scripts/dev-desktop.cjs`, `scripts/verify-workspace-root.cjs`,
   `scripts/rebuild-traced.cjs`, `scripts/clean-binary.cjs` — dev/build tooling
 
 ## Examples
 
-The runnable-in-repository examples (derived from `examples/`) are
-`core/query-library`, `extensions-v2/minimal` and
-`extensions-v2/settings`; CI runs all three.
+The runnable-in-repository examples are declared once in
+`examples/manifest.json` — each entry names the example
+(`core/query-library`, `extensions-v2/minimal`,
+`extensions-v2/settings`) and the runtime that runs it on the primary
+development platform. `node scripts/run-examples.cjs` reconciles that
+declaration with the `examples/` directory (so a new example cannot ship
+undiscovered) and executes every example; CI runs that one command. The
+generated extension package is verified separately by
+`node scripts/check-generated-extension.cjs`.
 
 ## Related documentation
 

@@ -65,6 +65,9 @@ the absolute path under the docs root, and reads it as UTF-8.
 - `src/lib/documentation.ts` — registry, location resolution, allowlisted reader
 - `src/app/api/docs/route.ts` — location/list endpoint
 - `src/app/api/docs/[...id]/route.ts` — single-document endpoint
+- `examples/manifest.json`, `scripts/examples.cjs` — the single runnable-example declaration and its reconciliation
+- `scripts/run-examples.cjs` — discovers and executes every declared example (CI)
+- `scripts/check-generated-extension.cjs` — holds the scaffold output to the CI gates
 - `CONTEXT-MAP.md` — context map (Application, Desktop runtime, Yard Core, Yard Tools)
 - `packages/yard-core/CONTEXT.md`, `src/CONTEXT.md`, `electron/CONTEXT.md`,
   `packages/yard-tools/CONTEXT.md` — context language definitions
@@ -111,9 +114,12 @@ the absolute path under the docs root, and reads it as UTF-8.
 
 ## Examples
 
-Runnable examples live in `examples/`; the served list is derived from
-that directory (`examples/<area>/<name>/run.ts`), and each README states
-prerequisites, invocation, expected results and version provenance:
+Runnable examples live in `examples/` and are declared once in
+`examples/manifest.json` (each entry names the runtime that runs it on the
+primary development platform); `node scripts/run-examples.cjs` reconciles
+that declaration with the `examples/<area>/<name>/run.ts` directory and CI
+executes every example from it. Each README states prerequisites,
+invocation, expected results and version provenance:
 
 - `examples/core/query-library/` (`node examples/core/query-library/run.ts`;
   `bun` cannot dlopen better-sqlite3 on Windows, see its README) —
@@ -125,7 +131,9 @@ prerequisites, invocation, expected results and version provenance:
   authored settings and a sidebar contribution resolved through the
   shared availability evaluator.
 
-They are repository-run examples, not executable installed plugins.
+They are repository-run examples, not executable installed plugins. The
+scaffold template is held to the same CI gates by
+`node scripts/check-generated-extension.cjs`.
 
 ## Related documentation
 

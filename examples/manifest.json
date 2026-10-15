@@ -1,0 +1,7 @@
+{
+  "examples": [
+    { "id": "core/query-library", "runtime": "node" },
+    { "id": "extensions-v2/minimal", "runtime": "bun" },
+    { "id": "extensions-v2/settings", "runtime": "bun" }
+  ]
+}

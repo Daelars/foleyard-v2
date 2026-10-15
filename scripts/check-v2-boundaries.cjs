@@ -23,13 +23,39 @@
  * `packages/yard-tools/`, and `make-pack-v2` must stay private with no
  * runtime dependency beyond `yard-core`.
  *
- * Usage: node scripts/check-v2-boundaries.cjs
+ * Usage: node scripts/check-v2-boundaries.cjs [--scan-root <relative-dir>]
+ *
+ * `--scan-root` appends an extra source root to the dependency-direction
+ * scan (repeatable). The generated-extension check uses it to hold a
+ * scaffolded package to the same boundary rule CI enforces on bundled
+ * ports (#310); the extra root never affects the package-wiring checks.
  */
 
 const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
+
+const extraScanRoots = [];
+const cliArgs = process.argv.slice(2);
+for (let i = 0; i < cliArgs.length; i += 1) {
+  if (cliArgs[i] === "--scan-root" && cliArgs[i + 1]) {
+    const absolute = path.resolve(root, cliArgs[i + 1]);
+    if (absolute !== root && !absolute.startsWith(root + path.sep)) {
+      console.error(
+        `check-v2-boundaries: --scan-root must stay inside the repository (got ${JSON.stringify(cliArgs[i + 1])})`,
+      );
+      process.exit(1);
+    }
+    extraScanRoots.push(path.relative(root, absolute).split(path.sep).join("/"));
+    i += 1;
+  } else {
+    console.error(
+      `check-v2-boundaries: unknown argument ${JSON.stringify(cliArgs[i])} (usage: --scan-root <relative-dir>)`,
+    );
+    process.exit(1);
+  }
+}
 
 // Every bundled v2 port lives at packages/yard-tools/<name>-v2. Discover
 // them so a new port is boundary-scanned the moment it lands, without
@@ -46,7 +72,7 @@ function discoverV2PortRoots() {
   return out;
 }
 
-const SCAN_ROOTS = [...discoverV2PortRoots(), "examples/extensions-v2"];
+const SCAN_ROOTS = [...discoverV2PortRoots(), "examples/extensions-v2", ...extraScanRoots];
 
 function listSourceFiles(dir) {
   const out = [];

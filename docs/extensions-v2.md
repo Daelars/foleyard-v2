@@ -229,6 +229,8 @@ approved; disabling removes its UI and listeners.
 - `src/components/extensions-v2/` — shared data shapes and resolver
 - `packages/yard-tools/make-pack-v2/` — reference extension
 - `scripts/scaffold-extension-v2.cjs` — scaffolding CLI
+- `scripts/check-generated-extension.cjs` — scaffold output CI gate (typecheck, boundaries, its own tests)
+- `examples/manifest.json` — single runnable-example declaration
 - `examples/extensions-v2/minimal/` — minimal runnable example
 
 ## Author examples
@@ -253,6 +255,12 @@ command (`my-tool.describe`), one setting, and palette plus settings
 contributions. Remove the directory when done experimenting; bundled
 packages register through explicit static registration (see above),
 never through an installer. Provenance: scaffold CLI R9, API v2.
+
+CI holds the template itself to the same gates:
+`node scripts/check-generated-extension.cjs` scaffolds a fresh package
+and runs typecheck, the v2 dependency-boundary scan, and the generated
+test suite against it, so the template cannot drift from the real v2 API
+unseen (#310).
 
 ### 2. Run the minimal example
 

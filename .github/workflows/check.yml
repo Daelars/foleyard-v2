@@ -22,8 +22,9 @@ jobs:
       - run: bun run build
       - run: node scripts/check-expected-failures.cjs
       - run: node scripts/check-v2-boundaries.cjs
+      - run: node scripts/check-generated-extension.cjs
       - run: bun run docs:prepare
       - run: bun run docs:check
-      - run: bun run example:v2-minimal
-      - run: bun run example:v2-settings
-      - run: node examples/core/query-library/run.ts
+      # Every advertised example is discovered from examples/manifest.json
+      # and executed here; the workflow never hardcodes a per-example list.
+      - run: node scripts/run-examples.cjs

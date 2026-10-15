@@ -25,10 +25,17 @@ export type ScanToast =
   | { kind: "warning"; message: string }
   | { kind: "success"; message: string };
 
-/** Pure settle toast: errors win, then skipped items, then success. */
+/** Pure settle toast: errors win, then unresolved moves, then skipped items, then success. */
 export function resolveScanToast(status: ScanStatusResponse): ScanToast {
   if (status.phase === "error" || status.error) {
     return { kind: "error", message: status.error ?? "Scan failed" };
+  }
+  const ambiguousMoves = status.ambiguousMoves ?? 0;
+  if (ambiguousMoves > 0) {
+    return {
+      kind: "warning",
+      message: `${ambiguousMoves} possible move${ambiguousMoves === 1 ? "" : "s"} need review: a file matched more than one candidate, so its tags and Collections were not moved`,
+    };
   }
   if (status.errors > 0) {
     return {

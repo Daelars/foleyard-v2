@@ -46,8 +46,9 @@ persists results through the file repository writes.
 - Unparseable or partially-tagged files yield `null` fields rather than
   errors; the scan counts the file as processed with nulls, or as
   `failed` when extraction throws — the run continues.
-- Distinct recordings can inherit tags incorrectly (finding B02,
-  expected-to-fail, #136). A late tag failure can erase a newer edit
+- A replacement recording never inherits a distinct recording's tags:
+  reconciliation matches on size+mtime only and fails closed on an ambiguous
+  match (finding B02, #136, #274). A late tag failure can erase a newer edit
   (finding B04, expected-to-fail, #140).
 - There is no embedded-tag writing API by design; tag edits live in the
   database only and do not modify file bytes.
@@ -72,4 +73,4 @@ reads post-extraction state against the checkout.
 - `docs/scanning.md` — metadata-queue phase
 - `docs/collections.md` — tags, Collections, favorites, Sound Shelf
 - `docs/library.md` — file identity and index writes
-- `docs/development.md` — expected-failures ledger (B02, B04)
+- `docs/development.md` — expected-failures ledger (B04)

@@ -41,6 +41,26 @@ export const pendingDeletions = sqliteTable('pending_deletions', {
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+/**
+ * Move reconciliation that could not be decided (#274): a removed row whose
+ * size+mtime identity matched more than one active file in the same root (or
+ * one active file matched by more than one removed row). The row is recorded
+ * instead of guessed, so a distinct recording never inherits another's tags,
+ * embeddings or Collections. An explicit, user-initiated confirmation
+ * resolves the entry; a scan never hashes content to break the tie.
+ */
+export const ambiguousMoves = sqliteTable('ambiguous_moves', {
+  removedFileId: text('removed_file_id').primaryKey(),
+  path: text('path').notNull(),
+  libraryRoot: text('library_root'),
+  fileSize: integer('file_size'),
+  mtimeMs: integer('mtime_ms'),
+  /** JSON array of the active file ids the removed identity matched. */
+  candidateFileIds: text('candidate_file_ids').notNull().default('[]'),
+  candidateCount: integer('candidate_count').notNull().default(0),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const tags = sqliteTable('tags', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),

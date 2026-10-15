@@ -39,7 +39,7 @@ vi.mock("@/lib/db", () => ({
     state.files!.batchUpdateFileMetadata(records, now),
   batchMarkRemoved: (paths: string[], removedAt: string, now: string) =>
     state.files!.batchMarkRemoved(paths, removedAt, now),
-  reconcileMovedFiles: () => state.files!.reconcileMovedFiles(),
+  reconcileMovedFiles: (activeFileIds?: string[]) => state.files!.reconcileMovedFiles(activeFileIds),
   analyzeStatistics: () => state.files!.analyzeStatistics(),
   toggleFavorite: (id: string) => state.files!.toggleFavorite(id),
   getLibraryRoot: () => state.settings!.getLibraryRoot(),

@@ -96,6 +96,7 @@ export interface ScanStatusResponse {
   added: number;
   updated: number;
   removed: number;
+  ambiguousMoves: number;
   failed: number;
   errors: number;
   total: number;
@@ -112,6 +113,7 @@ export const emptyScanStatus: ScanStatusResponse = {
   added: 0,
   updated: 0,
   removed: 0,
+  ambiguousMoves: 0,
   failed: 0,
   errors: 0,
   total: 0,

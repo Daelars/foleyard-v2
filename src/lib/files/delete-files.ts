@@ -8,6 +8,7 @@ import {
   listPendingDeletions,
   recordPendingDeletion,
 } from "@/lib/db";
+import { isSameFileIdentity } from "@/lib/files/identity";
 import { resolveReadablePath } from "@/lib/filesystem-boundary";
 
 /**
@@ -60,10 +61,10 @@ function matchesIndexedIdentity(
   return (
     !identity.symbolicLink &&
     identity.file &&
-    record.fileSize !== null &&
-    record.mtimeMs !== null &&
-    identity.size === record.fileSize &&
-    identity.mtimeMs === record.mtimeMs
+    isSameFileIdentity(
+      { fileSize: identity.size, mtimeMs: identity.mtimeMs },
+      record,
+    )
   );
 }
 

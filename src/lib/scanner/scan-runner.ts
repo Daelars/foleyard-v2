@@ -131,7 +131,7 @@ export class ScanRunner implements ScannerService {
     metadataUpdates.splice(0, batch.length);
   }
 
-  private markRemovedFiles(allExistingFiles: ScanCleanupRow[], seenPaths: Set<string>, now: string) { return markRemovedFiles(this.phaseContext(), allExistingFiles, seenPaths, now); }
+  private markRemovedFiles(allExistingFiles: ScanCleanupRow[], seenPaths: Set<string>, now: string, addedFileIds: string[]) { return markRemovedFiles(this.phaseContext(), allExistingFiles, seenPaths, now, addedFileIds); }
 
   private async runScan(libraryRoots: string[]) {
     let metadataQueue: ReturnType<typeof createMetadataQueue> | null = null;
@@ -140,6 +140,9 @@ export class ScanRunner implements ScannerService {
     // Collected outside the try so a partial failure still hands off the
     // arrivals that landed (#234).
     const arrivals: string[] = [];
+    // Files this run inserted for the first time; the only valid move
+    // targets for reconciliation (#274).
+    const addedIds: string[] = [];
     let lastScannedAt = new Date().toISOString();
 
     try {
@@ -171,14 +174,14 @@ export class ScanRunner implements ScannerService {
         () => this.incrementScanErrors(),
       );
 
-      const healthyRoots = await discoverRoots(this.phaseContext(), libraryRoots, lastScannedAt, seenPaths, metadataQueue, arrivals);
+      const healthyRoots = await discoverRoots(this.phaseContext(), libraryRoots, lastScannedAt, seenPaths, metadataQueue, arrivals, addedIds);
 
       this.status.phase = "metadata";
       this.emitProgress();
       await metadataQueue.onIdle();
       this.flushMetadataUpdates(metadataUpdates);
 
-      this.markRemovedFiles(allExistingFiles.filter((file) => file.libraryRoot !== null && healthyRoots.has(file.libraryRoot)), seenPaths, lastScannedAt);
+      this.markRemovedFiles(allExistingFiles.filter((file) => file.libraryRoot !== null && healthyRoots.has(file.libraryRoot)), seenPaths, lastScannedAt, addedIds);
 
       finishScanStatus(this.status);
       // Refresh SQLite query statistics after the import so browse queries

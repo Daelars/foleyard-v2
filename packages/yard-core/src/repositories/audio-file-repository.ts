@@ -8,6 +8,18 @@ export interface AudioFileTouchEntry {
   libraryRoot?: string | null;
 }
 
+/**
+ * Result of reconciling removed rows against newly discovered paths (#274).
+ * Organization data moves only for a confirmed, unambiguous move; an
+ * ambiguous match is recorded for later confirmation instead of guessed.
+ */
+export type MovedFileReconciliation = {
+  /** Removed rows relinked onto exactly one new path; organization data moved. */
+  relinked: number;
+  /** Removed rows whose identity matched ambiguously: recorded, not merged. */
+  ambiguous: number;
+};
+
 export interface AudioFileRepository {
   getFiles(query?: FileSearchQuery): AudioFile[];
   getFileCount(query?: FileSearchQuery): number;
@@ -41,7 +53,13 @@ export interface AudioFileRepository {
     now: string,
   ): void;
   batchMarkRemoved(paths: string[], removedAt: string, now: string): void;
-  reconcileMovedFiles(): number;
+  /**
+   * Reconcile removed rows against newly discovered paths (#274). Candidates
+   * are restricted to `activeFileIds` when the scan supplies the files it
+   * added, so an already-indexed unchanged file is never read as a move
+   * target; omitting it reconciles against every active row.
+   */
+  reconcileMovedFiles(activeFileIds?: string[]): MovedFileReconciliation;
   /** Refresh SQLite query statistics after a substantial import/migration. */
   analyzeStatistics(): void;
   toggleFavorite(id: string): boolean;

@@ -13,7 +13,7 @@ function normalizeStoredDirectory(directory: string | null | undefined) {
   return directory == null ? null : directory.replace(/\\/g, "/");
 }
 
-export async function processDiscoveredBatch(context: ScanPhaseContext, filePaths: string[], normalizedRoot: string, lastScannedAt: string, seenPaths: Set<string>, metadataQueue: ReturnType<typeof createMetadataQueue>, arrivals: string[]) {
+export async function processDiscoveredBatch(context: ScanPhaseContext, filePaths: string[], normalizedRoot: string, lastScannedAt: string, seenPaths: Set<string>, metadataQueue: ReturnType<typeof createMetadataQueue>, arrivals: string[], addedIds: string[]) {
     const existingByPath = new Map(
       context.fileRepo.getFilesByPaths(filePaths).map((file) => [file.path, file]),
     );
@@ -95,9 +95,11 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
     context.fileRepo.batchUpsertFiles(upsertRecords, lastScannedAt);
     if (newPaths.length > 0) {
       // New rows get their ids at insert; resolve them so the arrival list
-      // matches the files the scan actually added.
+      // matches the files the scan actually added. addedIds is the narrower
+      // set move reconciliation may use as a move target (#274).
       for (const file of context.fileRepo.getFilesByPaths(newPaths)) {
         arrivals.push(file.id);
+        addedIds.push(file.id);
       }
     }
 
@@ -119,7 +121,7 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
     }
   }
 
-export function markRemovedFiles(context: ScanPhaseContext, allExistingFiles: ScanCleanupRow[], seenPaths: Set<string>, now: string) {
+export function markRemovedFiles(context: ScanPhaseContext, allExistingFiles: ScanCleanupRow[], seenPaths: Set<string>, now: string, addedFileIds: string[]) {
     context.status.phase = "cleaning";
     context.emitProgress();
     const removedAt = new Date().toISOString();
@@ -136,7 +138,10 @@ export function markRemovedFiles(context: ScanPhaseContext, allExistingFiles: Sc
 
     context.fileRepo.batchMarkRemoved(removedPaths, removedAt, now);
 
-    const relinkedFiles = context.fileRepo.reconcileMovedFiles();
-    context.status.removed = Math.max(0, context.status.removed - relinkedFiles);
+    // Only files the scan just added can be a move target: an already
+    // indexed, unchanged file is never read as "the new path" (#274).
+    const reconciliation = context.fileRepo.reconcileMovedFiles(addedFileIds);
+    context.status.removed = Math.max(0, context.status.removed - reconciliation.relinked);
+    context.status.ambiguousMoves += reconciliation.ambiguous;
   }
 

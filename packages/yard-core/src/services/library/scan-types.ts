@@ -26,6 +26,11 @@ export interface ScanSummary {
   added: number;
   updated: number;
   removed: number;
+  /**
+   * Removed paths whose move match was ambiguous and was recorded rather than
+   * merged (#274, `ambiguous_moves`). Surfaced so reconciliation is visible.
+   */
+  ambiguousMoves: number;
   failed: number;
   errors: number;
   finishedAt: string | null;
@@ -41,6 +46,7 @@ export interface ScanStatus {
   added: number;
   updated: number;
   removed: number;
+  ambiguousMoves: number;
   failed: number;
   errors: number;
   total: number;

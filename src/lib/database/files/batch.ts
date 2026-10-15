@@ -1,5 +1,6 @@
 import { v4 as uuid } from "uuid";
-import type { AudioFileTouchEntry, ScanFileRecord } from "@yard-core";
+import type { AudioFileTouchEntry, MovedFileReconciliation, ScanFileRecord } from "@yard-core";
+import { SqliteMoveJournal, type AmbiguousMoveInput } from "@/lib/database/move-journal";
 import type { FileRepositoryContext } from "./context";
 
 export function batchTouchFiles(context: FileRepositoryContext, entries: AudioFileTouchEntry[], now: string): void {
@@ -126,41 +127,108 @@ export function batchMarkRemoved(context: FileRepositoryContext, paths: string[]
     txn(paths);
   }
 
-export function reconcileMovedFiles(context: FileRepositoryContext): number {
+/**
+ * Reconcile removed rows against newly discovered paths (#274).
+ *
+ * A move and a removed-and-replaced file look alike: the old path is gone and
+ * a new one appeared. Identity is size+mtime — the same signal permanent
+ * deletion validates against (#269) and documented in `docs/library.md` —
+ * within the same Library root, with both values known. Filename, duration
+ * and codec are not identity, and a scan never hashes content.
+ *
+ * A move is confirmed only when the match is unique in both directions:
+ * exactly one active candidate for the removed row and exactly one removed
+ * row claiming that candidate. Anything else is ambiguous: it is recorded in
+ * `ambiguous_moves` and left as a removal plus an add, so a distinct
+ * recording never inherits another's organization data.
+ *
+ * `activeFileIds`, when supplied, restricts candidates to files the scan
+ * just added ("the new path appeared", docs/library.md). The scanner passes
+ * the paths it discovered as new so a file that was already in the Library
+ * and merely unchanged can never be mistaken for a move target; a direct
+ * caller that omits it reconciles against every active row.
+ */
+export function reconcileMovedFiles(
+  context: FileRepositoryContext,
+  activeFileIds?: string[],
+): MovedFileReconciliation {
     const removedFiles = context.sqlite
       .prepare(
-        `SELECT id, filename, library_root as libraryRoot, file_size as fileSize,
-                duration, codec, sample_rate as sampleRate, bit_depth as bitDepth,
-                channels, is_favorite as isFavorite
+        `SELECT id, path, library_root as libraryRoot, file_size as fileSize,
+                mtime_ms as mtimeMs, is_favorite as isFavorite
          FROM files
          WHERE removed_at IS NOT NULL`,
       )
       .all() as Array<{
         id: string;
-        filename: string;
+        path: string;
         libraryRoot: string | null;
         fileSize: number | null;
-        duration: number | null;
-        codec: string | null;
-        sampleRate: number | null;
-        bitDepth: number | null;
-        channels: number | null;
+        mtimeMs: number | null;
         isFavorite: number | boolean | null;
       }>;
 
-    const findActiveMatch = context.sqlite.prepare(
+    // Identity is size+mtime with both known, inside one root. An unknown
+    // signal never matches, so it can never move organization data onto a
+    // guess. (SELECT ... see docs/library.md "Identity signals and moves".)
+    const findActiveMatches = context.sqlite.prepare(
       `SELECT id
        FROM files
        WHERE removed_at IS NULL
-         AND filename = ?
          AND COALESCE(library_root, '') = COALESCE(?, '')
-         AND COALESCE(file_size, -1) = COALESCE(?, -1)
-         AND ABS(COALESCE(duration, -1) - COALESCE(?, -1)) < 0.01
-         AND COALESCE(codec, '') = COALESCE(?, '')
-         AND COALESCE(sample_rate, -1) = COALESCE(?, -1)
-         AND COALESCE(bit_depth, -1) = COALESCE(?, -1)
-         AND COALESCE(channels, -1) = COALESCE(?, -1)`,
+         AND file_size IS NOT NULL
+         AND mtime_ms IS NOT NULL
+         AND file_size = ?
+         AND mtime_ms = ?`,
     );
+
+    // Phase 1: candidates for each removed row that has a known identity.
+    const newActiveIds = activeFileIds ? new Set(activeFileIds) : null;
+    const candidatesByRemoved = new Map<
+      string,
+      { removed: (typeof removedFiles)[number]; candidates: string[] }
+    >();
+    for (const removedFile of removedFiles) {
+      if (removedFile.fileSize === null || removedFile.mtimeMs === null) continue;
+      const candidates = (
+        findActiveMatches.all(
+          removedFile.libraryRoot,
+          removedFile.fileSize,
+          removedFile.mtimeMs,
+        ) as Array<{ id: string }>
+      )
+        .map((row) => row.id)
+        .filter((id) => !newActiveIds || newActiveIds.has(id));
+      if (candidates.length === 0) continue;
+      candidatesByRemoved.set(removedFile.id, { removed: removedFile, candidates });
+    }
+
+    // Phase 2: how many removed rows claim each active candidate. A move is
+    // confirmed only when the match is exclusive in both directions.
+    const claimsByActive = new Map<string, number>();
+    for (const { candidates } of candidatesByRemoved.values()) {
+      for (const id of candidates) {
+        claimsByActive.set(id, (claimsByActive.get(id) ?? 0) + 1);
+      }
+    }
+
+    const confirmed: Array<{ removed: (typeof removedFiles)[number]; activeId: string }> = [];
+    const ambiguous: AmbiguousMoveInput[] = [];
+    for (const { removed, candidates } of candidatesByRemoved.values()) {
+      if (candidates.length === 1 && claimsByActive.get(candidates[0]) === 1) {
+        confirmed.push({ removed, activeId: candidates[0] });
+      } else {
+        ambiguous.push({
+          removedFileId: removed.id,
+          path: removed.path,
+          libraryRoot: removed.libraryRoot,
+          fileSize: removed.fileSize,
+          mtimeMs: removed.mtimeMs,
+          candidateFileIds: candidates,
+        });
+      }
+    }
+
     const copyCollections = context.sqlite.prepare(
       `INSERT OR IGNORE INTO file_collections (file_id, collection_id)
        SELECT ?, collection_id FROM file_collections WHERE file_id = ?`,
@@ -179,43 +247,34 @@ export function reconcileMovedFiles(context: FileRepositoryContext): number {
     const deleteOldEmbeddings = context.sqlite.prepare("DELETE FROM file_embeddings WHERE file_id = ?");
     const deleteOldFile = context.sqlite.prepare("DELETE FROM files WHERE id = ?");
 
+    const moveJournal = new SqliteMoveJournal(context.sqlite);
+
     const reconcile = context.sqlite.transaction(() => {
+      // Ambiguity is re-derived on every pass: recording the current set
+      // clears an entry whose match has since resolved.
+      moveJournal.replace(ambiguous);
+
       let relinked = 0;
+      for (const { removed, activeId } of confirmed) {
+        copyCollections.run(activeId, removed.id);
+        copyTags.run(activeId, removed.id);
+        copyEmbeddings.run(activeId, removed.id);
 
-      for (const removedFile of removedFiles) {
-        const matches = findActiveMatch.all(
-          removedFile.filename,
-          removedFile.libraryRoot,
-          removedFile.fileSize,
-          removedFile.duration,
-          removedFile.codec,
-          removedFile.sampleRate,
-          removedFile.bitDepth,
-          removedFile.channels,
-        ) as Array<{ id: string }>;
-
-        if (matches.length !== 1) {
-          continue;
+        if (Boolean(removed.isFavorite)) {
+          preserveFavorite.run(activeId);
         }
 
-        const activeFileId = matches[0].id;
-        copyCollections.run(activeFileId, removedFile.id);
-        copyTags.run(activeFileId, removedFile.id);
-        copyEmbeddings.run(activeFileId, removedFile.id);
-
-        if (Boolean(removedFile.isFavorite)) {
-          preserveFavorite.run(activeFileId);
-        }
-
-        deleteOldCollections.run(removedFile.id);
-        deleteOldTags.run(removedFile.id);
-        deleteOldEmbeddings.run(removedFile.id);
-        deleteOldFile.run(removedFile.id);
+        deleteOldCollections.run(removed.id);
+        deleteOldTags.run(removed.id);
+        deleteOldEmbeddings.run(removed.id);
+        deleteOldFile.run(removed.id);
         relinked += 1;
       }
 
       return relinked;
     });
 
-    return reconcile();
-  }
+    const relinked = reconcile();
+    return { relinked, ambiguous: ambiguous.length };
+}
+

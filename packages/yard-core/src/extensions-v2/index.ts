@@ -240,7 +240,9 @@ export {
 export {
   authorizeV2ReadablePath,
   authorizeV2WritablePath,
+  resolveV2LibraryLocation,
   screenV2CandidatePath,
+  type V2LibraryResolution,
   type V2PathDenial,
   type V2PathIo,
 } from "./filesystem";

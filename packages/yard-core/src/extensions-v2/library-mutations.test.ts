@@ -155,4 +155,12 @@ describe("v2 insertGathered", () => {
     expect(() => operations.insertGathered(tooMany)).toThrowError(/per-call limit/);
     expect(inserted).toEqual([]);
   });
+
+  it("rejects a rootless gathered record instead of writing it", () => {
+    const { operations, inserted } = setup();
+    expect(() =>
+      operations.insertGathered([{ ...gathered("/lib/orphan.mp3"), libraryRoot: null }]),
+    ).toThrowError(/libraryRoot/);
+    expect(inserted).toEqual([]);
+  });
 });

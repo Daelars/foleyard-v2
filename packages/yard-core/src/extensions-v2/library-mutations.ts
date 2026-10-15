@@ -92,6 +92,13 @@ function checkRecord(record: unknown, index: number): ScanFileRecord {
   if (!filename.trim()) {
     throw new V2OperationError("input-invalid", `Gathered record ${index} needs a non-empty filename.`);
   }
+  const libraryRoot = typeof candidate.libraryRoot === "string" ? candidate.libraryRoot : "";
+  if (!libraryRoot.trim()) {
+    throw new V2OperationError(
+      "input-invalid",
+      `Gathered record ${index} needs an owning libraryRoot; rootless index records are rejected.`,
+    );
+  }
   const screened = screenV2CandidatePath(path);
   if (screened) {
     throw new V2OperationError("input-invalid", `Gathered record ${index} has a rejected path: ${screened.message}`);
@@ -105,7 +112,7 @@ function checkRecord(record: unknown, index: number): ScanFileRecord {
   return {
     path,
     filename,
-    libraryRoot: candidate.libraryRoot ?? null,
+    libraryRoot,
     directory: candidate.directory ?? null,
     format: candidate.format ?? null,
     codec: candidate.codec ?? null,

@@ -29,13 +29,20 @@ import {
  *
  * `preview-gather` lists readable source grants (bounded, cancellable),
  * filters audio files, and plans flat output names — no side effects.
- * `gather` copies each planned file into the destination grant through
- * the source-copy op (never overwrites: a name that already exists is
- * skipped or fails with a reason, per the skip-duplicates setting) and
- * inserts index records via the library-mutation op. Cancellation
- * disposes job-owned copies and settles honestly. No v1 imports, no
- * direct filesystem imports, no recursive copy — every effect goes
- * through the E1 #176 operation services.
+ * `gather` refuses any destination that is not an owned Library root,
+ * copies each planned file into it through the source-copy op (never
+ * overwrites: a name that already exists is skipped or fails with a
+ * reason, per the skip-duplicates setting) and inserts index records via
+ * the library-mutation op, carrying the Library root and directory the
+ * copy op resolved so no record is ever rootless (#271, #282).
+ *
+ * Cancellation is checked before the copy-to-index transition and
+ * between index batches; a cancellation or index failure disposes exactly
+ * the job-owned copies that were not indexed (version-checked, #267), so
+ * the run is recoverable: no orphan file survives and a retry re-copies
+ * cleanly instead of treating copied files as unexplained duplicates. No
+ * v1 imports, no direct filesystem imports, no recursive copy — every
+ * effect goes through the E1 #176 operation services.
  */
 
 export type LibraryGathererV2PreviewResult = {
@@ -50,9 +57,11 @@ export type LibraryGathererV2GatherResult = {
   copied: number;
   inserted: number;
   skipped: number;
+  missing: number;
   copiedPaths: string[];
   skippedSources: string[];
   skippedReasons: string[];
+  missingSources: string[];
   failedSources: string[];
   failedReasons: string[];
 };
@@ -204,14 +213,27 @@ export async function runGather(ctx: V2HandlerContext) {
       "Choose a destination library folder to gather into.",
     );
   }
+  // The destination must be an owned Library root. Resolving it before any
+  // copy refuses a folder the Library does not own, and gives every copied
+  // file the root and directory its index record needs (#271).
+  await ctx.operations.files.resolveLibraryDestination(destGrantId);
   const { planned, truncated } = await planGather(ctx, sourceGrantIds, settings);
 
   const copiedPaths: string[] = [];
   const skippedSources: string[] = [];
   const skippedReasons: string[] = [];
+  const missingSources: string[] = [];
   const failedSources: string[] = [];
   const failedReasons: string[] = [];
-  const insertRecords: Array<{ path: string; filename: string; fileSize: number }> = [];
+  const insertRecords: Array<{
+    path: string;
+    filename: string;
+    fileSize: number;
+    libraryRoot: string;
+    directory: string | null;
+    mtimeMs: number;
+    format: string | null;
+  }> = [];
 
   const now = new Date().toISOString();
   const nowMs = Date.now();
@@ -229,7 +251,15 @@ export async function runGather(ctx: V2HandlerContext) {
           destGrantId,
         );
         copiedPaths.push(created.path);
-        insertRecords.push({ path: created.path, filename: file.outputName, fileSize: file.size });
+        insertRecords.push({
+          path: created.path,
+          filename: file.outputName,
+          fileSize: file.size,
+          libraryRoot: created.libraryRoot,
+          directory: created.directory,
+          mtimeMs: nowMs,
+          format: extensionOf(file.outputName) || null,
+        });
       } catch (error) {
         if (isV2JobCancellation(error)) throw error;
         const reason = error instanceof Error ? error.message : String(error);
@@ -245,6 +275,10 @@ export async function runGather(ctx: V2HandlerContext) {
             failedSources.push(file.sourcePath);
             failedReasons.push(reason);
           }
+        } else if (/ENOENT|missing|does not exist|not readable/i.test(reason)) {
+          // A source that vanished between planning and copying is missing,
+          // not a failure: nothing was created and the run can continue.
+          missingSources.push(file.sourcePath);
         } else {
           failedSources.push(file.sourcePath);
           failedReasons.push(reason);
@@ -253,50 +287,53 @@ export async function runGather(ctx: V2HandlerContext) {
       done += 1;
       ctx.operations.jobs.reportProgress(done, total);
     }
+    // Checked before the copy-to-index transition: nothing has been indexed
+    // yet, so cancellation here can dispose every job-owned copy cleanly.
+    ctx.operations.jobs.throwIfCancelled();
   } catch (error) {
-    // Cancellation removes the job-owned copies made so far, then
-    // rethrows so the job settles as cancelled (never a partial success).
+    // Cancellation before indexing removes the job-owned copies made so
+    // far, then rethrows so the job settles as cancelled (never a partial
+    // success and never an orphaned file).
     if (isV2JobCancellation(error)) {
       await ctx.operations.workspace.dispose();
-      throw error;
     }
     throw error;
   }
 
   // Index the successful copies. insertGathered is bounded per call, so
-  // insert in chunks; a chunk failure is reported without discarding the
-  // copies that did land.
+  // insert in chunks. Cancellation is checked between batches, and any
+  // failure — cancellation or a rejected write — disposes exactly the
+  // copies of the batches that were not indexed yet, so an index failure
+  // never leaves an orphan file or a rootless record; a retry re-copies
+  // cleanly instead of treating copied files as unexplained duplicates.
   const { libraryMutations } = extendedOperationsOf(ctx);
   let inserted = 0;
   for (let start = 0; start < insertRecords.length; start += MAX_GATHER_FILES) {
-    const chunk = insertRecords.slice(start, start + MAX_GATHER_FILES);
+    const chunk = insertRecords.slice(start);
     try {
+      ctx.operations.jobs.throwIfCancelled();
       const result = libraryMutations.insertGathered(
         chunk.map((record) => ({
           path: record.path,
           filename: record.filename,
-          libraryRoot: null,
-          directory: null,
-          format: extensionOf(record.filename) || null,
+          libraryRoot: record.libraryRoot,
+          directory: record.directory,
+          format: record.format,
           codec: null,
           duration: null,
           sampleRate: null,
           bitDepth: null,
           channels: null,
           fileSize: record.fileSize,
-          mtimeMs: nowMs,
+          mtimeMs: record.mtimeMs,
           removedAt: null,
           lastScannedAt: now,
         })),
       );
       inserted += result.inserted;
     } catch (error) {
-      for (const record of chunk) {
-        failedSources.push(record.path);
-        failedReasons.push(
-          `Copied but not indexed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      await ctx.operations.workspace.dispose(chunk.map((record) => record.path));
+      throw error;
     }
   }
 
@@ -311,9 +348,11 @@ export async function runGather(ctx: V2HandlerContext) {
     copied: copiedPaths.length,
     inserted,
     skipped: skippedSources.length,
+    missing: missingSources.length,
     copiedPaths,
     skippedSources,
     skippedReasons,
+    missingSources,
     failedSources,
     failedReasons,
   } satisfies LibraryGathererV2GatherResult);

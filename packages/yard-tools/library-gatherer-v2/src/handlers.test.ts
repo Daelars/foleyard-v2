@@ -67,21 +67,27 @@ function entry(name: string, path: string, kind: "file" | "directory"): V2Direct
 type World = {
   host: ExtensionV2Host;
   bytes: Map<string, Uint8Array>;
-  inserted: Array<{ path: string; filename: string }>;
+  inserted: Array<{ path: string; filename: string; libraryRoot: string | null; directory: string | null }>;
   sourceGrantId: string;
   destGrantId: string;
   definition: ExtensionV2Definition;
+  /** Toggle to make the index write fail (simulating a partial copy/index run). */
+  insertError: { value: Error | null };
 };
 
 function world(overrides?: {
   granted?: string[];
   destSeed?: string[];
   failReporterAfter?: number | null;
+  destPath?: string;
+  libraryRoots?: string[];
 }): World {
   const definition = createLibraryGathererV2Definition();
   const registry = new ExtensionV2Registry();
   registry.register(definition);
   const granted = overrides?.granted ?? FULL;
+  const destPath = overrides?.destPath ?? "/lib";
+  const libraryRoots = overrides?.libraryRoots ?? ["/lib"];
 
   const bytes = new Map<string, Uint8Array>([
     ["/media/inbox/kick.wav", new TextEncoder().encode("kick")],
@@ -95,7 +101,8 @@ function world(overrides?: {
     "/media",
     "/media/inbox",
     "/media/inbox/sub",
-    "/lib",
+    ...libraryRoots,
+    destPath,
     ...bytes.keys(),
   ]);
 
@@ -151,12 +158,12 @@ function world(overrides?: {
       existing.delete(path);
       return { removed: true };
     },
-    libraryRoots: () => ["/lib"],
+    libraryRoots: () => libraryRoots,
     pathIo: () => fakePathIo(existing),
   };
 
   const folderPorts: V2FolderScanPorts = {
-    libraryRoots: () => ["/lib"],
+    libraryRoots: () => libraryRoots,
     pathIo: () => fakePathIo(existing),
     listDirectory: async (canonical) => {
       const found = tree.get(canonical);
@@ -166,16 +173,25 @@ function world(overrides?: {
     removeEmptyDirectory: async () => {},
   };
 
-  const inserted: Array<{ path: string; filename: string }> = [];
+  const inserted: World["inserted"] = [];
+  const insertError = { value: null as Error | null };
   const mutationPorts: V2LibraryMutationPorts = {
     markRemovedByPaths: () => {},
     insertRecords: (records) => {
-      for (const record of records) inserted.push({ path: record.path, filename: record.filename });
+      if (insertError.value) throw insertError.value;
+      for (const record of records) {
+        inserted.push({
+          path: record.path,
+          filename: record.filename,
+          libraryRoot: record.libraryRoot ?? null,
+          directory: record.directory ?? null,
+        });
+      }
     },
   };
 
   const grants = new V2GrantStore();
-  const destGrant = grants.issue(LIBRARY_GATHERER_V2_ID, "/lib");
+  const destGrant = grants.issue(LIBRARY_GATHERER_V2_ID, destPath);
   const sources = new V2SourceGrantStore();
   const sourceGrant = sources.issue(LIBRARY_GATHERER_V2_ID, "/media/inbox");
 
@@ -238,6 +254,7 @@ function world(overrides?: {
     sourceGrantId: sourceGrant.grantId,
     destGrantId: destGrant.grantId,
     definition,
+    insertError,
   };
 }
 
@@ -285,6 +302,117 @@ describe("library-gatherer-v2 gather", () => {
     expect(w.bytes.has("/lib/kick.wav")).toBe(true);
     expect(w.bytes.has("/lib/snare.wav")).toBe(true);
     expect(w.inserted.map((r) => r.filename).sort()).toEqual(["kick.wav", "snare.wav"]);
+    // Every row carries an owned Library root, never a rootless record.
+    expect(w.inserted.every((r) => r.libraryRoot === "/lib")).toBe(true);
+  });
+
+  it("records the owning root and relative directory for a destination subfolder", async () => {
+    const w = world({ destPath: "/lib/Drums" });
+    const submitted = await w.host.submitJob({
+      extensionId: LIBRARY_GATHERER_V2_ID,
+      commandId: LIBRARY_GATHERER_V2_GATHER,
+      input: { sourceGrantIds: [w.sourceGrantId], destGrantId: w.destGrantId, preserveFolderNames: false },
+      selection: {},
+    });
+    if (!submitted.ok || submitted.outcome.kind !== "job") throw new Error("expected a job");
+    const settled = await w.host.jobs.waitFor(submitted.outcome.jobId);
+    expect(settled.state).toBe("succeeded");
+    expect(w.inserted.map((row) => [row.libraryRoot, row.directory])).toEqual([
+      ["/lib", "Drums"],
+      ["/lib", "Drums"],
+    ]);
+  });
+
+  it("refuses a destination outside every Library root before copying", async () => {
+    const w = world({ destPath: "/outside", libraryRoots: ["/lib"] });
+    const submitted = await w.host.submitJob({
+      extensionId: LIBRARY_GATHERER_V2_ID,
+      commandId: LIBRARY_GATHERER_V2_GATHER,
+      input: { sourceGrantIds: [w.sourceGrantId], destGrantId: w.destGrantId, preserveFolderNames: false },
+      selection: {},
+    });
+    if (!submitted.ok || submitted.outcome.kind !== "job") throw new Error("expected a job");
+    const settled = await w.host.jobs.waitFor(submitted.outcome.jobId);
+    expect(settled.state).toBe("failed");
+    expect(settled.error?.message).toMatch(/Library root/);
+    expect([...w.bytes.keys()].filter((key) => key.startsWith("/outside/"))).toEqual([]);
+    expect(w.inserted).toEqual([]);
+  });
+
+  it("classifies a vanished source as missing instead of failed", async () => {
+    const w = world();
+    w.bytes.delete("/media/inbox/kick.wav");
+    const submitted = await w.host.submitJob({
+      extensionId: LIBRARY_GATHERER_V2_ID,
+      commandId: LIBRARY_GATHERER_V2_GATHER,
+      input: { sourceGrantIds: [w.sourceGrantId], destGrantId: w.destGrantId, preserveFolderNames: false },
+      selection: {},
+    });
+    if (!submitted.ok || submitted.outcome.kind !== "job") throw new Error("expected a job");
+    const settled = await w.host.jobs.waitFor(submitted.outcome.jobId);
+    const value = settled.value as LibraryGathererV2GatherResult;
+    expect(settled.state).toBe("succeeded");
+    expect(value.missing).toBe(1);
+    expect(value.missingSources).toEqual(["/media/inbox/kick.wav"]);
+    expect(value.failedSources).toEqual([]);
+    expect(value.copied).toBe(1);
+    expect(value.inserted).toBe(1);
+  });
+
+  it("leaves no orphan file or rootless row when indexing fails, and a retry indexes cleanly", async () => {
+    const w = world();
+    w.insertError.value = new Error("index write failed");
+    const first = await w.host.submitJob({
+      extensionId: LIBRARY_GATHERER_V2_ID,
+      commandId: LIBRARY_GATHERER_V2_GATHER,
+      input: { sourceGrantIds: [w.sourceGrantId], destGrantId: w.destGrantId, preserveFolderNames: false },
+      selection: {},
+    });
+    if (!first.ok || first.outcome.kind !== "job") throw new Error("expected a job");
+    const firstSettled = await w.host.jobs.waitFor(first.outcome.jobId);
+    expect(firstSettled.state).toBe("failed");
+    // The copied files were job-owned: cleanup removes every one, so a retry
+    // re-copies cleanly instead of tripping over unexplained duplicates.
+    expect(w.bytes.has("/lib/kick.wav")).toBe(false);
+    expect(w.bytes.has("/lib/snare.wav")).toBe(false);
+    expect(w.inserted).toEqual([]);
+
+    w.insertError.value = null;
+    const second = await w.host.submitJob({
+      extensionId: LIBRARY_GATHERER_V2_ID,
+      commandId: LIBRARY_GATHERER_V2_GATHER,
+      input: { sourceGrantIds: [w.sourceGrantId], destGrantId: w.destGrantId, preserveFolderNames: false },
+      selection: {},
+    });
+    if (!second.ok || second.outcome.kind !== "job") throw new Error("expected a job");
+    const secondSettled = await w.host.jobs.waitFor(second.outcome.jobId);
+    expect(secondSettled.state).toBe("succeeded");
+    const value = secondSettled.value as LibraryGathererV2GatherResult;
+    expect(value.copied).toBe(2);
+    expect(value.inserted).toBe(2);
+    expect(value.skipped).toBe(0);
+    expect(w.bytes.has("/lib/kick.wav")).toBe(true);
+    expect(w.bytes.has("/lib/snare.wav")).toBe(true);
+    expect(w.inserted).toHaveLength(2);
+    expect(w.inserted.every((row) => typeof row.libraryRoot === "string" && row.libraryRoot.length > 0)).toBe(true);
+  });
+
+  it("disposes the copies of an unindexed batch when the index phase settles cancelled", async () => {
+    const w = world();
+    w.insertError.value = new V2JobCancelledError("vjob_test");
+    const submitted = await w.host.submitJob({
+      extensionId: LIBRARY_GATHERER_V2_ID,
+      commandId: LIBRARY_GATHERER_V2_GATHER,
+      input: { sourceGrantIds: [w.sourceGrantId], destGrantId: w.destGrantId, preserveFolderNames: false },
+      selection: {},
+    });
+    if (!submitted.ok || submitted.outcome.kind !== "job") throw new Error("expected a job");
+    const settled = await w.host.jobs.waitFor(submitted.outcome.jobId);
+    expect(settled.state).toBe("cancelled");
+    // The index batch never landed, so its copies are removed: no orphan.
+    expect(w.bytes.has("/lib/kick.wav")).toBe(false);
+    expect(w.bytes.has("/lib/snare.wav")).toBe(false);
+    expect(w.inserted).toEqual([]);
   });
 
   it("skips a name that already exists in the destination when skip-duplicates is on", async () => {

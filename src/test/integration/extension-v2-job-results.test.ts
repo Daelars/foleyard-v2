@@ -93,6 +93,7 @@ function record(id: string, dir: string, filename: string): IndexedAudioFile {
 
 type World = {
   root: string;
+  libDir: string;
   host: ExtensionV2Host;
   makePackGrantId: string;
   gatherDestGrantId: string;
@@ -105,7 +106,7 @@ function buildWorld(): World {
   const libDir = path.join(root, "lib");
   const outDir = path.join(root, "pack-out");
   const sourceDir = path.join(root, "source-inbox");
-  const gatherDir = path.join(root, "gather-in");
+  const gatherDir = path.join(libDir, "gather-in");
   for (const dir of [libDir, outDir, sourceDir, gatherDir]) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(libDir, "kick.wav"), "kick-bytes");
   fs.writeFileSync(path.join(libDir, "snare.wav"), "snare-bytes");
@@ -195,6 +196,7 @@ function buildWorld(): World {
   registerLibraryGathererV2Handlers(host);
   return {
     root,
+    libDir,
     host,
     makePackGrantId: makePackGrant.grantId,
     gatherDestGrantId: gatherDestGrant.grantId,
@@ -309,8 +311,11 @@ describe("v2 job terminal results over the HTTP job API", () => {
     });
     const value = job.result?.value as { copiedPaths: string[] };
     expect(value.copiedPaths).toHaveLength(2);
-    expect(fs.existsSync(path.join(world.root, "gather-in", "hat.wav"))).toBe(true);
-    expect(fs.existsSync(path.join(world.root, "gather-in", "clap.wav"))).toBe(true);
+    expect(fs.existsSync(path.join(world.root, "lib", "gather-in", "hat.wav"))).toBe(true);
+    expect(fs.existsSync(path.join(world.root, "lib", "gather-in", "clap.wav"))).toBe(true);
     expect(world.inserted.map((row) => row.filename).sort()).toEqual(["clap.wav", "hat.wav"]);
+    // Gathered rows carry the owning Library root and directory, never null.
+    expect(world.inserted.map((row) => row.libraryRoot)).toEqual([world.libDir, world.libDir]);
+    expect(world.inserted.map((row) => row.directory)).toEqual(["gather-in", "gather-in"]);
   });
 });

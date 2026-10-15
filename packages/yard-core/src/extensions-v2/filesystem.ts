@@ -89,6 +89,17 @@ function isWithinRoot(candidate: string, root: string): boolean {
   return rootSegments.every((segment, index) => candidateSegments[index] === segment);
 }
 
+/** Path segments after the optional drive letter, preserving case. */
+function trailingSegments(candidate: string, root: string): string[] {
+  const withoutDrive = (value: string): string => {
+    const driveMatch = /^[A-Za-z]:/.exec(value);
+    return driveMatch ? value.slice(driveMatch[0].length) : value;
+  };
+  const candidateSegments = splitSegments(withoutDrive(candidate));
+  const rootSegments = splitSegments(withoutDrive(root));
+  return candidateSegments.slice(rootSegments.length);
+}
+
 function joinSegments(base: string, missing: string[]): string {
   const separator = base.includes("\\") && !base.includes("/") ? "\\" : "/";
   const trimmed = base.replace(/[\\/]+$/, "");
@@ -158,6 +169,63 @@ export async function authorizeV2ReadablePath(
     ok: false,
     reason: "outside-root",
     message: `The path ${JSON.stringify(candidate)} is outside the readable Library roots and is rejected.`,
+  };
+}
+
+export type V2LibraryResolution =
+  | { ok: true; canonicalPath: string; libraryRoot: string; directory: string | null }
+  | V2PathDenial;
+
+/**
+ * Resolve an existing folder to the readable Library root that owns it,
+ * with the folder's path relative to that root. This is the one place a
+ * v2 operation decides root and directory ownership: copied files carry
+ * the answer into the Library index so they are never rootless (#271).
+ * The `libraryRoot` is the configured root that matched (what the
+ * scanner stores), and `directory` is the root-relative path with
+ * forward slashes and no leading separator.
+ */
+export async function resolveV2LibraryLocation(
+  candidate: string,
+  roots: readonly string[],
+  io: V2PathIo,
+): Promise<V2LibraryResolution> {
+  const screened = screenV2CandidatePath(candidate);
+  if (screened) return screened;
+  let canonical: string;
+  try {
+    canonical = await io.realpath(candidate);
+  } catch {
+    const probe = await io.lstat(candidate).catch(() => ({ exists: false, isLink: false }));
+    if (probe.exists) {
+      return {
+        ok: false,
+        reason: "dangling-link",
+        message: `The path ${JSON.stringify(candidate)} is a link with an unresolvable target and is rejected.`,
+      };
+    }
+    return {
+      ok: false,
+      reason: "missing",
+      message: `The path ${JSON.stringify(candidate)} does not exist in the Library; refresh and retry.`,
+    };
+  }
+  for (const root of roots) {
+    const canonicalRootPath = await canonicalRoot(root, io);
+    if (canonicalRootPath && isWithinRoot(canonical, canonicalRootPath)) {
+      const rest = trailingSegments(canonical, canonicalRootPath);
+      return {
+        ok: true,
+        canonicalPath: canonical,
+        libraryRoot: root,
+        directory: rest.length === 0 ? null : rest.join("/"),
+      };
+    }
+  }
+  return {
+    ok: false,
+    reason: "outside-root",
+    message: `The path ${JSON.stringify(candidate)} is outside the Library roots; a gather destination must be an authorized Library root.`,
   };
 }
 

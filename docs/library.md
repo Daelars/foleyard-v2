@@ -55,6 +55,18 @@ scan. An explicit `forget` action (`POST /api/settings { action: "forget" }`)
 removes the root **and** deletes its files and organization data. The full
 decision is `docs/adr/library-root-detachment.md`.
 
+### Gathered-file ownership (#282)
+
+Library Gatherer v2 may only gather into an owned Library root: a destination
+grant whose folder is outside every configured root is refused before anything
+is copied. The copy op resolves the owning root and the destination's
+root-relative directory, and every inserted record carries them, so a gathered
+file is owned exactly like a scanned one — visible to browse, search,
+playback, waveform and Folder Janitor, and never a rootless record. A
+cancellation or an index failure disposes the job-owned copies that were not
+yet indexed, so a retry re-copies cleanly instead of meeting unexplained
+duplicates.
+
 ## Contracts
 
 - `AudioFileRepository` / `SettingsRepository` interfaces in

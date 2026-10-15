@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   authorizeV2ReadablePath,
   authorizeV2WritablePath,
+  resolveV2LibraryLocation,
   screenV2CandidatePath,
 } from "./index";
 import { fakePathIo } from "./test-helpers";
@@ -59,6 +60,47 @@ describe("authorizeV2ReadablePath", () => {
     const missing = await authorizeV2ReadablePath("/lib/absent.mp3", ["/lib"], io);
     expect(missing.ok).toBe(false);
     if (!missing.ok) expect(missing.reason).toBe("missing");
+  });
+});
+
+describe("resolveV2LibraryLocation", () => {
+  it("resolves a folder under a root with its owning root and relative directory", async () => {
+    const io = fakePathIo(["/lib", "/lib/Drums"]);
+    const resolved = await resolveV2LibraryLocation("/lib/Drums", ["/lib"], io);
+    expect(resolved).toEqual({
+      ok: true,
+      canonicalPath: "/lib/Drums",
+      libraryRoot: "/lib",
+      directory: "Drums",
+    });
+  });
+
+  it("reports a root itself as no directory", async () => {
+    const io = fakePathIo(["/lib"]);
+    const resolved = await resolveV2LibraryLocation("/lib", ["/lib"], io);
+    expect(resolved.ok).toBe(true);
+    if (resolved.ok) {
+      expect(resolved.libraryRoot).toBe("/lib");
+      expect(resolved.directory).toBeNull();
+    }
+  });
+
+  it("denies a folder outside every readable root", async () => {
+    const io = fakePathIo(["/lib", "/outside"]);
+    const denied = await resolveV2LibraryLocation("/outside", ["/lib"], io);
+    expect(denied.ok).toBe(false);
+    if (!denied.ok) expect(denied.reason).toBe("outside-root");
+  });
+
+  it("picks the matching root among several and keeps the original case", async () => {
+    const io = fakePathIo(["/lib-a", "/lib-b", "/lib-b/Stems/Vocals"]);
+    const resolved = await resolveV2LibraryLocation("/lib-b/Stems/Vocals", ["/lib-a", "/lib-b"], io);
+    expect(resolved).toEqual({
+      ok: true,
+      canonicalPath: "/lib-b/Stems/Vocals",
+      libraryRoot: "/lib-b",
+      directory: "Stems/Vocals",
+    });
   });
 });
 

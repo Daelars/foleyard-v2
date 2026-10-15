@@ -1,13 +1,18 @@
 // Stages version-matched documentation for packaged builds.
 //
-// `docs/manifest.json` is the single registry (#236). This script copies
-// each manifest document (plus README) from the repo root into a staging
-// directory and writes a staged manifest.json with version provenance:
-// productVersion (root package.json), coreVersion
+// `docs/manifest.json` is the single registry (#236). This script validates it
+// through `docs-registry.cjs` (the same validation the checker uses), clears
+// the output directory first so a stale file from an earlier run can never
+// survive, then copies each manifest document (plus README) from the repo root
+// into the clean staging directory and writes a staged manifest.json with
+// version provenance: productVersion (root package.json), coreVersion
 // (packages/yard-core/package.json), buildId (.next/BUILD_ID when present),
 // sourceRevision (git HEAD or SOURCE_REVISION env), sourceDirty
-// (git status --porcelain non-empty), per-document sha256, and the runnable
-// examples list.
+// (git status --porcelain non-empty), stagedAt (when this run staged the
+// output), per-document sha256, and the runnable examples list.
+//
+// `stagedAt` is what lets check-docs.cjs prove the output came from this
+// script: docs:prepare -> docs:check is the only supported order.
 //
 // Usage: node scripts/prepare-docs.cjs --out <dir>
 // Default out dir: staged-docs/foleyard-docs (matches electron-builder
@@ -18,37 +23,9 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { execSync } = require("node:child_process");
 
-const root = path.resolve(__dirname, "..");
-const REGISTRY_PATH = path.join(root, "docs", "manifest.json");
+const { validateRegistry } = require("./docs-registry.cjs");
 
-function readRegistry() {
-  if (!fs.existsSync(REGISTRY_PATH)) {
-    console.error("prepare-docs: docs/manifest.json not found; it is the single registry");
-    process.exit(1);
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8"));
-  } catch (error) {
-    console.error(`prepare-docs: docs/manifest.json is not valid JSON: ${error.message}`);
-    process.exit(1);
-  }
-  const documents = Array.isArray(parsed.documents) ? parsed.documents : [];
-  if (documents.length === 0) {
-    console.error("prepare-docs: docs/manifest.json declares no documents");
-    process.exit(1);
-  }
-  for (const doc of documents) {
-    if (typeof doc.id !== "string" || typeof doc.path !== "string") {
-      console.error(`prepare-docs: manifest entry needs id and path: ${JSON.stringify(doc)}`);
-      process.exit(1);
-    }
-  }
-  return {
-    manifestId: typeof parsed.manifestId === "string" ? parsed.manifestId : "foleyard-docs",
-    documents,
-  };
-}
+const root = path.resolve(__dirname, "..");
 
 /**
  * Runnable examples derived from `examples/<area>/<name>/run.ts` (#249):
@@ -81,6 +58,33 @@ function parseOutDir(argv) {
   return path.join(root, "staged-docs", "foleyard-docs");
 }
 
+/**
+ * Staging starts from a clean output: anything left there by an earlier run is
+ * removed before the registry documents are copied in, so a stale file cannot
+ * survive into a packaged build. Refuse targets that could destroy the
+ * checkout or a home/drive root.
+ */
+function assertSafeToClean(target) {
+  const resolved = path.resolve(target);
+  const rootResolved = path.resolve(root);
+  if (resolved === rootResolved) {
+    console.error("prepare-docs: refusing to clean the repository root as the staging output");
+    process.exit(1);
+  }
+  if (path.parse(resolved).root === resolved) {
+    console.error(`prepare-docs: refusing to clean the filesystem root "${resolved}"`);
+    process.exit(1);
+  }
+  if (rootResolved.startsWith(resolved + path.sep)) {
+    console.error(`prepare-docs: refusing to clean "${resolved}"; it contains the repository`);
+    process.exit(1);
+  }
+  if (fs.existsSync(path.join(resolved, ".git"))) {
+    console.error(`prepare-docs: refusing to clean "${resolved}"; it holds a git checkout`);
+    process.exit(1);
+  }
+}
+
 function tryExec(cmd) {
   try {
     return execSync(cmd, { cwd: root, stdio: ["ignore", "pipe", "ignore"] })
@@ -96,7 +100,19 @@ function sha256(content) {
 }
 
 const outDir = parseOutDir(process.argv.slice(2));
-const registry = readRegistry();
+const registryValidation = validateRegistry(root);
+if (registryValidation.errors.length > 0) {
+  console.error(
+    `prepare-docs: docs/manifest.json is invalid (${registryValidation.errors.length} problem(s)):`,
+  );
+  for (const error of registryValidation.errors) console.error(`  - ${error}`);
+  process.exit(1);
+}
+const documents = registryValidation.documents;
+const manifestId =
+  typeof registryValidation.manifest?.manifestId === "string"
+    ? registryValidation.manifest.manifestId
+    : "foleyard-docs";
 
 const productVersion = JSON.parse(
   fs.readFileSync(path.join(root, "package.json"), "utf8"),
@@ -141,18 +157,14 @@ const sourceDirty =
           ? false
           : statusOutput.length > 0;
 
-const seenIds = new Set();
-const documents = registry.documents.map((entry) => {
-  if (seenIds.has(entry.id)) {
-    console.error(`prepare-docs: duplicate document id "${entry.id}" in docs/manifest.json`);
-    process.exit(1);
-  }
-  seenIds.add(entry.id);
+// Clean output first: remove anything an earlier run (or another step) left
+// behind, then recreate the directory for this stage.
+assertSafeToClean(outDir);
+fs.rmSync(outDir, { recursive: true, force: true });
+fs.mkdirSync(outDir, { recursive: true });
+
+const stagedDocuments = documents.map((entry) => {
   const abs = path.join(root, entry.path);
-  if (!fs.existsSync(abs)) {
-    console.error(`prepare-docs: missing source file ${entry.path} (id "${entry.id}")`);
-    process.exit(1);
-  }
   const content = fs.readFileSync(abs, "utf8");
   const dest = path.join(outDir, entry.path);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -160,28 +172,28 @@ const documents = registry.documents.map((entry) => {
   return {
     id: entry.id,
     path: entry.path,
-    title: typeof entry.title === "string" ? entry.title : entry.id,
-    status: typeof entry.status === "string" ? entry.status : "current",
-    audience: typeof entry.audience === "string" ? entry.audience : null,
+    title: entry.title,
+    status: entry.status,
+    audience: entry.audience,
     sha256: sha256(content),
   };
 });
 
 const manifest = {
-  manifestId: registry.manifestId,
+  manifestId,
   productVersion,
   coreVersion,
   buildId,
   sourceRevision,
   sourceDirty,
-  documents,
+  stagedAt: new Date().toISOString(),
+  documents: stagedDocuments,
   examples: listExamples(),
 };
 
-fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 
 console.log(
-  `prepare-docs: staged ${documents.length} documents + manifest.json to ${outDir} ` +
+  `prepare-docs: cleaned and staged ${stagedDocuments.length} documents + manifest.json to ${outDir} ` +
     `(product ${productVersion}, core ${coreVersion}, revision ${sourceRevision}${sourceDirty ? ", dirty" : ""}).`,
 );

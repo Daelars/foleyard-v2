@@ -19,12 +19,17 @@ they resolve from staged `foleyard-docs/` resources (or
 reads never execute examples, and a missing staged file returns a
 missing-from-build error rather than falling back. Staging is
 `node scripts/prepare-docs.cjs` and verification is
-`node scripts/check-docs.cjs`; both run in CI. The checker fails on
+`node scripts/check-docs.cjs`; both run in CI, staging first. Staging
+clears the output directory before copying and stamps the staged
+manifest (`stagedAt`), so a file left by an earlier run cannot survive
+and the checker refuses output that was not produced by `docs:prepare`.
+The checker validates the registry entries (status, audience, safe
+paths, unique ids and paths, required current documents) and fails on
 missing repository paths, unresolved relative links, unknown docs ids
 referenced by capabilities/events/commands/definitions, missing example
-directories or READMEs, and any divergence between the manifest and the
-staged output; intentional historical references are allowlisted with a
-reason.
+directories or READMEs, stale or extra staged files, and any divergence
+between the manifest and the staged output; intentional historical
+references are allowlisted with a reason.
 
 ## Responsibilities and boundaries
 
@@ -65,6 +70,9 @@ the absolute path under the docs root, and reads it as UTF-8.
 - `src/lib/documentation.ts` — registry, location resolution, allowlisted reader
 - `src/app/api/docs/route.ts` — location/list endpoint
 - `src/app/api/docs/[...id]/route.ts` — single-document endpoint
+- `scripts/docs-registry.cjs` — shared registry validation (status, audience, paths, duplicates, required current docs)
+- `scripts/prepare-docs.cjs` — clean staging + staged manifest provenance
+- `scripts/check-docs.cjs` — staged-bundle verification (clean output, no stale files)
 - `CONTEXT-MAP.md` — context map (Application, Desktop runtime, Yard Core, Yard Tools)
 - `packages/yard-core/CONTEXT.md`, `src/CONTEXT.md`, `electron/CONTEXT.md`,
   `packages/yard-tools/CONTEXT.md` — context language definitions

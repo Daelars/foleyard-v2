@@ -35,9 +35,14 @@ bun run test           # npx vitest run
 bun run test:coverage  # npx vitest run --coverage
 bun run build          # next build (web); desktop via build:desktop
 node scripts/check-v2-boundaries.cjs  # v2 dependency boundary (also in CI)
-bun run docs:prepare   # stage version-matched docs (also in CI)
-bun run docs:check     # verify staged docs (also in CI)
+bun run docs:prepare   # clean-stage version-matched docs (also in CI)
+bun run docs:check     # verify the staged docs (also in CI)
 ```
+
+`docs:prepare` then `docs:check` is the only supported order. Staging
+clears `staged-docs/foleyard-docs` before copying and stamps the staged
+manifest; the check rejects a stale or extra file, a missing or unknown
+manifest entry, and output that was not produced by `docs:prepare`.
 
 `predev`/`prebuild` run `scripts/verify-workspace-root.cjs`.
 `dev:desktop` is implemented by `scripts/dev-desktop.cjs` and sets desktop

@@ -18,7 +18,7 @@ export function V3ExtensionsSection({
   /** Fired after an enable/disable write settles so the route catalog refreshes. */
   onEnabledToggle?: (extensionId: string, enabled: boolean) => void;
 }) {
-  const { entries, loading, error, toggle, updateSetting, reset, approve } =
+  const { entries, loading, error, refresh, toggle, updateSetting, reset, approve } =
     useV2ExtensionEntries();
 
   // Keep the current rows visible while a write-triggered refresh is in
@@ -27,10 +27,15 @@ export function V3ExtensionsSection({
     return <p className="p-6 text-center text-xs text-zinc-500">Loading v2 extensions…</p>;
   }
   if (error) {
+    // Total catalog failure: a visible, recoverable state, never an
+    // unexplained empty page.
     return (
-      <p role="alert" className="p-6 text-center text-xs text-accent-text">
-        {error}
-      </p>
+      <div role="alert" className="space-y-3 p-6 text-center">
+        <p className="text-xs text-accent-text">{error}</p>
+        <Button tone="secondary" size="sm" onClick={() => void refresh()}>
+          Retry
+        </Button>
+      </div>
     );
   }
   if (entries.length === 0) {
@@ -126,7 +131,23 @@ export function V3ExtensionsSection({
                   Reset
                 </Button>
               </div>
-              {entry.rows.length === 0 ? (
+              {entry.status === "degraded" ? (
+                // A failed panel stays visible: the enablement and
+                // permission controls above still work, and the settings
+                // reason is shown with a retry instead of an empty list.
+                <div role="alert" className="space-y-2">
+                  <p className="text-[11px] text-accent-text">
+                    Settings unavailable: {entry.error ?? "the settings read failed."}
+                  </p>
+                  <Button
+                    tone="secondary"
+                    size="sm"
+                    onClick={() => void refresh()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : entry.rows.length === 0 ? (
                 <p className="text-xs text-zinc-600">No settings declared.</p>
               ) : (
                 <div

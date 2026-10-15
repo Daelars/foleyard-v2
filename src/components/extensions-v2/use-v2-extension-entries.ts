@@ -3,13 +3,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { fetchV2ExtensionStatesCached, invalidateV2ClientCaches, setV2ExtensionEnabledRemote } from "@/lib/extensions-v2/contributions";
+import {
+  fetchV2SettingsCatalog,
+  invalidateV2ClientCaches,
+  setV2ExtensionEnabledRemote,
+} from "@/lib/extensions-v2/contributions";
 import type { V2ExtensionSettingsEntry } from "./settings";
 
 /**
  * Live v2 extension entries shared by the Tools grid cards and the
  * Settings dialog section. Registration stays server-side; this hook
  * only sequences endpoints and refreshes after every write.
+ *
+ * One batched read (#295): a single request loads every extension's
+ * enablement, permissions and settings. The Settings dialog used to
+ * mount every panel at once and fan out one `/settings/:id` request per
+ * extension; that is gone. A per-extension failure now stays in the list
+ * as a `degraded` entry with a reason instead of being filtered out.
  *
  * Load-once: the loaded entries live in a process-wide cache, so the
  * second mount (settings dialog after the Tools grid, view switches,
@@ -30,8 +40,10 @@ function readEntriesSnapshot(): V2ExtensionSettingsEntry[] | null {
   return cachedEntries;
 }
 
+/** Drop the snapshot and any load populating it; the next read refetches. */
 export function invalidateV2EntriesCache(): void {
   cachedEntries = null;
+  entriesInflight = null;
 }
 
 function patchEntry(
@@ -52,51 +64,28 @@ function loadEntriesShared(): Promise<EntriesLoadResult> {
   }
   if (!entriesInflight) {
     entriesInflight = (async (): Promise<EntriesLoadResult> => {
-      const states = await fetchV2ExtensionStatesCached();
-      if (!states.ok) {
-        return { entries: [], error: states.message };
+      const result = await fetchV2SettingsCatalog();
+      if (!result.ok) {
+        // Total catalog failure: surfaced by the caller, never cached, so
+        // the next mount or retry refetches.
+        return { entries: [], error: result.message };
       }
-      // One round trip per extension, all in parallel: the previous
-      // sequential for-await loop made load time the sum of every
-      // settings response instead of the slowest one.
-      const settled = await Promise.all(
-        states.extensions.map(async (extension) => {
-          try {
-            const response = await fetch(
-              `/api/extensions-v2/settings/${encodeURIComponent(extension.id)}`,
-            );
-            const body = (await response.json().catch(() => null)) as {
-              ok?: boolean;
-              declaredPermissions?: string[];
-              effectivePermissions?: string[];
-              settings?: Array<{ declaration: V2ExtensionSettingsEntry["rows"][number]["declaration"]; value: unknown }>;
-              error?: { message?: string };
-            } | null;
-            if (!response.ok || !body?.ok) {
-              return null;
-            }
-            return {
-              id: extension.id,
-              name: extension.name,
-              version: extension.version,
-              description: extension.description,
-              enabled: extension.enabled,
-              declaredPermissions: body.declaredPermissions ?? [],
-              effectivePermissions: body.effectivePermissions ?? [],
-              rows: (body.settings ?? []).map((row) => ({
-                declaration: row.declaration,
-                value: row.value,
-              })),
-            } satisfies V2ExtensionSettingsEntry;
-          } catch {
-            return null;
-          }
-        }),
-      );
       return {
-        entries: settled.filter(
-          (entry): entry is V2ExtensionSettingsEntry => entry !== null,
-        ),
+        entries: result.extensions.map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          version: entry.version,
+          description: entry.description,
+          enabled: entry.enabled,
+          declaredPermissions: entry.declaredPermissions,
+          effectivePermissions: entry.effectivePermissions,
+          rows: entry.settings.map((row) => ({
+            declaration: row.declaration,
+            value: row.value,
+          })),
+          status: entry.status,
+          error: entry.error,
+        })),
         error: null,
       };
     })().then((result) => {

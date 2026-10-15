@@ -63,6 +63,7 @@ desktop helpers grouped):
 | `GET/POST /api/extensions-v2/jobs*` | v2 job submit/poll/cancel |
 | `GET/PATCH /api/extensions-v2/extensions*` | v2 enablement + approvals |
 | `POST /api/extensions-v2/grants` | v2 destination-grant bridge |
+| `GET /api/extensions-v2/settings` | v2 batched settings/enablement read (#295) |
 | `GET/PUT/POST /api/extensions-v2/settings/*` | v2 settings read/write/reset |
 | `GET /api/runtime` | read-only runtime snapshot |
 | `GET /api/docs`, `GET /api/docs/[...id]` | version-matched docs |

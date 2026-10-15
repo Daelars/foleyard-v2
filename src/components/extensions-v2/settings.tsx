@@ -22,4 +22,8 @@ export type V2ExtensionSettingsEntry = {
   declaredPermissions: string[];
   effectivePermissions: string[];
   rows: V2SettingRow[];
+  /** "degraded" when this extension's settings could not be read; it stays visible with `error`. */
+  status: "ready" | "degraded";
+  /** Human reason when degraded; null when ready. */
+  error: string | null;
 };

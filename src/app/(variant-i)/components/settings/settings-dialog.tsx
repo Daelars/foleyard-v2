@@ -139,11 +139,11 @@ function V3SettingsDialogBody({
           </TabPanel>
         </div>
 
-        <div className={cn(activeTab !== "extensions" && "hidden")}>
+        {activeTab === "extensions" ? (
           <TabPanel tabKey="extensions">
             <V3SettingsExtensionsTab v2Settings={v2Settings} />
           </TabPanel>
-        </div>
+        ) : null}
 
         <div className={cn(activeTab !== "appearance" && "hidden")}>
           <TabPanel tabKey="appearance">

@@ -11,7 +11,7 @@ import {
   type V2FailureCode,
 } from "./invocation";
 import {
-  persistedV2JobRecord,
+  exposedV2JobRecord,
   sanitizeV2IdempotencyKey,
   type V2JobRecord,
   type V2JobStatusReader,
@@ -370,11 +370,13 @@ export async function handleV2HttpPlanApply(
 /**
  * Job polling entries (R4). The reader is the host's job manager (or
  * any `V2JobStatusReader`); records are already serializable and carry
- * ownership metadata without grant tokens.
+ * ownership metadata without grant tokens. The exposed projection adds
+ * the bounded, schema-shaped terminal value and a redacted diagnostic;
+ * the raw handler value never leaves the process.
  */
 
 function encodeV2JobRecord(record: V2JobRecord): V2HttpResponse {
-  return { status: 200, body: { ok: true, job: persistedV2JobRecord(record) } };
+  return { status: 200, body: { ok: true, job: exposedV2JobRecord(record) } };
 }
 
 function jobUnknownResponse(jobId: string): V2HttpResponse {
@@ -436,7 +438,7 @@ export function handleV2HttpJobList(
     status: 200,
     body: {
       ok: true,
-      jobs: page.jobs.map((record) => persistedV2JobRecord(record)),
+      jobs: page.jobs.map((record) => exposedV2JobRecord(record)),
       nextCursor: page.nextCursor,
     },
   };

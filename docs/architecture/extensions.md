@@ -68,9 +68,16 @@ commandId, selection, input }`:
    version, so cancellation cleanup removes only entries that job made.
 5. **UI.** Values, review plans, and job outcomes return typed; the
    route-local adapters render dialogs, progress and results (there is
-   no generic form/preview/result renderer). Per-item availability comes
-   from the same evaluator as preflight. Disable removes contributions
-   and listeners.
+   no generic form/preview/result renderer). A terminal job exposes a
+   bounded summary: a succeeded job's declared result is projected onto
+   the command `result` schema (`terminal-results.ts`) with undeclared
+   fields dropped and strings, arrays, and the whole projection
+   hard-capped; a failed, cancelled, or interrupted job exposes a
+   bounded, redacted diagnostic. The raw handler value and the
+   projection are memory-only — a persisted snapshot never carries a
+   value, a grant, a stack, or a private path. Per-item availability
+   comes from the same evaluator as preflight. Disable removes
+   contributions and listeners.
 
 Module dependency direction (enforced by
 `node scripts/check-v2-boundaries.cjs` in CI): definitions →
@@ -91,6 +98,14 @@ tool packages import `yard-core` and relatives only.
   not a class identity, because route bundles re-evaluate core) and
   report the created entry's `V2FileVersion`;
   `deleteFileIfVersion` removes only that version.
+- Job terminal results are bounded and schema-shaped:
+  `projectV2JobResultValue` (`terminal-results.ts`) drops undeclared
+  properties and caps strings, arrays, and the serialized projection;
+  `redactV2JobDiagnosticMessage` removes stacks and absolute paths and
+  caps message length; `persistedV2JobRecord` (`snapshot`) drops the
+  value and the projection and redacts diagnostics, while
+  `exposedV2JobRecord` (transport) adds the bounded value and the
+  state-derived diagnostic.
 - No provider contracts (waveform/metadata/search) exist; extension
   points mark them `unavailable`.
 
@@ -106,6 +121,8 @@ tool packages import `yard-core` and relatives only.
 
 - `packages/yard-tools/*-v2/src/{definition,handlers}.ts`
 - `packages/yard-core/src/extensions-v2/{registry,catalog,availability,permissions,grants,host,jobs,plans,transport,operations}.ts`
+- `packages/yard-core/src/extensions-v2/terminal-results.ts` — bounded
+  result projection and diagnostic redaction
 - `packages/yard-core/src/extensions-v2/output-ownership.ts` — created-file
   versions and the output-conflict error; `src/lib/extensions-v2/output-files.ts`
   — exclusive creation and version-checked removal

@@ -1,4 +1,6 @@
 // @vitest-environment node
+import fs from "node:fs";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -72,7 +74,12 @@ describe("desktop-picker proofs gate extension grants", () => {
     expect((await desktopGrantsPOST(pickerRequest({ path: destination }, "wrong"))).status).toBe(403);
 
     const picked = await pick(MAKE_PACK, "destination", destination);
-    expect(picked.path).toBe(destination);
+    // Sync and async realpath disagree on Windows 8.3 short names
+    // (`RUNNER~1` vs `runneradmin` on CI), so compare via the same async
+    // canonicalization the implementation uses.
+    expect(await fs.promises.realpath(picked.path)).toBe(
+      await fs.promises.realpath(destination),
+    );
     expect(picked.proof).toEqual(expect.any(String));
     expect(picked.proof).not.toContain(destination);
 
@@ -225,13 +232,28 @@ describe("desktop-picker proofs gate extension grants", () => {
 
     try {
       const pack = await pickV2Grant(bridge, MAKE_PACK, "destination");
-      expect(pack).toMatchObject({ ok: true, path: destination });
+      expect(pack.ok).toBe(true);
+      if (pack.ok) {
+        expect(await fs.promises.realpath(pack.path)).toBe(
+          await fs.promises.realpath(destination),
+        );
+      }
 
       const gatherSource = await pickV2Grant(bridge, GATHERER, "source");
-      expect(gatherSource).toMatchObject({ ok: true, path: source });
+      expect(gatherSource.ok).toBe(true);
+      if (gatherSource.ok) {
+        expect(await fs.promises.realpath(gatherSource.path)).toBe(
+          await fs.promises.realpath(source),
+        );
+      }
 
       const gatherDestination = await pickV2Grant(bridge, GATHERER, "destination");
-      expect(gatherDestination).toMatchObject({ ok: true, path: destination });
+      expect(gatherDestination.ok).toBe(true);
+      if (gatherDestination.ok) {
+        expect(await fs.promises.realpath(gatherDestination.path)).toBe(
+          await fs.promises.realpath(destination),
+        );
+      }
     } finally {
       globalThis.fetch = originalFetch;
     }

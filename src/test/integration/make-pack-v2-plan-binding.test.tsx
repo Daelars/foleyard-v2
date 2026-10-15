@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import fs from "node:fs";
+
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
@@ -182,7 +184,12 @@ describe("Make Pack plan binding in the dialog", () => {
     await act(async () => {
       await result.current.handlePickDest();
     });
-    expect(result.current.destPath).toBe(scratch.directory("other-out"));
+    // Sync and async realpath disagree on Windows 8.3 short names
+    // (`RUNNER~1` vs `runneradmin` on CI), so compare via the same async
+    // canonicalization the implementation uses.
+    expect(await fs.promises.realpath(result.current.destPath)).toBe(
+      await fs.promises.realpath(scratch.directory("other-out")),
+    );
     expect(result.current.phase).toBe("form");
     expect(result.current.preview).toBeNull();
   });

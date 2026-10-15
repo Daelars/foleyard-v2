@@ -36,9 +36,11 @@ grantToken)` rejects unknown tokens, then resolves every existing
 ancestor before accepting new output segments. `POST /api/desktop/grants`
 registers the folder the desktop picker chose; Gatherer and Make Pack
 destinations spend the single-use proof it returns at the v2 grant routes
-(see below). Drop Rules stages drag copies in owned directories
-under its configured staging directory and removes owned stages older
-than 24 h (user directories and directory links excluded). Desktop reveal
+(see below). Drop Rules stages drag copies in the desktop bridge's owned
+`drag-staging/` directories and removes owned stages older than 24 h
+(user directories and directory links excluded); the bridge creates one
+fresh directory per drag and mints the extension a destination grant for
+it, so a stage is never a raw configured path. Desktop reveal
 uses server grants. Permanent deletion (`deleteFiles` with
 `permanent: true`) unlinks without the recycle bin and requires an indexed
 file inside a Library root; Janitor folder deletion rechecks containment

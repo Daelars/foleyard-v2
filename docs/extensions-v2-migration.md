@@ -157,7 +157,9 @@ replays completed file operations.
   palette and row/menu commands (janitor scans/deletes, gather)
   likewise open their dialogs instead of invoking headless.
 - Drop Rules v2 stages drag-out copies into a staging grant rather
-  than the configured raw folder path; Folder Janitor v2 cannot tell
+  than the configured raw folder path; the native bridge mints a fresh
+  grant per drag, and only falls back to the raw indexed file when the
+  policy is disabled or not applicable. Folder Janitor v2 cannot tell
   an unreadable-but-present file from a missing one (no `stat` op).
   Both are documented in their package READMEs.
 

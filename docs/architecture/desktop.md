@@ -59,11 +59,19 @@ interval, active only when packaged; pushes `update-available` / `ready` /
 `check-for-updates` / `install-update` are invoke bridges; the About tab
 drives manual checks.
 
-Drag-out: `startDragFile` first asks Drop Rules (`drop-rules.prepare-drag`
-via the local execute endpoint) for a safe renamed/staged copy, and falls
-back to the raw indexed file (`resolveIndexedFile`) when preparation fails.
-Missing ids or unresolvable files emit `desktop:action-error` instead of
-starting a drag.
+Drag-out: `startDragFile` first asks the shared availability evaluator
+whether Drop Rules governs this drag. When the extension is enabled the
+bridge mints a fresh staging grant for an app-owned `drag-staging/`
+directory under user data, supplies the command's declared input
+(`fileId` + `stagingGrantId`) to `drop-rules-v2.prepare-drag`, and drags
+the deterministic path it returns after re-checking it against the
+server's readable containment (`/api/desktop/path`). The raw indexed file
+(`resolveIndexedFile`) is used only when the policy is disabled or not
+applicable; an enabled policy that is unreachable, denied, or fails is
+reported through `desktop:action-error` instead of silently dragging raw.
+Missing ids, unresolvable files, and rejected paths also emit
+`desktop:action-error` instead of starting a drag. Bridge-owned staging
+directories older than 24 h are pruned.
 
 v2 reuse: the desktop folder picker mints a single-use proof that
 `POST /api/extensions-v2/grants` and `/source-grants` spend into

@@ -97,8 +97,8 @@ open/close state. No global store; no EventBus.
   `No library roots configured` instead of scanning the world.
 - Removed files (`removed_at`) are filtered by default; rescan can restore
   rows whose files reappear (known finding B10, expected-to-fail).
-- Collection-branch counts can disagree with the main file list (finding
-  B03, expected-to-fail).
+- Collection browsing applies the same filter set as the main file list,
+  so Collection listings and their counts agree.
 
 ## Source map (real file paths)
 

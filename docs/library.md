@@ -50,9 +50,8 @@ list on the client.
   root not saved.
 - Removed-then-rescanned files can reappear (finding B10,
   expected-to-fail): removal is undone by rescan.
-- Collection-branch counts disagree with the main list (finding B03,
-  expected-to-fail); root ownership is order-dependent across multiple
-  roots (finding I03, expected-to-fail).
+- Root ownership is order-dependent across multiple roots (finding I03,
+  expected-to-fail).
 
 ## Source map (real file paths)
 

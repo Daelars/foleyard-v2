@@ -55,8 +55,6 @@ its save-search replaces the retired v1 tool.
 
 ## Failure behavior and limitations
 
-- B03 (expected-to-fail, #137): collection-branch counts disagree with
-  the file list — smart/Collection counts are untrusted.
 - B09 (expected-to-fail, #137): smart conversion is unchunked and
   non-atomic — large conversions can partially apply.
 - B02 (expected-to-fail, #136): distinct recordings can inherit tags.

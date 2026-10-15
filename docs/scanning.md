@@ -1,6 +1,6 @@
 # Scanning
 
-> Feature status: shipped (with known defects B03 / I03 tracked as expected-to-fail)
+> Feature status: shipped (with known defect I03 tracked as expected-to-fail)
 > Contract: internal
 > Owner: `src/lib/scanner/*` + `packages/yard-core/src/services/library/*`
 > Applies to: docs manifest ID (`scanning`); development checkout when unbuilt
@@ -55,8 +55,6 @@ phases:
 
 - Partial failure is normal: per-file metadata errors increment
   `failed`/`errors` without aborting the run; the summary records them.
-- B03 (expected-to-fail): collection-branch counts disagree with the
-  file list (#137).
 - I03 (expected-to-fail): order-dependent root ownership — overlapping
   roots attribute files by scan order (#139).
 - The old 5,000-file transport cap (finding B06, #138) is fixed; a large
@@ -86,5 +84,5 @@ post-scan state against the checkout.
 
 - `docs/library.md` — roots and file identity
 - `docs/metadata.md` — what extraction produces
-- `docs/development.md` — expected-failures ledger (B03, I03, B06)
+- `docs/development.md` — expected-failures ledger (I03)
 - `docs/filesystem.md` — root readability and grants

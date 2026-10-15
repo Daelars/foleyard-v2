@@ -175,43 +175,39 @@ describe("database correctness", () => {
     ).toEqual(["back\\slash.wav"]);
   });
 
-  it.fails(
-    "agrees between getFiles and getFileCount across every filter (B03)",
-    () => {
-      const seeded = seed(["/lib/kick.wav", "/lib/snare.wav", "/lib/hat.wav"]);
-      const collectionId = collections.createCollection("Session");
-      const tagId = tags.createTag("Loud");
-      for (const file of seeded.slice(0, 2)) {
-        collections.attachFileToCollection(file.id, collectionId);
-        files.setFileTagBatch([file.id], tagId, true);
-      }
-      files.setFavorites([seeded[0].id], true);
+  it("agrees between getFiles and getFileCount across every filter (B03)", () => {
+    const seeded = seed(["/lib/kick.wav", "/lib/snare.wav", "/lib/hat.wav"]);
+    const collectionId = collections.createCollection("Session");
+    const tagId = tags.createTag("Loud");
+    for (const file of seeded.slice(0, 2)) {
+      collections.attachFileToCollection(file.id, collectionId);
+      files.setFileTagBatch([file.id], tagId, true);
+    }
+    files.setFavorites([seeded[0].id], true);
 
-      // Collection plus tag already agrees; that is the corner the deleted
-      // 29-test file checked, under a name that claimed the whole matrix.
-      expect(files.getFiles({ collectionId, tagId })).toHaveLength(
-        files.getFileCount({ collectionId, tagId }),
-      );
+    // The collection branch builds its filters through the same contract as
+    // the whole-library branch, so every filter below moves the listing and
+    // the count together.
+    expect(files.getFiles({ collectionId, tagId })).toHaveLength(
+      files.getFileCount({ collectionId, tagId }),
+    );
 
-      // The collection branch of the query builder drops `query` and
-      // `favorites` entirely, so these disagree with reality and each other.
-      for (const options of [
-        { collectionId, query: "DOES_NOT_EXIST" },
-        { collectionId, favorites: true },
-        { collectionId, tagId, query: "kick" },
-      ]) {
-        expect(
-          files.getFiles(options).length,
-          `listing must match count for ${JSON.stringify(options)}`,
-        ).toBe(files.getFileCount(options));
-      }
-
+    for (const options of [
+      { collectionId, query: "DOES_NOT_EXIST" },
+      { collectionId, favorites: true },
+      { collectionId, tagId, query: "kick" },
+    ]) {
       expect(
-        files.getFiles({ collectionId, query: "DOES_NOT_EXIST" }),
-        "a collection search with no match must return nothing",
-      ).toHaveLength(0);
-    },
-  );
+        files.getFiles(options).length,
+        `listing must match count for ${JSON.stringify(options)}`,
+      ).toBe(files.getFileCount(options));
+    }
+
+    expect(
+      files.getFiles({ collectionId, query: "DOES_NOT_EXIST" }),
+      "a collection search with no match must return nothing",
+    ).toHaveLength(0);
+  });
 
   it("chunks batch work past the SQLite bind-variable ceiling, including through the PATCH route", async () => {
     const total = SQLITE_MAX_VARIABLES + 25;

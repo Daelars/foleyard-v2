@@ -27,34 +27,36 @@ function tagOriginSubselect(context: FileRepositoryContext, origin: TagOrigin) {
   );
 }
 
-function buildCollectionFilters(context: FileRepositoryContext, options: FileSearchQuery) {
-  const { collectionId, tagId, showRemoved, cursor } = options;
-  const collectionFilters = [eq(schema.fileCollections.collectionId, collectionId as string)];
-
-  if (tagId) {
-    collectionFilters.push(tagIdSubselect(context, tagId));
-  }
-
-  if (!showRemoved) {
-    collectionFilters.push(isNull(schema.files.removedAt));
-  }
-
-  if (cursor) {
-    const decoded = decodeFileCursor(cursor);
-    const expectedKey = options.sortKey ?? "filename";
-    const expectedDir = options.sortDir === "desc" ? -1 : 1;
-    if (!decoded || decoded.key !== expectedKey || decoded.dir !== expectedDir) {
-      throw new Error("Invalid file cursor for this ordering.");
-    }
-    collectionFilters.push(fileKeysetFilter(decoded));
-  }
-
-  return collectionFilters;
-}
-
-function buildFileFilters(context: FileRepositoryContext, options: FileSearchQuery) {
-  const { query, favorites, directory, libraryRoot, atLibraryRoot, tagId, tagOrigin, showRemoved, cursor } = options;
+/**
+ * The one filter-construction contract shared by every Audio file query
+ * (#272). A Collection query is the same query with an extra
+ * `fileCollections` membership predicate; nothing else differs, so search,
+ * favorites, library root, directory, tag, tag origin, removed state and
+ * keyset cursors all apply identically whether or not a `collectionId` is
+ * set. The `fileCollections` predicate is only added when `collectionId` is
+ * present, matching the `FROM` clause the caller builds.
+ *
+ * The caller decides whether the cursor and paging fields participate:
+ * `getFiles` passes them, `getFileCount` counts the whole filtered set.
+ */
+function buildFilters(context: FileRepositoryContext, options: FileSearchQuery) {
+  const {
+    query,
+    favorites,
+    collectionId,
+    directory,
+    libraryRoot,
+    atLibraryRoot,
+    tagId,
+    tagOrigin,
+    showRemoved,
+    cursor,
+  } = options;
   const filters = [];
+
+  if (collectionId) {
+    filters.push(eq(schema.fileCollections.collectionId, collectionId));
+  }
 
   if (cursor) {
     const decoded = decodeFileCursor(cursor);
@@ -107,6 +109,25 @@ function buildFileFilters(context: FileRepositoryContext, options: FileSearchQue
   return filters;
 }
 
+/** The Audio file columns every listing projection returns. */
+const fileProjection = {
+  id: schema.files.id,
+  path: schema.files.path,
+  filename: schema.files.filename,
+  libraryRoot: schema.files.libraryRoot,
+  directory: schema.files.directory,
+  format: schema.files.format,
+  duration: schema.files.duration,
+  sampleRate: schema.files.sampleRate,
+  bitDepth: schema.files.bitDepth,
+  channels: schema.files.channels,
+  fileSize: schema.files.fileSize,
+  mtimeMs: schema.files.mtimeMs,
+  isFavorite: schema.files.isFavorite,
+  removedAt: schema.files.removedAt,
+  createdAt: schema.files.createdAt,
+};
+
 /**
  * Server-side ordering for the Audio file list. Pages must arrive in final
  * order so infinite scroll appends globally-correct rows. Duration ordering
@@ -133,95 +154,24 @@ function buildFileOrderBy(options: FileSearchQuery) {
 }
 
 export function getFiles(context: FileRepositoryContext, options?: FileSearchQuery): AudioFile[] {
-    const {
-      query,
-      favorites,
-      collectionId,
-      directory,
-      libraryRoot,
-      atLibraryRoot,
-      tagId,
-      tagOrigin,
-      showRemoved,
-      limit = 500,
-      offset = 0,
-      sortKey,
-      sortDir,
-      cursor,
-    } = options ?? {};
+    const { collectionId, limit = 500, offset = 0, sortKey, sortDir } = options ?? {};
     const orderBy = buildFileOrderBy({ sortKey, sortDir });
+    const filters = buildFilters(context, options ?? {});
 
     if (collectionId) {
-      const collectionFilters = buildCollectionFilters(context, {
-        collectionId,
-        tagId,
-        showRemoved,
-        sortKey,
-        sortDir,
-        cursor,
-      });
-
-      const rows = context.db
-        .select({
-          id: schema.files.id,
-          path: schema.files.path,
-          filename: schema.files.filename,
-          libraryRoot: schema.files.libraryRoot,
-          directory: schema.files.directory,
-          format: schema.files.format,
-          duration: schema.files.duration,
-          sampleRate: schema.files.sampleRate,
-          bitDepth: schema.files.bitDepth,
-          channels: schema.files.channels,
-          fileSize: schema.files.fileSize,
-          mtimeMs: schema.files.mtimeMs,
-          isFavorite: schema.files.isFavorite,
-          removedAt: schema.files.removedAt,
-          createdAt: schema.files.createdAt,
-        })
+      return context.db
+        .select(fileProjection)
         .from(schema.fileCollections)
         .innerJoin(schema.files, eq(schema.fileCollections.fileId, schema.files.id))
-        .where(and(...collectionFilters))
+        .where(and(...filters))
         .orderBy(...orderBy)
         .limit(limit)
         .offset(offset)
-        .all();
-
-      return rows as AudioFile[];
+        .all() as AudioFile[];
     }
 
-    const filters = buildFileFilters(context, {
-      query,
-      favorites,
-      directory,
-      libraryRoot,
-      atLibraryRoot,
-      tagId,
-      tagOrigin,
-      showRemoved,
-      sortKey,
-      sortDir,
-      cursor,
-    });
-
     return context.db
-      .select({
-        id: schema.files.id,
-        path: schema.files.path,
-        filename: schema.files.filename,
-        libraryRoot: schema.files.libraryRoot,
-        directory: schema.files.directory,
-        format: schema.files.format,
-        duration: schema.files.duration,
-        sampleRate: schema.files.sampleRate,
-        bitDepth: schema.files.bitDepth,
-        channels: schema.files.channels,
-        fileSize: schema.files.fileSize,
-        mtimeMs: schema.files.mtimeMs,
-        isFavorite: schema.files.isFavorite,
-        removedAt: schema.files.removedAt,
-        createdAt: schema.files.createdAt,
-      })
+      .select(fileProjection)
       .from(schema.files)
       .where(filters.length ? and(...filters) : undefined)
       .orderBy(...orderBy)
@@ -231,21 +181,22 @@ export function getFiles(context: FileRepositoryContext, options?: FileSearchQue
   }
 
 export function getFileCount(context: FileRepositoryContext, options?: FileSearchQuery): number {
-    const { collectionId, tagId, showRemoved } = options ?? {};
+    // A count describes the whole filtered set, so the keyset cursor (a page
+    // boundary) is deliberately excluded; every real filter still travels the
+    // same builder as the listing.
+    const { collectionId } = options ?? {};
+    const filters = buildFilters(context, { ...options, cursor: undefined });
 
     if (collectionId) {
-      const collectionFilters = buildCollectionFilters(context, { collectionId, tagId, showRemoved });
       const result = context.db
         .select({ count: count() })
         .from(schema.fileCollections)
         .innerJoin(schema.files, eq(schema.fileCollections.fileId, schema.files.id))
-        .where(and(...collectionFilters))
+        .where(and(...filters))
         .get();
 
       return result?.count ?? 0;
     }
-
-    const filters = buildFileFilters(context, options ?? {});
 
     const result = context.db
       .select({ count: count() })

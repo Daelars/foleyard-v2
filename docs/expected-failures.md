@@ -10,7 +10,6 @@ deletes one of these tests without fixing the finding fails the check. A PR
 that FIXES a finding flips that test to `it` and removes its entry here in
 the same change.
 
-- B03 — database-correctness: collection-branch count disagreement (#137)
 - B09 — database-correctness: unchunked, non-atomic smart conversion (#137)
 - B02 — data-loss-prevention: distinct recordings inherit tags (#136)
 - B10 — data-loss-prevention: removal undone by rescan (#136)

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Database from "better-sqlite3";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 
 import {
   audioFileRecord,
@@ -12,6 +12,7 @@ import {
 import { SqliteAudioFileRepository } from "@/lib/database/file-repository";
 import { SqliteTagRepository } from "@/lib/database/tag-repository";
 import { SqliteCollectionRepository } from "@/lib/database/collection-repository";
+import { SqliteDeletionJournal } from "@/lib/database/deletion-journal";
 import { SqliteSettingsRepository } from "@/lib/database/settings-repository";
 import { SqliteBrowseRepository } from "@/lib/database/browse-repository";
 import { initializeDatabaseSchema } from "@/lib/database/migrations";
@@ -31,6 +32,7 @@ const state = vi.hoisted(() => ({
   files: null as SqliteAudioFileRepository | null,
   tags: null as SqliteTagRepository | null,
   collections: null as SqliteCollectionRepository | null,
+  journal: null as SqliteDeletionJournal | null,
   libraryRoots: [] as string[],
 }));
 
@@ -77,6 +79,10 @@ vi.mock("@/lib/db", () => ({
     state.files!.markFileRemoved(path, removedAt),
   batchMarkRemoved: (paths: string[], removedAt: string, now: string) =>
     state.files!.batchMarkRemoved(paths, removedAt, now),
+  recordPendingDeletion: (entry: Parameters<SqliteDeletionJournal["record"]>[0]) =>
+    state.journal!.record(entry),
+  listPendingDeletions: () => state.journal!.list(),
+  clearPendingDeletions: (paths: string[]) => state.journal!.clear(paths),
 }));
 
 import {
@@ -125,6 +131,7 @@ beforeEach(() => {
   state.files = files;
   state.tags = tags;
   state.collections = collections;
+  state.journal = new SqliteDeletionJournal(sqlite);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -364,9 +371,17 @@ describe("database correctness", () => {
       const outside = scratch.writeFile("private.wav");
       const soft = scratch.writeFile("library/soft.wav");
       state.files!.batchUpsertFiles(
-        [inside, outside, soft].map((path) =>
-          audioFileRecord({ path, filename: path.split("/").pop() }),
-        ),
+        [inside, outside, soft].map((path) => {
+          // The index records the on-disk identity; a permanently deleted
+          // path is only unlinked while it still matches it (#269).
+          const stats = statSync(path);
+          return audioFileRecord({
+            path,
+            filename: path.split("/").pop(),
+            fileSize: stats.size,
+            mtimeMs: Math.trunc(stats.mtimeMs),
+          });
+        }),
         NOW(),
       );
       const indexed = state.files!.getFiles({ limit: 10 });
@@ -404,6 +419,10 @@ describe("database correctness", () => {
       expect(existsSync(inside), "a permanent delete unlinks the file").toBe(false);
       expect(existsSync(outside), "a file outside the roots is never unlinked").toBe(true);
       expect(existsSync(soft), "a soft delete leaves disk contents intact").toBe(true);
+      expect(
+        state.journal!.list(),
+        "a completed permanent delete leaves no pending intent",
+      ).toEqual([]);
       expect(
         state.files!.getFileById(insideId)?.removedAt,
         "a permanent delete marks the row removed",

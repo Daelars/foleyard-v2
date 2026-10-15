@@ -68,7 +68,7 @@ function backfillLibraryRoots(sqlite: Database.Database) {
   apply();
 }
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 export type DatabaseVersionInfo = {
   state: "ready" | "not-initialized" | "unavailable";
@@ -190,6 +190,17 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
       PRIMARY KEY (file_id, collection_id),
       FOREIGN KEY (file_id) REFERENCES files(id),
       FOREIGN KEY (collection_id) REFERENCES collections(id)
+    );
+
+    -- Durable intent for permanent deletion (#269): committed before the
+    -- unlink, cleared once the index agrees with the filesystem, reconciled
+    -- on the next scan after a crash.
+    CREATE TABLE IF NOT EXISTS pending_deletions (
+      path TEXT PRIMARY KEY,
+      file_id TEXT NOT NULL,
+      file_size INTEGER,
+      mtime_ms INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
 

@@ -1,7 +1,9 @@
 import { rmSync, utimesSync } from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  audioFileRecord,
   createScratchLibrary,
   createTestDatabase,
   type TestDatabase,
@@ -9,6 +11,7 @@ import {
 import { SqliteAudioFileRepository } from "@/lib/database/file-repository";
 import { SqliteTagRepository } from "@/lib/database/tag-repository";
 import { SqliteCollectionRepository } from "@/lib/database/collection-repository";
+import { SqliteDeletionJournal } from "@/lib/database/deletion-journal";
 import { SqliteSettingsRepository } from "@/lib/database/settings-repository";
 import { startScan, getScanStatus } from "@/lib/scanner/run-scan";
 
@@ -44,6 +47,7 @@ const state = vi.hoisted(() => ({
   tags: null as SqliteTagRepository | null,
   collections: null as SqliteCollectionRepository | null,
   settings: null as SqliteSettingsRepository | null,
+  journal: null as SqliteDeletionJournal | null,
   extractor: null as null | ((
     filePath: string,
     options?: { fileSize?: number; filename?: string; format?: string | null; fullParse?: boolean },
@@ -67,6 +71,8 @@ vi.mock("@/lib/db", () => ({
   batchMarkRemoved: (paths: string[], removedAt: string, now: string) =>
     state.files!.batchMarkRemoved(paths, removedAt, now),
   reconcileMovedFiles: () => state.files!.reconcileMovedFiles(),
+  listPendingDeletions: () => state.journal!.list(),
+  clearPendingDeletions: (paths: string[]) => state.journal!.clear(paths),
   analyzeStatistics: () => state.files!.analyzeStatistics(),
   toggleFavorite: (id: string) => state.files!.toggleFavorite(id),
   getLibraryRoot: () => state.settings!.getLibraryRoot(),
@@ -103,6 +109,7 @@ function wireDatabase() {
   state.files = files;
   state.tags = new SqliteTagRepository(sqlite);
   state.collections = new SqliteCollectionRepository(sqlite);
+  state.journal = new SqliteDeletionJournal(sqlite);
   settings = new SqliteSettingsRepository(sqlite);
   state.settings = settings;
 }
@@ -250,6 +257,39 @@ describe("scanner", () => {
         secondOwner,
         `ownership must not depend on root order (got ${firstOwner} then ${secondOwner})`,
       ).toBe(firstOwner);
+    } finally {
+      scratch.dispose();
+    }
+  });
+
+  it("reconciles a permanent deletion interrupted after the unlink", async () => {
+    const scratch = createScratchLibrary("foleyard-scan-delete-");
+    try {
+      scratch.writeFile("kick.wav");
+      settings.setLibraryRoots([scratch.root]);
+      await runScanToIdle();
+
+      // A row whose file is gone and whose root the scan does not own: the
+      // scan's own removal phase filters it out, so only deletion recovery
+      // can resolve the journaled intent.
+      const missingPath = path.join(scratch.root, "gone.wav");
+      files.batchUpsertFiles(
+        [audioFileRecord({ path: missingPath, filename: "gone.wav" })],
+        new Date().toISOString(),
+      );
+      const interrupted = files.getFileByPath(missingPath)!;
+      expect(interrupted.libraryRoot).toBeNull();
+      state.journal!.record({
+        path: missingPath,
+        fileId: interrupted.id,
+        fileSize: null,
+        mtimeMs: null,
+      });
+
+      await runScanToIdle();
+
+      expect(files.getFileById(interrupted.id)?.removedAt).not.toBeNull();
+      expect(state.journal!.list()).toEqual([]);
     } finally {
       scratch.dispose();
     }

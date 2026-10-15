@@ -86,6 +86,12 @@ export {
   upsertFileEmbedding,
 } from "@/lib/database/embedding-repository";
 
+export {
+  clearPendingDeletions,
+  listPendingDeletions,
+  recordPendingDeletion,
+} from "@/lib/database/deletion-journal";
+
 import { sqlite } from "@/lib/database/connection";
 import { SqliteAudioFileRepository } from "@/lib/database/file-repository";
 import { SqliteTagRepository } from "@/lib/database/tag-repository";

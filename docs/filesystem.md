@@ -40,7 +40,11 @@ under its configured staging directory and removes owned stages older
 than 24 h (user directories and directory links excluded). Desktop reveal
 uses server grants. Permanent deletion (`deleteFiles` with
 `permanent: true`) unlinks without the recycle bin and requires an indexed
-file inside a Library root; Janitor folder deletion rechecks containment
+file inside a Library root whose on-disk identity still matches the row
+(size and mtime); the durable intent is journalled (`pending_deletions`)
+before the unlink and cleared once the index agrees. A path that was
+replaced since it was indexed is refused, so the delete never lands on a
+different file. Janitor folder deletion rechecks containment
 and emptiness immediately before removing the folder.
 
 ## v2 grants and operation services beside it
@@ -70,6 +74,13 @@ Pack v2 integration suite instead of an expected-failure entry.
 - Destructive outcomes: permanent delete unlinks files without the
   recycle bin — unrecoverable except from backup. Soft removal
   (`removedAt`) is the default; only explicit permanent delete unlinks.
+- A permanent delete interrupted between the unlink and the index update is
+  recovered from the journal: the next scan marks the missing row removed,
+  or drops the intent because the file is still there. Recovery never
+  unlinks, so an interrupted delete cannot destroy a replacement. When the
+  index write fails after the unlink the route reports the file as failed
+  (not removed) and keeps the intent, rather than leaving an active row
+  silently behind.
 - Drop Rules "apply now" requires a grant: a write with no writable path
   is rejected via `resolveDropRuleCommand` (finding E04, #135; fixed and
   removed from the ledger).
@@ -81,13 +92,19 @@ Pack v2 integration suite instead of an expected-failure entry.
   Node imports.
 - Export no longer deletes a manifest sidecar (finding B12, #136; fixed
   and removed from the ledger).
-- Time-of-check/time-of-use: validation and use are separate steps; a
-  hostile local process can replace directories between them.
+- Time-of-check/time-of-use: validation and use are separate steps. The
+  identity is re-checked immediately before the unlink and the unlink
+  targets the indexed path, never a resolved link target, so a replacement
+  cannot redirect the delete to a different file; a replacement that lands
+  after that final re-check is unlinked at that path and reconciled from
+  the journal.
 
 ## Source map (real file paths)
 
 - `src/lib/filesystem-boundary.ts` — grants, readable/writable resolution
-- `src/lib/files/delete-files.ts` — soft removal + permanent unlink
+- `src/lib/files/delete-files.ts` — soft removal, permanent unlink, intent
+  journaling and recovery
+- `src/lib/database/deletion-journal.ts` — `pending_deletions` storage
 - `src/app/api/desktop/grants/route.ts` — grant issuance
 - `src/app/api/desktop/file/route.ts`, `src/app/api/desktop/path/route.ts` —
   desktop file/path surface

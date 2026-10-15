@@ -4,8 +4,8 @@ const { APP_NAME } = require("./main/constants.cjs");
 const { ensureDesktopDatabaseInitialized, resetDesktopDatabaseForBuild } = require("./main/database.cjs");
 const { appendDesktopLog, reportMainProcessError, setMainWindow } = require("./main/errors.cjs");
 const { registerIpcHandlers } = require("./main/ipc.cjs");
-const { startNextProductionServer } = require("./main/next-server.cjs");
 const { setDesktopServerUrl } = require("./main/server-url.cjs");
+const { resolveDesktopStartUrl } = require("./main/start-url.cjs");
 const { createMainWindow } = require("./main/window.cjs");
 const { initAutoUpdater, setUpdateWindow } = require("./main/auto-updater.cjs");
 
@@ -14,8 +14,9 @@ app.setName(APP_NAME);
 let mainWindow = null;
 
 async function openMainWindow() {
-  const startUrl =
-    process.env.ELECTRON_START_URL ?? (await startNextProductionServer());
+  // Packaged builds always load the bundled loopback server; only development
+  // may point Electron at another local server (#261).
+  const startUrl = await resolveDesktopStartUrl();
 
   setDesktopServerUrl(startUrl);
   appendDesktopLog(`Opening main window: ${startUrl}`);

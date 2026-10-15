@@ -192,6 +192,9 @@ verification.
 - `release` preserves user data.
 - `build:desktop` is a plain local build; only `build:desktop:disposable`
   resets the local desktop database for testing.
+- The packaged app ships the production dependency closure, so newly
+  disclosed production advisories are gated on every push by
+  `node scripts/check-dependency-audit.cjs` (see `docs/development.md`).
 - Windows app and installer icons come from `icon.ico`.
 - The runtime Electron window icon comes from `icon.png`.
 - Contributor loop (install, run, check, test, coverage): see

@@ -9,7 +9,8 @@
 
 Defines the contributor loop: install, run, check, test, cover, and build
 the app, with fixture-isolated tests, the expected-failures ledger
-(`docs/expected-failures.md`) and the coverage thresholds in
+(`docs/expected-failures.md`), the shipped-dependency advisory gate
+(`scripts/check-dependency-audit.cjs`) and the coverage thresholds in
 `vitest.config.ts`.
 
 ## Responsibilities and boundaries
@@ -31,6 +32,7 @@ bun run dev            # web app only (Next dev)
 bun run dev:desktop    # Next on :3001 + Electron against it
 bunx tsc --noEmit      # typecheck (package.json: typecheck)
 bun run lint           # eslint . + theme CSS lint
+node scripts/check-dependency-audit.cjs  # shipped-dependency advisory gate (also in CI)
 bun run test           # npx vitest run
 bun run test:coverage  # npx vitest run --coverage
 bun run build          # next build (web); desktop via build:desktop
@@ -53,6 +55,47 @@ Fixture isolation: `src/test/fixtures.ts` builds throwaway libraries and
 databases per test; integration tests live in `src/test/integration/`.
 `scripts/check-expected-failures.cjs` (CI) counts `it.fails(` in
 `src/test/integration/` and requires the count to equal the ledger below.
+
+Shipped-dependency advisories: `node scripts/check-dependency-audit.cjs`
+(CI, after `lint`) runs `bun audit --json` over `bun.lock` and fails the
+build on an **unapproved high or critical advisory in a production
+dependency**. Every finding lands in exactly one bucket:
+
+- `production` — reachable from the root manifest's runtime dependencies
+  (`dependencies`, plus `runtimeDependencies` in `dependency-audit.json`).
+  `next build` traces part of this closure into `.next/node_modules` and
+  electron-builder copies the rest into the installer, so an advisory here
+  is reachable desktop risk.
+- `development` — reachable only from `devDependencies`. Never packaged.
+- `unreachable` — locked for an operating system or CPU the shipped
+  desktop build does not target (`shippedPlatform` in
+  `dependency-audit.json`), or reachable from no manifest field at all.
+
+The audit feed is keyed by package name, so an advisory is attributed only
+to copies whose version satisfies `vulnerable_versions`; advisories no
+locked copy satisfies are reported as not applicable instead of being
+pinned on an already-fixed sibling copy. Advisories below high are
+reported, not gated.
+
+Approved exceptions live in `dependency-audit.json`. Each entry names one
+package and one advisory id and carries an `owner`, a `reason` and an
+`expires` calendar date:
+
+```json
+{
+  "package": "example-package",
+  "advisory": "GHSA-0000-0000-0000",
+  "owner": "@foleyard/maintainers",
+  "reason": "no fixed release exists; parser is not reachable from user input",
+  "expires": "2026-12-31"
+}
+```
+
+An expired or malformed exception fails the gate — re-review it, then fix
+or renew the date — and an exception matching no current advisory is
+reported as stale. Run `node scripts/check-dependency-audit.cjs --json`
+for the machine-readable report, or `--audit-json <path>` to reuse a
+saved audit report offline.
 
 Authoring a v2 extension:
 
@@ -77,6 +120,10 @@ checkout never ships and is never read by production builds.
 - Internal scripts contract in `package.json`; coverage thresholds in
   `vitest.config.ts` sit one point below the measured baseline so ordinary
   churn does not fail the run. Raise them as coverage rises.
+- Dependency contract in `dependency-audit.json` + `bun.lock`: no
+  unapproved high or critical advisory may reach the shipped closure, and
+  every approved exception carries an owner, a reason and a future expiry.
+  Proven by `src/test/integration/dependency-audit.test.ts`.
 
 ## Failure behavior and limitations
 
@@ -111,6 +158,8 @@ thresholds and `bun run test:coverage` are the source of truth.
 - `src/test/fixtures.ts` — fixture isolation
 - `src/test/integration/` — integration suite incl. `it.fails` ledger tests
 - `scripts/check-expected-failures.cjs` — ledger count check (CI)
+- `scripts/check-dependency-audit.cjs`, `dependency-audit.json` — shipped
+  advisory gate, bucket classification and the approved-exception ledger (CI)
 - `scripts/dev-desktop.cjs`, `scripts/verify-workspace-root.cjs`,
   `scripts/rebuild-traced.cjs`, `scripts/clean-binary.cjs` — dev/build tooling
 

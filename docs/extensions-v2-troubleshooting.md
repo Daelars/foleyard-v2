@@ -46,7 +46,7 @@ redacted; local views may show more.
 | `extension-disabled` (403) | extensions GET shows `enabled: false` | PATCH enable; disabling also cancels live jobs |
 | `permission-denied` (403) | inspector names the denied permission; approvals GET shows the gap | POST the missing permission to approvals; nothing auto-grants |
 | capability unavailable | command lists `requiredCapabilities`; app host exposes none, desktop adds `desktop.native` in desktop mode | remove the requirement or run where the capability exists; unknown never counts as available |
-| grant rejected / expired | grants live in memory and die on restart | pick the destination again for a fresh grant ID |
+| grant rejected / expired | grants live in memory and die on restart; a picker proof is single-use and expires in 5 min | pick the folder again for a fresh proof and grant ID; reusing a proof, or sending a raw path, is denied |
 | plan rejected: altered/expired/replayed | TTL is 15 min default, 1 h max, single use | prepare a fresh plan; do not resend consumed IDs |
 | job interrupted after restart | job history keeps known outputs + recovery note | review outputs, resubmit with fresh authorization; effects never replay |
 | state migration disabled the extension | settings GET diagnosis names the failure; prior data is preserved | fix the stored shape or reset, then re-enable |

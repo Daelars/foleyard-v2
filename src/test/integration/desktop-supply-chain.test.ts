@@ -27,7 +27,10 @@ import { POST as desktopGrantsPOST } from "@/app/api/desktop/grants/route";
 
 // Area: desktop + supply chain (#141). A consolidation, not a cleanup: the
 // 41 tests here are good and none is filler, so all of their assertions
-// survive — grouped into 5 integration tests instead of 7 files.
+// survive — grouped into 5 integration tests instead of 7 files. The two
+// startup-locking tests below are the #261 contract (packaged startup ignores
+// start-URL overrides; the grant secret only reaches a loopback origin the
+// main process resolved itself).
 
 const cjsRequire = createRequire(import.meta.url);
 
@@ -119,6 +122,10 @@ const dbMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/db", () => ({
   getFileById: (id: string) => dbMocks.files.get(id),
+  getOwnedFileById: (id: string) => {
+    const file = dbMocks.files.get(id);
+    return file && file.removedAt === null ? file : undefined;
+  },
   getLibraryRoots: () => dbMocks.roots,
 }));
 
@@ -174,6 +181,7 @@ afterEach(() => {
   dropElectronModulesFromCache();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   (globalThis as unknown as { window?: unknown }).window = undefined;
 });
 
@@ -387,6 +395,111 @@ describe("desktop and supply chain", () => {
     }
   });
 
+  it("locks startup to the bundled loopback server and refuses hostile origins (#261)", async () => {
+    // A hostile override sits in the environment for the whole test: it must
+    // never reach the constants, so even the module-level default stays
+    // loopback.
+    vi.stubEnv("ELECTRON_START_URL", "https://evil.example.com");
+    dropElectronModulesFromCache();
+    const { DEV_SERVER_URL } = requireElectronMain<{ DEV_SERVER_URL: string }>("constants.cjs");
+    expect(DEV_SERVER_URL).toBe("http://localhost:3000");
+
+    const { resolveDesktopStartUrl } = requireElectronMain<{
+      resolveDesktopStartUrl: (options?: {
+        packaged?: boolean;
+        requestedStartUrl?: string;
+        startBundledServer?: () => Promise<string>;
+      }) => Promise<string>;
+    }>("start-url.cjs");
+
+    const bundledServerUrl = "http://127.0.0.1:49222";
+    const startBundledServer = vi.fn(async () => bundledServerUrl);
+    const remoteOrigins = [
+      "https://evil.example.com",
+      "http://localhost.evil.com:3001",
+      "http://127.0.0.1.evil.com:3001",
+      "http://169.254.169.254",
+      "file:///etc/passwd",
+      "javascript:alert(1)",
+      "not a url",
+    ];
+
+    // Packaged startup ignores the environment and always loads the bundled
+    // server the main process started itself.
+    for (const hostile of remoteOrigins) {
+      await expect(
+        resolveDesktopStartUrl({ packaged: true, requestedStartUrl: hostile, startBundledServer }),
+      ).resolves.toBe(bundledServerUrl);
+    }
+    // Even the environment default cannot change what a packaged build loads.
+    await expect(resolveDesktopStartUrl({ packaged: true, startBundledServer })).resolves.toBe(
+      bundledServerUrl,
+    );
+    expect(startBundledServer).toHaveBeenCalledTimes(remoteOrigins.length + 1);
+
+    // Development accepts the loopback server the override names...
+    for (const loopback of [
+      "http://localhost:3001",
+      "http://127.0.0.1:3001/library?view=all",
+      "http://[::1]:3001",
+    ]) {
+      await expect(
+        resolveDesktopStartUrl({ packaged: false, requestedStartUrl: loopback, startBundledServer }),
+      ).resolves.toBe(loopback);
+    }
+
+    // ...and falls back to the local default for anything remote, including
+    // the hostile value read from the environment.
+    for (const hostile of [...remoteOrigins, undefined]) {
+      await expect(
+        resolveDesktopStartUrl({ packaged: false, requestedStartUrl: hostile, startBundledServer }),
+      ).resolves.toBe(DEV_SERVER_URL);
+    }
+    await expect(resolveDesktopStartUrl({ packaged: false, startBundledServer })).resolves.toBe(
+      DEV_SERVER_URL,
+    );
+
+    // The bundled production server never starts in development.
+    expect(startBundledServer).toHaveBeenCalledTimes(remoteOrigins.length + 1);
+  });
+
+  it("sends the grant secret only to the origin the main process verified (#261)", async () => {
+    const { getDesktopServerUrl, setDesktopServerUrl } = requireElectronMain<{
+      getDesktopServerUrl: () => string;
+      setDesktopServerUrl: (startUrl: string) => void;
+    }>("server-url.cjs");
+
+    // A remote origin can never become the trusted desktop server.
+    for (const hostile of ["https://evil.example.com", "http://localhost.evil.com:3001"]) {
+      expect(() => setDesktopServerUrl(hostile)).toThrowError(/non-loopback server origin/);
+    }
+    expect(getDesktopServerUrl()).toBe("http://localhost:3000");
+
+    const trusted = "http://127.0.0.1:49222";
+    setDesktopServerUrl(`${trusted}/library?view=all`);
+    expect(getDesktopServerUrl()).toBe(trusted);
+
+    // The grant secret rides only on a request to that verified origin.
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, path: "C:\\music", grantToken: "opaque" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { grantDirectoryPath } = requireElectronMain<{
+      grantDirectoryPath: (directoryPath: string) => Promise<unknown>;
+    }>("desktop-service.cjs");
+
+    await expect(grantDirectoryPath("C:\\music")).resolves.toMatchObject({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      { method: string; headers: Record<string, string> },
+    ];
+    expect(url).toBe(`${trusted}/api/desktop/grants`);
+    expect(init.headers["x-foleyard-grant-secret"]).toBe(process.env.FOLEYARD_GRANT_SECRET);
+    expect(init.headers["x-foleyard-grant-secret"]).toEqual(expect.any(String));
+  });
+
   it("reports one build id and revision to the server and the desktop (#241)", async () => {
     const appRoot = fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-app-"));
     const originalGetAppPath = electronFake.app.getAppPath;
@@ -486,22 +599,26 @@ describe("desktop and supply chain", () => {
       const traversal = await desktopPathPOST(pathRequest(path.join(root, "..", "private.wav")));
       expect(traversal.status).toBe(404);
 
-      // Grants need the desktop secret and issue opaque tokens.
+      // Grants need the desktop secret and mint an opaque single-use proof.
       vi.stubEnv("FOLEYARD_GRANT_SECRET", "test-desktop-secret");
       const grantRequest = (secret?: string) =>
         new NextRequest("http://localhost/api/desktop/grants", {
           method: "POST",
           headers: secret ? { "x-foleyard-grant-secret": secret } : {},
-          body: JSON.stringify({ path: granted }),
+          body: JSON.stringify({
+            path: granted,
+            extensionId: "make-pack-v2",
+            grantKind: "destination",
+          }),
         });
       expect((await desktopGrantsPOST(grantRequest())).status).toBe(403);
       expect((await desktopGrantsPOST(grantRequest("wrong"))).status).toBe(403);
       const grantResponse = await desktopGrantsPOST(grantRequest("test-desktop-secret"));
       expect(grantResponse.status).toBe(200);
-      const grant = (await grantResponse.json()) as { path: string; grantToken: string };
+      const grant = (await grantResponse.json()) as { path: string; proof: string };
       expect(grant.path).toBe(await fsp.realpath(granted));
-      expect(grant.grantToken).toEqual(expect.any(String));
-      expect(grant.grantToken).not.toContain(granted);
+      expect(grant.proof).toEqual(expect.any(String));
+      expect(grant.proof).not.toContain(granted);
     } finally {
       await fsp.rm(temp, { recursive: true, force: true });
     }

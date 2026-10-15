@@ -1,32 +1,33 @@
 import { registerGrant } from "@/lib/filesystem-boundary";
-import { V2SourceGrantStore } from "@yard-core";
+import type { V2SourceGrantStore } from "@yard-core";
+
+import { getV2Runtime } from "./runtime";
 
 /**
  * Application readable source-grant bridge (Application context, E1 #176).
  *
  * Library Gatherer v2 reads external source folders outside the
  * Library roots; Folder Janitor v2 scans user-picked folders. Both
- * authorize through readable source grants issued here. The desktop
- * picker token maps to the grant ID in memory (the same pattern as
- * the destination-grant bridge in `filesystem.ts`): tokens never
- * enter definitions, logs, exports, or persisted state, and a restart
- * clears the map so previously issued access stops working. A source
- * grant never authorizes a write — that separation is enforced by the
- * core folder services, which check destination grants separately.
- * No v1 extension modules imported.
+ * authorize through readable source grants issued here. The grants and
+ * their picker-token map belong to the process-wide runtime, so a
+ * source grant issued through the grants route authorizes execution
+ * through any other route bundle. Tokens never enter definitions,
+ * logs, exports, or persisted state, and a restart clears them so
+ * previously issued access stops working. A source grant never
+ * authorizes a write — that separation is enforced by the core folder
+ * services, which check destination grants separately. No v1
+ * extension modules imported.
  */
 
-const sourceGrantStore: V2SourceGrantStore = new V2SourceGrantStore();
-const tokenToGrantId = new Map<string, string>();
-
 export function getV2SourceGrantStore(): V2SourceGrantStore {
-  return sourceGrantStore;
+  return getV2Runtime().sourceGrants.store;
 }
 
 /**
- * Bridge a desktop picker source folder into a core readable grant.
- * The opaque picker token maps to the grant ID in memory; handlers
- * only ever see the grant ID.
+ * Bridge a picker-authorized canonical folder into a core readable grant.
+ * `canonicalPath` must come from a spent picker proof (see
+ * `picker-proofs.ts`); the opaque filesystem-boundary token maps to the
+ * grant ID in memory and handlers only ever see the grant ID.
  */
 export async function issueV2SourceGrant(
   extensionId: string,
@@ -34,19 +35,21 @@ export async function issueV2SourceGrant(
   options?: { expiresAt?: string },
 ): Promise<{ grantId: string; grantToken: string; path: string }> {
   const { path, grantToken } = await registerGrant(directoryPath);
-  const grant = sourceGrantStore.issue(extensionId, path, options);
-  tokenToGrantId.set(grantToken, grant.grantId);
+  const { store, tokens } = getV2Runtime().sourceGrants;
+  const grant = store.issue(extensionId, path, options);
+  tokens.set(grantToken, grant.grantId);
   return { grantId: grant.grantId, grantToken, path };
 }
 
 /** Resolve a renderer-supplied picker token to its grant ID, if live. */
 export function resolveV2SourceGrantToken(grantToken: string): string | null {
-  return tokenToGrantId.get(grantToken) ?? null;
+  return getV2Runtime().sourceGrants.tokens.get(grantToken) ?? null;
 }
 
 export function revokeV2SourceGrant(grantId: string): void {
-  sourceGrantStore.revoke(grantId);
-  for (const [token, id] of tokenToGrantId) {
-    if (id === grantId) tokenToGrantId.delete(token);
+  const { store, tokens } = getV2Runtime().sourceGrants;
+  store.revoke(grantId);
+  for (const [token, id] of tokens) {
+    if (id === grantId) tokens.delete(token);
   }
 }

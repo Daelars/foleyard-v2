@@ -237,8 +237,7 @@ function unusedFiles(): V2FileContentPorts {
     readFileBytes: unused,
     copyFile: unused,
     writeFileBytes: unused,
-    deleteFile: unused,
-    exists: async () => false,
+    deleteFileIfVersion: unused,
     libraryRoots: () => [],
     pathIo: () => ({
       realpath: unused,

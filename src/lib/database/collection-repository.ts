@@ -1,4 +1,4 @@
-import { and, asc, count, eq, ne, sql } from "drizzle-orm";
+import { and, asc, count, eq, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { v4 as uuid } from "uuid";
 
@@ -7,6 +7,7 @@ import type { Collection } from "@yard-core";
 
 import { sqlite as defaultSqlite } from "./connection";
 import { filenameSearch } from "./filename-search";
+import { ownedFileFilter } from "./file-ownership";
 import { extractSmartQuery } from "@/lib/smart-collection-filter";
 import * as schema from "@/lib/schema";
 
@@ -29,7 +30,7 @@ function countFilesMatchingQuery(
   const result = db
     .select({ count: count() })
     .from(schema.files)
-    .where(and(sql`${schema.files.removedAt} IS NULL`, filenameSearch(sqlite, query)))
+    .where(and(ownedFileFilter(), filenameSearch(sqlite, query)))
     .get() as { count: number } | undefined;
   return result?.count ?? 0;
 }
@@ -95,7 +96,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
       .where(
         and(
           eq(schema.fileCollections.collectionId, id),
-          sql`${schema.files.removedAt} IS NULL`,
+          ownedFileFilter(),
         ),
       )
       .get() as { count: number } | undefined;
@@ -115,7 +116,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
       })
       .from(schema.collections)
       .leftJoin(schema.fileCollections, eq(schema.fileCollections.collectionId, schema.collections.id))
-      .leftJoin(schema.files, and(eq(schema.files.id, schema.fileCollections.fileId), sql`${schema.files.removedAt} IS NULL`))
+      .leftJoin(schema.files, and(eq(schema.files.id, schema.fileCollections.fileId), ownedFileFilter()))
       .groupBy(schema.collections.id)
       .orderBy(asc(schema.collections.name))
       .all() as unknown as Collection[];
@@ -217,7 +218,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
         .from(schema.files)
         .where(
           and(
-            sql`${schema.files.removedAt} IS NULL`,
+            ownedFileFilter(),
             filenameSearch(this.sqlite, query),
           ),
         )

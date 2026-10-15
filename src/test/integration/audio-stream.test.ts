@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createScratchLibrary, type ScratchLibrary } from "@/test/fixtures";
 
-const db = vi.hoisted(() => ({ getFileById: vi.fn(), getLibraryRoots: vi.fn() }));
+const db = vi.hoisted(() => ({ getFileById: vi.fn(), getOwnedFileById: vi.fn(), getLibraryRoots: vi.fn() }));
 vi.mock("@/lib/db", () => db);
 vi.mock("@/lib/extensions-v2/recent-source-store", () => ({ recordRecentMakePackFile: vi.fn() }));
 import { GET } from "@/app/api/audio/route";
@@ -13,7 +13,9 @@ let library: ScratchLibrary;
 beforeEach(() => {
   library = createScratchLibrary("foleyard-stream-");
   const path = library.writeFile("hit.wav", "audio".repeat(500000));
-  db.getFileById.mockReturnValue({ id: "hit", path, removedAt: null });
+  const record = { id: "hit", path, removedAt: null };
+  db.getFileById.mockReturnValue(record);
+  db.getOwnedFileById.mockReturnValue(record);
   db.getLibraryRoots.mockReturnValue([library.root]);
 });
 afterEach(() => {

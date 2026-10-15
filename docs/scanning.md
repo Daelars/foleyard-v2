@@ -32,7 +32,10 @@ phases:
    extension wins).
 2. **Reconcile** — `reconcile.ts` (`markRemovedFiles`) diffs discovered
    paths against the index: unchanged files skipped, missing files marked
-   removed, new/changed files queued.
+   removed, new/changed files queued. Detached rows (a removed root, #271)
+   are reattached when the owning root is scanned; they are never touched by
+   another root's scan, and interrupted root removals are reconciled from the
+   `pending_root_changes` journal before discovery.
 3. **Metadata-queue** — `metadata-queue.ts` extracts metadata with
    concurrency 16 and write batches of 250 (`METADATA_CONCURRENCY`,
    `METADATA_WRITE_BATCH_SIZE` in `scan-runner.ts`).
@@ -59,6 +62,9 @@ phases:
   file list (#137).
 - I03 (expected-to-fail): order-dependent root ownership — overlapping
   roots attribute files by scan order (#139).
+- An interrupted Library root removal is reconciled before discovery from
+  `pending_root_changes` (#271); the scan never resurrects a detached record
+  on its own (see `docs/library.md`).
 - The old 5,000-file transport cap (finding B06, #138) is fixed; a large
   scan is no longer silently truncated.
 

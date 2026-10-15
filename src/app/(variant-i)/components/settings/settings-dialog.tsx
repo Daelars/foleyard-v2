@@ -51,6 +51,7 @@ function V3SettingsDialogBody({
   settings,
   onSaveRoot,
   onRemoveRoot,
+  onForgetRoot,
   scanStatus,
   onStartScan,
   collections,
@@ -118,6 +119,7 @@ function V3SettingsDialogBody({
               settings={settings}
               onSaveRoot={onSaveRoot}
               onRemoveRoot={onRemoveRoot}
+              onForgetRoot={onForgetRoot}
               scanStatus={scanStatus}
               onStartScan={onStartScan}
             />

@@ -21,8 +21,16 @@ marketplace, or public authoring SDK.
 - `packages/yard-core/src/extensions-v2/` owns the framework-free engine:
   registry validation, catalog serialization, availability, permissions
   and grants, host execution, jobs, plans, and the HTTP transport codec.
+- `src/lib/extensions-v2/runtime.ts` owns the one process-wide v2
+  runtime: registration, host execution, plans, grants, picker proofs,
+  jobs, enablement, approvals, and events. Next compiles each route into its
+  own bundle, so module state forks per route subtree even though the
+  process is one realm; every module reads its slice through
+  `getV2Runtime()` instead of keeping a per-bundle copy, and the
+  creation guard is structural so a re-evaluated module reuses the
+  existing runtime.
 - `src/lib/extensions-v2/host.ts` composes the production registry and
-  per-port handlers behind `getAppV2Host()`.
+  per-port handlers behind `getAppV2Host()`, held on that runtime.
 - The renderer owns all UI: V3 adapters in
   `src/app/(variant-i)/components/`, palette entries, context menus,
   dialogs, and panels. Contributions declare intent; the renderer
@@ -54,12 +62,22 @@ commandId, selection, input }`:
    sources (shelf reads `v2shelf:sound-shelf-v2`, recent reads the
    recent record), authorized file/archive output, namespaced
    settings/state, and job reporting — never raw DB, routes, React,
-   or Electron.
+   or Electron. Every output is created exclusively (the create is the
+   claim, so a pre-existing file is never truncated and concurrent jobs
+   cannot both claim a destination) and tracked with the created file's
+   version, so cancellation cleanup removes only entries that job made.
 5. **UI.** Values, review plans, and job outcomes return typed; the
    route-local adapters render dialogs, progress and results (there is
-   no generic form/preview/result renderer). Per-item availability comes
-   from the same evaluator as preflight. Disable removes contributions
-   and listeners.
+   no generic form/preview/result renderer). A terminal job exposes a
+   bounded summary: a succeeded job's declared result is projected onto
+   the command `result` schema (`terminal-results.ts`) with undeclared
+   fields dropped and strings, arrays, and the whole projection
+   hard-capped; a failed, cancelled, or interrupted job exposes a
+   bounded, redacted diagnostic. The raw handler value and the
+   projection are memory-only — a persisted snapshot never carries a
+   value, a grant, a stack, or a private path. Per-item availability
+   comes from the same evaluator as preflight. Disable removes
+   contributions and listeners.
 
 Module dependency direction (enforced by
 `node scripts/check-v2-boundaries.cjs` in CI): definitions →
@@ -73,7 +91,23 @@ tool packages import `yard-core` and relatives only.
   scopes, settings, contributions, value schemas), failure codes,
   catalog and outcome envelopes.
 - Destination and source access travel through grant stores; raw paths
-  never reach handlers.
+  never reach handlers. A grant is issued only when the desktop picker
+  minted a single-use proof for that extension and grant kind, so a
+  caller-supplied path is never consent.
+- Output creation is exclusive: `V2FileContentPorts.copyFile` /
+  `writeFileBytes` and `V2ArchivePorts.createZipArchive` reject an
+  existing destination with `V2OutputConflictError` (a stable `code`,
+  not a class identity, because route bundles re-evaluate core) and
+  report the created entry's `V2FileVersion`;
+  `deleteFileIfVersion` removes only that version.
+- Job terminal results are bounded and schema-shaped:
+  `projectV2JobResultValue` (`terminal-results.ts`) drops undeclared
+  properties and caps strings, arrays, and the serialized projection;
+  `redactV2JobDiagnosticMessage` removes stacks and absolute paths and
+  caps message length; `persistedV2JobRecord` (`snapshot`) drops the
+  value and the projection and redacts diagnostics, while
+  `exposedV2JobRecord` (transport) adds the bounded value and the
+  state-derived diagnostic.
 - No provider contracts (waveform/metadata/search) exist; extension
   points mark them `unavailable`.
 
@@ -88,8 +122,15 @@ tool packages import `yard-core` and relatives only.
 ## Source map (real file paths)
 
 - `packages/yard-tools/*-v2/src/{definition,handlers}.ts`
-- `packages/yard-core/src/extensions-v2/{registry,catalog,availability,permissions,grants,host,jobs,plans,transport,operations}.ts`
+- `packages/yard-core/src/extensions-v2/{registry,catalog,availability,permissions,grants,picker-proofs,host,jobs,plans,transport,operations}.ts`
+- `packages/yard-core/src/extensions-v2/terminal-results.ts` — bounded
+  result projection and diagnostic redaction
+- `packages/yard-core/src/extensions-v2/output-ownership.ts` — created-file
+  versions and the output-conflict error; `src/lib/extensions-v2/output-files.ts`
+  — exclusive creation and version-checked removal
+- `src/lib/extensions-v2/runtime.ts` — the one process-wide v2 runtime
 - `src/lib/extensions-v2/host.ts` — production registry + enablement
+- `src/lib/extensions-v2/picker-grant-client.ts` — the renderer picker-to-grant flow
 - `src/app/api/extensions-v2/**/route.ts` — HTTP surface
 - `src/app/(variant-i)/components/extensions/**` — V3 adapters
 - `src/components/CommandPalette/` + `src/app/library/use-palette.ts`

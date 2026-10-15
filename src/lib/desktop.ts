@@ -4,7 +4,14 @@ export type DesktopActionResult = {
   ok: boolean;
   error?: string;
   path?: string;
-  grantToken?: string;
+  /** Single-use picker proof, present when the pick was made for an extension grant. */
+  proof?: string;
+};
+
+/** Why the native picker was opened: which extension and grant kind to prove. */
+export type DesktopPickerPurpose = {
+  extensionId: string;
+  grantKind: "source" | "destination";
 };
 
 export type DesktopWindowState = {
@@ -34,7 +41,7 @@ export interface DesktopBridge {
   openFileExternally: (fileId: string) => Promise<DesktopActionResult>;
   setZoomFactor: (factor: number) => void;
   copyFilePath: (fileId: string) => Promise<DesktopActionResult>;
-  pickFolder: () => Promise<DesktopActionResult>;
+  pickFolder: (purpose?: DesktopPickerPurpose) => Promise<DesktopActionResult>;
   minimizeWindow: () => Promise<{ ok: boolean }>;
   toggleMaximizeWindow: () => Promise<{
     ok: boolean;

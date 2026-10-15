@@ -1,4 +1,4 @@
-import type { IndexedAudioFile } from "../domain/audio-file";
+import { isOwnedAudioFile, type IndexedAudioFile } from "../domain/audio-file";
 
 import type { ExtensionV2Permission, ExtensionV2Setting } from "./definition";
 import { validateV2SettingValue } from "./definition";
@@ -9,6 +9,7 @@ import {
   type V2PathIo,
 } from "./filesystem";
 import type { V2GrantStore } from "./grants";
+import { isV2OutputConflict, type V2FileVersion } from "./output-ownership";
 import type { V2SourceGrantStore } from "./source-grants";
 import type { V2FailureCode } from "./invocation";
 
@@ -45,9 +46,12 @@ import type { V2FailureCode } from "./invocation";
  * tokens never appear here; only grant IDs are handled.
  *
  * Output creation and cleanup are scoped to job-owned resources: every
- * created path is tracked, and `workspace.dispose` removes only tracked
- * paths. Unrelated files are never overwritten (conflicting names fail)
- * or deleted.
+ * created entry is created exclusively (a pre-existing file is never
+ * truncated, and two concurrent jobs can never both claim one
+ * destination) and tracked with the version identity the port captured
+ * at creation. `workspace.dispose` removes a tracked path only while it
+ * still holds that version, so a replacement at a previously owned path
+ * is never deleted (see `output-ownership.ts`).
  */
 
 export class V2OperationError extends Error {
@@ -83,10 +87,26 @@ export type V2LibraryReadPorts = {
 
 export type V2FileContentPorts = {
   readFileBytes(canonicalPath: string): Promise<Uint8Array>;
-  copyFile(sourceCanonical: string, destCanonical: string): Promise<void>;
-  writeFileBytes(destCanonical: string, bytes: Uint8Array): Promise<void>;
-  deleteFile(canonicalPath: string): Promise<void>;
-  exists(canonicalPath: string): Promise<boolean>;
+  /**
+   * Exclusively create `destCanonical` by copying `sourceCanonical`.
+   * Rejects with `V2OutputConflictError` when the destination already
+   * exists: the create is the claim, so concurrent jobs can never both
+   * own one destination and an existing file is never truncated.
+   * Returns the created entry's version for later version-checked
+   * cleanup.
+   */
+  copyFile(sourceCanonical: string, destCanonical: string): Promise<V2FileVersion>;
+  /** Exclusively create `destCanonical` from bytes. Same contract as `copyFile`. */
+  writeFileBytes(destCanonical: string, bytes: Uint8Array): Promise<V2FileVersion>;
+  /**
+   * Remove `canonicalPath` only while it still holds `version` (the
+   * identity captured when this job created it). A replacement at the
+   * same path reports `{ removed: false }` and survives.
+   */
+  deleteFileIfVersion(
+    canonicalPath: string,
+    version: V2FileVersion,
+  ): Promise<{ removed: boolean }>;
   /** Configured readable Library roots. */
   libraryRoots(): readonly string[] | Promise<readonly string[]>;
   pathIo(): V2PathIo;
@@ -97,10 +117,16 @@ export type V2ArchiveEntry =
   | { name: string; text: string };
 
 export type V2ArchivePorts = {
+  /**
+   * Exclusively create the archive at `destPath`; rejects with
+   * `V2OutputConflictError` when the destination already exists (never
+   * truncating an existing file) and returns the created entry's
+   * version for later version-checked cleanup.
+   */
   createZipArchive(
     entries: readonly V2ArchiveEntry[],
     destPath: string,
-  ): Promise<{ bytesWritten: number }>;
+  ): Promise<{ bytesWritten: number; version: V2FileVersion }>;
 };
 
 export type V2SettingsPorts = {
@@ -180,8 +206,9 @@ export type V2FileOperations = {
    * Copy a file from a readable source grant into a writable destination
    * grant (Library Gatherer v2). The source path must sit under the
    * source grant's root; the destination must sit under the destination
-   * grant's root and must not already exist (never overwrites). The
-   * created path is tracked for job-owned cleanup.
+   * grant's root and is created exclusively — an existing entry is never
+   * overwritten. The created entry is tracked by version for job-owned
+   * cleanup.
    */
   copyFromSource(
     sourceGrantId: string,
@@ -286,7 +313,8 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
     selectionSources = [],
   } = args;
   const effective = new Set(args.effectivePermissions);
-  const owned = new Set<string>();
+  /** Created entries by canonical path, with the version identity captured at creation. */
+  const owned = new Map<string, V2FileVersion>();
   const jobs: V2JobReporter = args.jobs ?? {
     reportProgress: () => {},
     throwIfCancelled: () => {},
@@ -325,7 +353,7 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
 
   const liveRecord = (fileId: string): IndexedAudioFile => {
     const record = library.getFileById(fileId);
-    if (!record || record.removedAt !== null) {
+    if (!record || !isOwnedAudioFile(record)) {
       throw new V2OperationError(
         "input-invalid",
         `Sound ${JSON.stringify(fileId)} is not in the Library index; refresh the selection and retry.`,
@@ -343,7 +371,13 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
     return authorized.canonicalPath;
   };
 
-  const writableDestination = async (grantId: string, name: string): Promise<string> => {
+  /**
+   * Authorize an output name under the destination grant and return the
+   * canonical path to create. Existence is not probed here: creation
+   * itself is exclusive, so the check cannot be lost to a concurrent
+   * writer between probing and writing.
+   */
+  const authorizedOutput = async (grantId: string, name: string): Promise<string> => {
     const authorized = grants.authorize(grantId, extensionId, args.now);
     if (!authorized.ok) {
       throw new V2OperationError("permission-denied", authorized.message);
@@ -353,17 +387,34 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
     if (!resolved.ok) {
       throw new V2OperationError("permission-denied", `Output ${JSON.stringify(name)} is not writable: ${resolved.message}`);
     }
-    if (await files.exists(resolved.canonicalPath)) {
-      throw new V2OperationError(
-        "input-invalid",
-        `Output ${JSON.stringify(name)} already exists in the destination; choose another name. Existing files are never overwritten.`,
-      );
-    }
     return resolved.canonicalPath;
   };
 
-  const track = (canonicalPath: string): void => {
-    owned.add(canonicalPath);
+  /**
+   * Create one output exclusively and record its version. A lost race or
+   * a pre-existing file is the documented conflict outcome; the entry is
+   * never truncated and never tracked, so nothing is cleaned up that this
+   * job did not create.
+   */
+  const createOwned = async (
+    name: string,
+    dest: string,
+    create: () => Promise<V2FileVersion>,
+  ): Promise<string> => {
+    let version: V2FileVersion;
+    try {
+      version = await create();
+    } catch (error) {
+      if (isV2OutputConflict(error)) {
+        throw new V2OperationError(
+          "input-invalid",
+          `Output ${JSON.stringify(name)} already exists in the destination; choose another name. Existing files are never overwritten.`,
+        );
+      }
+      throw error;
+    }
+    owned.set(dest, version);
+    return dest;
   };
 
   return {
@@ -371,7 +422,7 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
       getFile(id: string): IndexedAudioFile | null {
         require("library:read");
         const record = library.getFileById(id);
-        return record && record.removedAt === null ? record : null;
+        return record && isOwnedAudioFile(record) ? record : null;
       },
       listPage(cursor: string | null = null, limit = 100) {
         require("library:read");
@@ -397,7 +448,7 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
         const byId = new Map(found.map((file) => [file.id, file]));
         const missing = ids.filter((id) => {
           const file = byId.get(id);
-          return !file || file.removedAt !== null;
+          return !file || !isOwnedAudioFile(file);
         });
         if (missing.length > 0) {
           throw new V2OperationError(
@@ -420,10 +471,8 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
         jobs.throwIfCancelled();
         checkOutputName(outputName);
         const canonical = await readableSource(liveRecord(fileId));
-        const dest = await writableDestination(grantId, outputName);
-        await files.copyFile(canonical, dest);
-        track(dest);
-        return { path: dest };
+        const dest = await authorizedOutput(grantId, outputName);
+        return { path: await createOwned(outputName, dest, () => files.copyFile(canonical, dest)) };
       },
       async createOutputText(grantId: string, name: string, text: string): Promise<{ path: string }> {
         require("files:write");
@@ -436,10 +485,8 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
             `Output ${JSON.stringify(name)} is ${bytes.length} bytes; the text-output limit is ${V2_OPERATIONS_MAX_OUTPUT_TEXT_BYTES}.`,
           );
         }
-        const dest = await writableDestination(grantId, name);
-        await files.writeFileBytes(dest, bytes);
-        track(dest);
-        return { path: dest };
+        const dest = await authorizedOutput(grantId, name);
+        return { path: await createOwned(name, dest, () => files.writeFileBytes(dest, bytes)) };
       },
       async copyFromSource(
         sourceGrantId: string,
@@ -476,10 +523,8 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
             `Source ${JSON.stringify(sourcePath)} is not readable: ${source.message}`,
           );
         }
-        const dest = await writableDestination(destGrantId, outputName);
-        await files.copyFile(source.canonicalPath, dest);
-        track(dest);
-        return { path: dest };
+        const dest = await authorizedOutput(destGrantId, outputName);
+        return { path: await createOwned(outputName, dest, () => files.copyFile(source.canonicalPath, dest)) };
       },
     },
     archive: {
@@ -535,10 +580,12 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
           // application codec streams it like any other entry.
           entries.push({ name: "manifest.json", text: options.manifestText });
         }
-        const dest = await writableDestination(grantId, name);
-        await archive.createZipArchive(entries, dest);
-        track(dest);
-        return { path: dest, entries: entries.length };
+        const dest = await authorizedOutput(grantId, name);
+        const created = await createOwned(name, dest, async () => {
+          const result = await archive.createZipArchive(entries, dest);
+          return result.version;
+        });
+        return { path: created, entries: entries.length };
       },
     },
     settings: {
@@ -637,14 +684,14 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
     },
     workspace: {
       ownedPaths(): string[] {
-        return [...owned];
+        return [...owned.keys()];
       },
       async dispose(): Promise<{ removed: string[] }> {
         const removed: string[] = [];
-        for (const path of owned) {
+        for (const [path, version] of owned) {
           try {
-            if (await files.exists(path)) await files.deleteFile(path);
-            removed.push(path);
+            // Version-checked: a replacement at this path is not ours.
+            if ((await files.deleteFileIfVersion(path, version)).removed) removed.push(path);
           } catch {
             continue;
           }

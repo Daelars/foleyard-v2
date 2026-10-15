@@ -25,6 +25,8 @@ getFileCount(options?: FileSearchQuery): number { return reads.getFileCount({ sq
 getAllFilesIncludingRemoved(): IndexedAudioFile[] { return reads.getAllFilesIncludingRemoved({ sqlite: this.sqlite, db: this.db }); }
 getScanCleanupRows(): Array<{ path: string; libraryRoot: string | null; removedAt: string | null }> { return reads.getScanCleanupRows({ sqlite: this.sqlite, db: this.db }); }
 getFileById(id: string): IndexedAudioFile | null { return reads.getFileById({ sqlite: this.sqlite, db: this.db }, id); }
+getOwnedFileById(id: string): IndexedAudioFile | null { return reads.getOwnedFileById({ sqlite: this.sqlite, db: this.db }, id); }
+getOwnedFilesByIds(ids: string[]): IndexedAudioFile[] { return reads.getOwnedFilesByIds({ sqlite: this.sqlite, db: this.db }, ids); }
 getFileByPath(filePath: string): IndexedAudioFile | null { return reads.getFileByPath({ sqlite: this.sqlite, db: this.db }, filePath); }
 getFilesByPaths(paths: string[]): IndexedAudioFile[] { return reads.getFilesByPaths({ sqlite: this.sqlite, db: this.db }, paths); }
 getFilesByIds(ids: string[]): IndexedAudioFile[] { return reads.getFilesByIds({ sqlite: this.sqlite, db: this.db }, ids); }
@@ -66,6 +68,8 @@ export const getFileCount = (options?: FileSearchQuery) => getFileRepo().getFile
 export const getAllFilesIncludingRemoved = () => getFileRepo().getAllFilesIncludingRemoved();
 export const getScanCleanupRows = () => getFileRepo().getScanCleanupRows();
 export const getFileById = (id: string) => getFileRepo().getFileById(id);
+export const getOwnedFileById = (id: string) => getFileRepo().getOwnedFileById(id);
+export const getOwnedFilesByIds = (ids: string[]) => getFileRepo().getOwnedFilesByIds(ids);
 export const getFileByPath = (filePath: string) => getFileRepo().getFileByPath(filePath);
 export const getFilesByPaths = (paths: string[]) => getFileRepo().getFilesByPaths(paths);
 export const getFilesByIds = (ids: string[]) => getFileRepo().getFilesByIds(ids);

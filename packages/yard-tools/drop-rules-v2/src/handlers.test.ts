@@ -9,10 +9,12 @@ import {
   validateV2Value,
   V2GrantStore,
   V2JobCancelledError,
+  V2OutputConflictError,
   type ExtensionV2Definition,
   type IndexedAudioFile,
   type V2ArchiveEntry,
   type V2FileContentPorts,
+  type V2FileVersion,
   type V2HostServices,
   type V2JobReporter,
   type V2LibraryReadPorts,
@@ -122,6 +124,15 @@ function world(overrides?: {
     ...(overrides?.bytes ?? []).map(([path]) => path),
   ];
   const io = fakePathIo(existing);
+  const versions = new Map<string, V2FileVersion>();
+  let versionSeq = 0;
+  const claim = (path: string): V2FileVersion => {
+    if (bytes.has(path)) throw new V2OutputConflictError(path);
+    versionSeq += 1;
+    const version: V2FileVersion = { device: "memory", fileId: `${path}#${versionSeq}` };
+    versions.set(path, version);
+    return version;
+  };
   const filePorts: V2FileContentPorts = {
     readFileBytes: async (path) => {
       const data = bytes.get(path);
@@ -131,15 +142,22 @@ function world(overrides?: {
     copyFile: async (source, dest) => {
       const data = bytes.get(source);
       if (!data) throw new Error(`ENOENT: copy source missing: ${source}`);
+      const version = claim(dest);
       bytes.set(dest, data);
+      return version;
     },
     writeFileBytes: async (dest, data) => {
+      const version = claim(dest);
       bytes.set(dest, data);
+      return version;
     },
-    deleteFile: async (path) => {
+    deleteFileIfVersion: async (path, version) => {
+      const current = versions.get(path);
+      if (!current || current.fileId !== version.fileId) return { removed: false };
+      versions.delete(path);
       bytes.delete(path);
+      return { removed: true };
     },
-    exists: async (path) => bytes.has(path),
     libraryRoots: () => ["/lib"],
     pathIo: () => io,
   };
@@ -188,8 +206,9 @@ function world(overrides?: {
         archive: {
           createZipArchive: async (entries: V2ArchiveEntry[], dest: string) => {
             void entries;
+            const version = claim(dest);
             bytes.set(dest, new TextEncoder().encode("zip-bytes"));
-            return { bytesWritten: 9 };
+            return { bytesWritten: 9, version };
           },
         },
         settings: {

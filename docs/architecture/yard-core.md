@@ -80,7 +80,9 @@ callbacks (see `docs/events.md`). There is no `services/commands/` module
   `review-required`, `job-unknown`, `plan-*`, `handler-*`) mapped to HTTP
   by the transport table.
 - Destination and source access travel through grant stores with canonical
-  path containment; raw paths never reach handlers. Trusted bundled code is
+  path containment; raw paths never reach handlers. A grant comes from a
+  single-use picker proof (`picker-proofs.ts`) minted by the desktop picker
+  for one extension and one grant kind. Trusted bundled code is
   not sandboxed against direct Node imports.
 - `yard-core` performs no I/O itself; misconfigured adapters (no roots, no
   DB) fail at the adapter layer, not in contracts.
@@ -93,7 +95,7 @@ callbacks (see `docs/events.md`). There is no `services/commands/` module
 - `packages/yard-core/src/services/library/{library-service,scanner-service,scan-types}.ts`
 - `packages/yard-core/src/services/organization/{collection,favorite,tag}-service.ts`
 - `packages/yard-core/src/services/search/filter-service.ts`
-- `packages/yard-core/src/extensions-v2/` — version, definition, registry, catalog, availability, permissions, grants, filesystem, host, operations, jobs, plans, extension-data, events, contributions, transport, index
+- `packages/yard-core/src/extensions-v2/` — version, definition, registry, catalog, availability, permissions, grants, picker-proofs, filesystem, host, operations, jobs, plans, extension-data, events, contributions, transport, index
 - `packages/yard-core/src/errors/yard-core-error.ts`
 - `packages/yard-core/src/async/map-concurrent.ts`
 - `packages/yard-core/CONTEXT.md` — context language (Library, Collection, …)

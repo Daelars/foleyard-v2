@@ -2,12 +2,13 @@ import { errorResponse } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from 'next/server';
 
 import {
-  addLibraryRoot,
+  detachLibraryRoot,
+  forgetLibraryRoot,
   getLibraryRoot,
   getLibraryRoots,
   getLibraryStats,
   getOnboardingVersion,
-  removeLibraryRoot,
+  reattachLibraryRoot,
   setOnboardingVersion,
 } from '@/lib/db';
 import { validateLibraryRoot } from '@/lib/scanner';
@@ -44,7 +45,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(validation, { status: 400 });
       }
 
-      addLibraryRoot(validation.normalizedPath);
+      // Re-adding a root also reattaches any records detached by a previous
+      // removal, with their organization data (#271).
+      reattachLibraryRoot(validation.normalizedPath);
 
       return NextResponse.json({
         success: true,
@@ -57,7 +60,22 @@ export async function POST(request: NextRequest) {
 
     if (action === 'remove') {
       const pathValue = String(body?.path ?? '');
-      removeLibraryRoot(pathValue);
+      // Default removal is soft: the root's files are detached and retained.
+      detachLibraryRoot(pathValue);
+
+      return NextResponse.json({
+        success: true,
+        libraryRoot: getLibraryRoot(),
+        libraryRoots: getLibraryRoots(),
+        stats: getLibraryStats(),
+      });
+    }
+
+    if (action === 'forget') {
+      const pathValue = String(body?.path ?? '');
+      // Explicit destructive alternative: remove the root and delete its
+      // files and organization data (#271).
+      forgetLibraryRoot(pathValue);
 
       return NextResponse.json({
         success: true,

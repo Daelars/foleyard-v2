@@ -27,6 +27,7 @@ export class ScanRunner implements ScannerService {
   private metadataExtractor: MetadataSeam;
   private onProgress?: (status: ScanStatus) => void;
   private onComplete?: (completion: { startedAt: string; fileIds: string[] }) => void;
+  private recoverRootChanges?: () => unknown;
 
   private status = createScanStatus();
 
@@ -39,6 +40,12 @@ export class ScanRunner implements ScannerService {
     fs: FileSystemSeam;
     metadataExtractor: MetadataSeam;
     onProgress?: (status: ScanStatus) => void;
+    /**
+     * Reconciliation for root removals interrupted before the index caught up
+     * (#271). Runs once per scan before discovery, and never fails the scan:
+     * the intents stay journaled for the next attempt.
+     */
+    recoverRootChanges?: () => unknown;
     /**
      * Fires once per finished run, success or failure, with the files the
      * run actually added or updated. Arrivals that landed before a failure
@@ -53,6 +60,7 @@ export class ScanRunner implements ScannerService {
     this.fs = deps.fs;
     this.metadataExtractor = deps.metadataExtractor;
     this.onProgress = deps.onProgress;
+    this.recoverRootChanges = deps.recoverRootChanges;
     this.onComplete = deps.onComplete;
   }
 
@@ -136,6 +144,14 @@ export class ScanRunner implements ScannerService {
 
     try {
       const seenPaths = new Set<string>();
+      // Finish root removals interrupted before the index caught up (#271).
+      // This never resurrects a detached record and never fails the scan: an
+      // intent that cannot be applied stays journaled for the next pass.
+      try {
+        this.recoverRootChanges?.();
+      } catch (error) {
+        console.warn("Could not reconcile interrupted Library root changes", error);
+      }
       // Narrow scan-cleanup projection: removal reconciliation only needs
       // path, library root and removed state, so a large library is not
       // fully materialized through the repository mapping for every scan.

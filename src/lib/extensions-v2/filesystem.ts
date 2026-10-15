@@ -3,7 +3,13 @@ import fs from "node:fs";
 import { getLibraryRoots } from "@/lib/db";
 import { registerGrant } from "@/lib/filesystem-boundary";
 import type { V2FileContentPorts, V2GrantStore, V2PathIo } from "@yard-core";
-import { V2GrantStore as GrantStore } from "@yard-core";
+
+import {
+  copyV2FileExclusive,
+  removeV2FileIfVersion,
+  writeV2FileBytesExclusive,
+} from "./output-files";
+import { getV2Runtime } from "./runtime";
 
 /**
  * Application file-content ports and destination-grant bridge
@@ -12,9 +18,14 @@ import { V2GrantStore as GrantStore } from "@yard-core";
  * The core operation services authorize every path through the
  * filesystem ADR guards; this module supplies the node primitives
  * underneath and bridges desktop picker tokens to core grant IDs.
- * Tokens stay in this in-memory map: they never enter definitions,
- * logs, exports, or persisted state, and a restart clears the map so
- * previously issued access stops working.
+ * Output creation is exclusive and cleanup is version-checked, both
+ * through `output-files.ts` (#267): a pre-existing file is never
+ * truncated and a replacement at a previously owned path is never
+ * deleted. Grants and tokens live on the process-wide runtime, so a
+ * grant issued by one route bundle authorizes execution through
+ * another. Tokens never enter definitions, logs, exports, or persisted
+ * state, and a restart clears them so previously issued access stops
+ * working.
  */
 
 const nodePathIo: V2PathIo = {
@@ -37,35 +48,38 @@ export function createV2FileContentPorts(): V2FileContentPorts {
   return {
     readFileBytes: async (canonicalPath) =>
       new Uint8Array(await fs.promises.readFile(canonicalPath)),
-    copyFile: async (sourceCanonical, destCanonical) =>
-      fs.promises.copyFile(sourceCanonical, destCanonical),
-    writeFileBytes: async (destCanonical, bytes) =>
-      fs.promises.writeFile(destCanonical, bytes),
-    deleteFile: async (canonicalPath) => fs.promises.rm(canonicalPath, { force: true }),
-    exists: async (canonicalPath) => {
-      try {
-        await fs.promises.lstat(canonicalPath);
-        return true;
-      } catch {
-        return false;
-      }
-    },
+    // Exclusive creation and version-checked removal live in
+    // `output-files.ts`, shared with the ZIP writer: the create is the
+    // claim, so a pre-existing or concurrently claimed destination is
+    // never truncated or overwritten.
+    copyFile: copyV2FileExclusive,
+    writeFileBytes: writeV2FileBytesExclusive,
+    deleteFileIfVersion: async (canonicalPath, version) => ({
+      removed: await removeV2FileIfVersion(canonicalPath, version),
+    }),
     libraryRoots: () => getLibraryRoots(),
     pathIo: () => nodePathIo,
   };
 }
 
-const grantStore: V2GrantStore = new GrantStore();
-const tokenToGrantId = new Map<string, string>();
+/**
+ * Destination grants belong to the process-wide runtime: the grants
+ * route issues them and execution authorizes them from different route
+ * bundles, so a per-module store would deny a grant the picker just
+ * issued. Tokens stay in the runtime's in-memory map: they never enter
+ * definitions, logs, exports, or persisted state, and a restart clears
+ * the map so previously issued access stops working.
+ */
 
 export function getV2GrantStore(): V2GrantStore {
-  return grantStore;
+  return getV2Runtime().destinationGrants.store;
 }
 
 /**
- * Bridge a desktop picker destination into a core grant. The opaque
- * picker token maps to the grant ID in memory; handlers only ever see
- * the grant ID.
+ * Bridge a picker-authorized canonical folder into a core destination
+ * grant. `canonicalPath` must come from a spent picker proof (see
+ * `picker-proofs.ts`); the opaque filesystem-boundary token maps to the
+ * grant ID in memory and handlers only ever see the grant ID.
  */
 export async function issueV2DestinationGrant(
   extensionId: string,
@@ -73,19 +87,21 @@ export async function issueV2DestinationGrant(
   options?: { expiresAt?: string },
 ): Promise<{ grantId: string; grantToken: string; path: string }> {
   const { path, grantToken } = await registerGrant(directoryPath);
-  const grant = grantStore.issue(extensionId, path, options);
-  tokenToGrantId.set(grantToken, grant.grantId);
+  const { store, tokens } = getV2Runtime().destinationGrants;
+  const grant = store.issue(extensionId, path, options);
+  tokens.set(grantToken, grant.grantId);
   return { grantId: grant.grantId, grantToken, path };
 }
 
 /** Resolve a renderer-supplied picker token to its grant ID, if live. */
 export function resolveV2GrantToken(grantToken: string): string | null {
-  return tokenToGrantId.get(grantToken) ?? null;
+  return getV2Runtime().destinationGrants.tokens.get(grantToken) ?? null;
 }
 
 export function revokeV2DestinationGrant(grantId: string): void {
-  grantStore.revoke(grantId);
-  for (const [token, id] of tokenToGrantId) {
-    if (id === grantId) tokenToGrantId.delete(token);
+  const { store, tokens } = getV2Runtime().destinationGrants;
+  store.revoke(grantId);
+  for (const [token, id] of tokens) {
+    if (id === grantId) tokens.delete(token);
   }
 }

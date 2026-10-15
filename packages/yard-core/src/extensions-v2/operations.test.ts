@@ -11,6 +11,7 @@ import {
   immediateV2Result,
   V2GrantStore,
   V2OperationError,
+  V2OutputConflictError,
   type V2ArchivePorts,
   type V2ExtensionStatePorts,
   type V2FileContentPorts,
@@ -19,6 +20,7 @@ import {
   type V2OperationFactoryArgs,
   type V2SettingsPorts,
 } from "./index";
+import { memoryOutputPorts, type MemoryV2Outputs } from "./test-helpers";
 import { fakePathIo } from "./test-helpers";
 import { audioFile, libraryPorts } from "./test-helpers";
 
@@ -53,37 +55,10 @@ function fileFake(opts: {
   dirs?: string[];
   links?: Record<string, string>;
   initialText?: Record<string, string>;
-} = {}): { ports: V2FileContentPorts; bytes: Map<string, Uint8Array> } {
-  const roots = opts.roots ?? ["/lib"];
-  const bytes = new Map<string, Uint8Array>();
-  const existing = new Set<string>([...roots, ...(opts.dirs ?? [])]);
-  for (const [path, text] of Object.entries(opts.initialText ?? {})) {
-    bytes.set(path, new TextEncoder().encode(text));
-    existing.add(path);
-  }
-  const io = fakePathIo([...existing], opts.links ?? {});
-  const ports: V2FileContentPorts = {
-    readFileBytes: async (path) => {
-      const data = bytes.get(path);
-      if (!data) throw new Error(`missing ${path}`);
-      return data;
-    },
-    copyFile: async (source, dest) => {
-      const data = bytes.get(source);
-      if (!data) throw new Error(`missing ${source}`);
-      bytes.set(dest, data);
-    },
-    writeFileBytes: async (dest, data) => {
-      bytes.set(dest, data);
-    },
-    deleteFile: async (path) => {
-      bytes.delete(path);
-    },
-    exists: async (path) => bytes.has(path),
-    libraryRoots: () => roots,
-    pathIo: () => io,
-  };
-  return { ports, bytes };
+} = {}): MemoryV2Outputs {
+  // Exclusive creation and version-checked cleanup are the port
+  // contract; the shared fake models both (see `memoryOutputPorts`).
+  return memoryOutputPorts(opts);
 }
 
 function memorySettings(): V2SettingsPorts {
@@ -108,11 +83,14 @@ function memoryState(): V2ExtensionStatePorts {
 
 function archiveFake(): V2ArchivePorts & { calls: Array<{ entries: number; dest: string }> } {
   const calls: Array<{ entries: number; dest: string }> = [];
+  const claimed = new Set<string>();
   return {
     calls,
     createZipArchive: async (entries, dest) => {
+      if (claimed.has(dest)) throw new V2OutputConflictError(dest);
+      claimed.add(dest);
       calls.push({ entries: entries.length, dest });
-      return { bytesWritten: entries.length };
+      return { bytesWritten: entries.length, version: { device: "memory", fileId: `zip:${dest}` } };
     },
   };
 }
@@ -275,6 +253,116 @@ describe("v2 file operations and grants", () => {
     expect(new TextDecoder().decode(bytes.get("/grant/unrelated.txt")!)).toBe("keep me");
     expect(services.workspace.ownedPaths()).toEqual([]);
   });
+
+  it("does not delete a replacement at a previously owned path", async () => {
+    const grants = new V2GrantStore(() => "2026-09-06T00:00:00.000Z");
+    const grant = grants.issue("fixture-greeter", "/grant");
+    const { ports, bytes, replace } = fileFake({
+      roots: ["/lib"],
+      dirs: ["/grant"],
+      initialText: { "/lib/a.mp3": "audio-a" },
+    });
+    const services = createV2OperationServices(
+      servicesArgs({ grants, files: ports, library: libraryFake([record("a")]) }),
+    );
+    await services.files.copyToOutput("a", "owned.mp3", grant.grantId);
+    // The job's output is gone; a different file now sits at that path.
+    replace("/grant/owned.mp3", "third-party replacement");
+
+    const disposed = await services.workspace.dispose();
+
+    expect(disposed.removed).toEqual([]);
+    expect(new TextDecoder().decode(bytes.get("/grant/owned.mp3")!)).toBe("third-party replacement");
+    expect(services.workspace.ownedPaths()).toEqual([]);
+  });
+
+  it("lets only one of two concurrent jobs claim a destination", async () => {
+    const grants = new V2GrantStore(() => "2026-09-06T00:00:00.000Z");
+    const grant = grants.issue("fixture-greeter", "/grant");
+    const { ports } = fileFake({
+      roots: ["/lib"],
+      dirs: ["/grant"],
+      initialText: { "/lib/a.mp3": "audio-a" },
+    });
+    const first = createV2OperationServices(
+      servicesArgs({
+        grants,
+        files: ports,
+        library: libraryFake([record("a")]),
+        invocationId: "vinv_first",
+      }),
+    );
+    const second = createV2OperationServices(
+      servicesArgs({
+        grants,
+        files: ports,
+        library: libraryFake([record("a")]),
+        invocationId: "vinv_second",
+      }),
+    );
+
+    const settled = await Promise.allSettled([
+      first.files.copyToOutput("a", "same.mp3", grant.grantId),
+      second.files.copyToOutput("a", "same.mp3", grant.grantId),
+    ]);
+
+    expect(settled.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
+    const rejected = settled.filter((entry) => entry.status === "rejected");
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(V2OperationError);
+    expect(String((rejected[0] as PromiseRejectedResult).reason)).toMatch(/already exists/i);
+  });
+
+  it("lets only one of two concurrent jobs claim a destination (text)", async () => {
+    const grants = new V2GrantStore(() => "2026-09-06T00:00:00.000Z");
+    const grant = grants.issue("fixture-greeter", "/grant");
+    const { ports } = fileFake({ roots: ["/lib"], dirs: ["/grant"] });
+    const first = createV2OperationServices(
+      servicesArgs({ grants, files: ports, invocationId: "vinv_first" }),
+    );
+    const second = createV2OperationServices(
+      servicesArgs({ grants, files: ports, invocationId: "vinv_second" }),
+    );
+
+    const settled = await Promise.allSettled([
+      first.files.createOutputText(grant.grantId, "same.txt", "first"),
+      second.files.createOutputText(grant.grantId, "same.txt", "second"),
+    ]);
+
+    expect(settled.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
+    const rejected = settled.filter((entry) => entry.status === "rejected");
+    expect(rejected).toHaveLength(1);
+    expect(String((rejected[0] as PromiseRejectedResult).reason)).toMatch(/already exists/i);
+    expect(first.workspace.ownedPaths().length + second.workspace.ownedPaths().length).toBe(1);
+  });
+
+  it("lets only one of two concurrent jobs claim a destination (ZIP)", async () => {
+    const grants = new V2GrantStore(() => "2026-09-06T00:00:00.000Z");
+    const grant = grants.issue("fixture-greeter", "/grant");
+    const { ports } = fileFake({
+      roots: ["/lib"],
+      dirs: ["/grant"],
+      initialText: { "/lib/a.mp3": "audio-a" },
+    });
+    const archive = archiveFake();
+    const first = createV2OperationServices(
+      servicesArgs({ grants, files: ports, archive, invocationId: "vinv_first" }),
+    );
+    const second = createV2OperationServices(
+      servicesArgs({ grants, files: ports, archive, invocationId: "vinv_second" }),
+    );
+
+    const settled = await Promise.allSettled([
+      first.archive.createZip(grant.grantId, "same.zip", ["a"]),
+      second.archive.createZip(grant.grantId, "same.zip", ["a"]),
+    ]);
+
+    expect(settled.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
+    const rejected = settled.filter((entry) => entry.status === "rejected");
+    expect(rejected).toHaveLength(1);
+    expect(String((rejected[0] as PromiseRejectedResult).reason)).toMatch(/already exists/i);
+    expect(archive.calls).toHaveLength(1);
+  });
 });
 
 describe("v2 named selection sources", () => {
@@ -377,6 +465,16 @@ describe("v2 archive output", () => {
     expect(services.workspace.ownedPaths()).toEqual(["/grant/pack.zip"]);
   });
 
+  it("rejects a second archive at the same name instead of overwriting it", async () => {
+    const { services, archive, grant } = archiveSetup();
+    await services.archive.createZip(grant.grantId, "pack.zip", ["a", "b"]);
+    await expect(
+      services.archive.createZip(grant.grantId, "pack.zip", ["a", "b"]),
+    ).rejects.toThrowError(/already exists/i);
+    expect(archive.calls).toHaveLength(1);
+    expect(services.workspace.ownedPaths()).toEqual(["/grant/pack.zip"]);
+  });
+
   it("forwards the manifest as an in-memory entry, never a temp file", async () => {
     const calls: Array<{ entries: unknown[]; dest: string }> = [];
     const grants = new V2GrantStore(() => "2026-09-06T00:00:00.000Z");
@@ -393,7 +491,7 @@ describe("v2 archive output", () => {
         archive: {
           createZipArchive: async (entries, dest) => {
             calls.push({ entries: [...entries], dest });
-            return { bytesWritten: entries.length };
+            return { bytesWritten: entries.length, version: { device: "memory", fileId: dest } };
           },
         },
         library: libraryFake([record("a")]),

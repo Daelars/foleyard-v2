@@ -27,6 +27,7 @@
     { "id": "architecture/yard-core", "path": "docs/architecture/yard-core.md", "title": "yard-core architecture", "status": "current", "audience": "developers" },
     { "id": "architecture/extensions", "path": "docs/architecture/extensions.md", "title": "Extension architecture", "status": "current", "audience": "developers" },
     { "id": "adr/filesystem-access", "path": "docs/adr/filesystem-access.md", "title": "Filesystem access ADR", "status": "current", "audience": "developers" },
+    { "id": "adr/library-root-detachment", "path": "docs/adr/library-root-detachment.md", "title": "Library root detachment ADR", "status": "current", "audience": "developers" },
     { "id": "adr/new-surface-promotion", "path": "docs/adr/new-surface-promotion.md", "title": "New surface promotion ADR", "status": "current", "audience": "developers" },
     { "id": "readme", "path": "README.md", "title": "Product overview", "status": "current", "audience": "users" }
   ]

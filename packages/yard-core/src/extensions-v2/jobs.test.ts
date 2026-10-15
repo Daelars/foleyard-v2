@@ -22,12 +22,11 @@ import {
   V2JobManager,
   V2OperationError,
   type V2CommandHandler,
-  type V2FileContentPorts,
   type V2HostServices,
   type V2JobRecord,
   type V2LibraryReadPorts,
 } from "./index";
-import { audioFile, fakePathIo, libraryPorts } from "./test-helpers";
+import { audioFile, fakePathIo, libraryPorts, memoryOutputPorts } from "./test-helpers";
 
 // Area: extension v2 R4 (#168). Host-owned job lifecycle: bounded
 // concurrency, timestamps, progress, partial outcomes, cooperative
@@ -326,17 +325,12 @@ describe("v2 cooperative cancellation", () => {
     const reporter = manager.reporterFor(submitted.record.jobId);
     const grants = new V2GrantStore(() => "2026-09-06T00:00:00.000Z");
     const grant = grants.issue("ext", "/grant");
-    const bytes = new Map<string, Uint8Array>([["/lib/a.mp3", new TextEncoder().encode("audio")]]);
-    const io = fakePathIo(["/lib", "/lib/a.mp3", "/grant"]);
-    const files: V2FileContentPorts = {
-      readFileBytes: async (path) => bytes.get(path)!,
-      copyFile: async (source, dest) => { bytes.set(dest, bytes.get(source)!); },
-      writeFileBytes: async (dest, data) => { bytes.set(dest, data); },
-      deleteFile: async (path) => { bytes.delete(path); },
-      exists: async (path) => bytes.has(path),
-      libraryRoots: () => ["/lib"],
-      pathIo: () => io,
-    };
+    const outputs = memoryOutputPorts({
+      roots: ["/lib"],
+      dirs: ["/grant"],
+      initialText: { "/lib/a.mp3": "audio" },
+    });
+    const files = outputs.ports;
     const services = createV2OperationServices({
       extensionId: "ext",
       invocationId: "vinv_1",
@@ -344,7 +338,7 @@ describe("v2 cooperative cancellation", () => {
       grants,
       library: pagedLibrary([record("a")]),
       files,
-      archive: { createZipArchive: async () => ({ bytesWritten: 0 }) },
+      archive: { createZipArchive: async () => ({ bytesWritten: 0, version: { device: "memory", fileId: "unused" } }) },
       settings: { readRaw: () => undefined, writeRaw: () => {} },
       extensionState: { readAll: () => ({}), writeAll: () => {} },
       jobs: reporter,
@@ -579,20 +573,13 @@ describe("v2 disable and disposal", () => {
     const manager = new V2JobManager({ clock: tickClock() });
     const grants = new V2GrantStore(() => "2026-09-06T00:00:00.000Z");
     const grant = grants.issue("ext", "/grant");
-    const bytes = new Map<string, Uint8Array>([
-      ["/lib/a.mp3", new TextEncoder().encode("audio")],
-      ["/grant/unrelated.txt", new TextEncoder().encode("keep me")],
-    ]);
-    const io = fakePathIo(["/lib", "/lib/a.mp3", "/grant", "/grant/unrelated.txt"]);
-    const files: V2FileContentPorts = {
-      readFileBytes: async (path) => bytes.get(path)!,
-      copyFile: async (source, dest) => { bytes.set(dest, bytes.get(source)!); },
-      writeFileBytes: async (dest, data) => { bytes.set(dest, data); },
-      deleteFile: async (path) => { bytes.delete(path); },
-      exists: async (path) => bytes.has(path),
-      libraryRoots: () => ["/lib"],
-      pathIo: () => io,
-    };
+    const outputs = memoryOutputPorts({
+      roots: ["/lib"],
+      dirs: ["/grant"],
+      initialText: { "/lib/a.mp3": "audio", "/grant/unrelated.txt": "keep me" },
+    });
+    const bytes = outputs.bytes;
+    const files = outputs.ports;
     const release = deferred();
     const submitted = manager.submit({
       extensionId: "ext", commandId: "cmd", invocationId: "vinv_1",
@@ -604,7 +591,7 @@ describe("v2 disable and disposal", () => {
           grants,
           library: pagedLibrary([record("a")]),
           files,
-          archive: { createZipArchive: async () => ({ bytesWritten: 0 }) },
+          archive: { createZipArchive: async () => ({ bytesWritten: 0, version: { device: "memory", fileId: "unused" } }) },
           settings: { readRaw: () => undefined, writeRaw: () => {} },
           extensionState: { readAll: () => ({}), writeAll: () => {} },
           jobs: context.reporter,
@@ -846,14 +833,13 @@ describe("v2 job bounded Library iteration", () => {
           library: pagedLibrary(files),
           files: {
             readFileBytes: async () => new Uint8Array(),
-            copyFile: async () => {},
-            writeFileBytes: async () => {},
-            deleteFile: async () => {},
-            exists: async () => false,
+            copyFile: async () => ({ device: "memory", fileId: "unused" }),
+            writeFileBytes: async () => ({ device: "memory", fileId: "unused" }),
+            deleteFileIfVersion: async () => ({ removed: false }),
             libraryRoots: () => [],
             pathIo: () => fakePathIo([]),
           },
-          archive: { createZipArchive: async () => ({ bytesWritten: 0 }) },
+          archive: { createZipArchive: async () => ({ bytesWritten: 0, version: { device: "memory", fileId: "unused" } }) },
           settings: { readRaw: () => undefined, writeRaw: () => {} },
           extensionState: { readAll: () => ({}), writeAll: () => {} },
           jobs: context.reporter,
@@ -895,14 +881,13 @@ describe("v2 job bounded Library iteration", () => {
           library: pagedLibrary(files),
           files: {
             readFileBytes: async () => new Uint8Array(),
-            copyFile: async () => {},
-            writeFileBytes: async () => {},
-            deleteFile: async () => {},
-            exists: async () => false,
+            copyFile: async () => ({ device: "memory", fileId: "unused" }),
+            writeFileBytes: async () => ({ device: "memory", fileId: "unused" }),
+            deleteFileIfVersion: async () => ({ removed: false }),
             libraryRoots: () => [],
             pathIo: () => fakePathIo([]),
           },
-          archive: { createZipArchive: async () => ({ bytesWritten: 0 }) },
+          archive: { createZipArchive: async () => ({ bytesWritten: 0, version: { device: "memory", fileId: "unused" } }) },
           settings: { readRaw: () => undefined, writeRaw: () => {} },
           extensionState: { readAll: () => ({}), writeAll: () => {} },
           jobs: context.reporter,

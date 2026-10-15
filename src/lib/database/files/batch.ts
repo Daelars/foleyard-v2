@@ -40,13 +40,13 @@ export function batchUpsertFiles(context: FileRepositoryContext, records: ScanFi
     if (records.length === 0) return;
 
     const stmt = context.sqlite.prepare(
-      `INSERT INTO files (id, path, filename, library_root, directory, format, codec, duration, sample_rate, bit_depth, channels, file_size, mtime_ms, removed_at, last_scanned_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO files (id, path, filename, library_root, directory, format, codec, duration, sample_rate, bit_depth, channels, file_size, mtime_ms, removed_at, detached_at, last_scanned_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
        ON CONFLICT(path) DO UPDATE SET
          filename=excluded.filename, library_root=excluded.library_root, directory=excluded.directory, format=excluded.format, codec=excluded.codec,
          duration=excluded.duration, sample_rate=excluded.sample_rate, bit_depth=excluded.bit_depth,
          channels=excluded.channels, file_size=excluded.file_size, mtime_ms=excluded.mtime_ms,
-         removed_at=excluded.removed_at, last_scanned_at=excluded.last_scanned_at, updated_at=excluded.updated_at`,
+         removed_at=excluded.removed_at, detached_at=NULL, last_scanned_at=excluded.last_scanned_at, updated_at=excluded.updated_at`,
     );
     const txn = context.sqlite.transaction((batchRecords: ScanFileRecord[]) => {
       for (const record of batchRecords) {
@@ -133,7 +133,7 @@ export function reconcileMovedFiles(context: FileRepositoryContext): number {
                 duration, codec, sample_rate as sampleRate, bit_depth as bitDepth,
                 channels, is_favorite as isFavorite
          FROM files
-         WHERE removed_at IS NOT NULL`,
+         WHERE removed_at IS NOT NULL AND detached_at IS NULL`,
       )
       .all() as Array<{
         id: string;
@@ -152,6 +152,7 @@ export function reconcileMovedFiles(context: FileRepositoryContext): number {
       `SELECT id
        FROM files
        WHERE removed_at IS NULL
+         AND detached_at IS NULL
          AND filename = ?
          AND COALESCE(library_root, '') = COALESCE(?, '')
          AND COALESCE(file_size, -1) = COALESCE(?, -1)

@@ -63,9 +63,10 @@ handlers never branch on client input flags.
   selection records reject at preflight (`selection-unresolvable`)
   before anything is written.
 - **Cancellation.** Cancelling removes job-owned incomplete output by
-  ownership (`workspace.dispose`) and settles the job as cancelled —
-  never a misleading success. Finished packs and unrelated
-  destination contents are never deleted.
+  ownership (`workspace.dispose`, version-checked) and settles the job
+  as cancelled — never a misleading success. Finished packs and
+  unrelated destination contents are never deleted, and neither is a
+  replacement written at a previously owned path.
 - **Limits.** 500 entries (service bound, rejected before any write),
   1 MiB manifest text, ZIP32 (no ZIP64): 65,535 entries, 4 GiB per
   entry/offset. Failures remove partial outputs.
@@ -92,10 +93,10 @@ handlers never branch on client input flags.
 | Confirmation | Explicit Start (job) or review confirm (apply) | Unconfirmed plans never write |
 | Job progress | Per-file progress via job reporter | Poll the job route; reload-safe by job ID |
 | Cancellation | Removes job-owned partials, settles cancelled | Documented above; v1 had no cancellation |
+| Overwrite conflicts | Fail with reason, never overwrite | v1 ZIP path also refused existing outputs; folder copies and ZIPs now create exclusively, so a pre-existing or concurrent writer is refused, never truncated |
 | Detailed results | Counts + skipped/missing/failed with reasons + output path | Validated against the result schema |
 | Reveal/open | Capability-aware (`desktop:reveal` hint; desktop-gated button) | Disabled with a reason outside the desktop app |
 | Manifest temp file | **Fixed, not preserved** | No dot-tmp files; sidecars survive (B12 regression test) |
-| Overwrite conflicts | Fail with reason, never overwrite | v1 ZIP path also refused existing outputs; folder copies now conflict-safe too |
 
 Explicitly unsupported: ZIP entry renaming (ZIP keeps Library filenames
 verbatim — use folder output for collision-heavy selections), ZIP64

@@ -22,7 +22,7 @@ import {
   type V2LibraryReadPorts,
   type V2SettingsPorts,
 } from "./index";
-import { audioFile, fakePathIo, libraryPorts } from "./test-helpers";
+import { audioFile, libraryPorts, memoryOutputPorts } from "./test-helpers";
 
 // Area: extension v2 R5+R7 (#169). Host-validated prepare/review/apply:
 // binding, expiry, altered/expired/replayed rejection, destructive
@@ -109,33 +109,17 @@ function fixtureWorld(overrides?: { granted?: string[] }): FixtureWorld {
     audioFile("a", { path: "/lib/a.mp3", filename: "a.mp3", libraryRoot: "/lib" }),
     audioFile("b", { path: "/lib/b.mp3", filename: "b.mp3", libraryRoot: "/lib" }),
   ];
-  const bytes = new Map<string, Uint8Array>([
-    ["/lib/a.mp3", new TextEncoder().encode("aaa")],
-    ["/lib/b.mp3", new TextEncoder().encode("bbb")],
-    ["/out/keep.txt", new TextEncoder().encode("unrelated")],
-  ]);
-  const io = fakePathIo(["/lib", "/lib/a.mp3", "/lib/b.mp3", "/out", "/out/keep.txt"]);
-  const filePorts: V2FileContentPorts = {
-    readFileBytes: async (path) => {
-      const data = bytes.get(path);
-      if (!data) throw new Error(`missing ${path}`);
-      return data;
+  const outputs = memoryOutputPorts({
+    roots: ["/lib"],
+    dirs: ["/out"],
+    initialText: {
+      "/lib/a.mp3": "aaa",
+      "/lib/b.mp3": "bbb",
+      "/out/keep.txt": "unrelated",
     },
-    copyFile: async (source, dest) => {
-      const data = bytes.get(source);
-      if (!data) throw new Error(`missing ${source}`);
-      bytes.set(dest, data);
-    },
-    writeFileBytes: async (dest, data) => {
-      bytes.set(dest, data);
-    },
-    deleteFile: async (path) => {
-      bytes.delete(path);
-    },
-    exists: async (path) => bytes.has(path),
-    libraryRoots: () => ["/lib"],
-    pathIo: () => io,
-  };
+  });
+  const bytes = outputs.bytes;
+  const filePorts: V2FileContentPorts = outputs.ports;
   const library: V2LibraryReadPorts = {
     ...libraryPorts(files),
     listPage: (cursor, limit) => {
@@ -159,7 +143,7 @@ function fixtureWorld(overrides?: { granted?: string[] }): FixtureWorld {
     },
   };
   const archive: V2ArchivePorts = {
-    createZipArchive: async () => ({ bytesWritten: 0 }),
+    createZipArchive: async () => ({ bytesWritten: 0, version: { device: "memory", fileId: "unused" } }),
   };
   const grants = new V2GrantStore();
   const grant = grants.issue(EXTENSION_ID, "/out");

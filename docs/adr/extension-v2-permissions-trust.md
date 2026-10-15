@@ -6,7 +6,7 @@ Date: 2026-09-06. Status: accepted. Context: implementation prompt, R3.
 
 Permissions are explicit and deny-by-default. Effective permissions are the intersection of the extension's declarations and an explicit application policy or persisted approval, and the same set drives the operation context and the catalog. Permissions are never inferred from method names, and requested permissions are never auto-granted.
 
-Read permissions are enforced alongside mutations. The authorized operation is the actual operation, including derived output and temporary paths. Library roots (readable) and destination grants (writable) stay distinct. Missing, expired, foreign, or insufficient grants are denied. Grant tokens and desktop secrets never appear in definitions, logs, exports, or persisted state.
+Read permissions are enforced alongside mutations. The authorized operation is the actual operation, including derived output and temporary paths. Library roots (readable) and source and destination grants stay distinct. Missing, expired, foreign, or insufficient grants are denied. Every extension grant is issued only for a single-use picker proof minted by the desktop picker and bound to one extension and one grant kind; a caller-supplied path is never consent. Grant tokens, picker proofs, and desktop secrets never appear in definitions, logs, exports, or persisted state.
 
 ## Consequences
 

@@ -7,11 +7,16 @@ const { getDesktopServerUrl } = require("./server-url.cjs");
 
 process.env.FOLEYARD_GRANT_SECRET ||= randomBytes(32).toString("hex");
 
-async function grantDirectoryPath(directoryPath) {
+async function grantDirectoryPath(directoryPath, purpose) {
+  const body = { path: directoryPath };
+  if (purpose && typeof purpose === "object") {
+    body.extensionId = purpose.extensionId;
+    body.grantKind = purpose.grantKind;
+  }
   const response = await fetch(`${getDesktopServerUrl()}/api/desktop/grants`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-foleyard-grant-secret": process.env.FOLEYARD_GRANT_SECRET },
-    body: JSON.stringify({ path: directoryPath }),
+    body: JSON.stringify(body),
   });
   const result = await response.json();
   return response.ok ? result : { ok: false, error: result.error ?? "Could not grant folder access" };

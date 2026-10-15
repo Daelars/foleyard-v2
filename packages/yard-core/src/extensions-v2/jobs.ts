@@ -1,5 +1,12 @@
+import type { ExtensionV2ValueSchema } from "./definition";
 import type { V2FailureCode } from "./invocation";
 import type { V2JobReporter } from "./operations";
+import {
+  projectV2JobResultValue,
+  redactV2JobDiagnosticMessage,
+  terminalV2JobDiagnostic,
+  type V2JobTerminalResult,
+} from "./terminal-results";
 
 /**
  * Host-owned v2 job lifecycle (Yard Core context, R4).
@@ -35,6 +42,14 @@ import type { V2JobReporter } from "./operations";
  * which live in the application's in-memory grant storage and expire
  * on restart). Restore marks every live job `interrupted` with known
  * outputs and a recovery note. Filesystem effects are never replayed.
+ *
+ * Terminal results (R4 #279): a succeeded job's handler value is
+ * projected onto the command's declared `result` schema, bounded, and
+ * exposed as `job.result.value`; failed, cancelled, and interrupted
+ * jobs expose a bounded, redacted `job.result.diagnostic`. The raw
+ * handler value and the projection are memory-only — the persisted
+ * snapshot never carries a value, a grant, a stack, or a private host
+ * path.
  *
  * Idempotency: a submit carrying an `idempotencyKey` returns the
  * existing record for the same extension, command, and key instead of
@@ -122,6 +137,15 @@ export type V2JobRecord = {
   destination?: V2JobDestination;
   /** Full handler value is memory-only; snapshots keep counts/outputs. */
   value?: unknown;
+  /**
+   * Bounded, schema-shaped terminal summary exposed over the job API: a
+   * projection of the declared result plus redacted diagnostics. Memory
+   * only — it is never persisted, because the projection may carry the
+   * user's own output paths and durable result storage belongs to a later
+   * ticket (#314). Transport attaches the diagnostic; the value is
+   * projected once at completion.
+   */
+  result?: V2JobTerminalResult;
   error?: { code: V2FailureCode; message: string };
   recovery?: {
     status: string;
@@ -153,6 +177,12 @@ export type V2JobSubmit = {
   invocationId: string;
   idempotencyKey?: string;
   destination?: V2JobDestination;
+  /**
+   * The command's declared result schema. When present, a succeeded job's
+   * handler value is projected onto it and bounded before transport; an
+   * undeclared schema exposes no result.
+   */
+  resultSchema?: ExtensionV2ValueSchema;
   /** Denial reason, or null when the submit may proceed. Checked at submit and at start. */
   gate?: () => string | null;
   run: (context: V2JobRunContext) => Promise<V2JobCompletion>;
@@ -177,18 +207,57 @@ export function isV2JobCancellation(error: unknown): error is V2JobCancelledErro
 }
 
 /**
- * Copy a record without its memory-only handler value. Snapshots and
- * the polling transport keep counts, outputs, and partial outcomes;
- * the full value never reaches persisted history or HTTP bodies.
+ * Projection persisted in the settings-table snapshot. Keeps counts,
+ * outputs, ownership metadata, and partial outcomes; drops the memory-only
+ * handler value and the terminal result entirely (a projected value may
+ * carry the user's own private paths, and durable result storage belongs
+ * to #314); and redacts diagnostic messages so a failure's stack or host
+ * path never reaches the database. A restored record therefore carries no
+ * value, and `parseSnapshotRecord` refuses one even if a snapshot is
+ * hand-edited to include it.
  */
 export function persistedV2JobRecord(record: V2JobRecord): V2JobRecord {
-  const copy = {
+  const copy: V2JobRecord = {
     ...record,
     progress: { ...record.progress },
-    partial: { ...record.partial, failed: [...record.partial.failed] },
+    partial: {
+      ...record.partial,
+      failed: record.partial.failed.map((failure) => ({
+        id: failure.id,
+        reason: redactV2JobDiagnosticMessage(failure.reason),
+      })),
+    },
     outputs: [...record.outputs],
   };
   delete copy.value;
+  delete copy.result;
+  if (copy.error) {
+    copy.error = {
+      code: copy.error.code,
+      message: redactV2JobDiagnosticMessage(copy.error.message),
+    };
+  }
+  if (copy.recovery) {
+    copy.recovery = { ...copy.recovery, cleanup: redactV2JobDiagnosticMessage(copy.recovery.cleanup) };
+  }
+  return copy;
+}
+
+/**
+ * Projection sent over the job API. The raw handler value and the redacted
+ * diagnostic baseline come from `persistedV2JobRecord`; the bounded,
+ * schema-shaped terminal value and the state-derived diagnostic are added
+ * back so a succeeded job exposes its declared result and a failed or
+ * cancelled job exposes bounded, redacted diagnostics.
+ */
+export function exposedV2JobRecord(record: V2JobRecord): V2JobRecord {
+  const copy = persistedV2JobRecord(record);
+  const result: V2JobTerminalResult = { ...(record.result ?? {}) };
+  const diagnostic = terminalV2JobDiagnostic(record);
+  if (diagnostic) result.diagnostic = diagnostic;
+  if (result.value !== undefined || result.valueOmitted || result.diagnostic) {
+    copy.result = result;
+  }
   return copy;
 }
 
@@ -229,6 +298,8 @@ type JobEntry = {
   record: V2JobRecord;
   gate?: () => string | null;
   run?: (context: V2JobRunContext) => Promise<V2JobCompletion>;
+  /** Declared result schema; drives the bounded terminal projection. */
+  resultSchema?: ExtensionV2ValueSchema;
   cancelRequested: boolean;
   waiters: Array<(record: V2JobRecord) => void>;
 };
@@ -316,6 +387,7 @@ export class V2JobManager implements V2JobStatusReader {
       record,
       gate: spec.gate,
       run: spec.run,
+      ...(spec.resultSchema ? { resultSchema: spec.resultSchema } : {}),
       cancelRequested: false,
       waiters: [],
     });
@@ -552,12 +624,21 @@ export class V2JobManager implements V2JobStatusReader {
         finishedAt: now,
       };
     } else {
+      const projected =
+        completion.value !== undefined &&
+        entry.resultSchema !== undefined &&
+        entry.resultSchema.kind !== "none"
+          ? projectV2JobResultValue(entry.resultSchema, completion.value)
+          : null;
       entry.record = {
         ...entry.record,
         state: "succeeded",
         partial,
         outputs: completion.outputs ?? entry.record.outputs,
         ...(completion.value !== undefined ? { value: completion.value } : {}),
+        ...(projected
+          ? { result: projected.ok ? { value: projected.value } : { valueOmitted: true } }
+          : {}),
         stoppedAt: now,
         finishedAt: now,
       };

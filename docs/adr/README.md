@@ -6,6 +6,7 @@ every context there.
 ## Index
 
 - [Filesystem access](filesystem-access.md) — Library-root and grant-scoped file authorization boundary.
+- [Library root detachment](library-root-detachment.md) — removing a root detaches its files; re-adding reattaches; forgetting deletes.
 - [New surface promotion](new-surface-promotion.md) — the Variant I surface is the root workspace.
 - [Extension v2 dependency direction](extension-v2-dependency-direction.md) — allowed direction and CI import enforcement.
 - [Extension v2 permissions and trust](extension-v2-permissions-trust.md) — deny-by-default, grant handling, no isolation claim.

@@ -120,7 +120,8 @@ Routes (all under `src/app/api/extensions-v2/`, envelopes
 | `/api/extensions-v2/extensions` | GET | enablement + effective permissions |
 | `/api/extensions-v2/extensions/:id` | PATCH | `{ enabled: boolean }` |
 | `/api/extensions-v2/extensions/:id/approvals` | POST / DELETE | approve / revoke permissions |
-| `/api/extensions-v2/grants` | POST | bridge a picked folder into a grant ID |
+| `/api/extensions-v2/grants` | POST | spend a picker proof for a destination grant ID |
+| `/api/extensions-v2/source-grants` | POST | spend a picker proof for a source grant ID |
 | `/api/extensions-v2/settings/:id` | GET | declarations + values + diagnosis |
 | `/api/extensions-v2/settings/:id/:settingId` | PUT | validated write |
 | `/api/extensions-v2/settings/:id/reset` | POST | reset one setting |
@@ -137,12 +138,14 @@ background. Handlers never branch on client input flags.
 
 Deny by default. Effective permissions are declared intersected with
 explicitly approved, in declaration order. The catalog reports the
-same effective set execution enforces. Grants are destination-scoped,
-expire on restart, and never reach handlers as tokens. Read paths and
-mutations both need authorization. Filesystem guards enforce
-canonical-path containment, traversal and link-escape denial, and
-existing-ancestor resolution; job-owned cleanup removes only resources
-the current job owns.
+same effective set execution enforces. Grants are destination- or
+source-scoped, expire on restart, and never reach handlers as tokens or
+proofs. A grant exists only where the native folder picker minted a
+single-use proof the renderer then spent; a caller-supplied path is not
+consent. Read paths and mutations both need authorization. Filesystem
+guards enforce canonical-path containment, traversal and link-escape
+denial, and existing-ancestor resolution; job-owned cleanup removes only
+resources the current job owns.
 
 These services are built for trusted bundled code. They are not a
 sandbox against hostile JavaScript. Do not claim untrusted extension
@@ -157,6 +160,16 @@ cooperative: the host records request vs stop times and never reports
 stopped while work still writes. Restart marks live jobs interrupted
 with known outputs; filesystem effects never replay. Duplicate
 invocation keys return the existing job.
+
+A terminal job exposes a bounded summary over the polling route
+(#279): `job.result.value` is the handler's declared result projected
+onto the command `result` schema — undeclared fields dropped, strings,
+array lengths, and the serialized projection hard-capped — and
+`job.result.diagnostic` carries a bounded, redacted message for a
+failed, cancelled, or interrupted job (no stacks, no absolute host
+paths). The raw handler value and the projection stay in memory; a
+persisted snapshot never carries a value, a grant, a stack, or a
+private path.
 
 Job persistence is coalesced (#258): state transitions and terminal
 records persist immediately, while per-file progress ticks persist at
@@ -211,7 +224,9 @@ approved; disabling removes its UI and listeners.
 ## Failure behavior and limitations
 
 - Unknown capabilities deny; invalid contexts fail predictably.
-- Missing, expired, or foreign grants deny.
+- Missing, expired, or foreign grants deny; picker proofs that are
+  missing, forged, replayed, expired, or minted for another extension or
+  grant kind deny, and a caller-supplied path is never a grant.
 - Altered, expired, or replayed plans reject per the documented retry rules.
 - No generic undo. Reversible application changes, job-owned
   temporary cleanup, and irreversible file effects stay distinct.
@@ -222,7 +237,7 @@ approved; disabling removes its UI and listeners.
 
 - `packages/yard-core/src/extensions-v2/{version,definition,registry,catalog}.ts` — contracts and discovery
 - `packages/yard-core/src/extensions-v2/{invocation,selection,availability,transport}.ts` — invocation path
-- `packages/yard-core/src/extensions-v2/{permissions,grants,filesystem,operations}.ts` — authorization
+- `packages/yard-core/src/extensions-v2/{permissions,grants,picker-proofs,filesystem,operations}.ts` — authorization
 - `packages/yard-core/src/extensions-v2/{jobs,plans,extension-data,events,contributions}.ts` — lifecycle and UI data
 - `src/lib/extensions-v2/host.ts` — application host composition
 - `src/app/api/extensions-v2/` — HTTP wrappers
@@ -325,8 +340,10 @@ rechecks the effective set, and unapproved calls fail with
 `permission-denied`. The operations suite
 (`packages/yard-core/src/extensions-v2/operations.test.ts`) holds the
 conformance cases, including bounded 5,200-record paging and
-owned-only cleanup. Expected: undeclared access fails closed; no
-overwrites outside job-owned output. Provenance: API v2 operation
+version-checked owned-only cleanup. Expected: undeclared access fails
+closed; outputs are created exclusively, so nothing outside job-owned
+output is truncated or overwritten, and cleanup never deletes a
+replacement at a previously owned path. Provenance: API v2 operation
 services.
 
 ### 7. Run a job with progress and cancellation
@@ -343,11 +360,14 @@ curl -X POST '/api/extensions-v2/jobs/<jobId>/cancel'
 ```
 
 Expected: submit returns 202 with a `vjob_` ID; status polls show
-queued, running, then a terminal state with partial outcomes;
-cancel moves running work to cancellation-requested and settles
-cancelled after owned cleanup. Duplicate invocation keys return the
-existing job. Reload-safe: poll by ID after reconnect. Provenance:
-API v2 jobs, app `jobs.ts` with settings-table snapshot persistence.
+queued, running, then a terminal state with partial outcomes; a
+succeeded job's declared result is bounded and returned as
+`job.result.value`, while a failed or cancelled job returns a bounded,
+redacted `job.result.diagnostic`; cancel moves running work to
+cancellation-requested and settles cancelled after owned cleanup.
+Duplicate invocation keys return the existing job. Reload-safe: poll by
+ID after reconnect. Provenance: API v2 jobs, app `jobs.ts` with
+settings-table snapshot persistence.
 
 ### 8. Subscribe to events
 

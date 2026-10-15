@@ -19,6 +19,11 @@ export interface SettingsDialogProps {
   };
   onSaveRoot: (path: string) => Promise<void>;
   onRemoveRoot: (path: string) => Promise<void>;
+  /**
+   * Explicit destructive alternative to {@link onRemoveRoot}: remove the root
+   * and delete its files and organization data (#271).
+   */
+  onForgetRoot: (path: string) => Promise<void>;
   scanStatus: ScanStatusResponse;
   onStartScan: () => Promise<void>;
   collections: { id: string; name: string; fileCount?: number; isSmart?: boolean; filter?: string | null }[];
@@ -45,6 +50,7 @@ export type SettingsDialogBodyProps = Pick<
   | "settings"
   | "onSaveRoot"
   | "onRemoveRoot"
+  | "onForgetRoot"
   | "scanStatus"
   | "onStartScan"
   | "collections"
@@ -65,7 +71,7 @@ export type SettingsDialogBodyProps = Pick<
   | "onRemoveDefaultChange"
 >;
 
-export type LibraryTabProps = Pick<SettingsDialogProps, "settings" | "onSaveRoot" | "onRemoveRoot" | "scanStatus" | "onStartScan">;
+export type LibraryTabProps = Pick<SettingsDialogProps, "settings" | "onSaveRoot" | "onRemoveRoot" | "onForgetRoot" | "scanStatus" | "onStartScan">;
 
 export type MetadataTabProps = Pick<SettingsDialogProps, "collections" | "tags" | "onCreateCollection" | "onDeleteCollection" | "onRenameCollection" | "onConvertToRegularCollection" | "onCreateTag" | "onDeleteTag">;
 

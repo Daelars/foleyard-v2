@@ -212,6 +212,18 @@ export async function runApply(ctx: V2HandlerContext) {
 
   if (ctx.runMode === "direct") {
     const summary = `Drop ${live.length} sound${live.length === 1 ? "" : "s"} with Drop Rules`;
+    // Destination conflicts are visible in review: probe existing output
+    // names under the destination grant before anything is written, so a
+    // collision is a row status and a notice, not a surprise at apply.
+    const conflicts: string[] = [];
+    if (destGrantId) {
+      for (const file of planned) {
+        if (await ctx.operations.files.outputExists(destGrantId, file.outputName)) {
+          conflicts.push(file.outputName);
+        }
+      }
+    }
+    const conflictSet = new Set(conflicts);
     const prepared = ctx.operations.plans.prepare({
       targets: { fileIds: live.map((file) => file.fileId) },
       options: {
@@ -230,13 +242,21 @@ export async function runApply(ctx: V2HandlerContext) {
             id: "drops",
             title: "Drops",
             columns: ["Sound", "Drop name", "Status"],
-            rows: planned.map((file) => [file.filename, file.outputName, "ready"]),
+            rows: planned.map((file) => [
+              file.filename,
+              file.outputName,
+              conflictSet.has(file.outputName) ? "conflict" : "ready",
+            ]),
           },
         ],
         notices: [
           ...missing.map((id) => ({
             tone: "warning" as const,
             message: `Sound "${id}" is no longer in the Library and is skipped.`,
+          })),
+          ...conflicts.map((name) => ({
+            tone: "warning" as const,
+            message: `"${name}" already exists in the destination and will not be overwritten; that sound will fail with a reason.`,
           })),
           {
             tone: "info" as const,
@@ -248,7 +268,7 @@ export async function runApply(ctx: V2HandlerContext) {
           sources: planned.map((file) => file.fileId),
           names: planned.map((file) => file.outputName),
           destination: destGrantId,
-          conflicts: [] as string[],
+          conflicts,
           missing,
         },
         reversibility: "irreversible-files" as const,
@@ -272,12 +292,24 @@ export async function runApply(ctx: V2HandlerContext) {
   const failedFiles: string[] = [];
   const failedReasons: string[] = [];
   const copied: Array<{ fileId: string; sourcePath: string; outputPath: string }> = [];
+  const warnings: string[] = missing.map(
+    (id) => `Sound "${id}" is no longer in the Library and is skipped.`,
+  );
+  const seenMissing = new Set(missing);
   let done = 0;
   const total = planned.length + (settings.markUsed ? 1 : 0);
 
   const cancelled = async (error: unknown): Promise<never> => {
     await ctx.operations.workspace.dispose();
     throw error;
+  };
+
+  /** Record a source that left the index once, keeping `missing` unique. */
+  const noteMissing = (fileId: string): void => {
+    if (seenMissing.has(fileId)) return;
+    seenMissing.add(fileId);
+    missing.push(fileId);
+    warnings.push(`Sound "${fileId}" is no longer in the Library and is skipped.`);
   };
 
   try {
@@ -289,7 +321,7 @@ export async function runApply(ctx: V2HandlerContext) {
       }
       const record = ctx.operations.library.getFile(file.fileId);
       if (!record) {
-        missing.push(file.fileId);
+        noteMissing(file.fileId);
         done += 1;
         ctx.operations.jobs.reportProgress(done, total);
         continue;
@@ -308,7 +340,7 @@ export async function runApply(ctx: V2HandlerContext) {
         if (isV2JobCancellation(error)) await cancelled(error);
         const reason = error instanceof Error ? error.message : String(error);
         if (/not in the Library index/i.test(reason)) {
-          missing.push(file.fileId);
+          noteMissing(file.fileId);
         } else {
           failedFiles.push(file.filename);
           failedReasons.push(`"${file.filename}": ${reason}`);
@@ -334,11 +366,18 @@ export async function runApply(ctx: V2HandlerContext) {
         await ctx.operations.files.createOutputText(grantId, "foleyard-used.json", report);
         usedReportWritten = true;
       } catch (error) {
-        // The used report is bookkeeping: a collision on a previous
-        // report never fails the drop itself.
-        skipped.push("foleyard-used.json");
+        // Cancellation is never swallowed, even while writing bookkeeping
+        // output: it disposes job-owned partials and settles cancelled.
+        if (isV2JobCancellation(error)) await cancelled(error);
+        // The used report is bookkeeping: a collision on a previous report
+        // never fails the drop itself, but it is recorded consistently with
+        // the failure arrays and a warning.
+        failedFiles.push("foleyard-used.json");
         failedReasons.push(
           `"foleyard-used.json": used report not written: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        warnings.push(
+          `The used-sounds report "foleyard-used.json" was not written: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
       done += 1;
@@ -352,7 +391,7 @@ export async function runApply(ctx: V2HandlerContext) {
       failedFiles,
       failedReasons,
       usedReportWritten,
-      warnings: missing.map((id) => `Sound "${id}" is no longer in the Library and is skipped.`),
+      warnings,
     } satisfies DropRulesV2ApplyResult);
   } catch (error) {
     if (isV2JobCancellation(error)) await cancelled(error);

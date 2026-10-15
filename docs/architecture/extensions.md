@@ -60,9 +60,11 @@ commandId, selection, input }`:
    failure is final and never falls through to another system.
 4. **Services.** Handlers use paged Library reads, named selection
    sources (shelf reads `v2shelf:sound-shelf-v2`, recent reads the
-   recent record), authorized file/archive output, namespaced
-   settings/state, and job reporting — never raw DB, routes, React,
-   or Electron. Every output is created exclusively (the create is the
+   recent record), authorized file/archive output, a read-only
+   output-existence probe (so a preview can show destination conflicts
+   without creating anything), namespaced settings/state, and job
+   reporting — never raw DB, routes, React, or Electron. Every output is
+   created exclusively (the create is the
    claim, so a pre-existing file is never truncated and concurrent jobs
    cannot both claim a destination) and tracked with the created file's
    version, so cancellation cleanup removes only entries that job made.

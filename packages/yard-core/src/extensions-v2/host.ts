@@ -449,6 +449,7 @@ export class ExtensionV2Host {
             commandId: checked.command.id,
             effectivePermissions: effective,
             capabilities: capabilityList(this.services.capabilities),
+            selection: invocation.selection,
           },
           spec,
         );
@@ -802,7 +803,7 @@ export class ExtensionV2Host {
     const availability = evaluateV2SnapshotAvailability(
       definition,
       command,
-      { fileIds: record.targets.fileIds },
+      record.selection,
       record.options,
       {
         enabled: true,
@@ -835,7 +836,7 @@ export class ExtensionV2Host {
       extensionId: record.extensionId,
       commandId: record.commandId,
       input: record.options,
-      selection: { fileIds: record.targets.fileIds },
+      selection: record.selection,
       requestedAt: new Date().toISOString(),
     };
     const checked: Extract<V2Preflight, { ok: true }> = {
@@ -843,7 +844,7 @@ export class ExtensionV2Host {
       invocation,
       definition,
       command,
-      selection: { fileIds: record.targets.fileIds },
+      selection: record.selection,
       files: resolved.filter((file) => record.targets.fileIds.includes(file.id)),
       effective,
     };

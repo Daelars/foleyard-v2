@@ -179,9 +179,13 @@ of snapshot writes. Batched writes through the tag operation
 `(file, tag)` pair, so a retried job cannot duplicate attachments.
 
 Plans (`vplan_` IDs) bind extension, command, validated
-targets/options, authorization context, expiry, and invocation.
+targets/options, the preparing selection context (for a drop, the
+dropped-file count), authorization context, expiry, and invocation.
 Single use, 15-minute default TTL capped at 1 hour. Apply revalidates
-targets, grants, permissions, and availability.
+targets, grants, permissions, and availability, and re-evaluates
+availability with the recorded context — so a direct drop preview can be
+reviewed and applied with its original drop context preserved instead of
+failing for a missing context.
 
 Settings are author-declared and validated with reset semantics.
 Workflow state is versioned with transactional migrations; a failed
@@ -202,7 +206,9 @@ keep-both collision rule. These points mount in the workspace:
 - `command-palette` → palette entries (`v2tool:` ids)
 - `file-context-menu` and `folder-context-menu` → the file-table row menu
 - `selection-actions` → the selection bulk bar
-- `drop-menu` → the Library drop zone
+- `drop-menu` → the Library drop zone (resolves the dropped OS files to
+  Library IDs, obtains the command's declared destination/staging grant
+  through the picker flow, and reviews and applies any prepared plan)
 - `sidebar` → the extension panel rail (`xl` and wider)
 
 `toolbar` and `settings` are declared vocabulary with no generic mount:

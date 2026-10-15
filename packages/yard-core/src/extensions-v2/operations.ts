@@ -28,6 +28,7 @@ import type { V2FailureCode } from "./invocation";
  * - selection.resolveSource → the source's declared requiredPermission
  * - files.readFile → `files:read` plus a readable-root check on the record path
  * - files.copyToOutput → `files:copy` plus readable source and grant-root destination
+ * - files.outputExists → `files:copy` plus a grant-root probe (read-only, never creates)
  * - files.createOutputText → `files:write` plus grant-root destination
  * - archive.createZip → `files:read` (sources) and `files:write` (destination)
  * - settings.get → `settings:read`; settings.set/reset → `settings:write`
@@ -200,6 +201,13 @@ export type V2SelectionOperations = {
 
 export type V2FileOperations = {
   readFile(fileId: string): Promise<Uint8Array>;
+  /**
+   * Probe whether `name` already exists under the destination grant,
+   * without creating, truncating, or tracking anything. Read-only; used
+   * by previews to surface destination conflicts before a plan is
+   * applied. Requires `files:copy` (the copy destination it reports on).
+   */
+  outputExists(grantId: string, name: string): Promise<boolean>;
   copyToOutput(fileId: string, outputName: string, grantId: string): Promise<{ path: string }>;
   createOutputText(grantId: string, name: string, text: string): Promise<{ path: string }>;
   /**
@@ -474,6 +482,17 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
         const dest = await authorizedOutput(grantId, outputName);
         return { path: await createOwned(outputName, dest, () => files.copyFile(canonical, dest)) };
       },
+      async outputExists(grantId: string, name: string): Promise<boolean> {
+        require("files:copy");
+        jobs.throwIfCancelled();
+        checkOutputName(name);
+        const dest = await authorizedOutput(grantId, name);
+        const probe = await files
+          .pathIo()
+          .lstat(dest)
+          .catch(() => ({ exists: false, isLink: false }));
+        return probe.exists;
+      },
       async createOutputText(grantId: string, name: string, text: string): Promise<{ path: string }> {
         require("files:write");
         jobs.throwIfCancelled();
@@ -720,6 +739,7 @@ export function denyAllV2Operations(extensionId: string): V2OperationServices {
     },
     files: {
       readFile: () => denyAsync(),
+      outputExists: () => denyAsync(),
       copyToOutput: () => denyAsync(),
       createOutputText: () => denyAsync(),
       copyFromSource: () => denyAsync(),

@@ -33,11 +33,14 @@ mark sounds as used.
 - **preview** — immediate. Plans output names for the dropped Library
   IDs; unknown IDs report as missing with a reason, never silent
   empty. No side effects, no destination needed.
-- **apply** — `direct` returns a review plan (file table + notices);
-  `apply`/`job` copy each planned file into the destination grant
-  through the authorized copy op and write `foleyard-used.json` when
-  `mark-used` is on. Cancellation disposes job-owned partials and
-  settles cancelled, never as a misleading success.
+- **apply** — `direct` returns a review plan (file table + notices)
+  whose rows mark existing destination conflicts as `conflict` and whose
+  details carry the conflicting names and missing sources; `apply`/`job`
+  copy each planned file into the destination grant through the
+  authorized copy op and write `foleyard-used.json` when `mark-used` is
+  on. Cancellation disposes job-owned partials and settles cancelled —
+  including a cancel that lands while the used report is being written —
+  never as a misleading success.
 - **prepare-drag** — stages one sound into the staging grant for
   drag-out. When no copy or rename is needed it hands back the Library
   path unstaged. Failures never strand files silently: a failed copy
@@ -48,10 +51,13 @@ mark sounds as used.
 ## Policies
 
 - **Drop payload arrives as input.** Drop-scope availability (a
-  validated OS drop through the real `V2DropMenu` adapter) is enforced
-  by the host; the payload itself (Library IDs + destination/staging
-  grants) arrives as command input and each ID is resolved against the
-  Library index at run time.
+  validated OS drop through the Library drop zone) is enforced by the
+  host; the drop zone resolves the dropped OS files to Library IDs,
+  obtains the destination/staging grant the command declares through the
+  shared picker-to-grant flow, and passes the payload (Library IDs +
+  grant) as command input. Each ID is resolved against the Library index
+  at run time, and a prepared plan is reviewed and applied with its
+  original drop context preserved.
 - **Never overwrite.** Planned names dedupe within the run; a
   destination collision fails that file with a reason while the rest
   still process. Unrelated destination contents are never deleted.
@@ -60,8 +66,10 @@ mark sounds as used.
   job output is ever disposed on cancellation.
 - **Used report is bookkeeping.** `foleyard-used.json` is written
   through the output-text op; if a previous report already occupies
-  the name, the drop still succeeds and the collision is recorded as a
-  warning with a reason.
+  the name, the drop still succeeds — `usedReportWritten` is false, the
+  name and reason land in `failedFiles`/`failedReasons` and a warning,
+  and the previous report is never overwritten. A cancellation that lands
+  during this write is rethrown, not recorded as a warning.
 - **Bounds.** At most `MAX_DROP_FILES` (100) sounds per preview/apply;
   larger drops reject with a reason instead of truncating silently.
 
@@ -83,12 +91,16 @@ mark sounds as used.
 
 Explicitly unsupported / deliberately changed: raw-path staging
 directories (grant-scoped staging instead), overwriting existing
-destination files, distinguishing unreadable files (no `stat` op —
-absent files report as missing), and silent v1→v2 settings migration.
+destination files, distinguishing unreadable source files (no source
+`stat` op — absent sources report as missing; the destination is probed
+read-only with `files.outputExists` so conflicts show in review), and
+silent v1→v2 settings migration.
 
 ## Use it
 
 1. Settings → Extensions → **Drop Rules v2** → enable.
 2. Approve the declared permissions.
-3. Drop sounds onto the Library drop zone and pick Preview/Apply, or
-   run Prepare Drag from the palette with a staging grant.
+3. Drop sounds onto the Library drop zone; the zone resolves them to
+   Library IDs, asks for a destination folder, and offers Preview/Apply.
+   Apply reviews the plan (conflicts and missing sources included) and
+   applies it, or run Prepare Drag from the palette with a staging grant.

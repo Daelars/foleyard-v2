@@ -76,7 +76,7 @@ approval; settings namespaces exist only where the port declares settings
 | `auto-tag-v2.list-origins` | global | — | | yes | yes | `commands` |
 | `auto-tag-v2.latest-arrivals` | global | — | | yes | yes | `commands` |
 | `auto-tag-v2.remove-by-origin` | global | — | destructive | yes | yes | `commands` |
-| `auto-tag-v2.rename-tag` | global | — | | yes | yes | `commands` |
+| `auto-tag-v2.rename-tag` | global | — | destructive | yes | yes | `commands` |
 | `auto-tag-v2.merge-tag` | global | — | destructive | yes | yes | `commands` |
 | `drop-rules-v2.preview` | drop | — | | yes | yes | `commands` |
 | `drop-rules-v2.apply` | drop | — | | yes | yes | `commands` |

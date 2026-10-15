@@ -172,9 +172,12 @@ export function useMenuKeyboard({
       };
 
       // Escape is caught on the document so a menu whose items are all
-      // disabled (a lone "no tags yet" row) can still be dismissed.
+      // disabled (a lone "no tags yet" row) can still be dismissed. Marking
+      // the key consumed keeps an enclosing modal surface from also closing
+      // on the same press.
       const onEscape = (event: KeyboardEvent) => {
         if (event.key !== "Escape") return;
+        event.preventDefault();
         typeahead.cancel();
         latest.current.onClose();
         latest.current.returnFocusRef?.current?.focus({ preventScroll: true });

@@ -16,6 +16,8 @@ src/components/variant-i/
     field.tsx       Field, Kbd, Select (floating viewport-fixed popup)
     menu-keyboard.ts  shared popup contract: focus-in, roving arrows, Home/End,
                     typeahead, disabled skipping, Escape/Tab close + focus return
+    modal-surface.ts  shared modal contract: focus-in on open, Tab trap, inert
+                    background, Escape dismissal, focus back on the invoker
     controls.tsx    Switch, Checkbox, Radio
     feedback.tsx    StatusBadge, TagChip, AIScore, Alert, Progress, Toast, DotMatrixStatus
     containers.tsx  Surface, Card, Tabs, TabPanel, Rail, Accordion
@@ -82,7 +84,20 @@ attribute is removed and the original presentation resumes.
   attach `useMenuKeyboard` to the element carrying `role="menu"`: it focuses
   the first enabled `menuitem`, roves with the arrow keys (wrapping, skipping
   disabled items), honours Home/End and typeahead, and closes on Escape (with
-  focus back on the trigger) or Tab.
+  focus back on the trigger) or Tab. A menu marks the Escape it consumes with
+  `preventDefault` so an enclosing modal surface does not close on the same
+  press.
+- `Dialog` and the command palettes are real modal surfaces: `useModalSurface`
+  (attached to the element carrying `role="dialog"`/`role="alertdialog"`)
+  moves focus to an intentional target on open, wraps Tab/Shift+Tab inside the
+  surface (skipping disabled and hidden controls), marks the surrounding
+  workspace `inert` + `aria-hidden` for the surface's lifetime, dismisses on
+  Escape when the surface permits it, and returns focus to the invoking
+  control on close. The surface is not portaled — the hook walks outward from
+  the surface, inerting every sibling branch up to `<body>`, so a dialog
+  nested inside another dialog still leaves its own panel live. Stacked
+  surfaces only answer Escape once the topmost one is past. `Dialog` takes
+  `closeOnEscape={false}` for a surface that must be answered.
 - `Tabs` is a real tablist: one roving tab stop (the selected tab), ArrowLeft/
   ArrowRight movement with wrapping, Home/End to the ends, and — because every
   panel is mounted and cheap to show — activation on move. Pair its `id` with

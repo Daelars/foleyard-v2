@@ -48,6 +48,8 @@ redacted; local views may show more.
 | capability unavailable | command lists `requiredCapabilities`; app host exposes none, desktop adds `desktop.native` in desktop mode | remove the requirement or run where the capability exists; unknown never counts as available |
 | grant rejected / expired | grants live in memory and die on restart | pick the destination again for a fresh grant ID |
 | plan rejected: altered/expired/replayed | TTL is 15 min default, 1 h max, single use | prepare a fresh plan; do not resend consumed IDs |
+| `idempotency-conflict` (409) | the key was first used with a different input/selection | resubmit the original payload, or use a fresh key for changed inputs |
+| job history shows `persistence.durable: false` | the settings snapshot write failed; `lastError` names the cause | fix the database/filesystem; the write retries on the next job request or backoff tick, or restart to restore the last committed snapshot |
 | job interrupted after restart | job history keeps known outputs + recovery note | review outputs, resubmit with fresh authorization; effects never replay |
 | state migration disabled the extension | settings GET diagnosis names the failure; prior data is preserved | fix the stored shape or reset, then re-enable |
 | empty shelf/recent source | sources report store failure instead of empty | check the persisted record; the adapter reads the v2 store directly |

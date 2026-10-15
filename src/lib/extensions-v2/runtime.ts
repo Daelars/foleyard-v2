@@ -44,6 +44,28 @@ export type V2SourceGrants = {
   tokens: Map<string, string>;
 };
 
+/**
+ * Durable-history status for v2 jobs (Application context, #314). The
+ * manager's snapshot is diagnostic history; a failed write is surfaced
+ * (never swallowed) and retried instead of silently dropping it.
+ */
+export type V2JobPersistenceState = {
+  /** True when the last write attempt did not fail; history is durable. */
+  durable: boolean;
+  /** True when a write failed and history is not yet durable. */
+  pending: boolean;
+  /** Message from the most recent failed write, cleared on success. */
+  lastError: string | null;
+  /** When the snapshot last committed. */
+  lastPersistedAt: string | null;
+  /** When the snapshot was last attempted (success or failure). */
+  lastAttemptAt: string | null;
+  /** Consecutive failed attempts; drives retry backoff. */
+  consecutiveFailures: number;
+};
+
+export type V2JobPersistenceStatus = V2JobPersistenceState;
+
 export type V2Runtime = {
   /** Structural brand so the process guard survives module re-evaluation. */
   readonly kind: "foleyard-v2-runtime";
@@ -61,6 +83,9 @@ export type V2Runtime = {
   jobs: V2JobManager | null;
   jobsRestored: boolean;
   lastEmittedJobState: Map<string, string>;
+  /** Durable-history status and pending retry for the job snapshot. */
+  jobPersistence: V2JobPersistenceState;
+  jobPersistenceTimer: ReturnType<typeof setTimeout> | null;
   /** Enablement: opt-in, disabled by default, hydrated once per process. */
   enabled: Set<string>;
   enablementLoaded: boolean;
@@ -87,6 +112,15 @@ export function createV2Runtime(): V2Runtime {
     jobs: null,
     jobsRestored: false,
     lastEmittedJobState: new Map(),
+    jobPersistence: {
+      durable: true,
+      pending: false,
+      lastError: null,
+      lastPersistedAt: null,
+      lastAttemptAt: null,
+      consecutiveFailures: 0,
+    },
+    jobPersistenceTimer: null,
     enabled: new Set(),
     enablementLoaded: false,
     approvals: new V2PermissionApprovals(),

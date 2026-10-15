@@ -53,6 +53,7 @@ export { V2_PAYLOAD_LIMITS };
  * - 400 invalid input/selection/context/capability payloads.
  * - 403 disabled extensions and denied permissions.
  * - 404 unknown extensions/commands, unresolvable selections, unknown jobs.
+ * - 409 an idempotency key reused with a different payload.
  * - 413 envelopes or inputs over the payload limits.
  * - 500 missing handlers, handler failures, invalid handler results.
  *
@@ -105,6 +106,7 @@ export const V2_FAILURE_STATUS: Record<V2FailureCode, number> = {
   "handler-failed": 500,
   "result-invalid": 500,
   "job-unknown": 404,
+  "idempotency-conflict": 409,
   "plan-unknown": 404,
   "plan-expired": 400,
   "plan-altered": 400,

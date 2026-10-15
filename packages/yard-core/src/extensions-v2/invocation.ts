@@ -45,6 +45,7 @@ export type V2FailureCode =
   | "handler-failed"
   | "result-invalid"
   | "job-unknown"
+  | "idempotency-conflict"
   | "plan-unknown"
   | "plan-expired"
   | "plan-altered"

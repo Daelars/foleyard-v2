@@ -10,6 +10,8 @@ On restart, abandoned running jobs are marked interrupted with known outputs and
 
 Extension settings and workflow state are namespaced by the host; extension code cannot select another extension's namespace. Settings carry schema versions with transactional migrations: a failed migration preserves prior data or disables that extension with an actionable diagnosis. Changes persist before consumers are notified. Retention is bounded.
 
+Update 2026-10-15 (#314). Submission and history are durable server-side. An idempotency key is bound to a digest of the payload it first created, so a resubmission after a lost response returns the existing job while a reused key with a changed payload is rejected (`idempotency-conflict`, 409). The job snapshot commits through the settings-state ports; a failed write is recorded on the runtime and reported by the job routes (`persistence`), then retried on the next transition, request, or backoff tick instead of being swallowed.
+
 ## Consequences
 
 - Cancellation is cooperative: extension code observes the signal, the host records request vs stop. A timeout cannot forcibly stop in-process JavaScript, and a job is never reported stopped while still writing.

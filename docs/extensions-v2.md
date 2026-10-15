@@ -156,7 +156,19 @@ interrupted. Concurrency is bounded (max 2). Cancellation is
 cooperative: the host records request vs stop times and never reports
 stopped while work still writes. Restart marks live jobs interrupted
 with known outputs; filesystem effects never replay. Duplicate
-invocation keys return the existing job.
+invocation keys return the existing job, which makes a lost response
+recoverable.
+
+Idempotency is payload-bound (#314): a key is tied to a digest of the
+input and selection it first created. Resubmitting the same payload with
+the same key returns that job; reusing the key with a changed payload is
+rejected as `idempotency-conflict` (409) instead of silently running the
+earlier job. The digest persists with the record and is never exposed.
+Job history is durable: every transition commits the snapshot, and the
+job routes return a `persistence` status (`durable`, `pending`,
+`lastError`, `lastPersistedAt`). A failed write is surfaced there and
+retried — on the next transition, the next job request, and a backoff
+timer — rather than silently dropping history.
 
 A terminal job exposes a bounded summary over the polling route
 (#279): `job.result.value` is the handler's declared result projected

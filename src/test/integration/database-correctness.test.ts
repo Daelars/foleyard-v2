@@ -507,7 +507,7 @@ describe("database correctness", () => {
     expect(files.getFileByPath("/lib/up.wav")?.duration).toBe(9);
   });
 
-  it.fails("converts a smart collection atomically within the bind limit (B09)", () => {
+  it("converts a smart collection atomically within the bind limit (B09)", () => {
     const matching = Math.ceil(SQLITE_MAX_VARIABLES / 2) + 50;
     files.batchUpsertFiles(
       Array.from({ length: matching }, (_, index) =>
@@ -524,9 +524,8 @@ describe("database correctness", () => {
     );
 
     // Every other batch path in this repository chunks by SQLITE_MAX_VARIABLES.
-    // convertToRegularCollection builds one values array for every match and
-    // issues it as a single statement, so the ceiling is the runtime's, not
-    // ours — it simply fails at whatever size that turns out to be.
+    // A single values array for every match would bind two variables per member
+    // and cross the ceiling at this size, so the conversion must chunk too.
     const realPrepare = sqlite.prepare.bind(sqlite);
     let widest = 0;
     vi.spyOn(sqlite, "prepare").mockImplementation(((sql: string) => {
@@ -544,9 +543,15 @@ describe("database correctness", () => {
       widest,
       `one statement bound ${widest} variables, over the ${SQLITE_MAX_VARIABLES} this repo chunks at`,
     ).toBeLessThanOrEqual(SQLITE_MAX_VARIABLES);
+    // The reviewed conversion commits both halves together: every match is a
+    // member and the collection is now regular with no filter.
+    expect(collections.getCollectionById(collectionId)).toMatchObject({
+      isSmart: 0,
+      filter: null,
+    });
 
-    // And the conversion is not transactional: fail the finishing update and
-    // the inserted memberships are left behind instead of rolling back.
+    // And the conversion is transactional: fail the finishing update and the
+    // memberships inserted for it roll back, leaving the collection smart.
     const secondId = collections.createSmartCollection(
       "Smart two",
       JSON.stringify({ q: "kick" }),
@@ -570,6 +575,10 @@ describe("database correctness", () => {
         .get(secondId) as { n: number },
       "a failed conversion must leave no memberships behind",
     ).toEqual({ n: 0 });
+    expect(
+      collections.getCollectionById(secondId),
+      "a failed conversion must leave the collection smart and filtered",
+    ).toMatchObject({ isSmart: 1, filter: JSON.stringify({ q: "kick" }) });
   });
 
   it("keeps settings, colours and tag/collection creation round-tripping, including through the routes", async () => {

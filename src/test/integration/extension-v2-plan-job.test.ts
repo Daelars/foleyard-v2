@@ -364,7 +364,12 @@ describe("make-pack-v2 plan-bound jobs", () => {
     expect(value.copied).toBe(1);
     expect(value.failedFiles).toEqual(["a.wav"]);
     expect(value.failedReasons[0]).toMatch(/already exists/);
-    expect(value.outputPath).toBe(world.outDir);
+    // Sync and async realpath disagree on Windows 8.3 short names
+    // (`RUNNER~1` vs `runneradmin` on CI), so compare via the same async
+    // canonicalization the implementation uses.
+    expect(await fs.promises.realpath(value.outputPath)).toBe(
+      await fs.promises.realpath(world.outDir),
+    );
     expect(fs.readFileSync(path.join(world.outDir, "a.wav"), "utf8")).toBe("ORIGINAL");
   });
 });

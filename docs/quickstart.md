@@ -56,9 +56,8 @@ and tags. Each step links to the guide that documents it in full.
   the root is not saved.
 - Scan is best-effort per file: individual metadata failures are counted
   (`failed`/`errors` in `ScanStatus`) without aborting the run.
-- Collection-branch counts currently disagree with the main file list
-  (finding B03, expected-to-fail); filename search is substring-only
-  (FTS5 trigram, LIKE fallback), with no semantic ranking.
+- Filename search is substring-only (FTS5 trigram, LIKE fallback), with
+  no semantic ranking.
 
 ## Source map (real file paths)
 

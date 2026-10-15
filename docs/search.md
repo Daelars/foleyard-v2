@@ -1,6 +1,6 @@
 # Search
 
-> Feature status: shipped (with known defect B03 tracked as expected-to-fail)
+> Feature status: shipped
 > Contract: internal
 > Owner: `src/app/api/files/route.ts` + `src/lib/database/files/reads.ts`
 > Applies to: docs manifest ID (`search`); development checkout when unbuilt
@@ -45,10 +45,13 @@ equality (+ `directory IS NULL` when `atLibraryRoot`), tag membership via
 `src/lib/database/filename-search.ts`: an FTS5 `MATCH` subquery when the
 trigram index is usable, otherwise `filenameLike` from
 `src/lib/database/sql-parameters.ts` with `LIKE` wildcard escaping.
-Collection-branch queries join
-`fileCollections` (`buildCollectionFilters`); the file-list branch uses
-`buildFileFilters`. Sorting and limit/offset apply after filtering; the
-route also returns the matching count (`getFileCount`) for pagination UI.
+Reads build one filter list (`buildFilters`). Collection browsing joins
+`fileCollections` and adds a membership predicate to that same list, so every
+filter — search, favorites, root, directory, tag, tag origin and removed
+state — applies identically to both; `getFileCount` builds its count through
+the same contract, excluding only the keyset cursor (a page boundary, not a
+filter). Sorting and limit/offset apply after filtering; the route also
+returns the matching count (`getFileCount`) for pagination UI.
 
 ### Cursor pagination
 
@@ -73,8 +76,6 @@ opaque cursor contract internally; see `src/lib/database/file-cursor.ts`.
 
 ## Failure behavior and limitations
 
-- B03 (expected-to-fail, #137): the collection-branch count disagrees
-  with the main file list — Collection-filtered counts are untrusted.
 - No semantic matching: `q=horn` matches filenames containing "horn"
   only; metadata fields (codec, duration) and tag names are not
   substring-searched by `q`. A database without FTS5 keeps working on
@@ -107,4 +108,4 @@ library query against the checkout.
 
 - `docs/library.md` — browsing and removal over the same index
 - `docs/collections.md` — Collection/tag filters and smart-query reuse
-- `docs/development.md` — expected-failures ledger (B03, B11)
+- `docs/development.md` — expected-failures ledger (B11)

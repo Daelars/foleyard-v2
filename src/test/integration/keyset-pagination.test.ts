@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { callRoute, createTestDatabase, type TestDatabase } from "@/test/fixtures";
 import { SqliteAudioFileRepository } from "@/lib/database/file-repository";
+import { SqliteTagRepository } from "@/lib/database/tag-repository";
+import { SqliteCollectionRepository } from "@/lib/database/collection-repository";
+import type { FileSearchQuery } from "@yard-core";
 
 // Area: #256. File-list paging walks every row exactly once through opaque
 // keyset cursors, hasMore is exact at boundaries, and the offset surface
@@ -132,5 +135,72 @@ describe("keyset file pagination", () => {
     });
     expect(response.status).toBe(400);
     expect(response.body.error).toMatch(/cursor/i);
+  });
+
+  // Area: #272. The collection branch must honour every filter and still page
+  // by keyset cursor for every supported sort, without duplicating or skipping
+  // a row.
+  it("walks a filtered collection exactly once for every sort and filter", async () => {
+    const collections = new SqliteCollectionRepository(sqlite);
+    const tags = new SqliteTagRepository(sqlite);
+    const collectionId = collections.createCollection("Session");
+    const all = files.getFiles({ limit: 100, sortKey: "filename", sortDir: "asc" });
+    for (const file of all) {
+      collections.attachFileToCollection(file.id, collectionId);
+    }
+    const tagId = tags.createTag("tagged");
+    for (const file of all.slice(0, 8)) {
+      files.setFileTagBatch([file.id], tagId, true);
+    }
+    files.setFavorites([all[0].id, all[5].id], true);
+
+    const cases: Array<{ label: string; params: string; options: FileSearchQuery }> = [
+      { label: "collection", params: `collectionId=${collectionId}`, options: { collectionId } },
+      {
+        label: "collection+favorites",
+        params: `collectionId=${collectionId}&favorites=true`,
+        options: { collectionId, favorites: true },
+      },
+      {
+        label: "collection+tag",
+        params: `collectionId=${collectionId}&tagId=${tagId}`,
+        options: { collectionId, tagId },
+      },
+      {
+        label: "collection+query",
+        params: `collectionId=${collectionId}&q=clip-0`,
+        options: { collectionId, query: "clip-0" },
+      },
+      {
+        label: "collection+origin",
+        params: `collectionId=${collectionId}&origin=manual`,
+        options: { collectionId, tagOrigin: "manual" },
+      },
+    ];
+
+    for (const sortKey of ["filename", "duration"] as const) {
+      for (const sortDir of ["asc", "desc"] as const) {
+        for (const testCase of cases) {
+          const expected = files
+            .getFiles({ ...testCase.options, sortKey, sortDir, limit: 100 })
+            .map((file) => file.id);
+
+          const seen: string[] = [];
+          let cursor: string | null = null;
+          let pages = 0;
+          do {
+            const page = await getPage(
+              `limit=5&sortKey=${sortKey}&sortDir=${sortDir}&${testCase.params}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+            );
+            seen.push(...page.files.map((file) => file.id));
+            cursor = page.nextCursor;
+            pages += 1;
+            expect(pages).toBeLessThan(10);
+          } while (cursor);
+
+          expect(seen, `${testCase.label} ${sortKey} ${sortDir}`).toEqual(expected);
+        }
+      }
+    }
   });
 });

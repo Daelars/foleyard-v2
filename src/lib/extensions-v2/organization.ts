@@ -20,7 +20,7 @@ import {
   resolveTagAlias,
   updateCollectionFilter,
 } from "@/lib/db";
-import type { Collection, Tag, TagOrigin, V2CollectionPorts, V2TagPorts } from "@yard-core";
+import type { Collection, Tag, TagOrigin, V2AttachOutcome, V2CollectionPorts, V2TagPorts } from "@yard-core";
 import { extractSmartQuery } from "@/lib/smart-collection-filter";
 
 import { getV2Events } from "./events";
@@ -128,18 +128,31 @@ export function createV2TagPorts(deps: V2OrganizationDeps = {}): V2TagPorts {
       else attachTagToFileWithOrigin(fileId, tagId, origin ?? "manual", confidence);
       notify();
     },
-    attachMany: (entries) => {
-      if (entries.length === 0) return;
+    attachMany: (entries): V2AttachOutcome => {
+      const outcome: V2AttachOutcome = { inserted: 0, upgraded: 0, ignored: 0 };
+      if (entries.length === 0) return outcome;
       if (ports?.attachMany) {
-        ports.attachMany(entries);
+        const reported = ports.attachMany(entries);
+        if (reported) {
+          outcome.inserted = reported.inserted;
+          outcome.upgraded = reported.upgraded;
+          outcome.ignored = reported.ignored;
+        } else {
+          outcome.inserted = entries.length;
+        }
       } else if (ports) {
         for (const entry of entries) {
           ports.attach(entry.fileId, entry.tagId, entry.origin, entry.confidence);
         }
+        outcome.inserted = entries.length;
       } else {
-        attachTagsBatch(entries);
+        const reported = attachTagsBatch(entries);
+        outcome.inserted = reported.inserted;
+        outcome.upgraded = reported.upgraded;
+        outcome.ignored = reported.ignored;
       }
       notify();
+      return outcome;
     },
     coverage: () => (ports?.coverage ? ports.coverage() : coverageAggregate()),
     memberPage: (input) =>

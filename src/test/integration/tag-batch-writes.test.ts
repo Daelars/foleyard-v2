@@ -4,8 +4,8 @@ import { audioFileRecord, createTestDatabase, type TestDatabase } from "@/test/f
 import { SqliteAudioFileRepository } from "@/lib/database/file-repository";
 import { SqliteTagRepository } from "@/lib/database/tag-repository";
 
-// Area: #258. Batch tag writes land in one transaction, stay idempotent on a
-// retried job, and keep the manual-wins origin rule.
+// Area: #258/#286. Batch tag writes land in one transaction, stay idempotent
+// on a retried job, keep the origin precedence rule, and report what they did.
 
 describe("attachTagsBatch", () => {
   let sqlite: TestDatabase;
@@ -27,6 +27,14 @@ describe("attachTagsBatch", () => {
   afterEach(() => {
     sqlite.close();
   });
+
+  function row(tagId: string): { origin: string; confidence: number | null } {
+    return sqlite
+      .prepare(
+        "SELECT origin, confidence FROM file_tags WHERE file_id = ? AND tag_id = ?",
+      )
+      .get(fileId, tagId) as { origin: string; confidence: number | null };
+  }
 
   it("writes many rows in one transaction and is idempotent on retry", () => {
     const thunder = tags.createTag("thunder");
@@ -56,18 +64,58 @@ describe("attachTagsBatch", () => {
     tags.attachTagsBatch([
       { fileId, tagId: thunder, origin: "semantic_ai", confidence: 0.91 },
     ]);
-    const row = sqlite
-      .prepare("SELECT origin FROM file_tags WHERE file_id = ? AND tag_id = ?")
-      .get(fileId, thunder) as { origin: string };
-    expect(row.origin).toBe("manual");
+    expect(row(thunder).origin).toBe("manual");
 
     // An automatic first, then a manual, upgrades.
     const rain = tags.createTag("rain");
     tags.attachTagsBatch([{ fileId, tagId: rain, origin: "deterministic", confidence: null }]);
     tags.attachTagsBatch([{ fileId, tagId: rain, origin: "manual", confidence: null }]);
-    const upgraded = sqlite
-      .prepare("SELECT origin FROM file_tags WHERE file_id = ? AND tag_id = ?")
-      .get(fileId, rain) as { origin: string };
-    expect(upgraded.origin).toBe("manual");
+    expect(row(rain).origin).toBe("manual");
+  });
+
+  it("reports inserted, upgraded, and ignored writes from precedence", () => {
+    const thunder = tags.createTag("thunder");
+    // Insert.
+    expect(
+      tags.attachTagsBatch([{ fileId, tagId: thunder, origin: "deterministic" }]),
+    ).toEqual({ inserted: 1, upgraded: 0, ignored: 0 });
+    // Same write again: ignored, no change.
+    expect(
+      tags.attachTagsBatch([{ fileId, tagId: thunder, origin: "deterministic" }]),
+    ).toEqual({ inserted: 0, upgraded: 0, ignored: 1 });
+    // A weaker semantic write never downgrades a deterministic attachment.
+    expect(
+      tags.attachTagsBatch([
+        { fileId, tagId: thunder, origin: "semantic_ai", confidence: 0.9 },
+      ]),
+    ).toEqual({ inserted: 0, upgraded: 0, ignored: 1 });
+    expect(row(thunder)).toEqual({ origin: "deterministic", confidence: null });
+    // A manual write upgrades.
+    expect(
+      tags.attachTagsBatch([{ fileId, tagId: thunder, origin: "manual" }]),
+    ).toEqual({ inserted: 0, upgraded: 1, ignored: 0 });
+    expect(row(thunder)).toEqual({ origin: "manual", confidence: null });
+  });
+
+  it("refreshes a same-origin semantic confidence but never weakens an origin", () => {
+    const rain = tags.createTag("rain");
+    expect(
+      tags.attachTagsBatch([
+        { fileId, tagId: rain, origin: "semantic_ai", confidence: 0.6 },
+      ]),
+    ).toEqual({ inserted: 1, upgraded: 0, ignored: 0 });
+    // A rerun over a new vector refreshes the stored confidence instead of
+    // leaving it disagreeing with the vector it came from (#286).
+    expect(
+      tags.attachTagsBatch([
+        { fileId, tagId: rain, origin: "semantic_ai", confidence: 0.91 },
+      ]),
+    ).toEqual({ inserted: 0, upgraded: 1, ignored: 0 });
+    expect(row(rain)).toEqual({ origin: "semantic_ai", confidence: 0.91 });
+    // A deterministic write strengthens the origin and clears the confidence.
+    expect(
+      tags.attachTagsBatch([{ fileId, tagId: rain, origin: "deterministic" }]),
+    ).toEqual({ inserted: 0, upgraded: 1, ignored: 0 });
+    expect(row(rain)).toEqual({ origin: "deterministic", confidence: null });
   });
 });

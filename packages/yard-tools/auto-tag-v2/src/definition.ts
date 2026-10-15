@@ -77,12 +77,25 @@ function tagFilesResultSchema(): ExtensionV2ValueSchema {
     properties: {
       tagged: { kind: "number", integer: true, min: 0 },
       attached: { kind: "number", integer: true, min: 0 },
+      inserted: { kind: "number", integer: true, min: 0 },
+      upgraded: { kind: "number", integer: true, min: 0 },
+      ignored: { kind: "number", integer: true, min: 0 },
       skipped: { kind: "string-array" },
       missing: { kind: "string-array" },
       failedFiles: { kind: "string-array" },
       failedReasons: { kind: "string-array" },
     },
-    required: ["tagged", "attached", "skipped", "missing", "failedFiles", "failedReasons"],
+    required: [
+      "tagged",
+      "attached",
+      "inserted",
+      "upgraded",
+      "ignored",
+      "skipped",
+      "missing",
+      "failedFiles",
+      "failedReasons",
+    ],
   };
 }
 
@@ -174,12 +187,27 @@ function tagSemanticResultSchema(): ExtensionV2ValueSchema {
     properties: {
       tagged: { kind: "number", integer: true, min: 0 },
       attached: { kind: "number", integer: true, min: 0 },
+      inserted: { kind: "number", integer: true, min: 0 },
+      upgraded: { kind: "number", integer: true, min: 0 },
+      ignored: { kind: "number", integer: true, min: 0 },
+      alreadyClassified: { kind: "number", integer: true, min: 0 },
       skipped: { kind: "string-array" },
       missing: { kind: "string-array" },
       failedFiles: { kind: "string-array" },
       failedReasons: { kind: "string-array" },
     },
-    required: ["tagged", "attached", "skipped", "missing", "failedFiles", "failedReasons"],
+    required: [
+      "tagged",
+      "attached",
+      "inserted",
+      "upgraded",
+      "ignored",
+      "alreadyClassified",
+      "skipped",
+      "missing",
+      "failedFiles",
+      "failedReasons",
+    ],
   };
 }
 

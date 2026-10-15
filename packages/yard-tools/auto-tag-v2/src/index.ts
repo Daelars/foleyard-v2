@@ -21,7 +21,10 @@ export {
 } from "./definition";
 export {
   COVERAGE_HISTORY_KEY,
+  MAX_CLASSIFICATION_STATE_BYTES,
   MAX_COVERAGE_SNAPSHOTS,
+  MAX_RETAINED_CLASSIFICATIONS,
+  SEMANTIC_CLASSIFICATION_KEY,
   registerAutoTagV2Handlers,
   runClapStatus,
   runCoverageHistory,
@@ -55,6 +58,7 @@ export {
   type AutoTagV2TagSemanticResult,
   type CoverageSnapshot,
   type LastRunSummary,
+  type SemanticClassificationRecord,
 } from "./handlers";
 export {
   MAX_CANDIDATE_EXAMPLES,

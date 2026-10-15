@@ -70,6 +70,12 @@ export type AutoTagV2PreviewResult = {
 export type AutoTagV2TagFilesResult = {
   tagged: number;
   attached: number;
+  /** Deterministic attachments created by this run (#286). */
+  inserted: number;
+  /** Existing deterministic attachments whose origin or confidence changed. */
+  upgraded: number;
+  /** Attempted writes a stronger stored origin turned away. */
+  ignored: number;
   skipped: string[];
   missing: string[];
   failedFiles: string[];
@@ -417,6 +423,9 @@ export async function runTagFiles(ctx: V2HandlerContext) {
   const failedReasons: string[] = [];
   let tagged = 0;
   let attached = 0;
+  let inserted = 0;
+  let upgraded = 0;
+  let ignored = 0;
   let done = 0;
 
   const known = new Map(tags.list().map((tag) => [tag.name, tag.id]));
@@ -429,7 +438,8 @@ export async function runTagFiles(ctx: V2HandlerContext) {
   };
 
   // #258: one transaction per file chunk instead of one commit per row. A
-  // failed chunk is attributed to its files and the job keeps going.
+  // failed chunk is attributed to its files and the job keeps going. The
+  // outcome (#286) separates inserted from upgraded and ignored writes.
   const TAG_BATCH_FILES = 100;
   let pending: Array<{ filename: string; fileId: string; names: string[] }> = [];
   const flushTagBatch = () => {
@@ -444,14 +454,21 @@ export async function runTagFiles(ctx: V2HandlerContext) {
       })),
     );
     try {
-      if (tags.attachMany) {
-        tags.attachMany(entries);
+      const outcome = tags.attachMany ? tags.attachMany(entries) : undefined;
+      if (outcome) {
+        inserted += outcome.inserted;
+        upgraded += outcome.upgraded;
+        ignored += outcome.ignored;
+        attached += outcome.inserted + outcome.upgraded;
       } else {
-        for (const entry of entries) {
-          tags.attach(entry.fileId, entry.tagId, entry.origin);
+        if (!tags.attachMany) {
+          for (const entry of entries) {
+            tags.attach(entry.fileId, entry.tagId, entry.origin);
+          }
         }
+        inserted += entries.length;
+        attached += entries.length;
       }
-      attached += entries.length;
       tagged += batch.length;
     } catch (error) {
       if (isV2JobCancellation(error)) throw error;
@@ -512,6 +529,9 @@ export async function runTagFiles(ctx: V2HandlerContext) {
   const result = {
     tagged,
     attached,
+    inserted,
+    upgraded,
+    ignored,
     skipped,
     missing,
     failedFiles,
@@ -794,6 +814,121 @@ export async function runDownloadModel(ctx: V2HandlerContext) {
   } satisfies AutoTagV2DownloadModelResult);
 }
 
+/**
+ * Semantic classification completion state (#286).
+ *
+ * A file is "complete" only once its vector, its semantic attachments, and a
+ * record here have all been written, in that order. The record makes the file
+ * explicitly done instead of inferring completion from a stored vector: a
+ * vector left by an interrupted run is therefore reprocessed, never skipped
+ * forever. Records are keyed to the approved vocabulary (`vocabularyKey`), so
+ * approving a new tag re-runs classification instead of silently ignoring it,
+ * and the queue is capped and byte-pruned like the candidate queue (#288) —
+ * a pruned record only costs a later rerun, never correctness.
+ */
+export const SEMANTIC_CLASSIFICATION_KEY = "semantic-classifications";
+export const MAX_RETAINED_CLASSIFICATIONS = 200;
+export const MAX_CLASSIFICATION_STATE_BYTES = 16 * 1024;
+
+export type SemanticClassificationRecord = {
+  fileId: string;
+  /** The semantic tag ids committed for this file, for a future consistency check. */
+  tagIds: string[];
+};
+
+type SemanticClassificationState = {
+  records: SemanticClassificationRecord[];
+  /** The approved vocabulary the records were computed against. */
+  vocabularyKey: string;
+  /** How many records an earlier retention pass dropped. */
+  dropped: number;
+};
+
+function isClassificationRecord(entry: unknown): entry is SemanticClassificationRecord {
+  return (
+    isRecordValue(entry) &&
+    typeof entry.fileId === "string" &&
+    Array.isArray(entry.tagIds) &&
+    entry.tagIds.every((id) => typeof id === "string")
+  );
+}
+
+function normalizeClassificationState(raw: unknown): SemanticClassificationState {
+  const list = Array.isArray(raw)
+    ? raw
+    : isRecordValue(raw) && Array.isArray(raw.records)
+      ? raw.records
+      : [];
+  const records = list
+    .filter(isClassificationRecord)
+    .map((entry) => ({ fileId: entry.fileId, tagIds: [...entry.tagIds] }));
+  const vocabularyKey =
+    isRecordValue(raw) && typeof raw.vocabularyKey === "string" ? raw.vocabularyKey : "";
+  const dropped =
+    isRecordValue(raw) && typeof raw.dropped === "number" ? Math.max(0, Math.floor(raw.dropped)) : 0;
+  return { records, vocabularyKey, dropped };
+}
+
+/** Stable signature of the approved vocabulary; a rename or new tag changes it. */
+function vocabularyKeyOf(vocabulary: Array<{ id: string; name: string }>): string {
+  return vocabulary
+    .map((tag) => `${tag.id}:${tag.name}`)
+    .sort()
+    .join("|");
+}
+
+/** Keep the newest records within the count and byte bounds, counting the rest. */
+function retainClassifications(state: SemanticClassificationState): SemanticClassificationState {
+  const ordered = state.records;
+  const kept = ordered.slice(Math.max(0, ordered.length - MAX_RETAINED_CLASSIFICATIONS));
+  let dropped = state.dropped + (ordered.length - kept.length);
+  while (kept.length > 1 && serializeBytes(kept) > MAX_CLASSIFICATION_STATE_BYTES) {
+    kept.shift();
+    dropped += 1;
+  }
+  return { records: kept, vocabularyKey: state.vocabularyKey, dropped };
+}
+
+/** Fold one completed file into the state, resetting it when the vocabulary changed. */
+function mergeClassification(
+  state: SemanticClassificationState,
+  vocabularyKey: string,
+  record: SemanticClassificationRecord,
+): SemanticClassificationState {
+  const base = state.vocabularyKey === vocabularyKey ? state.records : [];
+  const records = base.filter((entry) => entry.fileId !== record.fileId);
+  records.push({ fileId: record.fileId, tagIds: [...record.tagIds] });
+  return retainClassifications({ records, vocabularyKey, dropped: state.dropped });
+}
+
+function completedClassifications(ctx: V2HandlerContext, vocabularyKey: string): Set<string> {
+  const state = normalizeClassificationState(
+    ctx.operations.state.read(SEMANTIC_CLASSIFICATION_KEY),
+  );
+  return state.vocabularyKey === vocabularyKey
+    ? new Set(state.records.map((entry) => entry.fileId))
+    : new Set();
+}
+
+async function recordClassification(
+  ctx: V2HandlerContext,
+  vocabularyKey: string,
+  record: SemanticClassificationRecord,
+): Promise<void> {
+  await ctx.operations.state.update(SEMANTIC_CLASSIFICATION_KEY, (current) =>
+    mergeClassification(normalizeClassificationState(current), vocabularyKey, record),
+  );
+}
+
+/** Drop every completion when the semantic attachments they described are removed. */
+async function clearClassifications(ctx: V2HandlerContext): Promise<void> {
+  await ctx.operations.state.update(SEMANTIC_CLASSIFICATION_KEY, () => ({
+    records: [],
+    vocabularyKey: "",
+    dropped: 0,
+  }));
+}
+
 async function runSemanticBatch(
   ctx: V2HandlerContext,
   live: LiveTagFile[],
@@ -820,6 +955,14 @@ async function runSemanticBatch(
       "There are no approved tags to classify against; promote a candidate first.",
     );
   }
+  const vocabularyKey = vocabularyKeyOf(vocabulary);
+  // Resume: a file whose classification committed against this same
+  // vocabulary is skipped, whether or not its vector is present. A vector
+  // without a completion record is reprocessed, so an interruption never
+  // leaves a file skipped forever (#286).
+  const completed = completedClassifications(ctx, vocabularyKey);
+  const pending = live.filter((file) => !completed.has(file.fileId));
+  const alreadyClassified = live.length - pending.length;
   const prompts = vocabulary.map((tag) => clapPrompt(tag.name));
   const textVecs = await analysis.embedTexts(prompts);
   const known = new Map(vocabulary.map((tag) => [tag.name, tag.id]));
@@ -832,7 +975,9 @@ async function runSemanticBatch(
   const failedFiles: string[] = [];
   const failedReasons: string[] = [];
   let tagged = 0;
-  let attached = 0;
+  let inserted = 0;
+  let upgraded = 0;
+  let ignored = 0;
   let done = 0;
   const staged: Array<{
     file: LiveTagFile;
@@ -841,13 +986,8 @@ async function runSemanticBatch(
     candidate?: { label: string; confidence: number };
   }> = [];
 
-  for (const file of live) {
-    try {
-      ctx.operations.jobs.throwIfCancelled();
-    } catch (error) {
-      if (isV2JobCancellation(error)) throw error;
-      throw error;
-    }
+  for (const file of pending) {
+    ctx.operations.jobs.throwIfCancelled();
     try {
       const audio = await analysis.embedAudio(file.fileId);
       const ranked = rankLabels(audio.vec, vocabulary.map((tag) => tag.name), textVecs);
@@ -870,22 +1010,44 @@ async function runSemanticBatch(
       failedReasons.push(`"${file.filename}": ${error instanceof Error ? error.message : String(error)}`);
     }
     done += 1;
-    ctx.operations.jobs.reportProgress(done, live.length);
+    ctx.operations.jobs.reportProgress(done, pending.length);
   }
 
-  // Cancellation is all-or-nothing for this submitted batch. Inference is
-  // staged in memory, then one synchronous commit section applies it with no
-  // await or cancellation yield between the first and last write.
+  // Commit per file so an interruption leaves a prefix of fully committed
+  // files and an explicit, resumable remainder: the vector lands first, then
+  // the semantic attachments in one transaction, then the completion record.
+  // A throw between any two leaves the file unmarked, so it reruns instead of
+  // looking fully tagged (or fully untagged). Completed files are never
+  // rewritten, so a stored confidence cannot drift from its vector.
   ctx.operations.jobs.throwIfCancelled();
   for (const entry of staged) {
+    ctx.operations.jobs.throwIfCancelled();
     embeddings.store(entry.file.fileId, CLAP_MODEL_ID, entry.vec);
-    if (entry.tags.length === 0) skipped.push(entry.file.filename);
-    else tagged += 1;
-    for (const attachment of entry.tags) {
-      tags.attach(entry.file.fileId, attachment.tagId, "semantic_ai", attachment.confidence);
-      attached += 1;
+    if (entry.tags.length > 0) {
+      const writes = entry.tags.map((attachment) => ({
+        fileId: entry.file.fileId,
+        tagId: attachment.tagId,
+        origin: "semantic_ai" as const,
+        confidence: attachment.confidence,
+      }));
+      const outcome = tags.attachMany ? tags.attachMany(writes) : undefined;
+      if (outcome) {
+        inserted += outcome.inserted;
+        upgraded += outcome.upgraded;
+        ignored += outcome.ignored;
+      } else {
+        inserted += writes.length;
+      }
+      tagged += 1;
+    } else {
+      skipped.push(entry.file.filename);
     }
+    await recordClassification(ctx, vocabularyKey, {
+      fileId: entry.file.fileId,
+      tagIds: entry.tags.map((attachment) => attachment.tagId),
+    });
   }
+  const attached = inserted + upgraded;
 
   await mergeCandidatesAtomic(
     ctx,
@@ -924,6 +1086,10 @@ async function runSemanticBatch(
   return {
     tagged,
     attached,
+    inserted,
+    upgraded,
+    ignored,
+    alreadyClassified,
     skipped,
     missing,
     failedFiles,
@@ -975,6 +1141,14 @@ export type AutoTagV2DownloadModelResult = {
 export type AutoTagV2TagSemanticResult = {
   tagged: number;
   attached: number;
+  /** Semantic attachments created by this run (#286). */
+  inserted: number;
+  /** Existing semantic attachments whose confidence changed. */
+  upgraded: number;
+  /** Attempted writes a stronger stored origin turned away. */
+  ignored: number;
+  /** Files skipped because classification already committed against this vocabulary. */
+  alreadyClassified: number;
   skipped: string[];
   missing: string[];
   failedFiles: string[];
@@ -1397,6 +1571,12 @@ export async function runRemoveByOrigin(ctx: V2HandlerContext) {
     throw new V2OperationError("input-invalid", "Choose deterministic or semantic AI attachments.");
   }
   const removed = extendedOperationsOf(ctx).tags.detachByOrigin(input.origin);
+  // Removing the semantic attachments removes the provenance the completion
+  // records attest to, so drop them: the next classification run then
+  // re-derives them instead of skipping files whose tags are gone (#286).
+  if (input.origin === "semantic_ai") {
+    await clearClassifications(ctx);
+  }
   await recordCoverageAtBoundary(ctx);
   return immediateV2Result({ origin: input.origin, removed });
 }

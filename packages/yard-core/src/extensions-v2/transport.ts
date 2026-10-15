@@ -448,7 +448,10 @@ export function handleV2HttpJobList(
 
 /**
  * Request cancellation. Idempotent: cancelling a terminal job returns
- * its current record; only live jobs move.
+ * its current record, and a repeated request while already
+ * `cancellation-requested` returns the same record without moving the
+ * request time. The stop time appears only once the runner has unwound,
+ * so a client never sees work reported stopped while it still writes.
  */
 export function handleV2HttpJobCancel(
   reader: V2JobStatusReader,

@@ -12,6 +12,8 @@ Extension settings and workflow state are namespaced by the host; extension code
 
 Update 2026-10-15 (#314). Submission and history are durable server-side. An idempotency key is bound to a digest of the payload it first created, so a resubmission after a lost response returns the existing job while a reused key with a changed payload is rejected (`idempotency-conflict`, 409). The job snapshot commits through the settings-state ports; a failed write is recorded on the runtime and reported by the job routes (`persistence`), then retried on the next transition, request, or backoff tick instead of being swallowed.
 
+Update 2026-10-15 (#281). The renderer lifecycle is a durable job center that owns no job state: it reads the durable history and polls live jobs, so closing the starting dialog, reloading, or reopening the application reconnects to an active or terminal job. Cancellation is idempotent — a repeated request while already stopping returns the same record and does not move the request time — and work is reported stopped only once the runner has unwound. Success, failure, cancellation, and interruption are distinct terminal outcomes with their bounded diagnostics, and partial output is reported separately so an early stop is not shown as a clean success.
+
 ## Consequences
 
 - Cancellation is cooperative: extension code observes the signal, the host records request vs stop. A timeout cannot forcibly stop in-process JavaScript, and a job is never reported stopped while still writing.

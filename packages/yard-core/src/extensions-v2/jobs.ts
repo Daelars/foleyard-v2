@@ -503,6 +503,10 @@ export class V2JobManager implements V2JobStatusReader {
     const entry = this.entries.get(jobId);
     if (!entry) return null;
     if (isTerminal(entry.record.state)) return { ...entry.record };
+    // Idempotent while already stopping: the first request time is the
+    // audit point, and a job that has not unwound is never reported
+    // stopped, so a repeated request returns the same record unchanged.
+    if (entry.record.state === "cancellation-requested") return { ...entry.record };
     const now = this.clock();
     if (entry.record.state === "queued") {
       entry.record = {

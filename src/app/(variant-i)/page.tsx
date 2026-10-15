@@ -19,6 +19,7 @@ import { V3SelectionActions } from "./components/extensions/selection-actions";
 import { V3ExtensionsSection } from "./components/extensions/settings-section";
 import { V3ToolsCards } from "./components/extensions/tools-cards";
 import { V3ExtensionSidebarPanels } from "./components/extensions/sidebar-panels";
+import { V2JobCenter } from "@/components/extensions-v2/job-center";
 import { V3SearchField } from "./components/search-field";
 import { getAvailableCapabilityIds } from "@/lib/capabilities";
 import { useDesktopApp } from "@/lib/desktop";
@@ -961,6 +962,7 @@ function AppV3Content() {
           {showExtensionsView ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
               <V3ExtensionGrid>
+                <V2JobCenter />
                 <V3ToolsCards
                   onRunExtension={runV2Extension}
                   onEnabledToggle={() => v2Catalog.refresh()}

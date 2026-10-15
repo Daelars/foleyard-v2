@@ -114,6 +114,7 @@ Routes (all under `src/app/api/extensions-v2/`, envelopes
 | `/api/extensions-v2/execute` | POST | immediate or reviewed execution |
 | `/api/extensions-v2/plans/:planId` | GET | review a prepared plan |
 | `/api/extensions-v2/plans/:planId/apply` | POST | apply a reviewed plan |
+| `/api/extensions-v2/plans/:planId/job` | POST | run a reviewed plan as a background job (202) |
 | `/api/extensions-v2/jobs` | POST / GET | submit work (202) / poll history |
 | `/api/extensions-v2/jobs/:jobId` | GET | poll one job |
 | `/api/extensions-v2/jobs/:jobId/cancel` | POST | request cancellation |
@@ -132,7 +133,9 @@ Limits: 256 KiB body, 64 KiB input, 500 selection IDs. Status map:
 
 Handlers see an engine-owned `runMode`: `direct` previews without
 side effects, `apply` runs after a reviewed plan, `job` runs in the
-background. Handlers never branch on client input flags.
+background. Handlers never branch on client input flags; a plan-bound
+job receives the same stored `plan` (targets and options) that apply
+does.
 
 ### Permissions and operation services
 
@@ -181,7 +184,13 @@ of snapshot writes. Batched writes through the tag operation
 Plans (`vplan_` IDs) bind extension, command, validated
 targets/options, authorization context, expiry, and invocation.
 Single use, 15-minute default TTL capped at 1 hour. Apply revalidates
-targets, grants, permissions, and availability.
+targets, grants, permissions, and availability. A reviewed plan can
+also run as a background job
+(`POST /api/extensions-v2/plans/:planId/job`) that executes the stored
+target IDs and order and the stored options — never a source or option
+re-resolved after review — and consumes the plan so one review starts
+at most one export. Any changed Shelf, Recent source, pack option, or
+destination makes the echo differ and rejects with `plan-altered`.
 
 Settings are author-declared and validated with reset semantics.
 Workflow state is versioned with transactional migrations; a failed
@@ -357,6 +366,10 @@ curl -X POST /api/extensions-v2/jobs \
   -d '{"extensionId":"make-pack-v2","commandId":"make-pack-v2.from-shelf","input":{"grantId":"<grant>"}}'
 curl '/api/extensions-v2/jobs/<jobId>'
 curl -X POST '/api/extensions-v2/jobs/<jobId>/cancel'
+# Or run a reviewed plan so the job executes exactly what was reviewed:
+curl -X POST '/api/extensions-v2/plans/<planId>/job' \
+  -H 'Content-Type: application/json' \
+  -d '{"targets":{"fileIds":["a","b"]},"options":{"grantId":"<grant>"}}'
 ```
 
 Expected: submit returns 202 with a `vjob_` ID; status polls show
@@ -365,9 +378,12 @@ succeeded job's declared result is bounded and returned as
 `job.result.value`, while a failed or cancelled job returns a bounded,
 redacted `job.result.diagnostic`; cancel moves running work to
 cancellation-requested and settles cancelled after owned cleanup.
-Duplicate invocation keys return the existing job. Reload-safe: poll by
-ID after reconnect. Provenance: API v2 jobs, app `jobs.ts` with
-settings-table snapshot persistence.
+Duplicate invocation keys return the existing job. The
+`/plans/:planId/job` route echoes the review's targets/options
+byte-identically and rejects a changed plan with `plan-altered`, so the
+job runs the reviewed targets and order rather than a re-resolved
+source. Reload-safe: poll by ID after reconnect. Provenance: API v2
+jobs, app `jobs.ts` with settings-table snapshot persistence.
 
 ### 8. Subscribe to events
 

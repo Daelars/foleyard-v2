@@ -32,6 +32,7 @@ import {
 import {
   V2PlanManager,
   type V2AppliedPlan,
+  type V2PlanRecord,
   type V2PlanReview,
 } from "./plans";
 import {
@@ -158,7 +159,7 @@ function fail(
   message: string,
   request: V2ExecuteRequest,
   invocationId?: string,
-): V2ExecutionResult {
+): V2Failure {
   const failure: V2Failure = {
     ok: false,
     code,
@@ -705,6 +706,135 @@ export class ExtensionV2Host {
   }
 
   /**
+   * Shared revalidation for every reviewed execution: immediate apply and
+   * a plan-bound background job both run the stored plan's own targets and
+   * options after this passes. Ownership, enablement, effective
+   * permissions, destination grants, Library target liveness, and
+   * availability are recomputed from the record, so a source, option, or
+   * destination that changed after review can never redirect or widen the
+   * plan. Returns the resolved records, the effective set, and the handler
+   * to run, or the typed failure to return without executing.
+   */
+  private preparePlanExecution(
+    record: V2PlanRecord,
+  ):
+    | {
+        ok: true;
+        definition: ExtensionV2Definition;
+        command: ExtensionV2Command;
+        handler: V2CommandHandler;
+        resolved: IndexedAudioFile[];
+        effective: string[];
+      }
+    | { ok: false; result: V2Failure } {
+    const request: V2ExecuteRequest = {
+      extensionId: record.extensionId,
+      commandId: record.commandId,
+    };
+    const ownership = resolveV2Ownership(
+      this.services.registry,
+      record.extensionId,
+      record.commandId,
+    );
+    if (!ownership.ok) return { ok: false, result: ownership.failure };
+    const { definition, command } = ownership;
+
+    if (!this.services.isEnabled(record.extensionId)) {
+      return {
+        ok: false,
+        result: fail(
+          "extension-disabled",
+          `Extension "${definition.name}" is disabled; enable it to apply this plan.`,
+          request,
+        ),
+      };
+    }
+
+    const granted = grantedList(this.services.grantedPermissions(record.extensionId));
+    const effective = computeEffectiveV2Permissions(definition.permissions, granted);
+    const effectiveSet = new Set<string>(effective);
+    const lapsed = record.requiredPermissions.filter((permission) => !effectiveSet.has(permission));
+    if (lapsed.length > 0) {
+      return {
+        ok: false,
+        result: fail(
+          "permission-denied",
+          `Plan "${record.planId}" needs ${lapsed.map((permission) => `"${permission}"`).join(", ")} but approval lapsed since review; re-approve and prepare a new plan.`,
+          request,
+        ),
+      };
+    }
+
+    if (this.services.authorizeGrant) {
+      for (const grantId of record.grantIds) {
+        const authorized = this.services.authorizeGrant(grantId, record.extensionId);
+        if (!authorized.ok) {
+          return {
+            ok: false,
+            result: fail(
+              "permission-denied",
+              `Plan "${record.planId}" needs destination grant "${grantId}" again: ${authorized.message}`,
+              request,
+            ),
+          };
+        }
+      }
+    }
+
+    const resolved = this.services.ports.getFilesByIds(record.targets.fileIds);
+    const byId = new Map(resolved.map((file) => [file.id, file]));
+    const changed = record.targets.fileIds.filter((id) => {
+      const file = byId.get(id);
+      return !file || !isOwnedAudioFile(file);
+    });
+    if (changed.length > 0) {
+      return {
+        ok: false,
+        result: fail(
+          "plan-altered",
+          `Plan "${record.planId}" targets changed since review (${changed.length} sound(s) left the Library index); refresh the preview and prepare a new plan.`,
+          request,
+        ),
+      };
+    }
+
+    const availability = evaluateV2SnapshotAvailability(
+      definition,
+      command,
+      { fileIds: record.targets.fileIds },
+      record.options,
+      {
+        enabled: true,
+        capabilities: this.services.capabilities,
+        grantedPermissions: granted,
+      } satisfies V2AvailabilityState,
+    );
+    if (!availability.available) {
+      return {
+        ok: false,
+        result: fail(
+          availabilityFailureCode(availability.code) as V2FailureCode,
+          availability.reason,
+          request,
+        ),
+      };
+    }
+
+    const handler = this.handlers.get(`${record.extensionId} ${record.commandId}`);
+    if (!handler) {
+      return {
+        ok: false,
+        result: fail(
+          "handler-missing",
+          `Command "${record.commandId}" has no registered handler; the extension needs an update.`,
+          request,
+        ),
+      };
+    }
+    return { ok: true, definition, command, handler, resolved, effective };
+  }
+
+  /**
    * Apply a reviewed plan (R5).
    *
    * Revalidates everything prepare bound: unknown/consumed/expired
@@ -748,84 +878,9 @@ export class ExtensionV2Host {
       throw error;
     }
 
-    const ownership = resolveV2Ownership(this.services.registry, record.extensionId, record.commandId);
-    if (!ownership.ok) return ownership.failure;
-    const { definition, command } = ownership;
-
-    if (!this.services.isEnabled(record.extensionId)) {
-      return fail(
-        "extension-disabled",
-        `Extension "${definition.name}" is disabled; enable it to apply this plan.`,
-        request,
-      );
-    }
-
-    const granted = grantedList(this.services.grantedPermissions(record.extensionId));
-    const effective = computeEffectiveV2Permissions(definition.permissions, granted);
-    const effectiveSet = new Set<string>(effective);
-    const lapsed = record.requiredPermissions.filter((permission) => !effectiveSet.has(permission));
-    if (lapsed.length > 0) {
-      return fail(
-        "permission-denied",
-        `Plan "${planId}" needs ${lapsed.map((permission) => `"${permission}"`).join(", ")} but approval lapsed since review; re-approve and prepare a new plan.`,
-        request,
-      );
-    }
-
-    if (this.services.authorizeGrant) {
-      for (const grantId of record.grantIds) {
-        const authorized = this.services.authorizeGrant(grantId, record.extensionId);
-        if (!authorized.ok) {
-          return fail(
-            "permission-denied",
-            `Plan "${planId}" needs destination grant "${grantId}" again: ${authorized.message}`,
-            request,
-          );
-        }
-      }
-    }
-
-    const resolved = this.services.ports.getFilesByIds(record.targets.fileIds);
-    const byId = new Map(resolved.map((file) => [file.id, file]));
-    const changed = record.targets.fileIds.filter((id) => {
-      const file = byId.get(id);
-      return !file || !isOwnedAudioFile(file);
-    });
-    if (changed.length > 0) {
-      return fail(
-        "plan-altered",
-        `Plan "${planId}" targets changed since review (${changed.length} sound(s) left the Library index); refresh the preview and prepare a new plan.`,
-        request,
-      );
-    }
-
-    const availability = evaluateV2SnapshotAvailability(
-      definition,
-      command,
-      { fileIds: record.targets.fileIds },
-      record.options,
-      {
-        enabled: true,
-        capabilities: this.services.capabilities,
-        grantedPermissions: granted,
-      } satisfies V2AvailabilityState,
-    );
-    if (!availability.available) {
-      return fail(
-        availabilityFailureCode(availability.code) as V2FailureCode,
-        availability.reason,
-        request,
-      );
-    }
-
-    const handler = this.handlers.get(`${record.extensionId} ${record.commandId}`);
-    if (!handler) {
-      return fail(
-        "handler-missing",
-        `Command "${record.commandId}" has no registered handler; the extension needs an update.`,
-        request,
-      );
-    }
+    const prepared = this.preparePlanExecution(record);
+    if (!prepared.ok) return prepared.result;
+    const { definition, command, handler, resolved, effective } = prepared;
 
     // Execution starts here: consume first so a duplicate apply reports
     // `plan-consumed` instead of running twice.
@@ -888,6 +943,151 @@ export class ExtensionV2Host {
       }
     }
     return { ok: true, outcome: { kind: "immediate", invocationId: invocation.invocationId, value: produced.value } };
+  }
+
+  /**
+   * Start a reviewed plan as a host-owned background job (R5 + R4).
+   *
+   * The job runs the stored plan's exact targets and options — the same
+   * binding `applyPlan` uses — so a Shelf, Recent source, pack option, or
+   * destination that changed after review can never widen or redirect the
+   * plan. A mismatched echo rejects with `plan-altered`, lapsed grants and
+   * permissions reject, and target liveness is rechecked against exactly
+   * the reviewed file IDs. The plan is consumed when the job is accepted,
+   * so one review can start at most one export; a retry re-reviews.
+   */
+  async submitPlanJob(
+    planId: string,
+    echoed: { targets?: unknown; options?: unknown },
+  ): Promise<V2ExecutionResult> {
+    const peeked = this.plans.peek(planId);
+    if (!peeked) {
+      return {
+        ok: false,
+        code: "plan-unknown",
+        message: `Plan "${planId}" is unknown; it may have expired, been evicted, or belonged to a restarted process. Prepare a new plan.`,
+      };
+    }
+    let record: V2PlanRecord;
+    try {
+      record = this.plans.checkForApply(planId, peeked.extensionId, echoed);
+    } catch (error) {
+      if (error instanceof V2OperationError) {
+        return {
+          ok: false,
+          code: error.failureCode,
+          message: error.message,
+          invocationId: peeked.invocationId,
+          extensionId: peeked.extensionId,
+          commandId: peeked.commandId,
+        };
+      }
+      throw error;
+    }
+
+    const prepared = this.preparePlanExecution(record);
+    if (!prepared.ok) return prepared.result;
+    const { definition, command, handler, resolved, effective } = prepared;
+
+    // Consume before queuing: the review is single-use, so one plan can
+    // never start two exports even when two submits race the queue.
+    this.plans.markConsumed(planId);
+
+    const invocation: V2Invocation = {
+      invocationId: createV2InvocationId(),
+      extensionId: record.extensionId,
+      commandId: record.commandId,
+      input: record.options,
+      selection: { fileIds: record.targets.fileIds },
+      requestedAt: new Date().toISOString(),
+    };
+    const checked: Extract<V2Preflight, { ok: true }> = {
+      ok: true,
+      invocation,
+      definition,
+      command,
+      selection: { fileIds: record.targets.fileIds },
+      files: resolved.filter((file) => record.targets.fileIds.includes(file.id)),
+      effective,
+    };
+    const plan: V2AppliedPlan = {
+      planId: record.planId,
+      targets: { fileIds: [...record.targets.fileIds] },
+      options: record.options,
+      ...(record.reviewedAt ? { reviewedAt: record.reviewedAt } : {}),
+    };
+    const gate = (): string | null =>
+      this.services.isEnabled(record.extensionId)
+        ? null
+        : `Extension "${definition.name}" is disabled; enable it to run "${command.title}".`;
+
+    let submitted: { record: V2JobRecord; duplicate: boolean };
+    try {
+      submitted = this.jobs.submit({
+        extensionId: record.extensionId,
+        commandId: record.commandId,
+        invocationId: invocation.invocationId,
+        ...(command.result !== undefined ? { resultSchema: command.result } : {}),
+        gate,
+        run: async (context) => {
+          const operations = this.operationsFor(checked, context.reporter);
+          let produced: V2HandlerResult;
+          try {
+            produced = await handler(this.handlerContext(checked, operations, plan, "job"));
+          } catch (error) {
+            if (error instanceof V2OperationError) {
+              const completion: V2JobCompletion = {
+                error: { code: error.failureCode, message: error.message },
+              };
+              return completion;
+            }
+            throw error;
+          }
+          if (produced.kind === "review-required" || produced.kind === "job") {
+            const completion: V2JobCompletion = {
+              error: {
+                code: "result-invalid",
+                message: `Command "${command.title}" returned "${produced.kind}" inside a job; jobs complete with immediate values.`,
+              },
+            };
+            return completion;
+          }
+          if (command.result !== undefined) {
+            const invalid = validateV2Value(command.result, produced.value, "result");
+            if (invalid) {
+              const completion: V2JobCompletion = {
+                error: {
+                  code: "result-invalid",
+                  message: `Command "${command.title}" produced an invalid result: ${invalid}`,
+                },
+              };
+              return completion;
+            }
+          }
+          return { value: produced.value, outputs: operations.workspace.ownedPaths() };
+        },
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        code: "extension-disabled",
+        message: error instanceof Error ? error.message : String(error),
+        invocationId: invocation.invocationId,
+        extensionId: record.extensionId,
+        commandId: record.commandId,
+      };
+    }
+    const state = submitted.record.state === "running" ? "running" : "queued";
+    return {
+      ok: true,
+      outcome: {
+        kind: "job",
+        invocationId: submitted.record.invocationId,
+        jobId: submitted.record.jobId,
+        state,
+        ...(submitted.duplicate ? { duplicate: true as const } : {}),
+      },
+    };
   }
 
   getJob(jobId: string): V2JobRecord | null {

@@ -79,6 +79,11 @@ export function v2PlanApplyRoute(planId: string): string {
   return `${V2_ROUTES.plans}/${planId}/apply`;
 }
 
+/** Start a reviewed plan as a background job. */
+export function v2PlanJobRoute(planId: string): string {
+  return `${V2_ROUTES.plans}/${planId}/job`;
+}
+
 /** Job polling routes derived from a job ID. */
 export function v2JobStatusRoute(jobId: string): string {
   return `${V2_ROUTES.jobs}/${jobId}`;
@@ -361,6 +366,40 @@ export async function handleV2HttpPlanApply(
   const body = rawBody as Record<string, unknown>;
   return encodeV2Result(
     await host.applyPlan(planId, {
+      ...(body.targets !== undefined ? { targets: body.targets } : {}),
+      ...(body.options !== undefined ? { options: body.options } : {}),
+    }),
+  );
+}
+
+/**
+ * Start a reviewed plan as a background job. The body echoes `{ targets,
+ * options }` exactly as review returned them; missing or differing echoes
+ * reject with `plan-altered`, so the job runs the reviewed plan rather
+ * than a re-derived source. Success returns 202 with a job outcome.
+ */
+export async function handleV2HttpPlanJobSubmit(
+  host: ExtensionV2Host,
+  planId: string,
+  rawBody: unknown,
+): Promise<V2HttpResponse> {
+  if (!planId.trim()) {
+    return encodeV2Failure({
+      ok: false,
+      code: "plan-unknown",
+      message: "Plan ID must be a non-empty string.",
+    });
+  }
+  if (typeof rawBody !== "object" || rawBody === null || Array.isArray(rawBody)) {
+    return encodeV2Failure({
+      ok: false,
+      code: "plan-altered",
+      message: "Job submit body must be a JSON object echoing the review's targets and options.",
+    });
+  }
+  const body = rawBody as Record<string, unknown>;
+  return encodeV2Result(
+    await host.submitPlanJob(planId, {
       ...(body.targets !== undefined ? { targets: body.targets } : {}),
       ...(body.options !== undefined ? { options: body.options } : {}),
     }),

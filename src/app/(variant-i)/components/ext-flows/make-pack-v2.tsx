@@ -381,7 +381,7 @@ export function V3MakePackV2Dialog({
           <div className="flex items-center gap-2 rounded-lg border border-dashed border-[var(--vi-edge)] bg-white/[0.02] p-3">
             <PackagePlus className="size-4 text-zinc-500" />
             <p className="text-xs text-zinc-400">
-              Preview the pack, choose a destination, then start the job.
+              Choose a destination, preview the pack, then start the job.
             </p>
           </div>
         ) : null}

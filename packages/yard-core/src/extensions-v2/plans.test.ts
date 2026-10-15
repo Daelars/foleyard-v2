@@ -6,6 +6,7 @@ import {
   ExtensionV2Registry,
   handleV2HttpPlanApply,
   handleV2HttpPlanGet,
+  handleV2HttpPlanJobSubmit,
   immediateV2Result,
   reviewV2Result,
   V2_EXTENSION_API_VERSION,
@@ -528,6 +529,61 @@ describe("prepare/review/apply", () => {
   });
 });
 
+describe("plan-bound jobs", () => {
+  it("runs the reviewed plan as a job, then rejects a replay", async () => {
+    const { host, grantId } = fixtureWorld();
+    const executed = await host.execute({
+      extensionId: EXTENSION_ID,
+      commandId: PREVIEW_COMMAND,
+      input: input(grantId),
+      selection: { fileIds: ["a", "b"] },
+    });
+    if (!executed.ok || executed.outcome.kind !== "review-required") throw new Error("setup failed");
+    const reviewed = host.reviewPlan(executed.outcome.planId);
+    if (!reviewed.ok) throw new Error("setup failed");
+    const echo = { targets: reviewed.review.targets, options: reviewed.review.options };
+
+    const submitted = await host.submitPlanJob(executed.outcome.planId, echo);
+    expect(submitted.ok).toBe(true);
+    if (!submitted.ok || submitted.outcome.kind !== "job") throw new Error("expected a job outcome");
+    const settled = await host.jobs.waitFor(submitted.outcome.jobId);
+    expect(settled.state).toBe("succeeded");
+    expect(settled.value).toEqual({ exported: 2 });
+
+    // One review starts at most one export.
+    const replay = await host.submitPlanJob(executed.outcome.planId, echo);
+    expect(replay.ok).toBe(false);
+    if (!replay.ok) expect(replay.code).toBe("plan-consumed");
+  });
+
+  it("rejects unknown plans and altered echoes without starting a job", async () => {
+    const { host, grantId } = fixtureWorld();
+    const unknown = await host.submitPlanJob("vplan_missing", {
+      targets: { fileIds: [] },
+      options: null,
+    });
+    expect(unknown.ok).toBe(false);
+    if (!unknown.ok) expect(unknown.code).toBe("plan-unknown");
+
+    const executed = await host.execute({
+      extensionId: EXTENSION_ID,
+      commandId: PREVIEW_COMMAND,
+      input: input(grantId),
+      selection: { fileIds: ["a", "b"] },
+    });
+    if (!executed.ok || executed.outcome.kind !== "review-required") throw new Error("setup failed");
+    const reviewed = host.reviewPlan(executed.outcome.planId);
+    if (!reviewed.ok) throw new Error("setup failed");
+    const altered = await host.submitPlanJob(executed.outcome.planId, {
+      targets: { fileIds: ["a"] },
+      options: reviewed.review.options,
+    });
+    expect(altered.ok).toBe(false);
+    if (!altered.ok) expect(altered.code).toBe("plan-altered");
+    expect(host.jobs.listJobs(null, 50).jobs).toHaveLength(0);
+  });
+});
+
 describe("plan transport codec", () => {
   it("reviews and applies over HTTP with documented statuses", async () => {
     const { host, grantId } = fixtureWorld();
@@ -561,5 +617,37 @@ describe("plan transport codec", () => {
       options: reviewBody.review.options,
     });
     expect(replay.status).toBe(400);
+  });
+
+  it("starts a reviewed plan as a 202 job and rejects an altered echo", async () => {
+    const { host, grantId } = fixtureWorld();
+    const executed = await host.execute({
+      extensionId: EXTENSION_ID,
+      commandId: PREVIEW_COMMAND,
+      input: input(grantId),
+      selection: { fileIds: ["a", "b"] },
+    });
+    if (!executed.ok || executed.outcome.kind !== "review-required") throw new Error("setup failed");
+    const planId = executed.outcome.planId;
+    const review = handleV2HttpPlanGet(host, planId);
+    const reviewBody = review.body as { review: { targets: unknown; options: unknown } };
+
+    const altered = await handleV2HttpPlanJobSubmit(host, planId, {
+      targets: { fileIds: ["a"] },
+      options: reviewBody.review.options,
+    });
+    expect(altered.status).toBe(400);
+    expect((altered.body as { error: { code: string } }).error.code).toBe("plan-altered");
+
+    const started = await handleV2HttpPlanJobSubmit(host, planId, {
+      targets: reviewBody.review.targets,
+      options: reviewBody.review.options,
+    });
+    expect(started.status).toBe(202);
+    const outcome = (started.body as { outcome: { kind: string; jobId: string } }).outcome;
+    expect(outcome.kind).toBe("job");
+    const settled = await host.jobs.waitFor(outcome.jobId);
+    expect(settled.state).toBe("succeeded");
+    expect(settled.value).toEqual({ exported: 2 });
   });
 });

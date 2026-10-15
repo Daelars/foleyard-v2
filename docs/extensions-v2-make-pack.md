@@ -45,9 +45,15 @@ engine only. The retired v1 Make Pack no longer runs.
    header. The dialog shows sources, names, output format,
    destination, conflicts, missing sources, and the manifest choice.
 3. Choose a destination with the folder picker (desktop) to mint a
-   destination grant. Unconfirmed plans never write.
-4. Start the job, watch per-file progress, cancel anytime. The
-   result lists output location, copied/skipped/failed counts with
+   destination grant, then preview. The review is bound to the
+   destination, the source IDs and order, and the pack options;
+   unconfirmed plans never write.
+4. Start the job, watch per-file progress, cancel anytime. The job
+   runs the exact reviewed plan — the reviewed target IDs and order
+   and the reviewed options — so a Shelf, Recent source, pack option,
+   or destination that changed after preview invalidates the review
+   and requires a new preview instead of silently re-deriving one.
+   The result lists output location, copied/skipped/failed counts with
    reasons, and an Open destination action on desktop.
 
 ### Run it from HTTP
@@ -61,9 +67,12 @@ curl -X POST /api/extensions-v2/execute \
 
 Expected: availability reports ready with reasons when blocked;
 execute previews without side effects and returns a review plan
-through the preview channel. Apply the plan or submit the same
-command to `/api/extensions-v2/jobs` for background export with
-progress and cancellation.
+through the preview channel. Apply the plan, or start it as a
+background export with `POST /api/extensions-v2/plans/<planId>/job`
+echoing the review's targets and options for progress and
+cancellation. The job executes the reviewed plan exactly; a changed
+Shelf, Recent source, option, or destination rejects with
+`plan-altered`.
 
 ### Policies
 
@@ -78,6 +87,11 @@ progress and cancellation.
 - Cancellation removes job-owned partials and settles cancelled.
   Finished packs and unrelated destination contents are never
   deleted.
+- The dialog, review plan, and job are one bound operation: the job
+  runs the reviewed target IDs and order and the reviewed options
+  (destination included), and editing any reviewed field invalidates
+  the preview. Apply revalidates target liveness and the destination
+  grant before executing, without widening the reviewed set.
 - Limits: 500 entries, 1 MiB manifest text, ZIP32 (65,535 entries,
   4 GiB per entry/offset). ZIP integrity is verified with an
   independent reader in the integration suite.
@@ -110,6 +124,8 @@ progress and cancellation.
 - `src/lib/extensions-v2/{archive,sources,make-pack-v2}.ts`
 - `src/components/extensions/make-pack-v2/{MakePackV2Dialog,use-make-pack-v2}.tsx`
 - `src/test/integration/make-pack-v2.test.ts` — real-filesystem exports
+- `src/test/integration/extension-v2-plan-job.test.ts` — reviewed plan bound to the job
+- `src/test/integration/make-pack-v2-plan-binding.test.tsx` — dialog invalidation and plan-bound start
 
 ## Related documentation
 

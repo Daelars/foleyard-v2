@@ -12,9 +12,8 @@ mark sounds as used.
 
 ## Layout
 
-- `src/definition.ts` — v2 definition: id `drop-rules-v2`, four
-  commands (`.preview`, `.apply`, `.prepare-drag` drop scope;
-  `.open-settings` global), five settings, eight contributions
+- `src/definition.ts` — v2 definition: id `drop-rules-v2` (commands
+  under **Commands** below), five settings, eight contributions
   (palette ×4, drop-menu ×3, settings ×1). Permissions:
   `library:read`, `files:read`, `files:copy`, `files:write`,
   `drop:read`, `drop:modify`, `settings:read`. No
@@ -27,6 +26,15 @@ mark sounds as used.
   modes), prepare-drag (single-file staging), open-settings
   (immediate settings surface). No v1 imports, no direct filesystem
   access, no raw staging paths.
+
+## Commands
+
+The definition declares 4 commands:
+
+- `drop-rules-v2.preview` — plan output names for the dropped sounds; no side effects.
+- `drop-rules-v2.apply` — copy, rename and mark the dropped sounds used.
+- `drop-rules-v2.prepare-drag` — stage one sound for drag-out.
+- `drop-rules-v2.open-settings` — open the settings surface.
 
 ## Run-mode contract
 

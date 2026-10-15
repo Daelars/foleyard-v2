@@ -14,7 +14,7 @@ Each tool declares a manifest, commands, permissions, and settings against
 | `make-pack-v2` (`@foleyard/make-pack-v2`) | `make-pack-v2` | 3 — pack from selection/shelf/recent | `docs/extensions-v2.md`, `docs/commands.md` |
 | `drop-rules-v2` (`@foleyard/drop-rules-v2`) | `drop-rules-v2` | 4 — configure/preview/apply/prepare-drag | `docs/extensions-v2.md`, `docs/filesystem.md` |
 | `library-gatherer-v2` (`@foleyard/library-gatherer-v2`) | `library-gatherer-v2` | 2 — preview/gather | `docs/extensions-v2.md`, `docs/commands.md` |
-| `auto-tag-v2` (`@foleyard/auto-tag-v2`) | `auto-tag-v2` | 2 — preview/tag-files plus find-similar | `docs/extensions-v2.md` |
+| `auto-tag-v2` (`@foleyard/auto-tag-v2`) | `auto-tag-v2` | 17 — rule/semantic tagging, candidates, coverage, tag origins | `docs/extensions-v2.md`, `docs/commands.md` |
 
 All six v1 tools (Sound Shelf, Folder Janitor, Smart Collections, Make
 Pack, Drop Rules, Library Gatherer) retired to these v2 ports; see

@@ -10,9 +10,8 @@ before the v1 rows were deleted.
 
 ## Layout
 
-- `src/definition.ts` — v2 definition: id `make-pack-v2`, three
-  commands (`make-pack-v2.from-selection`, `.from-shelf`,
-  `.from-recent`), three settings (`make-pack-v2.pack-name`,
+- `src/definition.ts` — v2 definition: id `make-pack-v2` (commands
+  under **Commands** below), three settings (`make-pack-v2.pack-name`,
   `make-pack-v2.default-format`, `make-pack-v2.include-manifest`),
   seven contributions (palette ×3, file-context-menu, selection-actions,
   sidebar, settings). No `requiredCapabilities`: the host exposes server
@@ -25,6 +24,14 @@ before the v1 rows were deleted.
 - `src/handlers.ts` — command handlers. Every privileged effect runs
   through the invocation's v2 operation services. No v1 imports, no
   direct filesystem access, no guessed temporary filenames.
+
+## Commands
+
+The definition declares 3 commands:
+
+- `make-pack-v2.from-selection` — pack the current selection.
+- `make-pack-v2.from-shelf` — pack the Sound Shelf.
+- `make-pack-v2.from-recent` — pack recent sounds.
 
 ## Run-mode contract
 

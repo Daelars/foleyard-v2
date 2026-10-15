@@ -12,9 +12,9 @@ into one main Foleyard library.
 
 ## Layout
 
-- `src/definition.ts` — v2 definition: id `library-gatherer-v2`, two
-  commands (`.preview-gather`, `.gather`, global scope), two settings,
-  three contributions (palette ×2, settings). Permissions:
+- `src/definition.ts` — v2 definition: id `library-gatherer-v2`
+  (commands under **Commands** below), two settings, three
+  contributions (palette ×2, settings). Permissions:
   `library:read`, `library:write`, `files:read`, `files:copy`,
   `settings:read`, `settings:write`. No `requiredCapabilities`.
 - `src/policy.ts` — pure gather policy: audio-extension matching, flat
@@ -25,6 +25,13 @@ into one main Foleyard library.
   effects) and `gather` (source-copy op + library-mutation insert, job
   with progress and cancellation). No v1 imports, no direct filesystem
   imports, no recursive copy.
+
+## Commands
+
+The definition declares 2 commands:
+
+- `library-gatherer-v2.preview-gather` — plan the files a gather would copy; no side effects.
+- `library-gatherer-v2.gather` — copy the planned files into the destination library.
 
 ## Run-mode contract
 

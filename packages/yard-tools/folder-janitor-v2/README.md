@@ -12,9 +12,9 @@ unusual formats, and missing files, then clean up.
 
 ## Layout
 
-- `src/definition.ts` — v2 definition: id `folder-janitor-v2`, four
-  commands (`.scan-library`, `.scan-folder`, `.remove-files`,
-  `.delete-folders`), two settings, five contributions. Permissions:
+- `src/definition.ts` — v2 definition: id `folder-janitor-v2`
+  (commands under **Commands** below), two settings, five
+  contributions. Permissions:
   `library:read`, `library:write`, `files:read`, `files:delete`,
   `settings:read`, `settings:write`. No `requiredCapabilities`.
 - `src/policy.ts` — pure issue derivation from Library index metadata
@@ -24,6 +24,15 @@ unusual formats, and missing files, then clean up.
   walk), `remove-files` (index mutation), and the destructive
   `delete-folders` plan contract. No v1 imports, no `node:fs`, no
   recursive `rmdir`.
+
+## Commands
+
+The definition declares 4 commands:
+
+- `folder-janitor-v2.scan-library` — scan the whole Library for duplicate, empty, tiny, unusual and missing files.
+- `folder-janitor-v2.scan-folder` — scan one folder.
+- `folder-janitor-v2.remove-files` — mark selected index records removed.
+- `folder-janitor-v2.delete-folders` — delete empty folders (reviewed and confirmed).
 
 ## Run-mode contract
 

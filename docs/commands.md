@@ -19,6 +19,8 @@ There is no public command SDK and no external command source.
 
 - Each tool's `definition.ts` is the single source of command metadata;
   handlers live in the same package and run only through the v2 host.
+- `scripts/check-command-inventories.cjs` (CI) checks the bundled table
+  below and each package README's command list against those definitions.
 - `src/lib/commands.ts` is the single source of built-in palette actions
   (id, section, gate, title, action). The palette builder and the
   palette/shortcut dispatch both read it.

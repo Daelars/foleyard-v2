@@ -33,6 +33,7 @@
     "docs:prepare": "node scripts/prepare-docs.cjs",
     "docs:check": "node scripts/check-docs.cjs",
     "check:v2-boundaries": "node scripts/check-v2-boundaries.cjs",
+    "check:command-inventories": "node scripts/check-command-inventories.cjs",
     "example:v2-settings": "bun examples/extensions-v2/settings/run.ts"
   },
   "dependencies": {

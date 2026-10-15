@@ -14,10 +14,8 @@ semantic with its confidence.
 
 ## Layout
 
-- `src/definition.ts` — v2 definition: id `auto-tag-v2`, nine
-  commands (`.tag-files`, `.preview`, `.list-candidates`,
-  `.promote-candidate`, `.dismiss-candidate`, `.find-similar`,
-  `.clap-status`, `.download-model`, `.tag-semantic`). Permissions:
+- `src/definition.ts` — v2 definition: id `auto-tag-v2` (commands
+  under **Commands** below). Permissions:
   `library:read`, `files:read`, `tags:read`, `tags:write`,
   `settings:read`, `embeddings:read`, `embeddings:write`.
   No `requiredCapabilities`.
@@ -36,6 +34,28 @@ semantic with its confidence.
   dismiss-candidate (persisted dismissed set in extension state).
   Rule tags attach with the deterministic origin. No v1 imports, no
   direct filesystem access.
+
+## Commands
+
+The definition declares 17 commands:
+
+- `auto-tag-v2.tag-files` — tag the given sounds with the filename rules.
+- `auto-tag-v2.preview` — show what the rules would tag, without writing.
+- `auto-tag-v2.list-candidates` — list uncovered words with example files; nothing is created.
+- `auto-tag-v2.promote-candidate` — turn an uncovered word into a real tag and attach it.
+- `auto-tag-v2.dismiss-candidate` — remove an uncovered word from the candidate queue.
+- `auto-tag-v2.find-similar` — list the closest sounds by stored embeddings.
+- `auto-tag-v2.clap-status` — report whether the tagging model is downloaded and ready.
+- `auto-tag-v2.download-model` — download the tagging model, with confirmation.
+- `auto-tag-v2.tag-semantic` — tag sounds with model suggestions over the approved vocabulary.
+- `auto-tag-v2.coverage-history` — read recorded coverage snapshots, oldest first.
+- `auto-tag-v2.record-coverage` — append a coverage snapshot for trend charts.
+- `auto-tag-v2.coverage-summary` — aggregate full-Library tag coverage and page selected tags.
+- `auto-tag-v2.list-origins` — list files with attachment origins and origin counts.
+- `auto-tag-v2.latest-arrivals` — read the most recent Auto Tag arrival job and its rules.
+- `auto-tag-v2.remove-by-origin` — remove automatic tags without touching manual tags.
+- `auto-tag-v2.rename-tag` — rename a tag and keep the old name as an alias.
+- `auto-tag-v2.merge-tag` — move attachments into one canonical tag, preserving manual precedence.
 
 ## Run-mode contract
 

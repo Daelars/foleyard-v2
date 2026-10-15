@@ -13,8 +13,8 @@ appear automatically.
 
 ## Layout
 
-- `src/definition.ts` — v2 definition: id `smart-collections-v2`, one
-  command (`.save-search`, global scope), no settings, three
+- `src/definition.ts` — v2 definition: id `smart-collections-v2`
+  (command under **Commands** below), no settings, three
   contributions (palette, sidebar, settings). Permissions:
   `collections:read`, `collections:write`, `library:read` (matching
   v1). No `requiredCapabilities`: the host exposes its derived capability set and these commands need none of the desktop-only ones.
@@ -23,6 +23,12 @@ appear automatically.
   through the v2 collections op (E1 #176). No v1 imports, no repository
   access, and no filter evaluation — query validity is the app filter
   service's job.
+
+## Commands
+
+The definition declares 1 command:
+
+- `smart-collections-v2.save-search` — save the current search as a live-updating Collection.
 
 ## Run-mode contract
 

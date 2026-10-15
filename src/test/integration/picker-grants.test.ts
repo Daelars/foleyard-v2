@@ -68,20 +68,21 @@ afterEach(() => {
 describe("desktop-picker proofs gate extension grants", () => {
   it("returns a single-use opaque proof only to the authenticated picker", async () => {
     const destination = scratch.directory("out");
+    // Sync and async realpath disagree on Windows 8.3 short names
+    // (`RUNNER~1` vs `runneradmin` on CI), so compare via the same async
+    // canonicalization the implementation uses.
+    const canonicalDestination = await fs.promises.realpath(destination);
 
     // Only the desktop process may mint; no secret and a wrong secret deny.
     expect((await desktopGrantsPOST(pickerRequest({ path: destination }, null))).status).toBe(403);
     expect((await desktopGrantsPOST(pickerRequest({ path: destination }, "wrong"))).status).toBe(403);
 
     const picked = await pick(MAKE_PACK, "destination", destination);
-    // Sync and async realpath disagree on Windows 8.3 short names
-    // (`RUNNER~1` vs `runneradmin` on CI), so compare via the same async
-    // canonicalization the implementation uses.
-    expect(await fs.promises.realpath(picked.path)).toBe(
-      await fs.promises.realpath(destination),
-    );
+    expect(await fs.promises.realpath(picked.path)).toBe(canonicalDestination);
     expect(picked.proof).toEqual(expect.any(String));
-    expect(picked.proof).not.toContain(destination);
+    // The proof must not leak the chosen folder, in the canonical spelling the
+    // implementation would have used.
+    expect(picked.proof).not.toContain(canonicalDestination);
 
     // Library-root browsing still gets the canonical path and no proof.
     const browsed = (await (

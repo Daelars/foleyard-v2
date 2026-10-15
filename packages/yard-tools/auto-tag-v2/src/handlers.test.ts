@@ -5,10 +5,13 @@ import {
   createV2OperationServices,
   ExtensionV2Host,
   ExtensionV2Registry,
+  MAX_V2_STATE_BYTES,
+  V2WorkflowStateStore,
   validateV2Value,
   type ExtensionV2Definition,
   type IndexedAudioFile,
   type TagOrigin,
+  type V2ExtensionStatePorts,
   type V2HostServices,
   type V2AnalysisPorts,
   type V2EmbeddingPorts,
@@ -33,6 +36,9 @@ import {
   AUTO_TAG_V2_REMOVE_BY_ORIGIN,
   AUTO_TAG_V2_TAG_FILES,
   AUTO_TAG_V2_TAG_SEMANTIC,
+  MAX_ARRIVAL_FILES,
+  MAX_CLASSIFICATION_STATE_BYTES,
+  MAX_RETAINED_CLASSIFICATIONS,
   createAutoTagV2Definition,
   registerAutoTagV2Handlers,
   type AutoTagV2ClapStatusResult,
@@ -48,7 +54,7 @@ import {
   type AutoTagV2TagSemanticResult,
   type CoverageSnapshot,
 } from "./index";
-import { MAX_QUEUE_FILES } from "./rules";
+import { MAX_QUEUE_FILES, MAX_RETAINED_CANDIDATES } from "./rules";
 
 // Area: auto-tag v2 (#190). Handlers through the real host preflight with
 // fixture library and tag ports: preview plans without writes, tag-files
@@ -102,8 +108,17 @@ type World = {
   vectors: Map<string, { dim: number; vec: Uint8Array }>;
   progress: { calls: number };
   scanCalls: { pages: number };
+  /** Every fileId audio embedding was requested for, in order (#286). */
+  embedCalls: string[];
+  /** The raw per-extension state envelope the production store persists. */
+  stateStore: Map<string, unknown>;
   definition: ExtensionV2Definition;
 };
+
+/** Serialized bytes of the persisted state `data` record, as the store measures it. */
+function stateDataBytes(w: World): number {
+  return JSON.stringify(w.stateStore.get("data") ?? {}).length;
+}
 
 function world(overrides?: {
   granted?: string[];
@@ -112,6 +127,14 @@ function world(overrides?: {
   embedAudio?: (fileId: string) => Promise<{ dim: number; vec: number[] }>;
   files?: IndexedAudioFile[];
   aggregatePorts?: boolean;
+  /** A fileId whose next tag commit throws once, to interrupt a batch (#286). */
+  attachManyThrowsFor?: string;
+  /** What `attachMany` returns, so a test can drive inserted/upgraded/ignored. */
+  attachManyOutcome?: (entries: ReadonlyArray<{ fileId: string; tagId: string }>) => {
+    inserted: number;
+    upgraded: number;
+    ignored: number;
+  };
 }): World {
   const definition = createAutoTagV2Definition();
   const registry = new ExtensionV2Registry();
@@ -141,6 +164,16 @@ function world(overrides?: {
   const created: string[] = [];
   const stateStore = new Map<string, unknown>();
   const vectors = new Map<string, { dim: number; vec: Uint8Array }>();
+  const embedCalls: string[] = [];
+  // One interrupt per world: the first commit for the marked file throws, so a
+  // test can abort a batch mid-commit and then rerun it (#286).
+  let interrupted = false;
+  const maybeInterrupt = (fileId: string): void => {
+    if (!interrupted && overrides?.attachManyThrowsFor === fileId) {
+      interrupted = true;
+      throw new Error("tag commit interrupted");
+    }
+  };
   const modelState = {
     modelId: "Xenova/clap-htsat-unfused",
     state: "ready" as "ready" | "not-downloaded" | "downloading",
@@ -199,9 +232,11 @@ function world(overrides?: {
       return id;
     },
     attach: (fileId, tagId, origin, confidence) => {
+      maybeInterrupt(fileId);
       attachments.push({ fileId, tagId, origin, confidence });
     },
     attachMany: (entries) => {
+      for (const entry of entries) maybeInterrupt(entry.fileId);
       attachBatches.push(
         entries.map((entry) => ({
           fileId: entry.fileId,
@@ -218,6 +253,7 @@ function world(overrides?: {
           confidence: entry.confidence,
         });
       }
+      return overrides?.attachManyOutcome?.(entries);
     },
     detach: () => {},
     attachmentsForFiles: (fileIds) => attachments
@@ -274,14 +310,29 @@ function world(overrides?: {
   const analysisPorts: V2AnalysisPorts = {
     modelStatus: () => ({ ...modelState }),
     downloadModel: async () => ({ bytes: modelState.totalBytes }),
-    embedAudio: overrides?.embedAudio ?? (async (fileId) => {
+    embedAudio: async (fileId) => {
+      embedCalls.push(fileId);
+      if (overrides?.embedAudio) return overrides.embedAudio(fileId);
       const vec = audioVecs[fileId] ?? [0, 0];
       return { dim: vec.length, vec };
-    }),
+    },
     embedTexts: async (texts) => texts.map((text) => textVecs[text] ?? [0, 0]),
     backendAvailable: () => modelState.backendAvailable,
   };
-  const progress = { calls: 0 };  const services: V2HostServices = {
+  const progress = { calls: 0 };
+  // One shared store per extension, the production shape (#264/#265): the
+  // process-wide runtime hands the same store to every invocation, so
+  // concurrent jobs serialize their read-modify-write instead of racing
+  // separate store instances.
+  const extensionState: V2ExtensionStatePorts = {
+    readAll: () => Object.fromEntries(stateStore),
+    writeAll: (_extensionId, state) => {
+      stateStore.clear();
+      for (const [key, value] of Object.entries(state)) stateStore.set(key, value);
+    },
+  };
+  const workflowState = new V2WorkflowStateStore(AUTO_TAG_V2_ID, extensionState);
+  const services: V2HostServices = {
     registry,
     isEnabled: () => true,
     capabilities: {},
@@ -291,6 +342,7 @@ function world(overrides?: {
     createOperations: (binding) => ({
       ...createV2OperationServices({
         ...binding,
+        workflowState,
         grants: { authorize: () => ({ ok: false, message: "no grants" }) } as never,
         library,
         files: {
@@ -306,13 +358,7 @@ function world(overrides?: {
         },
         archive: { createZipArchive: async () => ({ bytesWritten: 0, version: { device: "memory", fileId: "unused" } }) },
         settings: { readRaw: () => undefined, writeRaw: () => {} },
-        extensionState: {
-          readAll: () => Object.fromEntries(stateStore),
-          writeAll: (_extensionId, state) => {
-            stateStore.clear();
-            for (const [key, value] of Object.entries(state)) stateStore.set(key, value);
-          },
-        },
+        extensionState,
         jobs: binding.reporter
           ? {
               reportProgress: (completed: number, total: number) => {
@@ -347,6 +393,8 @@ function world(overrides?: {
     vectors,
     progress,
     scanCalls,
+    embedCalls,
+    stateStore,
     definition,
   };
 }
@@ -428,6 +476,9 @@ describe("auto-tag-v2 tag-files", () => {
     const value = immediateValue<AutoTagV2TagFilesResult>(result);
     expect(value.tagged).toBe(2);
     expect(value.attached).toBe(4);
+    expect(value.inserted).toBe(4);
+    expect(value.upgraded).toBe(0);
+    expect(value.ignored).toBe(0);
     expect(value.skipped).toEqual(["paper-bag_crumple_fast.wav"]);
     expect(value.missing).toEqual([]);
     expect(value.failedFiles).toEqual([]);
@@ -1071,5 +1122,291 @@ describe("auto-tag-v2 SQL aggregates (#257)", () => {
     const summary = JSON.parse(value.summary) as { total: number; members: string[] };
     expect(summary.total).toBe(3);
     expect(summary.members).toEqual([]);
+  });
+});
+
+describe("auto-tag-v2 candidate scaling (#288)", () => {
+  // A Library far larger than the retained queue: every file contributes two
+  // distinct uncovered words, so the mined set is thousands of records, each
+  // with a long label and example id.
+  function largeLibrary(count: number): IndexedAudioFile[] {
+    return Array.from({ length: count }, (_, index) =>
+      record(
+        `file-large-${index}-0123456789abcdef`,
+        `token${index}abcdefghijklmnopqrstuvwxyz-session${index}take.wav`,
+      ),
+    );
+  }
+
+  it("keeps a large candidate set within the state budget and reports truncation", async () => {
+    const w = world({ files: largeLibrary(2_000) });
+
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_LIST_CANDIDATES,
+      input: { limit: 10 },
+      selection: { fileIds: [] },
+    });
+
+    // The production workflow store must accept the write instead of
+    // failing closed with input-invalid.
+    expect((result as { ok: boolean }).ok).toBe(true);
+    const value = immediateValue<AutoTagV2ListCandidatesResult>(result);
+
+    // Retention is explicit and visible: the queue is capped, says so, and
+    // never exceeds the advertised bound.
+    expect(value.retained).toBe(MAX_RETAINED_CANDIDATES);
+    expect(value.total).toBeGreaterThan(0);
+    expect(value.total).toBeLessThanOrEqual(MAX_RETAINED_CANDIDATES);
+    expect(value.words).toHaveLength(10);
+    expect(value.truncated).toBe(true);
+
+    // The whole persisted envelope stays inside the per-extension budget the
+    // production store enforces.
+    expect(stateDataBytes(w)).toBeLessThanOrEqual(MAX_V2_STATE_BYTES);
+
+    // Listing pages the full retained queue with a stable cursor and never
+    // re-mines: the walk is bounded to one pass.
+    const pages = w.scanCalls.pages;
+    const next = immediateValue<AutoTagV2ListCandidatesResult>(
+      await w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_LIST_CANDIDATES,
+        input: { cursor: value.nextCursor, limit: 10 },
+        selection: { fileIds: [] },
+      }),
+    );
+    expect(value.nextCursor).toBe("10");
+    expect(next.words).toHaveLength(10);
+    expect(next.total).toBe(value.total);
+    expect(next.words).not.toEqual(value.words);
+    expect(w.scanCalls.pages).toBe(pages);
+  });
+
+  it("records coverage once per completed scan, not once per job", async () => {
+    const w = world();
+    const input = { fileIds: ["f1", "f2"], scanStartedAt: "2026-10-15T00:00:00.000Z" };
+    const command = {
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_TAG_FILES,
+      input,
+      selection: { fileIds: [] },
+    };
+    expect((await w.host.execute(command)).ok).toBe(true);
+    expect((await w.host.execute(command)).ok).toBe(true);
+
+    const history = immediateValue<AutoTagV2CoverageHistoryResult>(
+      await w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_COVERAGE_HISTORY,
+        input: {},
+        selection: { fileIds: [] },
+      }),
+    );
+    const snapshots = history.entries.map((entry) => JSON.parse(entry) as CoverageSnapshot);
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]!.scanId).toBe("2026-10-15T00:00:00.000Z");
+    expect(stateDataBytes(w)).toBeLessThanOrEqual(MAX_V2_STATE_BYTES);
+  });
+
+  it("folds concurrent job suggestions into one candidate queue", async () => {
+    const w = world({
+      files: [record("f1", "paper-bag.wav"), record("f2", "coffee-cup.wav")],
+    });
+    await Promise.all([
+      w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_TAG_FILES,
+        input: { fileIds: ["f1"] },
+        selection: { fileIds: [] },
+      }),
+      w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_TAG_FILES,
+        input: { fileIds: ["f2"] },
+        selection: { fileIds: [] },
+      }),
+    ]);
+
+    const value = immediateValue<AutoTagV2ListCandidatesResult>(
+      await w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_LIST_CANDIDATES,
+        input: { limit: 100 },
+        selection: { fileIds: [] },
+      }),
+    );
+    // Neither job's suggestions were lost to the other's stale snapshot.
+    expect(value.words).toEqual(expect.arrayContaining(["paper", "bag", "coffee", "cup"]));
+  });
+
+  it("bounds the retained arrival batch and reports its total", async () => {
+    const files = Array.from({ length: 120 }, (_, index) =>
+      record(`a${index}`, `thunder-${String(index).padStart(3, "0")}.wav`),
+    );
+    const w = world({ files });
+    const submitted = await w.host.submitJob({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_TAG_FILES,
+      input: {
+        fileIds: files.map((file) => file.id),
+        batchId: "scan:test",
+        scanStartedAt: "2026-10-15T00:00:00.000Z",
+      },
+      selection: { fileIds: [] },
+    });
+    expect(submitted.ok).toBe(true);
+    if (!submitted.ok || submitted.outcome.kind !== "job") throw new Error("expected a job");
+    const settled = await w.host.jobs.waitFor(submitted.outcome.jobId);
+    expect(settled.state).toBe("succeeded");
+
+    const arrivals = immediateValue<{ hasData: boolean; batch: string }>(
+      await w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_LATEST_ARRIVALS,
+        input: {},
+        selection: { fileIds: [] },
+      }),
+    );
+    const batch = JSON.parse(arrivals.batch) as {
+      files: unknown[];
+      totalFiles: number;
+      truncated: boolean;
+    };
+    expect(batch.totalFiles).toBe(120);
+    expect(batch.truncated).toBe(true);
+    expect(batch.files.length).toBeLessThanOrEqual(MAX_ARRIVAL_FILES);
+    expect(stateDataBytes(w)).toBeLessThanOrEqual(MAX_V2_STATE_BYTES);
+  });
+});
+
+// Area: auto-tag semantic classification commits (#286). A classification
+// commit writes a vector, its semantic attachments, and a completion record
+// that must agree. An interruption mid-commit leaves the file explicitly
+// incomplete (never falsely complete, never falsely untouched), and a rerun
+// resumes the incomplete files without redoing the completed ones.
+describe("auto-tag-v2 semantic classification commits (#286)", () => {
+  const VKEY = "Xenova/clap-htsat-unfused";
+
+  type ClassificationView = {
+    records: Array<{ fileId: string; tagIds: string[] }>;
+    dropped: number;
+  };
+
+  function classificationState(w: World): ClassificationView {
+    const data =
+      (w.stateStore.get("data") as Record<string, unknown> | undefined) ?? {};
+    const raw = data["semantic-classifications"];
+    if (typeof raw !== "object" || raw === null) return { records: [], dropped: 0 };
+    const value = raw as { records?: unknown; dropped?: unknown };
+    return {
+      records: Array.isArray(value.records)
+        ? (value.records as Array<{ fileId: string; tagIds: string[] }>)
+        : [],
+      dropped: typeof value.dropped === "number" ? value.dropped : 0,
+    };
+  }
+
+  function classify(w: World, fileIds: string[]) {
+    return w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_TAG_SEMANTIC,
+      input: { fileIds },
+      selection: { fileIds },
+    });
+  }
+
+  it("keeps vector, tags, and completion consistent when a commit is interrupted", async () => {
+    const w = world({ seedTags: ["thunder", "rain"], attachManyThrowsFor: "f2" });
+
+    const first = await classify(w, ["f1", "f2", "f3"]);
+    // The commit was interrupted, so the command fails and nothing beyond the
+    // already-committed prefix claims to be complete.
+    expect((first as { ok: boolean }).ok).toBe(false);
+
+    // f1 is fully committed and self-consistent: vector, semantic tag with its
+    // confidence, and a completion record all agree.
+    expect(w.vectors.has(`${VKEY}:f1`)).toBe(true);
+    expect(w.attachments).toEqual([
+      { fileId: "f1", tagId: "t1", origin: "semantic_ai", confidence: 1 },
+    ]);
+    expect(classificationState(w).records.map((entry) => entry.fileId)).toEqual(["f1"]);
+    expect(classificationState(w).records[0]!.tagIds).toEqual(["t1"]);
+
+    // f2 half-committed: its vector landed but its tag did not and it is not
+    // marked complete, so it looks neither fully tagged nor fully untagged.
+    expect(w.vectors.has(`${VKEY}:f2`)).toBe(true);
+    expect(w.attachments.some((entry) => entry.fileId === "f2")).toBe(false);
+    expect(classificationState(w).records.map((entry) => entry.fileId)).not.toContain("f2");
+    // f3 was never reached.
+    expect(w.vectors.has(`${VKEY}:f3`)).toBe(false);
+
+    // Rerun: the completed f1 is skipped, and only the incomplete f2 and the
+    // untouched f3 are re-embedded, so no valid work is lost or repeated.
+    w.embedCalls.length = 0;
+    const second = immediateValue<AutoTagV2TagSemanticResult>(
+      await classify(w, ["f1", "f2", "f3"]),
+    );
+    expect(w.embedCalls).toEqual(["f2", "f3"]);
+    expect((second as unknown as { alreadyClassified: number }).alreadyClassified).toBe(1);
+    expect(classificationState(w).records.map((entry) => entry.fileId).sort()).toEqual([
+      "f1",
+      "f2",
+      "f3",
+    ]);
+    expect(w.attachments).toEqual([
+      { fileId: "f1", tagId: "t1", origin: "semantic_ai", confidence: 1 },
+      { fileId: "f2", tagId: "t2", origin: "semantic_ai", confidence: 1 },
+    ]);
+  });
+
+  it("reruns a file whose vector was stored without a completion record", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    // A vector left by an earlier interrupted run, with no completion record:
+    // its presence alone must not skip the file forever.
+    w.vectors.set(`${VKEY}:f1`, { dim: 2, vec: stubVec([1, 0]) });
+
+    const value = immediateValue<AutoTagV2TagSemanticResult>(await classify(w, ["f1"]));
+
+    expect(w.embedCalls).toEqual(["f1"]);
+    expect((value as unknown as { inserted: number }).inserted).toBe(1);
+    expect((value as unknown as { alreadyClassified: number }).alreadyClassified).toBe(0);
+    expect(classificationState(w).records.map((entry) => entry.fileId)).toEqual(["f1"]);
+  });
+
+  it("reports inserted, upgraded, and ignored writes from the tag port", async () => {
+    const w = world({
+      seedTags: ["thunder", "rain"],
+      attachManyOutcome: () => ({ inserted: 0, upgraded: 1, ignored: 2 }),
+    });
+
+    const value = immediateValue<AutoTagV2TagSemanticResult>(await classify(w, ["f1", "f2"]));
+
+    // Two files each commit one tag: the handler sums the port's outcome
+    // instead of counting every attempted write as attached.
+    expect((value as unknown as { inserted: number }).inserted).toBe(0);
+    expect((value as unknown as { upgraded: number }).upgraded).toBe(2);
+    expect((value as unknown as { ignored: number }).ignored).toBe(4);
+    expect(value.attached).toBe(2);
+  });
+
+  it("keeps the persisted classification queue inside the state budget", async () => {
+    const files = Array.from({ length: 400 }, (_, index) =>
+      record(`cf${index}`, `thunder-${String(index).padStart(3, "0")}.wav`),
+    );
+    const w = world({ files, seedTags: ["thunder"] });
+
+    const value = immediateValue<AutoTagV2TagSemanticResult>(
+      await classify(w, files.map((file) => file.id)),
+    );
+    expect(value.alreadyClassified).toBe(0);
+
+    // Retention is explicit: the completion queue is capped at the advertised
+    // bound and the whole persisted envelope stays inside the state budget.
+    const state = classificationState(w);
+    expect(state.records.length).toBeLessThanOrEqual(MAX_RETAINED_CLASSIFICATIONS);
+    expect(state.dropped).toBeGreaterThan(0);
+    expect(stateDataBytes(w)).toBeLessThanOrEqual(MAX_V2_STATE_BYTES);
+    expect(MAX_CLASSIFICATION_STATE_BYTES).toBeLessThanOrEqual(MAX_V2_STATE_BYTES);
   });
 });

@@ -28,14 +28,25 @@ semantic with its confidence.
   `MAX_TAG_FILES` (500) bound, case-insensitive matching,
   uncovered-word extraction, queue aggregation with examples and
   counts, and input cleaning. Caps: `MAX_QUEUE_FILES` (2000) files
-  walked, `MAX_CANDIDATES` (100) entries per listing.
+  walked, `MAX_CANDIDATES` (100) entries per listing,
+  `MAX_RETAINED_CANDIDATES` (200) records retained, and a
+  `MAX_CANDIDATE_STATE_BYTES` (32 KiB) ceiling the queue is pruned to.
 - `src/handlers.ts` — preview (immediate, no side effects),
   tag-files (immediate in `direct` mode; progress plus cancellation
-  in `job` mode), list-candidates (immediate paged walk, no writes),
-  promote-candidate (find-or-create by name, attach as manual),
-  dismiss-candidate (persisted dismissed set in extension state).
-  Rule tags attach with the deterministic origin. No v1 imports, no
-  direct filesystem access.
+  in `job` mode), list-candidates (immediate paged walk with a stable
+  cursor, no writes), promote-candidate (find-or-create by name,
+  attach as manual), dismiss-candidate (marks the retained record in
+  extension state). Rule tags attach with the deterministic origin.
+  Workflow state stays inside the v2 per-extension budget: the
+  candidate queue is capped and byte-pruned deterministically, the
+  latest-arrival batch keeps at most `MAX_ARRIVAL_FILES` (100) files
+  under `MAX_ARRIVAL_STATE_BYTES` (16 KiB), the semantic completion
+  queue keeps at most `MAX_RETAINED_CLASSIFICATIONS` (200) records
+  under `MAX_CLASSIFICATION_STATE_BYTES` (16 KiB), and coverage is
+  recorded once per completed scan through the atomic `state.update`
+  so concurrent jobs do not lose snapshots or candidates. Truncation
+  is reported (`truncated`, `totalFiles`, `nextCursor`), never
+  silent. No v1 imports, no direct filesystem access.
 
 ## Run-mode contract
 
@@ -54,14 +65,33 @@ semantic with its confidence.
 
 ## Policies
 
-- **Manual wins.** The repository upgrades an attachment to manual
-  and never away from it, so a hand tag is never clobbered by a rule
-  firing later on the same file.
+- **Origin precedence.** Attachments carry an origin: `manual` >
+  `deterministic` > `semantic_ai`. A write moves an attachment to its
+  own origin only when it is at least as strong; equal-origin semantic
+  writes refresh the stored confidence so it matches the vector it came
+  from, and weaker writes are ignored, never a downgrade. The result
+  reports `inserted`, `upgraded`, `ignored`, and `attached` (inserted +
+  upgraded), so a count never claims a write that a stronger stored
+  origin turned away.
 - **Deterministic only.** This slice never invents tags: a file gets
   exactly what the rules fire, and uncovered words queue up as
   candidates instead of guesses.
+- **Resumable semantic commits.** A semantic commit writes the vector,
+  then the attachments in one transaction, then a completion record —
+  in that order, per file. A vector with no completion record is
+  reprocessed, never skipped forever; a rerun skips only files whose
+  classification committed against the same approved vocabulary, so an
+  interruption never loses valid work and never double-writes a
+  completed file. Removing semantic attachments clears the records
+  they attested to.
 - **Bounds.** At most `MAX_TAG_FILES` (500) sounds per call; larger
-  batches reject with a reason instead of truncating silently.
+  batches reject with a reason instead of truncating silently. The
+  retained candidate queue, the latest-arrival batch, the semantic
+  completion queue, and coverage history are each capped and
+  byte-pruned so a large Library keeps the whole v2 workflow state
+  inside its per-extension budget; a capped queue or batch reports
+  `truncated` and its `totalFiles`/`total` rather than dropping data
+  silently.
 - **Off means off.** Disabled or unapproved, the tool writes nothing
   and fetches nothing: no model, no inference, no migration pressure.
 
@@ -91,7 +121,11 @@ Three commands, one model, no bundled weights:
   with confidence, marked semantic. Vectors land in the embedding
   store, so find-similar improves with every run. Nothing is
   invented: with no approved tags the command refuses, and manual
-  tags stay untouchable.
+  tags stay untouchable. Classification is resumable: a file whose
+  commit completed against the same approved vocabulary is skipped,
+  while a file left with only a vector (or only some attachments) by
+  an interrupted run is reprocessed, so an interruption never leaves
+  a file either falsely complete or silently skipped.
 
 Inference itself is an injected seam (`setClapBackendFactory` in
 `src/lib/audio-analysis/clap.ts`): onnxruntime ships no

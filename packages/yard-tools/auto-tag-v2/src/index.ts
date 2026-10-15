@@ -21,7 +21,10 @@ export {
 } from "./definition";
 export {
   COVERAGE_HISTORY_KEY,
+  MAX_CLASSIFICATION_STATE_BYTES,
   MAX_COVERAGE_SNAPSHOTS,
+  MAX_RETAINED_CLASSIFICATIONS,
+  SEMANTIC_CLASSIFICATION_KEY,
   registerAutoTagV2Handlers,
   runClapStatus,
   runCoverageHistory,
@@ -55,10 +58,14 @@ export {
   type AutoTagV2TagSemanticResult,
   type CoverageSnapshot,
   type LastRunSummary,
+  type SemanticClassificationRecord,
 } from "./handlers";
 export {
+  MAX_CANDIDATE_EXAMPLES,
+  MAX_CANDIDATE_STATE_BYTES,
   MAX_CANDIDATES,
   MAX_QUEUE_FILES,
+  MAX_RETAINED_CANDIDATES,
   MAX_TAG_FILES,
   SEED_RULES,
   cleanCandidateWord,
@@ -69,3 +76,4 @@ export {
   type CandidateEntry,
   type TagRule,
 } from "./rules";
+export { MAX_ARRIVAL_FILES, MAX_ARRIVAL_STATE_BYTES } from "./handlers";

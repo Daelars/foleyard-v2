@@ -8,7 +8,13 @@ export interface TagRepository {
   updateTagColor(tagId: string, color: string | null): void;
   attachTagToFile(fileId: string, tagId: string): void;
   detachTagFromFile(fileId: string, tagId: string): void;
-  /** Attach with provenance; a stored manual origin is never downgraded. */
+  /**
+   * Attach with provenance. Precedence, strongest first:
+   * `manual` > `deterministic` > `semantic_ai`. A write moves an attachment
+   * to its own origin only when its origin is at least as strong; equal-rank
+   * `semantic_ai` writes refresh the stored confidence to match the newest
+   * vector. Weaker writes are ignored and never downgrade the row (#286).
+   */
   attachTagToFileWithOrigin(
     fileId: string,
     tagId: string,

@@ -565,6 +565,7 @@ export function V3AutoTagBoard({
     lines: [],
     entries: [],
   });
+  const [queueTruncated, setQueueTruncated] = useState(false);
   const [queuePage, setQueuePage] = useState(0);
   const [futureRules, setFutureRules] = useState<Set<string>>(new Set());
   const [model, setModel] = useState<ModelState | null>(null);
@@ -717,40 +718,67 @@ export function V3AutoTagBoard({
       }
 
       if (!queued.ok) throw new Error(queued.message);
-      const value = queued.value as Partial<QueueState> & { entries?: unknown };
-      const queueKey = JSON.stringify({
-        words: value.words,
-        lines: value.lines,
-        entries: value.entries,
-      });
+      const value = queued.value as Partial<QueueState> & {
+        entries?: unknown;
+        nextCursor?: unknown;
+        truncated?: unknown;
+      };
+      // Walk the retained queue with its stable cursor. The server caps the
+      // queue, so this is a bounded handful of pages; a failed later page
+      // leaves the pages already read in place instead of failing the board.
+      const words: string[] = [];
+      const lines: string[] = [];
+      const rawEntries: unknown[] = [];
+      const absorb = (page: {
+        words?: unknown;
+        lines?: unknown;
+        entries?: unknown;
+        nextCursor?: unknown;
+      }): string => {
+        if (Array.isArray(page.words)) {
+          words.push(...page.words.filter((w): w is string => typeof w === "string"));
+        }
+        if (Array.isArray(page.lines)) {
+          lines.push(...page.lines.filter((l): l is string => typeof l === "string"));
+        }
+        if (Array.isArray(page.entries)) rawEntries.push(...page.entries);
+        return typeof page.nextCursor === "string" ? page.nextCursor : "";
+      };
+      let nextCursor = absorb(value);
+      let cursorGuard = 0;
+      while (nextCursor && cursorGuard < 8) {
+        const more = await runCommand("auto-tag-v2.list-candidates", {
+          cursor: nextCursor,
+        });
+        if (!more.ok) break;
+        nextCursor = absorb(
+          more.value as {
+            words?: unknown;
+            lines?: unknown;
+            entries?: unknown;
+            nextCursor?: unknown;
+          },
+        );
+        cursorGuard += 1;
+      }
+      const truncated = value.truncated === true;
+      const queueKey = JSON.stringify({ words, lines, entries: rawEntries, truncated });
       if (queueKey !== lastQueueRef.current) {
         lastQueueRef.current = queueKey;
-        const entries = Array.isArray(value.entries)
-          ? value.entries.flatMap((entry) => {
-              if (typeof entry !== "string") return [];
-              try {
-                return [JSON.parse(entry) as Candidate];
-              } catch {
-                return [];
-              }
-            })
-          : [];
-        setQueue({
-          words: Array.isArray(value.words)
-            ? value.words.filter((w): w is string => typeof w === "string")
-            : [],
-          lines: Array.isArray(value.lines)
-            ? value.lines.filter((l): l is string => typeof l === "string")
-            : [],
-          entries,
+        const entries = rawEntries.flatMap((entry) => {
+          if (typeof entry !== "string") return [];
+          try {
+            return [JSON.parse(entry) as Candidate];
+          } catch {
+            return [];
+          }
         });
+        setQueue({ words, lines, entries });
+        setQueueTruncated(truncated);
         setQueuePage((page) => {
           const pages = Math.max(
             1,
-            Math.ceil(
-              (Array.isArray(value.words) ? value.words.length : 0) /
-                QUEUE_PAGE_SIZE,
-            ),
+            Math.ceil(words.length / QUEUE_PAGE_SIZE),
           );
           return Math.min(page, pages - 1);
         });
@@ -1580,6 +1608,15 @@ export function V3AutoTagBoard({
             </div>
 
             <div className={cn(SHELL, "px-5 py-4")}>
+              {queueTruncated && (
+                <p
+                  role="status"
+                  className="mb-2 font-mono text-[11px] text-zinc-400"
+                >
+                  The candidate queue is capped; older candidates were dropped
+                  and are no longer listed.
+                </p>
+              )}
               <QueueCard
                 words={queueItems}
                 page={queuePage}

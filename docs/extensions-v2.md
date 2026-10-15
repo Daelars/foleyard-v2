@@ -173,7 +173,11 @@ records persist immediately, while per-file progress ticks persist at
 most once per two seconds, so a 500-file job performs a bounded number
 of snapshot writes. Batched writes through the tag operation
 (`attachMany`) land in one transaction per chunk and are idempotent per
-`(file, tag)` pair, so a retried job cannot duplicate attachments.
+`(file, tag)` pair, so a retried job cannot duplicate attachments. The
+batch reports what it did (`inserted` / `upgraded` / `ignored`) under a
+documented origin precedence (`manual` > `deterministic` > `semantic_ai`,
+equal-origin semantic writes refresh the confidence), so a handler count
+never claims a write a stronger stored origin turned away (#286).
 
 Plans (`vplan_` IDs) bind extension, command, validated
 targets/options, authorization context, expiry, and invocation.
@@ -188,8 +192,15 @@ bounded (key length, per-value bytes, per-extension bytes and key count)
 with every limit checked before persistence, and `operations.state.update`
 is the atomic read-modify-write: the store is shared per extension on the
 process-wide runtime, so concurrent jobs serialize instead of losing
-updates. The host owns job records separately. Persist precedes notify on
-every write.
+updates. Tools that accumulate their own state (Auto Tag's candidate
+queue, latest-arrival batch, coverage history, and semantic completion
+queue) cap and deterministically prune what they persist and report
+truncation, so a large Library cannot push an extension past that
+budget. A semantic commit is resumable: the completion record is
+written after the vector and attachments and keyed to the approved
+vocabulary, so an interrupted run leaves files explicitly incomplete
+and a rerun reprocesses them instead of skipping them forever. The host
+owns job records separately. Persist precedes notify on every write.
 
 Events are five typed contracts only: `settings-changed`,
 `state-changed`, `approvals-changed`, `job-transition`,

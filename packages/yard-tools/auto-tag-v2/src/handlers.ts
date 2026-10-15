@@ -4,7 +4,6 @@ import {
   isV2JobCancellation,
   V2OperationError,
   type ExtensionV2Host,
-  type IndexedAudioFile,
   type V2HandlerContext,
   type V2TagAttachment,
 } from "yard-core";
@@ -31,8 +30,11 @@ import {
 } from "./definition";
 import { clapPrompt, CLAP_MODEL_ID, rankLabels } from "./semantic";
 import {
+  MAX_CANDIDATE_EXAMPLES,
+  MAX_CANDIDATE_STATE_BYTES,
   MAX_CANDIDATES,
   MAX_QUEUE_FILES,
+  MAX_RETAINED_CANDIDATES,
   MAX_TAG_FILES,
   SEED_RULES,
   cleanCandidateWord,
@@ -68,6 +70,12 @@ export type AutoTagV2PreviewResult = {
 export type AutoTagV2TagFilesResult = {
   tagged: number;
   attached: number;
+  /** Deterministic attachments created by this run (#286). */
+  inserted: number;
+  /** Existing deterministic attachments whose origin or confidence changed. */
+  upgraded: number;
+  /** Attempted writes a stronger stored origin turned away. */
+  ignored: number;
   skipped: string[];
   missing: string[];
   failedFiles: string[];
@@ -206,49 +214,109 @@ function readLastRun(ctx: V2HandlerContext): LastRunSummary | null {
   };
 }
 
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isCandidateRecord(entry: unknown): entry is AutoTagCandidateRecord {
+  if (!isRecordValue(entry)) return false;
+  const value = entry as Partial<AutoTagCandidateRecord>;
+  return (
+    typeof value.id === "string" &&
+    typeof value.label === "string" &&
+    (value.source === "filename_token" || value.source === "clap_suggestion" || value.source === "similar_audio_cluster") &&
+    Array.isArray(value.exampleFileIds) &&
+    typeof value.occurrenceCount === "number" &&
+    (value.status === "pending" || value.status === "promoted" || value.status === "dismissed") &&
+    typeof value.createdAt === "string" &&
+    typeof value.updatedAt === "string"
+  );
+}
+
+/**
+ * The persisted candidate queue (#288): the retained records plus how many
+ * records earlier retention passes dropped. Stored as one value so a
+ * read-modify-write keeps the records and their truncation count consistent.
+ * Legacy state stored a bare array; it reads back with `dropped: 0`.
+ */
+type CandidatesState = { records: AutoTagCandidateRecord[]; dropped: number };
+
+function normalizeCandidatesState(raw: unknown): CandidatesState {
+  const list = Array.isArray(raw)
+    ? raw
+    : isRecordValue(raw) && Array.isArray(raw.records)
+      ? raw.records
+      : [];
+  // Clone each record: the stored value comes back by reference, so mutating
+  // it in place would edit the persisted envelope before the commit.
+  const records = list.filter(isCandidateRecord).map((entry) => ({
+    ...entry,
+    exampleFileIds: [...entry.exampleFileIds],
+  }));
+  const dropped =
+    isRecordValue(raw) && typeof raw.dropped === "number"
+      ? Math.max(0, Math.floor(raw.dropped))
+      : 0;
+  return { records, dropped };
+}
+
 function readCandidates(ctx: V2HandlerContext): AutoTagCandidateRecord[] {
-  const raw = ctx.operations.state.read(CANDIDATES_KEY);
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((entry): entry is AutoTagCandidateRecord => {
-    if (typeof entry !== "object" || entry === null) return false;
-    const value = entry as Partial<AutoTagCandidateRecord>;
-    return (
-      typeof value.id === "string" &&
-      typeof value.label === "string" &&
-      (value.source === "filename_token" || value.source === "clap_suggestion" || value.source === "similar_audio_cluster") &&
-      Array.isArray(value.exampleFileIds) &&
-      typeof value.occurrenceCount === "number" &&
-      (value.status === "pending" || value.status === "promoted" || value.status === "dismissed") &&
-      typeof value.createdAt === "string" &&
-      typeof value.updatedAt === "string"
-    );
-  });
+  return normalizeCandidatesState(ctx.operations.state.read(CANDIDATES_KEY)).records;
 }
 
-function writeCandidates(ctx: V2HandlerContext, candidates: AutoTagCandidateRecord[]): void {
-  ctx.operations.state.write(CANDIDATES_KEY, candidates.slice(0, MAX_CANDIDATES * 3));
+function serializeBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value) ?? "").length;
 }
 
-function upsertCandidateSuggestions(
-  ctx: V2HandlerContext,
+/** Highest-occurrence first, then a stable tiebreak so retention is deterministic. */
+function compareCandidates(a: AutoTagCandidateRecord, b: AutoTagCandidateRecord): number {
+  return (
+    b.occurrenceCount - a.occurrenceCount ||
+    a.label.localeCompare(b.label) ||
+    a.source.localeCompare(b.source) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+/**
+ * Cap the queue explicitly and deterministically: at most
+ * `MAX_RETAINED_CANDIDATES` records, then byte-pruned from the lowest-priority
+ * end until the serialized queue fits `MAX_CANDIDATE_STATE_BYTES`. Everything
+ * dropped is counted, so the listing can report truncation instead of losing
+ * candidates silently.
+ */
+function retainCandidates(state: CandidatesState): CandidatesState {
+  const ordered = [...state.records].sort(compareCandidates);
+  const kept = ordered.slice(0, MAX_RETAINED_CANDIDATES);
+  let dropped = state.dropped + (ordered.length - kept.length);
+  while (kept.length > 1 && serializeBytes(kept) > MAX_CANDIDATE_STATE_BYTES) {
+    kept.pop();
+    dropped += 1;
+  }
+  return { records: kept, dropped };
+}
+
+/** Fold suggestions into the queue; occurrences accumulate, examples stay capped. */
+function mergeCandidatesState(
+  state: CandidatesState,
   suggestions: Array<{
     label: string;
     source: AutoTagCandidateSource;
     confidence?: number | null;
     fileId: string;
   }>,
-): void {
-  if (suggestions.length === 0) return;
+): CandidatesState {
+  if (suggestions.length === 0) return state;
   const now = new Date().toISOString();
-  const current = readCandidates(ctx);
-  const byId = new Map(current.map((entry) => [entry.id, entry]));
+  const records = state.records.map((entry) => ({ ...entry, exampleFileIds: [...entry.exampleFileIds] }));
+  const byId = new Map(records.map((entry) => [entry.id, entry]));
   for (const suggestion of suggestions) {
     const id = candidateId(suggestion.source, suggestion.label);
     const existing = byId.get(id);
     if (existing) {
       if (existing.status !== "pending") continue;
       existing.occurrenceCount += 1;
-      if (!existing.exampleFileIds.includes(suggestion.fileId) && existing.exampleFileIds.length < 12) {
+      if (!existing.exampleFileIds.includes(suggestion.fileId) && existing.exampleFileIds.length < MAX_CANDIDATE_EXAMPLES) {
         existing.exampleFileIds.push(suggestion.fileId);
       }
       existing.confidence = Math.max(existing.confidence ?? 0, suggestion.confidence ?? 0) || null;
@@ -266,10 +334,33 @@ function upsertCandidateSuggestions(
       createdAt: now,
       updatedAt: now,
     };
-    current.push(record);
+    records.push(record);
     byId.set(id, record);
   }
-  writeCandidates(ctx, current);
+  return { ...state, records };
+}
+
+/** Synchronous merge used by the one-time mining walk, where no await may interleave. */
+function mergeCandidates(ctx: V2HandlerContext, suggestions: Parameters<typeof mergeCandidatesState>[1]): void {
+  const next = retainCandidates(
+    mergeCandidatesState(normalizeCandidatesState(ctx.operations.state.read(CANDIDATES_KEY)), suggestions),
+  );
+  ctx.operations.state.write(CANDIDATES_KEY, next);
+}
+
+/**
+ * Atomic merge used by tag jobs: `update` serializes per store, so concurrent
+ * jobs sharing the runtime fold their suggestions into one queue instead of
+ * each clobbering the other with a stale snapshot.
+ */
+async function mergeCandidatesAtomic(
+  ctx: V2HandlerContext,
+  suggestions: Parameters<typeof mergeCandidatesState>[1],
+): Promise<void> {
+  if (suggestions.length === 0) return;
+  await ctx.operations.state.update(CANDIDATES_KEY, (current) =>
+    retainCandidates(mergeCandidatesState(normalizeCandidatesState(current), suggestions)),
+  );
 }
 
 function ensureFilenameCandidates(ctx: V2HandlerContext): void {
@@ -292,7 +383,7 @@ function ensureFilenameCandidates(ctx: V2HandlerContext): void {
     walked += files.length;
     cursor = walked >= MAX_QUEUE_FILES ? null : page.nextCursor;
   } while (cursor);
-  upsertCandidateSuggestions(ctx, suggestions);
+  mergeCandidates(ctx, suggestions);
   ctx.operations.state.write(CANDIDATES_MINED_KEY, true);
 }
 
@@ -332,6 +423,9 @@ export async function runTagFiles(ctx: V2HandlerContext) {
   const failedReasons: string[] = [];
   let tagged = 0;
   let attached = 0;
+  let inserted = 0;
+  let upgraded = 0;
+  let ignored = 0;
   let done = 0;
 
   const known = new Map(tags.list().map((tag) => [tag.name, tag.id]));
@@ -344,7 +438,8 @@ export async function runTagFiles(ctx: V2HandlerContext) {
   };
 
   // #258: one transaction per file chunk instead of one commit per row. A
-  // failed chunk is attributed to its files and the job keeps going.
+  // failed chunk is attributed to its files and the job keeps going. The
+  // outcome (#286) separates inserted from upgraded and ignored writes.
   const TAG_BATCH_FILES = 100;
   let pending: Array<{ filename: string; fileId: string; names: string[] }> = [];
   const flushTagBatch = () => {
@@ -359,14 +454,21 @@ export async function runTagFiles(ctx: V2HandlerContext) {
       })),
     );
     try {
-      if (tags.attachMany) {
-        tags.attachMany(entries);
+      const outcome = tags.attachMany ? tags.attachMany(entries) : undefined;
+      if (outcome) {
+        inserted += outcome.inserted;
+        upgraded += outcome.upgraded;
+        ignored += outcome.ignored;
+        attached += outcome.inserted + outcome.upgraded;
       } else {
-        for (const entry of entries) {
-          tags.attach(entry.fileId, entry.tagId, entry.origin);
+        if (!tags.attachMany) {
+          for (const entry of entries) {
+            tags.attach(entry.fileId, entry.tagId, entry.origin);
+          }
         }
+        inserted += entries.length;
+        attached += entries.length;
       }
-      attached += entries.length;
       tagged += batch.length;
     } catch (error) {
       if (isV2JobCancellation(error)) throw error;
@@ -409,7 +511,7 @@ export async function runTagFiles(ctx: V2HandlerContext) {
       fileId: file.fileId,
     })),
   );
-  upsertCandidateSuggestions(ctx, filenameSuggestions);
+  await mergeCandidatesAtomic(ctx, filenameSuggestions);
 
   let semanticTagged = 0;
   let semanticAttached = 0;
@@ -427,6 +529,9 @@ export async function runTagFiles(ctx: V2HandlerContext) {
   const result = {
     tagged,
     attached,
+    inserted,
+    upgraded,
+    ignored,
     skipped,
     missing,
     failedFiles,
@@ -442,7 +547,7 @@ export async function runTagFiles(ctx: V2HandlerContext) {
     missing: missing.length,
     failed: failedFiles.length,
   });
-  recordCoverageAtBoundary(ctx, inputRecord(ctx).scanStartedAt as string | undefined);
+  await recordCoverageAtBoundary(ctx, inputRecord(ctx).scanStartedAt as string | undefined);
   return immediateV2Result(result);
 }
 
@@ -450,7 +555,14 @@ export type AutoTagV2ListCandidatesResult = {
   words: string[];
   lines: string[];
   entries: string[];
+  /** True when retention dropped candidates, so the queue is not the full set discovered. */
   truncated: boolean;
+  /** Total pending candidates in the retained queue (not just this page). */
+  total: number;
+  /** Cursor for the next page; empty when this page is the last. */
+  nextCursor: string;
+  /** The retained-record bound the queue is capped to. */
+  retained: number;
   totalFiles: number;
 };
 
@@ -481,20 +593,25 @@ function readCandidateWord(ctx: V2HandlerContext): string {
 export function runListCandidates(ctx: V2HandlerContext) {
   const raw = inputRecord(ctx);
   const limit = Math.max(1, Math.min(MAX_CANDIDATES, typeof raw.limit === "number" ? Math.floor(raw.limit) : MAX_CANDIDATES));
+  const skip = typeof raw.cursor === "string" ? Math.max(0, Number.parseInt(raw.cursor, 10) || 0) : 0;
   const { tags } = extendedOperationsOf(ctx);
   ensureFilenameCandidates(ctx);
+  const state = normalizeCandidatesState(ctx.operations.state.read(CANDIDATES_KEY));
   const handled = new Set(tags.list().map((tag) => tag.name.toLowerCase()));
-  const all = readCandidates(ctx)
+  const all = state.records
     .filter((entry) => entry.status === "pending" && !handled.has(entry.label))
-    .sort((a, b) => b.occurrenceCount - a.occurrenceCount || a.label.localeCompare(b.label));
-  const entries = all.slice(0, limit);
+    .sort(compareCandidates);
+  const entries = all.slice(skip, skip + limit);
   return immediateV2Result({
     words: entries.map((entry) => entry.label),
     lines: entries.map((entry) =>
       `${entry.label} - ${entry.occurrenceCount} occurrence${entry.occurrenceCount === 1 ? "" : "s"} from ${entry.source.replaceAll("_", " ")}`,
     ),
     entries: entries.map((entry) => JSON.stringify(entry)),
-    truncated: all.length > entries.length,
+    truncated: state.dropped > 0,
+    total: all.length,
+    nextCursor: skip + entries.length < all.length ? String(skip + entries.length) : "",
+    retained: MAX_RETAINED_CANDIDATES,
     totalFiles: new Set(entries.flatMap((entry) => entry.exampleFileIds)).size,
   } satisfies AutoTagV2ListCandidatesResult);
 }
@@ -544,15 +661,18 @@ export async function runPromoteCandidate(ctx: V2HandlerContext) {
     attached += 1;
   }
 
-  const candidates = readCandidates(ctx);
-  const now = new Date().toISOString();
-  for (const candidate of candidates) {
-    if (candidate.label === word && candidate.status === "pending") {
-      candidate.status = "promoted";
-      candidate.updatedAt = now;
-    }
-  }
-  writeCandidates(ctx, candidates);
+  await ctx.operations.state.update(CANDIDATES_KEY, (current) => {
+    const state = normalizeCandidatesState(current);
+    const now = new Date().toISOString();
+    return retainCandidates({
+      ...state,
+      records: state.records.map((candidate) =>
+        candidate.label === word && candidate.status === "pending"
+          ? { ...candidate, status: "promoted", updatedAt: now }
+          : candidate,
+      ),
+    });
+  });
 
   if (raw.useForFutureFilenames === true) {
     const custom = readRules(ctx).filter((rule) => !SEED_RULES.some((seed) => seed.tok === rule.tok));
@@ -570,20 +690,22 @@ export async function runPromoteCandidate(ctx: V2HandlerContext) {
   } satisfies AutoTagV2PromoteCandidateResult);
 }
 
-export function runDismissCandidate(ctx: V2HandlerContext) {
+export async function runDismissCandidate(ctx: V2HandlerContext) {
   const word = readCandidateWord(ctx);
   ensureFilenameCandidates(ctx);
-  const candidates = readCandidates(ctx);
   const now = new Date().toISOString();
   let dismissedCount = 0;
-  for (const candidate of candidates) {
-    if (candidate.label === word && candidate.status === "pending") {
-      candidate.status = "dismissed";
-      candidate.updatedAt = now;
-      dismissedCount += 1;
-    }
-  }
-  writeCandidates(ctx, candidates);
+  await ctx.operations.state.update(CANDIDATES_KEY, (current) => {
+    const state = normalizeCandidatesState(current);
+    const records = state.records.map((candidate) => {
+      if (candidate.label === word && candidate.status === "pending") {
+        dismissedCount += 1;
+        return { ...candidate, status: "dismissed" as const, updatedAt: now };
+      }
+      return candidate;
+    });
+    return retainCandidates({ ...state, records });
+  });
   return immediateV2Result({
     word,
     dismissedCount,
@@ -692,6 +814,121 @@ export async function runDownloadModel(ctx: V2HandlerContext) {
   } satisfies AutoTagV2DownloadModelResult);
 }
 
+/**
+ * Semantic classification completion state (#286).
+ *
+ * A file is "complete" only once its vector, its semantic attachments, and a
+ * record here have all been written, in that order. The record makes the file
+ * explicitly done instead of inferring completion from a stored vector: a
+ * vector left by an interrupted run is therefore reprocessed, never skipped
+ * forever. Records are keyed to the approved vocabulary (`vocabularyKey`), so
+ * approving a new tag re-runs classification instead of silently ignoring it,
+ * and the queue is capped and byte-pruned like the candidate queue (#288) —
+ * a pruned record only costs a later rerun, never correctness.
+ */
+export const SEMANTIC_CLASSIFICATION_KEY = "semantic-classifications";
+export const MAX_RETAINED_CLASSIFICATIONS = 200;
+export const MAX_CLASSIFICATION_STATE_BYTES = 16 * 1024;
+
+export type SemanticClassificationRecord = {
+  fileId: string;
+  /** The semantic tag ids committed for this file, for a future consistency check. */
+  tagIds: string[];
+};
+
+type SemanticClassificationState = {
+  records: SemanticClassificationRecord[];
+  /** The approved vocabulary the records were computed against. */
+  vocabularyKey: string;
+  /** How many records an earlier retention pass dropped. */
+  dropped: number;
+};
+
+function isClassificationRecord(entry: unknown): entry is SemanticClassificationRecord {
+  return (
+    isRecordValue(entry) &&
+    typeof entry.fileId === "string" &&
+    Array.isArray(entry.tagIds) &&
+    entry.tagIds.every((id) => typeof id === "string")
+  );
+}
+
+function normalizeClassificationState(raw: unknown): SemanticClassificationState {
+  const list = Array.isArray(raw)
+    ? raw
+    : isRecordValue(raw) && Array.isArray(raw.records)
+      ? raw.records
+      : [];
+  const records = list
+    .filter(isClassificationRecord)
+    .map((entry) => ({ fileId: entry.fileId, tagIds: [...entry.tagIds] }));
+  const vocabularyKey =
+    isRecordValue(raw) && typeof raw.vocabularyKey === "string" ? raw.vocabularyKey : "";
+  const dropped =
+    isRecordValue(raw) && typeof raw.dropped === "number" ? Math.max(0, Math.floor(raw.dropped)) : 0;
+  return { records, vocabularyKey, dropped };
+}
+
+/** Stable signature of the approved vocabulary; a rename or new tag changes it. */
+function vocabularyKeyOf(vocabulary: Array<{ id: string; name: string }>): string {
+  return vocabulary
+    .map((tag) => `${tag.id}:${tag.name}`)
+    .sort()
+    .join("|");
+}
+
+/** Keep the newest records within the count and byte bounds, counting the rest. */
+function retainClassifications(state: SemanticClassificationState): SemanticClassificationState {
+  const ordered = state.records;
+  const kept = ordered.slice(Math.max(0, ordered.length - MAX_RETAINED_CLASSIFICATIONS));
+  let dropped = state.dropped + (ordered.length - kept.length);
+  while (kept.length > 1 && serializeBytes(kept) > MAX_CLASSIFICATION_STATE_BYTES) {
+    kept.shift();
+    dropped += 1;
+  }
+  return { records: kept, vocabularyKey: state.vocabularyKey, dropped };
+}
+
+/** Fold one completed file into the state, resetting it when the vocabulary changed. */
+function mergeClassification(
+  state: SemanticClassificationState,
+  vocabularyKey: string,
+  record: SemanticClassificationRecord,
+): SemanticClassificationState {
+  const base = state.vocabularyKey === vocabularyKey ? state.records : [];
+  const records = base.filter((entry) => entry.fileId !== record.fileId);
+  records.push({ fileId: record.fileId, tagIds: [...record.tagIds] });
+  return retainClassifications({ records, vocabularyKey, dropped: state.dropped });
+}
+
+function completedClassifications(ctx: V2HandlerContext, vocabularyKey: string): Set<string> {
+  const state = normalizeClassificationState(
+    ctx.operations.state.read(SEMANTIC_CLASSIFICATION_KEY),
+  );
+  return state.vocabularyKey === vocabularyKey
+    ? new Set(state.records.map((entry) => entry.fileId))
+    : new Set();
+}
+
+async function recordClassification(
+  ctx: V2HandlerContext,
+  vocabularyKey: string,
+  record: SemanticClassificationRecord,
+): Promise<void> {
+  await ctx.operations.state.update(SEMANTIC_CLASSIFICATION_KEY, (current) =>
+    mergeClassification(normalizeClassificationState(current), vocabularyKey, record),
+  );
+}
+
+/** Drop every completion when the semantic attachments they described are removed. */
+async function clearClassifications(ctx: V2HandlerContext): Promise<void> {
+  await ctx.operations.state.update(SEMANTIC_CLASSIFICATION_KEY, () => ({
+    records: [],
+    vocabularyKey: "",
+    dropped: 0,
+  }));
+}
+
 async function runSemanticBatch(
   ctx: V2HandlerContext,
   live: LiveTagFile[],
@@ -718,6 +955,14 @@ async function runSemanticBatch(
       "There are no approved tags to classify against; promote a candidate first.",
     );
   }
+  const vocabularyKey = vocabularyKeyOf(vocabulary);
+  // Resume: a file whose classification committed against this same
+  // vocabulary is skipped, whether or not its vector is present. A vector
+  // without a completion record is reprocessed, so an interruption never
+  // leaves a file skipped forever (#286).
+  const completed = completedClassifications(ctx, vocabularyKey);
+  const pending = live.filter((file) => !completed.has(file.fileId));
+  const alreadyClassified = live.length - pending.length;
   const prompts = vocabulary.map((tag) => clapPrompt(tag.name));
   const textVecs = await analysis.embedTexts(prompts);
   const known = new Map(vocabulary.map((tag) => [tag.name, tag.id]));
@@ -730,7 +975,9 @@ async function runSemanticBatch(
   const failedFiles: string[] = [];
   const failedReasons: string[] = [];
   let tagged = 0;
-  let attached = 0;
+  let inserted = 0;
+  let upgraded = 0;
+  let ignored = 0;
   let done = 0;
   const staged: Array<{
     file: LiveTagFile;
@@ -739,13 +986,8 @@ async function runSemanticBatch(
     candidate?: { label: string; confidence: number };
   }> = [];
 
-  for (const file of live) {
-    try {
-      ctx.operations.jobs.throwIfCancelled();
-    } catch (error) {
-      if (isV2JobCancellation(error)) throw error;
-      throw error;
-    }
+  for (const file of pending) {
+    ctx.operations.jobs.throwIfCancelled();
     try {
       const audio = await analysis.embedAudio(file.fileId);
       const ranked = rankLabels(audio.vec, vocabulary.map((tag) => tag.name), textVecs);
@@ -768,24 +1010,46 @@ async function runSemanticBatch(
       failedReasons.push(`"${file.filename}": ${error instanceof Error ? error.message : String(error)}`);
     }
     done += 1;
-    ctx.operations.jobs.reportProgress(done, live.length);
+    ctx.operations.jobs.reportProgress(done, pending.length);
   }
 
-  // Cancellation is all-or-nothing for this submitted batch. Inference is
-  // staged in memory, then one synchronous commit section applies it with no
-  // await or cancellation yield between the first and last write.
+  // Commit per file so an interruption leaves a prefix of fully committed
+  // files and an explicit, resumable remainder: the vector lands first, then
+  // the semantic attachments in one transaction, then the completion record.
+  // A throw between any two leaves the file unmarked, so it reruns instead of
+  // looking fully tagged (or fully untagged). Completed files are never
+  // rewritten, so a stored confidence cannot drift from its vector.
   ctx.operations.jobs.throwIfCancelled();
   for (const entry of staged) {
+    ctx.operations.jobs.throwIfCancelled();
     embeddings.store(entry.file.fileId, CLAP_MODEL_ID, entry.vec);
-    if (entry.tags.length === 0) skipped.push(entry.file.filename);
-    else tagged += 1;
-    for (const attachment of entry.tags) {
-      tags.attach(entry.file.fileId, attachment.tagId, "semantic_ai", attachment.confidence);
-      attached += 1;
+    if (entry.tags.length > 0) {
+      const writes = entry.tags.map((attachment) => ({
+        fileId: entry.file.fileId,
+        tagId: attachment.tagId,
+        origin: "semantic_ai" as const,
+        confidence: attachment.confidence,
+      }));
+      const outcome = tags.attachMany ? tags.attachMany(writes) : undefined;
+      if (outcome) {
+        inserted += outcome.inserted;
+        upgraded += outcome.upgraded;
+        ignored += outcome.ignored;
+      } else {
+        inserted += writes.length;
+      }
+      tagged += 1;
+    } else {
+      skipped.push(entry.file.filename);
     }
+    await recordClassification(ctx, vocabularyKey, {
+      fileId: entry.file.fileId,
+      tagIds: entry.tags.map((attachment) => attachment.tagId),
+    });
   }
+  const attached = inserted + upgraded;
 
-  upsertCandidateSuggestions(
+  await mergeCandidatesAtomic(
     ctx,
     staged.flatMap((entry) =>
       entry.candidate
@@ -805,7 +1069,7 @@ async function runSemanticBatch(
     group.push({ fileId: entry.file.fileId, confidence: entry.candidate.confidence });
     clusters.set(entry.candidate.label, group);
   }
-  upsertCandidateSuggestions(
+  await mergeCandidatesAtomic(
     ctx,
     [...clusters.entries()].flatMap(([label, group]) =>
       group.length < 2
@@ -822,6 +1086,10 @@ async function runSemanticBatch(
   return {
     tagged,
     attached,
+    inserted,
+    upgraded,
+    ignored,
+    alreadyClassified,
     skipped,
     missing,
     failedFiles,
@@ -843,7 +1111,7 @@ export async function runTagSemantic(ctx: V2HandlerContext) {
     missing: result.missing.length,
     failed: result.failedFiles.length,
   });
-  recordCoverageAtBoundary(ctx, inputRecord(ctx).scanStartedAt as string | undefined);
+  await recordCoverageAtBoundary(ctx, inputRecord(ctx).scanStartedAt as string | undefined);
   return immediateV2Result(result satisfies AutoTagV2TagSemanticResult);
 }
 
@@ -873,6 +1141,14 @@ export type AutoTagV2DownloadModelResult = {
 export type AutoTagV2TagSemanticResult = {
   tagged: number;
   attached: number;
+  /** Semantic attachments created by this run (#286). */
+  inserted: number;
+  /** Existing semantic attachments whose confidence changed. */
+  upgraded: number;
+  /** Attempted writes a stronger stored origin turned away. */
+  ignored: number;
+  /** Files skipped because classification already committed against this vocabulary. */
+  alreadyClassified: number;
   skipped: string[];
   missing: string[];
   failedFiles: string[];
@@ -901,8 +1177,7 @@ export type CoverageSnapshot = {
 export const COVERAGE_HISTORY_KEY = "coverage-history";
 export const MAX_COVERAGE_SNAPSHOTS = 30;
 
-function readSnapshots(ctx: V2HandlerContext): CoverageSnapshot[] {
-  const raw: unknown = ctx.operations.state.read(COVERAGE_HISTORY_KEY);
+function normalizeSnapshots(raw: unknown): CoverageSnapshot[] {
   if (!Array.isArray(raw)) return [];
   const out: CoverageSnapshot[] = [];
   for (const entry of raw) {
@@ -929,24 +1204,45 @@ function readSnapshots(ctx: V2HandlerContext): CoverageSnapshot[] {
   return out;
 }
 
+function readSnapshots(ctx: V2HandlerContext): CoverageSnapshot[] {
+  return normalizeSnapshots(ctx.operations.state.read(COVERAGE_HISTORY_KEY));
+}
+
+/**
+ * Append one snapshot with the atomic read-modify-write, keeping the newest
+ * `MAX_COVERAGE_SNAPSHOTS`. Serialized per store, so concurrent jobs append
+ * without losing each other's entries (#288).
+ */
+async function appendSnapshot(
+  ctx: V2HandlerContext,
+  snapshot: CoverageSnapshot,
+): Promise<CoverageSnapshot[]> {
+  let kept: CoverageSnapshot[] = [];
+  await ctx.operations.state.update(COVERAGE_HISTORY_KEY, (current) => {
+    const snapshots = normalizeSnapshots(current);
+    snapshots.push(snapshot);
+    while (snapshots.length > MAX_COVERAGE_SNAPSHOTS) snapshots.shift();
+    kept = snapshots;
+    return snapshots;
+  });
+  return kept;
+}
+
 export function runCoverageHistory(ctx: V2HandlerContext) {
   return immediateV2Result({
     entries: readSnapshots(ctx).map((entry) => JSON.stringify(entry)),
   } satisfies AutoTagV2CoverageHistoryResult);
 }
 
-export function runRecordCoverage(ctx: V2HandlerContext) {
+export async function runRecordCoverage(ctx: V2HandlerContext) {
   const aggregate = aggregateLibrary(ctx);
-  const snapshots = readSnapshots(ctx);
-  snapshots.push({
+  const snapshots = await appendSnapshot(ctx, {
     at: new Date().toISOString(),
     tagged: aggregate.tagged,
     total: aggregate.total,
     tags: aggregate.tags,
     invocationId: ctx.invocation.invocationId,
   });
-  while (snapshots.length > MAX_COVERAGE_SNAPSHOTS) snapshots.shift();
-  ctx.operations.state.write(COVERAGE_HISTORY_KEY, snapshots);
   return immediateV2Result({
     recorded: true,
     entriesCount: snapshots.length,
@@ -1093,10 +1389,17 @@ function aggregateLibrary(
   };
 }
 
-function recordCoverageAtBoundary(ctx: V2HandlerContext, scanId?: string): void {
+/**
+ * Record coverage once per completed scan (#288). When the scan boundary is
+ * known and already present, skip the aggregation entirely so a scan split
+ * into many 500-file jobs does not re-walk the Library or duplicate its
+ * snapshot. The append itself is atomic, so two racing jobs still land one
+ * snapshot per scan.
+ */
+async function recordCoverageAtBoundary(ctx: V2HandlerContext, scanId?: string): Promise<void> {
+  if (scanId && readSnapshots(ctx).some((entry) => entry.scanId === scanId)) return;
   const aggregate = aggregateLibrary(ctx);
-  const snapshots = readSnapshots(ctx);
-  snapshots.push({
+  await appendSnapshot(ctx, {
     at: new Date().toISOString(),
     tagged: aggregate.tagged,
     total: aggregate.total,
@@ -1104,9 +1407,11 @@ function recordCoverageAtBoundary(ctx: V2HandlerContext, scanId?: string): void 
     invocationId: ctx.invocation.invocationId,
     ...(scanId ? { scanId } : {}),
   });
-  while (snapshots.length > MAX_COVERAGE_SNAPSHOTS) snapshots.shift();
-  ctx.operations.state.write(COVERAGE_HISTORY_KEY, snapshots);
 }
+
+/** Files one arrival batch keeps, and the serialized byte ceiling for them. */
+export const MAX_ARRIVAL_FILES = 100;
+export const MAX_ARRIVAL_STATE_BYTES = 16 * 1024;
 
 type ArrivalBatch = {
   batchId: string;
@@ -1120,13 +1425,21 @@ type ArrivalBatch = {
     firedRules: Array<{ token: string; tags: string[] }>;
     tags: AttachmentView[];
   }>;
+  /** Files the batch actually processed; may exceed the retained `files`. */
+  totalFiles: number;
+  /** True when the retained file list was capped by count or bytes. */
+  truncated: boolean;
 };
 
 function latestArrival(ctx: V2HandlerContext): ArrivalBatch | null {
   const value = ctx.operations.state.read(LATEST_ARRIVALS_KEY);
-  return typeof value === "object" && value !== null && Array.isArray((value as { files?: unknown }).files)
-    ? (value as ArrivalBatch)
-    : null;
+  if (!isRecordValue(value) || !Array.isArray(value.files)) return null;
+  const batch = value as unknown as ArrivalBatch;
+  return {
+    ...batch,
+    totalFiles: typeof value.totalFiles === "number" ? value.totalFiles : batch.files.length,
+    truncated: value.truncated === true,
+  };
 }
 
 function recordArrivalBatch(
@@ -1146,25 +1459,36 @@ function recordArrivalBatch(
     });
     byFile.set(attachment.fileId, list);
   }
+  const mapped = files.map((file) => {
+    const attachments = byFile.get(file.fileId) ?? [];
+    return {
+      id: file.fileId,
+      filename: file.filename,
+      tagged: attachments.length > 0,
+      firedRules: rules
+        .filter((rule) => filenameMatchesToken(file.filename, rule.tok))
+        .map((rule) => ({ token: rule.tok, tags: [...rule.tags] })),
+      tags: attachments,
+    };
+  });
+  // Cap the retained arrival list so a large scan cannot push the shared
+  // extension state past its byte budget; report the cap instead of hiding it.
+  const retained = mapped.slice(0, MAX_ARRIVAL_FILES);
+  let truncated = mapped.length > retained.length;
+  while (retained.length > 1 && serializeBytes(retained) > MAX_ARRIVAL_STATE_BYTES) {
+    retained.pop();
+    truncated = true;
+  }
   const input = inputRecord(ctx);
   ctx.operations.state.write(LATEST_ARRIVALS_KEY, {
     batchId: typeof input.batchId === "string" ? input.batchId : ctx.invocation.invocationId,
     ...(typeof input.scanStartedAt === "string" ? { scanStartedAt: input.scanStartedAt } : {}),
     invocationId: ctx.invocation.invocationId,
     completedAt: new Date().toISOString(),
-    files: files.map((file) => {
-      const attachments = byFile.get(file.fileId) ?? [];
-      return {
-        id: file.fileId,
-        filename: file.filename,
-        tagged: attachments.length > 0,
-        firedRules: rules
-          .filter((rule) => filenameMatchesToken(file.filename, rule.tok))
-          .map((rule) => ({ token: rule.tok, tags: [...rule.tags] })),
-        tags: attachments,
-      };
-    }),
-  });
+    totalFiles: mapped.length,
+    truncated,
+    files: retained,
+  } satisfies ArrivalBatch);
 }
 
 export function runCoverageSummary(ctx: V2HandlerContext) {
@@ -1238,7 +1562,7 @@ export function runLatestArrivals(ctx: V2HandlerContext) {
   });
 }
 
-export function runRemoveByOrigin(ctx: V2HandlerContext) {
+export async function runRemoveByOrigin(ctx: V2HandlerContext) {
   const input = inputRecord(ctx);
   if (input.confirm !== true) {
     throw new V2OperationError("input-invalid", "Confirm removal before changing automatic tag attachments.");
@@ -1247,7 +1571,13 @@ export function runRemoveByOrigin(ctx: V2HandlerContext) {
     throw new V2OperationError("input-invalid", "Choose deterministic or semantic AI attachments.");
   }
   const removed = extendedOperationsOf(ctx).tags.detachByOrigin(input.origin);
-  recordCoverageAtBoundary(ctx);
+  // Removing the semantic attachments removes the provenance the completion
+  // records attest to, so drop them: the next classification run then
+  // re-derives them instead of skipping files whose tags are gone (#286).
+  if (input.origin === "semantic_ai") {
+    await clearClassifications(ctx);
+  }
+  await recordCoverageAtBoundary(ctx);
   return immediateV2Result({ origin: input.origin, removed });
 }
 

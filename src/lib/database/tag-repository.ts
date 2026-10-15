@@ -11,6 +11,47 @@ import * as schema from "@/lib/schema";
 
 import type Database from "better-sqlite3";
 
+/**
+ * Tag origin strength for attachment precedence (#286):
+ * `manual` > `deterministic` > `semantic_ai`. A write may strengthen an
+ * attachment's origin but never weaken it, and equal-rank semantic writes
+ * refresh the confidence so a stored confidence never disagrees with the
+ * vector it was derived from.
+ */
+const TAG_ORIGIN_RANK: Record<TagOrigin, number> = {
+  manual: 2,
+  deterministic: 1,
+  semantic_ai: 0,
+};
+
+/**
+ * Decide what an incoming write does to an existing attachment. Returns the
+ * possibly-updated row and whether it changed; an unchanged result is an
+ * ignored write and leaves the stored row exactly as it was.
+ */
+function decideTagWrite(
+  prev: { origin: TagOrigin; confidence: number | null },
+  incomingOrigin: TagOrigin,
+  incomingConfidence: number | null,
+): { changed: boolean; origin: TagOrigin; confidence: number | null } {
+  const prevRank = TAG_ORIGIN_RANK[prev.origin] ?? 0;
+  const nextRank = TAG_ORIGIN_RANK[incomingOrigin] ?? 0;
+  if (nextRank > prevRank) {
+    return { changed: true, origin: incomingOrigin, confidence: incomingConfidence };
+  }
+  if (nextRank < prevRank) {
+    return { changed: false, origin: prev.origin, confidence: prev.confidence };
+  }
+  if (incomingOrigin === "semantic_ai") {
+    return {
+      changed: prev.confidence !== incomingConfidence,
+      origin: prev.origin,
+      confidence: incomingConfidence,
+    };
+  }
+  return { changed: false, origin: prev.origin, confidence: prev.confidence };
+}
+
 export class SqliteTagRepository implements TagRepository {
   private sqlite: Database;
   private db: ReturnType<typeof drizzle<typeof schema>>;
@@ -64,9 +105,13 @@ export class SqliteTagRepository implements TagRepository {
   }
 
   /**
-   * One transaction for many attachments (#258). Manual wins without a
-   * read: an incoming manual upgrades the row, an incoming automatic never
-   * downgrades a stored manual. Idempotent per (file, tag) pair.
+   * One transaction for many attachments (#258) with an accurate outcome
+   * (#286). Precedence, strongest first: `manual` > `deterministic` >
+   * `semantic_ai`. A write changes an existing row only when its origin is at
+   * least as strong; equal-rank `semantic_ai` writes refresh the confidence to
+   * match the newest vector, and weaker writes are ignored without a
+   * downgrade. `inserted` counts new pairs, `upgraded` counts rows whose
+   * origin or confidence changed, `ignored` counts unchanged pairs.
    */
   attachTagsBatch(
     entries: ReadonlyArray<{
@@ -75,19 +120,19 @@ export class SqliteTagRepository implements TagRepository {
       origin?: TagOrigin;
       confidence?: number | null;
     }>,
-  ): void {
-    if (entries.length === 0) return;
-    const stmt = this.sqlite
-      .prepare(
-        `INSERT INTO file_tags (file_id, tag_id, origin, confidence)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT (file_id, tag_id) DO UPDATE SET
-           origin = CASE WHEN excluded.origin = 'manual' THEN 'manual' ELSE file_tags.origin END,
-           confidence = CASE
-             WHEN excluded.origin = 'manual' AND file_tags.origin != 'manual' THEN excluded.confidence
-             ELSE file_tags.confidence
-           END`,
-      );
+  ): { inserted: number; upgraded: number; ignored: number } {
+    const outcome = { inserted: 0, upgraded: 0, ignored: 0 };
+    if (entries.length === 0) return outcome;
+    const readExisting = this.sqlite.prepare(
+      "SELECT tag_id AS tagId, origin, confidence FROM file_tags WHERE file_id = ?",
+    );
+    const upsert = this.sqlite.prepare(
+      `INSERT INTO file_tags (file_id, tag_id, origin, confidence)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (file_id, tag_id) DO UPDATE SET
+         origin = excluded.origin,
+         confidence = excluded.confidence`,
+    );
     const write = this.sqlite.transaction(
       (
         batch: ReadonlyArray<{
@@ -97,12 +142,54 @@ export class SqliteTagRepository implements TagRepository {
           confidence?: number | null;
         }>,
       ) => {
+        const byFile = new Map<string, Array<(typeof batch)[number]>>();
         for (const entry of batch) {
-          stmt.run(entry.fileId, entry.tagId, entry.origin ?? "manual", entry.confidence ?? null);
+          const list = byFile.get(entry.fileId) ?? [];
+          list.push(entry);
+          byFile.set(entry.fileId, list);
+        }
+        for (const [fileId, fileEntries] of byFile) {
+          const existing = new Map<string, { origin: TagOrigin; confidence: number | null }>();
+          for (const row of readExisting.all(fileId) as Array<{
+            tagId: string;
+            origin: TagOrigin;
+            confidence: number | null;
+          }>) {
+            existing.set(row.tagId, {
+              origin: row.origin ?? "manual",
+              confidence: row.confidence ?? null,
+            });
+          }
+          for (const entry of fileEntries) {
+            const incomingOrigin = entry.origin ?? "manual";
+            const incomingConfidence = entry.confidence ?? null;
+            const prev = existing.get(entry.tagId);
+            if (!prev) {
+              upsert.run(fileId, entry.tagId, incomingOrigin, incomingConfidence);
+              outcome.inserted += 1;
+              existing.set(entry.tagId, {
+                origin: incomingOrigin,
+                confidence: incomingConfidence,
+              });
+              continue;
+            }
+            const decision = decideTagWrite(prev, incomingOrigin, incomingConfidence);
+            if (!decision.changed) {
+              outcome.ignored += 1;
+              continue;
+            }
+            upsert.run(fileId, entry.tagId, decision.origin, decision.confidence);
+            outcome.upgraded += 1;
+            existing.set(entry.tagId, {
+              origin: decision.origin,
+              confidence: decision.confidence,
+            });
+          }
         }
       },
     );
     write(entries);
+    return outcome;
   }
 
   getAttachmentsForFile(fileId: string): FileTagAttachment[] {

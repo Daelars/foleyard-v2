@@ -45,13 +45,16 @@ export type V2TagPorts = {
   attachmentsForFiles?(fileIds: string[]): V2TagAttachment[];
   create(name: string): string;
   attach(fileId: string, tagId: string, origin?: TagOrigin, confidence?: number | null): void;
-  /** Optional single-transaction batch attach (#258). */
+  /**
+   * Optional single-transaction batch attach (#258). Returns what the batch
+   * actually did (#286): hosts that cannot report it may return nothing.
+   */
   attachMany?(entries: ReadonlyArray<{
     fileId: string;
     tagId: string;
     origin?: TagOrigin;
     confidence?: number | null;
-  }>): void;
+  }>): V2AttachOutcome | void;
   /** SQL-backed coverage aggregate over active files (#257). */
   coverage?(): V2CoverageAggregate;
   /** One page of coverage members plus the full match count (#257). */
@@ -69,6 +72,18 @@ export type V2TagPorts = {
 };
 
 export type V2TagAttachment = FileTagAttachment & { tagName: string };
+
+/**
+ * What a batch of tag writes did, so a handler reports reality instead of
+ * counting every attempt as attached (#286): `inserted` created a pair,
+ * `upgraded` changed an existing pair's origin or confidence, and `ignored`
+ * left an existing pair untouched because the write had lower precedence.
+ */
+export type V2AttachOutcome = {
+  inserted: number;
+  upgraded: number;
+  ignored: number;
+};
 
 /** One active file with its attachments, for coverage member pages. */
 export type V2CoverageMember = {
@@ -109,14 +124,15 @@ export type V2TagOperations = {
   attach(fileId: string, tagId: string, origin?: TagOrigin, confidence?: number | null): void;
   /**
    * Batch attach (#258): one transaction for many attachments when the host
-   * supports it. Optional so fixture hosts keep the per-attach shape.
+   * supports it, returning what the batch did (#286). Optional so fixture
+   * hosts keep the per-attach shape.
    */
   attachMany?(entries: ReadonlyArray<{
     fileId: string;
     tagId: string;
     origin?: TagOrigin;
     confidence?: number | null;
-  }>): void;
+  }>): V2AttachOutcome | void;
   /** SQL-backed coverage aggregate over active files (#257). */
   coverage?(): V2CoverageAggregate;
   /** One page of coverage members plus the full match count (#257). */
@@ -340,8 +356,9 @@ export function createV2TagOperations(args: V2OrganizationFactoryArgs): V2TagOpe
       ports().attach(checkId(fileId, "Sound ID"), checkId(tagId, "Tag ID"), origin, confidence ?? null);
       args.notify?.("tags");
     },
-    attachMany(entries): void {
+    attachMany(entries): V2AttachOutcome {
       require("tags:write");
+      const outcome: V2AttachOutcome = { inserted: 0, upgraded: 0, ignored: 0 };
       const clean = entries.map((entry) => ({
         fileId: checkId(entry.fileId, "Sound ID"),
         tagId: checkId(entry.tagId, "Tag ID"),
@@ -349,16 +366,27 @@ export function createV2TagOperations(args: V2OrganizationFactoryArgs): V2TagOpe
         confidence: entry.confidence ?? null,
       }));
       for (const entry of clean) liveTarget(entry.fileId);
-      if (clean.length === 0) return;
+      if (clean.length === 0) return outcome;
       const portsValue = ports();
       if (portsValue.attachMany) {
-        portsValue.attachMany(clean);
+        const reported = portsValue.attachMany(clean);
+        if (reported) {
+          outcome.inserted = reported.inserted;
+          outcome.upgraded = reported.upgraded;
+          outcome.ignored = reported.ignored;
+        } else {
+          // A batch host that cannot report outcomes: treat every entry as
+          // landed, the pre-#286 count.
+          outcome.inserted = clean.length;
+        }
       } else {
         for (const entry of clean) {
           portsValue.attach(entry.fileId, entry.tagId, entry.origin, entry.confidence);
         }
+        outcome.inserted = clean.length;
       }
       args.notify?.("tags");
+      return outcome;
     },
     // The SQL aggregate ports only exist when the host provides them, so a
     // fixture host falls through to the handler's one-pass fallback.

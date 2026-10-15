@@ -1,7 +1,8 @@
 /**
  * Desktop-owned runtime identity.
- * Electron main owns desktop identity, installed IPC handlers and resource
- * locations. No generic invoke-anything IPC is added.
+ * Electron main owns desktop identity, installed IPC handlers and
+ * resource availability. Absolute install/user-data paths are reported as
+ * presence booleans only (#307). No generic invoke-anything IPC is added.
  */
 const { app } = require("electron");
 const fs = require("node:fs");
@@ -72,6 +73,10 @@ function getDesktopIdentity() {
     version = null;
   }
   const provenance = readBuildProvenance(appPath);
+  // Report only whether the install/resource locations exist. Absolute
+  // resources/user-data paths belong to the operator's machine, not to a
+  // diagnostic export (#307).
+  const resourcesPath = process.resourcesPath || null;
   return {
     owner: "desktop",
     platform: process.platform,
@@ -80,13 +85,12 @@ function getDesktopIdentity() {
     buildId: provenance.buildId,
     sourceRevision: provenance.sourceRevision,
     sourceDirty: provenance.sourceDirty,
-    resourcesPath: process.resourcesPath || null,
-    docsRoot: (() => {
+    resourcesPresent: Boolean(resourcesPath),
+    docsRootPresent: (() => {
       try {
-        const candidate = path.join(process.resourcesPath || "", "foleyard-docs");
-        return fs.existsSync(candidate) ? candidate : null;
+        return Boolean(resourcesPath && fs.existsSync(path.join(resourcesPath, "foleyard-docs")));
       } catch {
-        return null;
+        return false;
       }
     })(),
     installedChannels: getInstalledChannels(),

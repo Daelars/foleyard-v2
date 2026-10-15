@@ -15,6 +15,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { readRunningBuildIdentity } from "@/lib/build-identity";
+
 import packageJson from "../../package.json";
 
 export type DocumentStatus = "current" | "historical" | "experimental";
@@ -70,7 +72,6 @@ export type DocumentationLocation = {
   indexId: string;
   documentIds: string[];
   examples: DocumentationExample[];
-  localRoot?: string;
 };
 
 const EMPTY_REGISTRY: DocumentationRegistry = {
@@ -201,24 +202,6 @@ export function listRunnableExamples(): DocumentationExample[] {
   return found.sort((left, right) => left.id.localeCompare(right.id));
 }
 
-function readBuildId(): string | undefined {
-  try {
-    const roots = [process.env.FOLEYARD_APP_PATH, process.cwd()].filter(
-      (root): root is string => typeof root === "string" && root.length > 0,
-    );
-    for (const root of roots) {
-      const candidate = path.join(root, ".next", "BUILD_ID");
-      if (fs.existsSync(candidate)) {
-        const raw = fs.readFileSync(candidate, "utf8").trim();
-        if (raw) return raw;
-      }
-    }
-  } catch {
-    // Absence is explicit, not fatal.
-  }
-  return undefined;
-}
-
 /** Provenance block of a staged `manifest.json`; null when absent or invalid. */
 function readStagedManifest(root: string): (DocsManifestIdentity & { documents: unknown[] }) | null {
   const manifestPath = path.join(root, "manifest.json");
@@ -239,11 +222,15 @@ function readStagedManifest(root: string): (DocsManifestIdentity & { documents: 
 }
 
 /**
- * Docs location plus a real match verdict (#240). A packaged build compares
- * the staged manifest's product version, build id and source revision with
- * the running identity and names every mismatched field with both values. A
- * development checkout reports unversioned, and a staged root without a
- * manifest reports missing-manifest — never a constant `matched: true`.
+ * Docs location plus a real match verdict (#240/#307). A packaged build
+ * compares the staged manifest's product version, build id and source revision
+ * with the running identity read by the one shared build-identity reader and
+ * names every mismatched field with both values. A missing expected identity —
+ * an unreadable provenance or a staged manifest without the field — is a
+ * mismatch, never agreement: the verdict fails closed. A development checkout
+ * reports unversioned, and a staged root without a manifest reports
+ * missing-manifest — never a constant `matched: true`. No private local path
+ * is part of the location.
  */
 export function getDocumentationLocation(): DocumentationLocation {
   const { root, packaged } = resolveDocsRoot();
@@ -255,7 +242,6 @@ export function getDocumentationLocation(): DocumentationLocation {
     indexId: "index",
     documentIds: registry.documents.map((d) => d.id),
     examples: listRunnableExamples(),
-    ...(packaged ? {} : { localRoot: root }),
   };
 
   if (!packaged) {
@@ -291,26 +277,22 @@ export function getDocumentationLocation(): DocumentationLocation {
     };
   }
 
+  // Fail closed: a field counts as agreed only when the running identity
+  // supplies an expected value and it equals the staged value. A missing
+  // expected value (unreadable build) or a missing staged value is a mismatch.
   const mismatches: DocsMismatch[] = [];
-  if (staged.productVersion !== productVersion) {
-    mismatches.push({
-      field: "productVersion",
-      expected: productVersion,
-      actual: staged.productVersion ?? "absent",
-    });
-  }
-  const runningBuildId = readBuildId();
-  if (staged.buildId && runningBuildId && staged.buildId !== runningBuildId) {
-    mismatches.push({ field: "buildId", expected: runningBuildId, actual: staged.buildId });
-  }
-  const runningRevision = process.env.FOLEYARD_SOURCE_REVISION;
-  if (staged.sourceRevision && runningRevision && staged.sourceRevision !== runningRevision) {
-    mismatches.push({
-      field: "sourceRevision",
-      expected: runningRevision,
-      actual: staged.sourceRevision,
-    });
-  }
+  const compareIdentity = (
+    field: string,
+    expected: string | undefined,
+    actual: string | null,
+  ): void => {
+    if (expected && expected === actual) return;
+    mismatches.push({ field, expected: expected ?? "absent", actual: actual ?? "absent" });
+  };
+  compareIdentity("productVersion", productVersion, staged.productVersion);
+  const running = readRunningBuildIdentity();
+  compareIdentity("buildId", running.buildId, staged.buildId);
+  compareIdentity("sourceRevision", running.sourceRevision, staged.sourceRevision);
 
   return {
     ...base,

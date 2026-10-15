@@ -173,10 +173,18 @@ function world(overrides?: {
       vectors.set(vkey(fileId, model), { dim, vec });
     },
     get: (fileId, model) => vectors.get(vkey(fileId, model)) ?? null,
-    listIds: (model) =>
-      [...vectors.keys()]
+    listPage: (model, request) => {
+      const ids = [...vectors.keys()]
         .filter((entry) => entry.startsWith(`${model}:`))
-        .map((entry) => entry.slice(model.length + 1)),
+        .map((entry) => entry.slice(model.length + 1))
+        .sort()
+        .filter((id) => request.after === null || id > request.after);
+      const page = ids.slice(0, request.limit);
+      return {
+        rows: page.map((fileId) => ({ fileId, ...vectors.get(vkey(fileId, model))! })),
+        hasMore: ids.length > page.length,
+      };
+    },
     removeFile: (fileId) => {
       for (const entry of [...vectors.keys()]) {
         if (entry.endsWith(`:${fileId}`)) vectors.delete(entry);

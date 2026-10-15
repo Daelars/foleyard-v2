@@ -1,8 +1,7 @@
 import {
   deleteEmbeddingsForFile,
   getFileEmbedding,
-  listEmbeddingIds,
-  listEmbeddings,
+  listEmbeddingsPage,
   upsertFileEmbedding,
 } from "@/lib/db";
 import type { V2EmbeddingPorts } from "@yard-core";
@@ -17,6 +16,10 @@ import { getV2Events } from "./events";
  * as float-32 blobs keyed by file and model; all ranking math lives
  * in yard-core.
  *
+ * Candidate reads are pages, not listings (#298): `listPage` streams one
+ * bounded keyset page of a model's vectors, so similarity ranking never
+ * materialises the whole vector set in this process.
+ *
  * Persist-before-notify: each mutation commits its repository write
  * first and emits `contributions-changed` afterwards, so subscribers
  * that re-read on receipt always observe the triggering change.
@@ -26,8 +29,7 @@ export type V2EmbeddingsDeps = {
   embeddings?: {
     upsert: V2EmbeddingPorts["upsert"];
     get: V2EmbeddingPorts["get"];
-    listIds: V2EmbeddingPorts["listIds"];
-    list?: NonNullable<V2EmbeddingPorts["list"]>;
+    listPage: V2EmbeddingPorts["listPage"];
     removeFile: V2EmbeddingPorts["removeFile"];
   };
   notify?: () => void;
@@ -52,19 +54,17 @@ export function createV2EmbeddingPorts(deps: V2EmbeddingsDeps = {}): V2Embedding
       const row = getFileEmbedding(fileId, model);
       return row ? { dim: row.dim, vec: new Uint8Array(row.vec.buffer, row.vec.byteOffset, row.vec.byteLength) } : null;
     },
-    listIds: (model) => (ports ? ports.listIds(model) : listEmbeddingIds(model)),
-    list: (model) => {
-      if (ports?.list) {
-        return ports.list(model).map((row) => ({
-          ...row,
+    listPage: (model, request) => {
+      if (ports) return ports.listPage(model, request);
+      const page = listEmbeddingsPage(model, request);
+      return {
+        rows: page.rows.map((row) => ({
+          fileId: row.fileId,
+          dim: row.dim,
           vec: new Uint8Array(row.vec.buffer, row.vec.byteOffset, row.vec.byteLength),
-        }));
-      }
-      return listEmbeddings(model).map((row: { fileId: string; dim: number; vec: Buffer }) => ({
-        fileId: row.fileId,
-        dim: row.dim,
-        vec: new Uint8Array(row.vec.buffer, row.vec.byteOffset, row.vec.byteLength),
-      }));
+        })),
+        hasMore: page.hasMore,
+      };
     },
     removeFile: (fileId) => {
       if (ports) ports.removeFile(fileId);

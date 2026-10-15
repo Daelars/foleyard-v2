@@ -200,12 +200,15 @@ export {
 } from "./analysis";
 export {
   STUB_EMBEDDING_MODEL,
+  SIMILARITY_CHUNK_SIZE,
   cosineSimilarity,
   createV2EmbeddingOperations,
   denyV2EmbeddingOperations,
   liveFileViaLibrary,
   type V2EmbeddingFactoryArgs,
   type V2EmbeddingOperations,
+  type V2EmbeddingPage,
+  type V2EmbeddingPageRequest,
   type V2EmbeddingPorts,
   type V2SimilarFile,
 } from "./embeddings";

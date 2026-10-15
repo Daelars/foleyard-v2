@@ -21,8 +21,16 @@ marketplace, or public authoring SDK.
 - `packages/yard-core/src/extensions-v2/` owns the framework-free engine:
   registry validation, catalog serialization, availability, permissions
   and grants, host execution, jobs, plans, and the HTTP transport codec.
+- `src/lib/extensions-v2/runtime.ts` owns the one process-wide v2
+  runtime: registration, host execution, plans, grants, jobs,
+  enablement, approvals, and events. Next compiles each route into its
+  own bundle, so module state forks per route subtree even though the
+  process is one realm; every module reads its slice through
+  `getV2Runtime()` instead of keeping a per-bundle copy, and the
+  creation guard is structural so a re-evaluated module reuses the
+  existing runtime.
 - `src/lib/extensions-v2/host.ts` composes the production registry and
-  per-port handlers behind `getAppV2Host()`.
+  per-port handlers behind `getAppV2Host()`, held on that runtime.
 - The renderer owns all UI: V3 adapters in
   `src/app/(variant-i)/components/`, palette entries, context menus,
   dialogs, and panels. Contributions declare intent; the renderer
@@ -89,6 +97,7 @@ tool packages import `yard-core` and relatives only.
 
 - `packages/yard-tools/*-v2/src/{definition,handlers}.ts`
 - `packages/yard-core/src/extensions-v2/{registry,catalog,availability,permissions,grants,host,jobs,plans,transport,operations}.ts`
+- `src/lib/extensions-v2/runtime.ts` — the one process-wide v2 runtime
 - `src/lib/extensions-v2/host.ts` — production registry + enablement
 - `src/app/api/extensions-v2/**/route.ts` — HTTP surface
 - `src/app/(variant-i)/components/extensions/**` — V3 adapters

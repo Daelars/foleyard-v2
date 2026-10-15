@@ -1,4 +1,6 @@
 // @vitest-environment node
+import fs from "node:fs";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -66,15 +68,21 @@ afterEach(() => {
 describe("desktop-picker proofs gate extension grants", () => {
   it("returns a single-use opaque proof only to the authenticated picker", async () => {
     const destination = scratch.directory("out");
+    // Sync and async realpath disagree on Windows 8.3 short names
+    // (`RUNNER~1` vs `runneradmin` on CI), so compare via the same async
+    // canonicalization the implementation uses.
+    const canonicalDestination = await fs.promises.realpath(destination);
 
     // Only the desktop process may mint; no secret and a wrong secret deny.
     expect((await desktopGrantsPOST(pickerRequest({ path: destination }, null))).status).toBe(403);
     expect((await desktopGrantsPOST(pickerRequest({ path: destination }, "wrong"))).status).toBe(403);
 
     const picked = await pick(MAKE_PACK, "destination", destination);
-    expect(picked.path).toBe(destination);
+    expect(await fs.promises.realpath(picked.path)).toBe(canonicalDestination);
     expect(picked.proof).toEqual(expect.any(String));
-    expect(picked.proof).not.toContain(destination);
+    // The proof must not leak the chosen folder, in the canonical spelling the
+    // implementation would have used.
+    expect(picked.proof).not.toContain(canonicalDestination);
 
     // Library-root browsing still gets the canonical path and no proof.
     const browsed = (await (
@@ -201,6 +209,11 @@ describe("desktop-picker proofs gate extension grants", () => {
   it("completes the picker-to-grant flow Make Pack and Library Gatherer run", async () => {
     const destination = scratch.directory("out");
     const source = scratch.directory("incoming");
+    // Sync and async realpath disagree on Windows 8.3 short names
+    // (`RUNNER~1` vs `runneradmin` on CI), so match the async canonicalization
+    // the implementation uses.
+    const canonicalDestination = await fs.promises.realpath(destination);
+    const canonicalSource = await fs.promises.realpath(source);
 
     // The bridge stands in for the Electron main process: it opens the native
     // picker (here, the real desktop-grants route) and returns the proof.
@@ -225,13 +238,13 @@ describe("desktop-picker proofs gate extension grants", () => {
 
     try {
       const pack = await pickV2Grant(bridge, MAKE_PACK, "destination");
-      expect(pack).toMatchObject({ ok: true, path: destination });
+      expect(pack).toMatchObject({ ok: true, path: canonicalDestination });
 
       const gatherSource = await pickV2Grant(bridge, GATHERER, "source");
-      expect(gatherSource).toMatchObject({ ok: true, path: source });
+      expect(gatherSource).toMatchObject({ ok: true, path: canonicalSource });
 
       const gatherDestination = await pickV2Grant(bridge, GATHERER, "destination");
-      expect(gatherDestination).toMatchObject({ ok: true, path: destination });
+      expect(gatherDestination).toMatchObject({ ok: true, path: canonicalDestination });
     } finally {
       globalThis.fetch = originalFetch;
     }

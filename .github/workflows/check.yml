@@ -17,6 +17,10 @@ jobs:
       # package on CI runners instead of the TypeScript compiler.
       - run: bun run typecheck
       - run: bun run lint
+      # Publishes the failure before the test suite: a newly disclosed high or
+      # critical advisory in a shipped dependency blocks the pull request, while
+      # development-only and unreachable findings stay out of the way (#260).
+      - run: node scripts/check-dependency-audit.cjs
       - run: bun run test
       - run: bun run test:coverage
       - run: bun run build

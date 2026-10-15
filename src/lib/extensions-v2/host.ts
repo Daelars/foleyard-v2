@@ -32,7 +32,7 @@ import { ensureDropRulesV2Registered } from "./drop-rules-v2";
 import { ensureLibraryGathererV2Registered } from "./library-gatherer-v2";
 import { ensureAutoTagV2Registered } from "./auto-tag-v2";
 import { getV2GrantedPermissions } from "./policy";
-import { createV2ExtensionStatePorts, createV2SettingsPorts } from "./settings-state";
+import { createV2ExtensionStatePorts, createV2SettingsPorts, getV2WorkflowState } from "./settings-state";
 import {
   adoptRetiredV1Enablement,
   listPersistedEnabled,
@@ -191,6 +191,7 @@ function createOperations(binding: {
 }): V2OperationServices {
   const declarations = getV2Registry().get(binding.extensionId)?.settings;
   const library = createV2LibraryPorts();
+  const extensionState = createV2ExtensionStatePorts();
   const base = createV2OperationServices({
     ...binding,
     grants: getV2GrantStore(),
@@ -199,7 +200,11 @@ function createOperations(binding: {
     files: createV2FileContentPorts(),
     archive: createV2ArchivePorts(),
     settings: createV2SettingsPorts(),
-    extensionState: createV2ExtensionStatePorts(),
+    extensionState,
+    // The one process-wide versioned store for this extension: the host
+    // and the job runner share it, so concurrent jobs serialize their
+    // state read-modify-writes instead of losing updates.
+    workflowState: getV2WorkflowState(binding.extensionId, extensionState),
     selectionSources: [createShelfSelectionSource(), createRecentSelectionSource()],
     ...(declarations ? { settingsDeclarations: declarations } : {}),
     ...(binding.reporter ? { jobs: binding.reporter } : {}),

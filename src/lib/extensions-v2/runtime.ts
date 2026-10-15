@@ -7,6 +7,7 @@ import {
   V2SourceGrantStore,
   type ExtensionV2Host,
   type V2JobManager,
+  type V2WorkflowStateStore,
 } from "@yard-core";
 
 /**
@@ -24,9 +25,9 @@ import {
  * invisible to the subscription that owned it.
  *
  * One object now owns registration, host execution, plans, grants,
- * jobs, enablement, approvals, and events, and is created once per
- * process. Every module reads its slice through `getV2Runtime()`; no
- * module keeps a second copy.
+ * jobs, enablement, approvals, workflow state, and events, and is
+ * created once per process. Every module reads its slice through
+ * `getV2Runtime()`; no module keeps a second copy.
  *
  * The guard is structural, not `instanceof`: a re-evaluated module
  * (tests simulate bundles with `vi.resetModules()`) must still
@@ -70,6 +71,15 @@ export type V2Runtime = {
   /** Grants: destination (write) and source (read) access. */
   destinationGrants: V2DestinationGrants;
   sourceGrants: V2SourceGrants;
+  /**
+   * Workflow state: one versioned, bounded, migration-aware store per
+   * extension, created once per process by `settings-state.ts` and
+   * shared by every route bundle, the host, and the job runner. One
+   * instance per extension is what makes `state.update` atomic across
+   * concurrent jobs: the store serializes its own read-modify-write
+   * operations.
+   */
+  workflowStates: Map<string, V2WorkflowStateStore>;
   /** Host-owned events: the bus every adapter and renderer subscription shares. */
   events: V2EventBus;
 };
@@ -93,6 +103,7 @@ export function createV2Runtime(): V2Runtime {
     approvalsLoaded: false,
     destinationGrants: { store: new V2GrantStore(), tokens: new Map() },
     sourceGrants: { store: new V2SourceGrantStore(), tokens: new Map() },
+    workflowStates: new Map(),
     events: new V2EventBus(),
   };
 }

@@ -11,6 +11,7 @@ import {
 } from "@yard-core";
 
 import { getV2Events } from "./events";
+import { getV2Runtime } from "./runtime";
 
 /**
  * Application settings/state ports for v2 operations (Application
@@ -21,7 +22,9 @@ import { getV2Events } from "./events";
  * importing v1 extension modules. Settings rows are namespaced per
  * extension by the core services; state is one versioned envelope per
  * extension (`V2WorkflowStateStore` reads legacy unversioned blobs as
- * version 0); approvals persist under `v2:approvals` (see `policy.ts`).
+ * version 0), cached once per extension on the process-wide runtime so
+ * concurrent jobs serialize their read-modify-write updates; approvals
+ * persist under `v2:approvals` (see `policy.ts`).
  *
  * Persist-before-notify: every write commits its settings-table row
  * first and emits its typed event afterwards, so a subscriber that
@@ -120,7 +123,26 @@ export function createV2AuthoredSettings(
   return new V2AuthoredSettingsStore(extensionId, declarations, createV2SettingsPorts());
 }
 
-/** Versioned workflow state with transactional migrations (see core `V2WorkflowStateStore`). */
-export function createV2WorkflowState(extensionId: string): V2WorkflowStateStore {
-  return new V2WorkflowStateStore(extensionId, createV2ExtensionStatePorts());
+/**
+ * Versioned workflow state with transactional migrations (see core
+ * `V2WorkflowStateStore`).
+ *
+ * One store per extension for the whole process, cached on the
+ * process-wide runtime (#264): every route bundle, the host, and the job
+ * runner address the same instance, so `state.update` serializes
+ * read-modify-write operations across concurrent jobs instead of one
+ * clobbering another. `ports` is only consulted when the store is first
+ * created (production passes its own DB-backed ports; tests may pass
+ * fakes).
+ */
+export function getV2WorkflowState(
+  extensionId: string,
+  ports?: V2ExtensionStatePorts,
+): V2WorkflowStateStore {
+  const runtime = getV2Runtime();
+  const existing = runtime.workflowStates.get(extensionId);
+  if (existing) return existing;
+  const created = new V2WorkflowStateStore(extensionId, ports ?? createV2ExtensionStatePorts());
+  runtime.workflowStates.set(extensionId, created);
+  return created;
 }

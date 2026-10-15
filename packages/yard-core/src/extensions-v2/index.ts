@@ -285,11 +285,15 @@ export {
 export {
   MAX_V2_STATE_BYTES,
   MAX_V2_STATE_KEYS,
+  MAX_V2_STATE_KEY_BYTES,
+  MAX_V2_STATE_VALUE_BYTES,
   V2AuthoredSettingsStore,
   V2WorkflowStateStore,
   type V2AuthoredSettingsOptions,
   type V2DataDiagnosis,
   type V2SettingValueCheck,
+  type V2StateMigrationPath,
+  type V2StateMigrationStep,
   type V2WorkflowStateEnvelope,
   type V2WorkflowStateOptions,
 } from "./extension-data";

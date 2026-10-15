@@ -123,6 +123,7 @@ Routes (all under `src/app/api/extensions-v2/`, envelopes
 | `/api/extensions-v2/extensions/:id` | PATCH | `{ enabled: boolean }` |
 | `/api/extensions-v2/extensions/:id/approvals` | POST / DELETE | approve / revoke permissions |
 | `/api/extensions-v2/grants` | POST | bridge a picked folder into a grant ID |
+| `/api/extensions-v2/settings` | GET | one batched read of every extension's enablement, permissions and settings (#295) |
 | `/api/extensions-v2/settings/:id` | GET | declarations + values + diagnosis |
 | `/api/extensions-v2/settings/:id/:settingId` | PUT | validated write |
 | `/api/extensions-v2/settings/:id/reset` | POST | reset one setting |
@@ -199,7 +200,14 @@ Single use, 15-minute default TTL capped at 1 hour. Apply revalidates
 targets, grants, permissions, and availability.
 
 Settings are author-declared and validated with reset semantics; reset-all
-writes each declared setting under its canonical namespaced row. Workflow
+writes each declared setting under its canonical namespaced row. The
+Settings dialog loads them lazily through one batched read
+(`GET /api/extensions-v2/settings`, #295): only the active tab mounts
+its requests, so opening Settings does not fan out one request per panel.
+A per-extension read failure or corrupt stored row stays in the response
+as a `status: "degraded"` entry with a reason, and a total catalog
+failure is a 500 the client renders as a recoverable error — neither is
+allowed to render as an unexplained empty panel. Workflow
 state is versioned with a declared per-version migration path; a failed
 migration preserves prior data or disables with a diagnosis. State is
 bounded (key length, per-value bytes, per-extension bytes and key count)

@@ -12,6 +12,8 @@ import {
   type V2ResolvedContribution,
 } from "@yard-core";
 
+import type { V2SettingsCatalogEntry } from "./settings-read";
+
 /**
  * Application v2 contribution adapters (Application context, R6).
  *
@@ -168,6 +170,51 @@ export async function fetchV2ExtensionStates(): Promise<V2ExtensionStatesResult>
     };
   }
   return { ok: true, extensions: body.extensions };
+}
+
+/** Batched read: every extension's enablement, permissions and settings in one request (#295). */
+export type V2SettingsCatalogResult =
+  | {
+      ok: true;
+      policyHealth: { degraded: boolean; reason: string | null };
+      extensions: V2SettingsCatalogEntry[];
+    }
+  | { ok: false; message: string };
+
+export async function fetchV2SettingsCatalog(): Promise<V2SettingsCatalogResult> {
+  let response: Response;
+  try {
+    response = await fetch("/api/extensions-v2/settings");
+  } catch (error) {
+    return {
+      ok: false,
+      message: `Extension settings request failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+  const body = (await readJson(response)) as {
+    ok?: boolean;
+    policyHealth?: { degraded?: boolean; reason?: string | null };
+    extensions?: V2SettingsCatalogEntry[];
+    error?: { message?: string };
+  } | null;
+  if (!response.ok || !body?.ok || !body.extensions) {
+    return {
+      ok: false,
+      message:
+        body?.error?.message ??
+        `Extension settings request failed with ${response.status}.`,
+    };
+  }
+  return {
+    ok: true,
+    policyHealth: {
+      degraded: body.policyHealth?.degraded ?? false,
+      reason: body.policyHealth?.reason ?? null,
+    },
+    extensions: body.extensions,
+  };
 }
 
 /**

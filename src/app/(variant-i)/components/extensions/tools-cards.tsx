@@ -44,7 +44,7 @@ export function V3ToolsCards({
   /** Fired after an enable/disable write settles so the route catalog refreshes. */
   onEnabledToggle?: (extensionId: string, enabled: boolean) => void;
 }) {
-  const { entries, loading, toggle, updateSetting, reset, approve } =
+  const { entries, loading, error, refresh, toggle, updateSetting, reset, approve } =
     useV2ExtensionEntries();
   const [detailsId, setDetailsId] = useState<string | null>(null);
 
@@ -54,6 +54,17 @@ export function V3ToolsCards({
   // first load, with nothing to show, renders nothing.
   if (loading && entries.length === 0) {
     return null;
+  }
+  if (error && entries.length === 0) {
+    // Total catalog failure must not render an unexplained empty Tools page.
+    return (
+      <div role="alert" className="col-span-full space-y-3 p-6 text-center">
+        <p className="text-xs text-accent-text">{error}</p>
+        <Button tone="secondary" size="sm" onClick={() => void refresh()}>
+          Retry
+        </Button>
+      </div>
+    );
   }
   const details = entries.find((entry) => entry.id === detailsId) ?? null;
   return (
@@ -102,6 +113,7 @@ export function V3ToolsCards({
         onApprove={(permissions) =>
           details && void approve(details.id, permissions)
         }
+        onRetry={() => void refresh()}
         onRun={
           details && V2_RUN_LABELS[details.id] && onRunExtension
             ? {
@@ -124,6 +136,7 @@ function V3ExtensionDetailsDialog({
   onUpdateSetting,
   onReset,
   onApprove,
+  onRetry,
   onRun,
 }: {
   entry: V2ExtensionSettingsEntry | null;
@@ -131,6 +144,7 @@ function V3ExtensionDetailsDialog({
   onUpdateSetting: (settingId: string, value: unknown) => void;
   onReset: () => void;
   onApprove: (permissions: string[]) => void;
+  onRetry: () => void;
   onRun?: { label: string; run: () => void };
 }) {
   const denied =
@@ -228,7 +242,16 @@ function V3ExtensionDetailsDialog({
                   Reset
                 </Button>
               </div>
-              {entry.rows.length ? (
+              {entry.status === "degraded" ? (
+                <div role="alert" className="space-y-2">
+                  <p className="text-xs text-accent-text">
+                    Settings unavailable: {entry.error ?? "the settings read failed."}
+                  </p>
+                  <Button tone="secondary" size="sm" onClick={onRetry}>
+                    Retry
+                  </Button>
+                </div>
+              ) : entry.rows.length ? (
                 <div
                   className={cn(
                     "space-y-2",

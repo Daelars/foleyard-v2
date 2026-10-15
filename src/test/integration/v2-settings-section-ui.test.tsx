@@ -41,9 +41,10 @@ beforeEach(() => {
       }
       calls.push({ url, method, body });
 
-      if (url === "/api/extensions-v2/extensions") {
+      if (url === "/api/extensions-v2/settings") {
         return jsonResponse({
           ok: true,
+          policyHealth: { degraded: false, reason: null },
           extensions: [
             {
               id: "make-pack-v2",
@@ -51,25 +52,22 @@ beforeEach(() => {
               version: "1.0.0",
               description: "Export packs.",
               enabled: true,
-            },
-          ],
-        });
-      }
-      if (url === "/api/extensions-v2/settings/make-pack-v2") {
-        return jsonResponse({
-          ok: true,
-          declaredPermissions: ["files:write"],
-          effectivePermissions: [],
-          settings: [
-            {
-              declaration: {
-                id: "copy-on-drop",
-                label: "Copy on drop",
-                description: "Copy files here instead of moving them.",
-                type: "boolean",
-                defaultValue: false,
-              },
-              value: false,
+              declaredPermissions: ["files:write"],
+              effectivePermissions: [],
+              settings: [
+                {
+                  declaration: {
+                    id: "copy-on-drop",
+                    label: "Copy on drop",
+                    description: "Copy files here instead of moving them.",
+                    type: "boolean",
+                    defaultValue: false,
+                  },
+                  value: false,
+                },
+              ],
+              status: "ready",
+              error: null,
             },
           ],
         });

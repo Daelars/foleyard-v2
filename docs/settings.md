@@ -50,10 +50,21 @@ Writes validate against the declaration (`V2AuthoredSettingsStore`) and
 persist before the `settings-changed` event is emitted, so a subscriber
 that re-reads on receipt always observes the triggering change.
 
+The Settings dialog loads extension settings lazily (#295). Only the
+active tab mounts its requests, and one batched read
+(`GET /api/extensions-v2/settings`) returns every extension's
+enablement, declared/effective permissions and settings instead of one
+request per panel. Loading, a single degraded panel (a failed read or a
+corrupt row, kept as `status: "degraded"` with a reason), and a total
+catalog failure (a 500 the client renders with a retry) each stay
+visible and recoverable; a degraded panel is never an unexplained empty
+list.
+
 Routes:
 
 | Route | Method | Purpose |
 | --- | --- | --- |
+| `/api/extensions-v2/settings` | GET | Batched read: every extension's enablement, permissions and settings (#295) |
 | `/api/extensions-v2/settings/:extensionId` | GET | Declarations, current values, effective permissions, diagnosis |
 | `/api/extensions-v2/settings/:extensionId/:settingId` | PUT | Validated single-setting write |
 | `/api/extensions-v2/settings/:extensionId/reset` | POST | Reset one setting (`{ settingId }`) or all (`{}`) to defaults |
@@ -116,6 +127,7 @@ settings. Reset-all writes every declared setting under its canonical
 - `src/lib/settings-schema.ts` — discovery + `validateSettingValue`
 - `src/lib/database/settings-repository.ts` — library roots and onboarding version
 - `src/app/api/settings/route.ts` — library-roots/onboarding endpoint
+- `src/app/api/extensions-v2/settings/route.ts` — batched settings read (#295)
 - `src/app/api/extensions-v2/settings/[extensionId]/route.ts` — declarations/values/diagnosis
 - `src/app/api/extensions-v2/settings/[extensionId]/[settingId]/route.ts` — write and reset
 - `src/components/Shortcuts/shortcuts.ts` — shortcut/remove-default storage

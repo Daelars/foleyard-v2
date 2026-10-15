@@ -5,10 +5,13 @@ import {
   createV2OperationServices,
   ExtensionV2Host,
   ExtensionV2Registry,
+  MAX_V2_STATE_BYTES,
+  V2WorkflowStateStore,
   validateV2Value,
   type ExtensionV2Definition,
   type IndexedAudioFile,
   type TagOrigin,
+  type V2ExtensionStatePorts,
   type V2HostServices,
   type V2AnalysisPorts,
   type V2EmbeddingPorts,
@@ -33,6 +36,9 @@ import {
   AUTO_TAG_V2_REMOVE_BY_ORIGIN,
   AUTO_TAG_V2_TAG_FILES,
   AUTO_TAG_V2_TAG_SEMANTIC,
+  MAX_ARRIVAL_FILES,
+  MAX_COVERAGE_SNAPSHOTS,
+  MAX_COVERAGE_TAGS,
   createAutoTagV2Definition,
   registerAutoTagV2Handlers,
   type AutoTagV2ClapStatusResult,
@@ -48,7 +54,7 @@ import {
   type AutoTagV2TagSemanticResult,
   type CoverageSnapshot,
 } from "./index";
-import { MAX_QUEUE_FILES } from "./rules";
+import { MAX_QUEUE_FILES, MAX_RETAINED_CANDIDATES } from "./rules";
 
 // Area: auto-tag v2 (#190). Handlers through the real host preflight with
 // fixture library and tag ports: preview plans without writes, tag-files
@@ -102,8 +108,15 @@ type World = {
   vectors: Map<string, { dim: number; vec: Uint8Array }>;
   progress: { calls: number };
   scanCalls: { pages: number };
+  /** The raw per-extension state envelope the production store persists. */
+  stateStore: Map<string, unknown>;
   definition: ExtensionV2Definition;
 };
+
+/** Serialized bytes of the persisted state `data` record, as the store measures it. */
+function stateDataBytes(w: World): number {
+  return JSON.stringify(w.stateStore.get("data") ?? {}).length;
+}
 
 function world(overrides?: {
   granted?: string[];
@@ -281,7 +294,20 @@ function world(overrides?: {
     embedTexts: async (texts) => texts.map((text) => textVecs[text] ?? [0, 0]),
     backendAvailable: () => modelState.backendAvailable,
   };
-  const progress = { calls: 0 };  const services: V2HostServices = {
+  const progress = { calls: 0 };
+  // One shared store per extension, the production shape (#264/#265): the
+  // process-wide runtime hands the same store to every invocation, so
+  // concurrent jobs serialize their read-modify-write instead of racing
+  // separate store instances.
+  const extensionState: V2ExtensionStatePorts = {
+    readAll: () => Object.fromEntries(stateStore),
+    writeAll: (_extensionId, state) => {
+      stateStore.clear();
+      for (const [key, value] of Object.entries(state)) stateStore.set(key, value);
+    },
+  };
+  const workflowState = new V2WorkflowStateStore(AUTO_TAG_V2_ID, extensionState);
+  const services: V2HostServices = {
     registry,
     isEnabled: () => true,
     capabilities: {},
@@ -291,6 +317,7 @@ function world(overrides?: {
     createOperations: (binding) => ({
       ...createV2OperationServices({
         ...binding,
+        workflowState,
         grants: { authorize: () => ({ ok: false, message: "no grants" }) } as never,
         library,
         files: {
@@ -306,13 +333,7 @@ function world(overrides?: {
         },
         archive: { createZipArchive: async () => ({ bytesWritten: 0, version: { device: "memory", fileId: "unused" } }) },
         settings: { readRaw: () => undefined, writeRaw: () => {} },
-        extensionState: {
-          readAll: () => Object.fromEntries(stateStore),
-          writeAll: (_extensionId, state) => {
-            stateStore.clear();
-            for (const [key, value] of Object.entries(state)) stateStore.set(key, value);
-          },
-        },
+        extensionState,
         jobs: binding.reporter
           ? {
               reportProgress: (completed: number, total: number) => {
@@ -347,6 +368,7 @@ function world(overrides?: {
     vectors,
     progress,
     scanCalls,
+    stateStore,
     definition,
   };
 }
@@ -887,15 +909,27 @@ describe("auto-tag-v2 coverage history", () => {
     const recorded = await recordSnapshot(w, 2, 3, ["thunder:2", "rain:1", "bogus", "zero:-1"]);
     expect(recorded.recorded).toBe(true);
     expect(recorded.entriesCount).toBe(1);
+    // #288: the command records the caller's bounded delta instead of
+    // re-aggregating the whole Library; malformed tag deltas are dropped.
     expect(await history(w)).toEqual([
       {
         at: expect.any(String),
-        tagged: 0,
+        tagged: 2,
         total: 3,
-        tags: {},
+        tags: { thunder: 2, rain: 1 },
         invocationId: expect.any(String),
       },
     ]);
+  });
+
+  it("records the supplied delta without walking the library", async () => {
+    const files = Array.from({ length: 2_105 }, (_, index) => record(`large-${index}`, `sound-${index}.wav`));
+    const w = world({ files });
+    w.scanCalls.pages = 0;
+    await recordSnapshot(w, 4, 2_105, ["thunder:2"]);
+    // No full-Library aggregation: the bounded input is the snapshot.
+    expect(w.scanCalls.pages).toBe(0);
+    expect((await history(w))[0]).toMatchObject({ tagged: 4, total: 2_105, tags: { thunder: 2 } });
   });
 
   it("caps history at thirty snapshots", async () => {
@@ -905,8 +939,24 @@ describe("auto-tag-v2 coverage history", () => {
     }
     const entries = await history(w);
     expect(entries).toHaveLength(30);
-    expect(entries[0]!.tagged).toBe(0);
-    expect(entries[29]!.tagged).toBe(0);
+    expect(entries[0]!.tagged).toBe(2);
+    expect(entries[29]!.tagged).toBe(31);
+  });
+
+  it("byte-prunes history so a wide tag vocabulary stays inside the state budget", async () => {
+    const w = world();
+    const wide = Array.from({ length: 300 }, (_, index) => `word${index}abcdefghijkl:${index + 1}`);
+    for (let pass = 0; pass < 40; pass += 1) {
+      await recordSnapshot(w, pass, 40, wide);
+    }
+    expect(stateDataBytes(w)).toBeLessThanOrEqual(MAX_V2_STATE_BYTES);
+    const entries = await history(w);
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.length).toBeLessThanOrEqual(MAX_COVERAGE_SNAPSHOTS);
+    // The widest tags survive; the overflow is counted, not hidden.
+    const last = entries[entries.length - 1]!;
+    expect(Object.keys(last.tags)).toHaveLength(MAX_COVERAGE_TAGS);
+    expect(last.omittedTags).toBe(300 - MAX_COVERAGE_TAGS);
   });
 
   it("aggregates libraries larger than two thousand files", async () => {
@@ -1071,5 +1121,258 @@ describe("auto-tag-v2 SQL aggregates (#257)", () => {
     const summary = JSON.parse(value.summary) as { total: number; members: string[] };
     expect(summary.total).toBe(3);
     expect(summary.members).toEqual([]);
+  });
+});
+
+describe("auto-tag-v2 candidate scaling (#288)", () => {
+  // A Library far larger than the retained queue: every file contributes two
+  // distinct uncovered words, so the mined set is thousands of records, each
+  // with a long label and example id.
+  function largeLibrary(count: number): IndexedAudioFile[] {
+    return Array.from({ length: count }, (_, index) =>
+      record(
+        `file-large-${index}-0123456789abcdef`,
+        `token${index}abcdefghijklmnopqrstuvwxyz-session${index}take.wav`,
+      ),
+    );
+  }
+
+  it("keeps a large candidate set within the state budget and reports truncation", async () => {
+    const w = world({ files: largeLibrary(2_000) });
+
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_LIST_CANDIDATES,
+      input: { limit: 10 },
+      selection: { fileIds: [] },
+    });
+
+    // The production workflow store must accept the write instead of
+    // failing closed with input-invalid.
+    expect((result as { ok: boolean }).ok).toBe(true);
+    const value = immediateValue<AutoTagV2ListCandidatesResult>(result);
+
+    // Retention is explicit and visible: the queue is capped, says so, and
+    // never exceeds the advertised bound.
+    expect(value.retainedLimit).toBe(MAX_RETAINED_CANDIDATES);
+    expect(value.retained).toBeLessThanOrEqual(MAX_RETAINED_CANDIDATES);
+    expect(value.total).toBeGreaterThan(0);
+    expect(value.total).toBeLessThanOrEqual(value.retained);
+    expect(value.words).toHaveLength(10);
+    expect(value.truncated).toBe(true);
+
+    // The whole persisted envelope stays inside the per-extension budget the
+    // production store enforces.
+    expect(stateDataBytes(w)).toBeLessThanOrEqual(MAX_V2_STATE_BYTES);
+
+    // Listing pages the full retained queue with a stable keyset cursor and
+    // never re-mines: the walk is bounded to one pass.
+    const pages = w.scanCalls.pages;
+    expect(value.nextCursor).not.toBe("");
+    const next = immediateValue<AutoTagV2ListCandidatesResult>(
+      await w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_LIST_CANDIDATES,
+        input: { cursor: value.nextCursor, limit: 10 },
+        selection: { fileIds: [] },
+      }),
+    );
+    expect(next.words).toHaveLength(10);
+    expect(next.total).toBe(value.total);
+    expect(next.words).not.toEqual(value.words);
+    expect(w.scanCalls.pages).toBe(pages);
+  });
+
+  it("walks the whole retained queue once with the stable cursor", async () => {
+    const w = world({ files: largeLibrary(2_000) });
+    const command = (input: Record<string, unknown>) => ({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_LIST_CANDIDATES,
+      input,
+      selection: { fileIds: [] },
+    });
+
+    const first = immediateValue<AutoTagV2ListCandidatesResult>(
+      await w.host.execute(command({ limit: 7 })),
+    );
+    const seen: string[] = [...first.words];
+    let cursor = first.nextCursor;
+    let guard = 0;
+    while (cursor !== "") {
+      const page = immediateValue<AutoTagV2ListCandidatesResult>(
+        await w.host.execute(command({ limit: 7, cursor })),
+      );
+      seen.push(...page.words);
+      cursor = page.nextCursor;
+      guard += 1;
+      expect(guard).toBeLessThan(100);
+    }
+
+    // Every retained pending candidate appears exactly once: no cursor skips
+    // or repeats a record, and the page count matches the retained bound.
+    expect(seen).toHaveLength(first.total);
+    expect(new Set(seen).size).toBe(seen.length);
+
+    // A cursor that is not a cursor is rejected instead of paging blindly.
+    const rejected = await w.host.execute(command({ cursor: "not-a-cursor" }));
+    expect(rejected).toMatchObject({ ok: false, code: "input-invalid" });
+  });
+
+  it("records coverage once per completed scan, not once per job", async () => {
+    const w = world();
+    const input = { fileIds: ["f1", "f2"], scanStartedAt: "2026-10-15T00:00:00.000Z" };
+    const command = {
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_TAG_FILES,
+      input,
+      selection: { fileIds: [] },
+    };
+    expect((await w.host.execute(command)).ok).toBe(true);
+    expect((await w.host.execute(command)).ok).toBe(true);
+
+    const history = immediateValue<AutoTagV2CoverageHistoryResult>(
+      await w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_COVERAGE_HISTORY,
+        input: {},
+        selection: { fileIds: [] },
+      }),
+    );
+    const snapshots = history.entries.map((entry) => JSON.parse(entry) as CoverageSnapshot);
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]!.scanId).toBe("2026-10-15T00:00:00.000Z");
+    expect(stateDataBytes(w)).toBeLessThanOrEqual(MAX_V2_STATE_BYTES);
+  });
+
+  it("folds concurrent job suggestions into one candidate queue", async () => {
+    const w = world({
+      files: [record("f1", "paper-bag.wav"), record("f2", "coffee-cup.wav")],
+    });
+    await Promise.all([
+      w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_TAG_FILES,
+        input: { fileIds: ["f1"] },
+        selection: { fileIds: [] },
+      }),
+      w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_TAG_FILES,
+        input: { fileIds: ["f2"] },
+        selection: { fileIds: [] },
+      }),
+    ]);
+
+    const value = immediateValue<AutoTagV2ListCandidatesResult>(
+      await w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_LIST_CANDIDATES,
+        input: { limit: 100 },
+        selection: { fileIds: [] },
+      }),
+    );
+    // Neither job's suggestions were lost to the other's stale snapshot.
+    expect(value.words).toEqual(expect.arrayContaining(["paper", "bag", "coffee", "cup"]));
+  });
+
+  it("bounds the retained arrival batch and reports its total", async () => {
+    const files = Array.from({ length: 120 }, (_, index) =>
+      record(`a${index}`, `thunder-${String(index).padStart(3, "0")}.wav`),
+    );
+    const w = world({ files });
+    const submitted = await w.host.submitJob({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_TAG_FILES,
+      input: {
+        fileIds: files.map((file) => file.id),
+        batchId: "scan:test",
+        scanStartedAt: "2026-10-15T00:00:00.000Z",
+      },
+      selection: { fileIds: [] },
+    });
+    expect(submitted.ok).toBe(true);
+    if (!submitted.ok || submitted.outcome.kind !== "job") throw new Error("expected a job");
+    const settled = await w.host.jobs.waitFor(submitted.outcome.jobId);
+    expect(settled.state).toBe("succeeded");
+
+    const arrivals = immediateValue<{ hasData: boolean; batch: string }>(
+      await w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_LATEST_ARRIVALS,
+        input: {},
+        selection: { fileIds: [] },
+      }),
+    );
+    const batch = JSON.parse(arrivals.batch) as {
+      files: unknown[];
+      totalFiles: number;
+      truncated: boolean;
+    };
+    expect(batch.totalFiles).toBe(120);
+    expect(batch.truncated).toBe(true);
+    expect(batch.files.length).toBeLessThanOrEqual(MAX_ARRIVAL_FILES);
+    expect(stateDataBytes(w)).toBeLessThanOrEqual(MAX_V2_STATE_BYTES);
+  });
+
+  it("keeps both snapshots when two coverage updates race", async () => {
+    const w = world();
+    const record = (tags: string[]) => ({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_RECORD_COVERAGE,
+      input: { tagged: 1, total: 2, tags },
+      selection: { fileIds: [] },
+    });
+    const [first, second] = await Promise.all([
+      w.host.execute(record(["alpha:1"])),
+      w.host.execute(record(["beta:2"])),
+    ]);
+    expect(first).toMatchObject({ ok: true });
+    expect(second).toMatchObject({ ok: true });
+
+    const history = immediateValue<AutoTagV2CoverageHistoryResult>(
+      await w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_COVERAGE_HISTORY,
+        input: {},
+        selection: { fileIds: [] },
+      }),
+    );
+    const snapshots = history.entries.map((entry) => JSON.parse(entry) as CoverageSnapshot);
+    // Both racing updates append; neither overwrote the other's snapshot.
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots.flatMap((entry) => Object.keys(entry.tags)).sort()).toEqual([
+      "alpha",
+      "beta",
+    ]);
+  });
+
+  it("keeps both dismissals when two candidate updates race", async () => {
+    const w = world({
+      files: [record("f1", "paper-bag.wav"), record("f2", "coffee-cup.wav")],
+    });
+    const list = () =>
+      w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_LIST_CANDIDATES,
+        input: { limit: 100 },
+        selection: { fileIds: [] },
+      });
+    const dismiss = (word: string) =>
+      w.host.execute({
+        extensionId: AUTO_TAG_V2_ID,
+        commandId: AUTO_TAG_V2_DISMISS_CANDIDATE,
+        input: { word },
+        selection: { fileIds: [] },
+      });
+
+    await list();
+    const [first, second] = await Promise.all([dismiss("paper"), dismiss("coffee")]);
+    expect(first).toMatchObject({ ok: true });
+    expect(second).toMatchObject({ ok: true });
+    const remaining = immediateValue<AutoTagV2ListCandidatesResult>(await list()).words;
+    // Each dismissal landed on the other's committed queue instead of being
+    // clobbered by a stale snapshot.
+    expect(remaining).not.toContain("paper");
+    expect(remaining).not.toContain("coffee");
   });
 });

@@ -94,9 +94,13 @@ function listCandidatesResultSchema(): ExtensionV2ValueSchema {
       lines: { kind: "string-array" },
       entries: { kind: "string-array" },
       truncated: { kind: "boolean" },
+      total: { kind: "number", integer: true, min: 0 },
+      nextCursor: { kind: "string" },
+      retained: { kind: "number", integer: true, min: 0 },
+      retainedLimit: { kind: "number", integer: true, min: 0 },
       totalFiles: { kind: "number", integer: true, min: 0 },
     },
-    required: ["words", "lines", "entries", "truncated", "totalFiles"],
+    required: ["words", "lines", "entries", "truncated", "total", "nextCursor", "retained", "retainedLimit", "totalFiles"],
   };
 }
 
@@ -246,6 +250,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
           kind: "object",
           properties: {
             limit: { kind: "number", integer: true, min: 1 },
+            cursor: { kind: "string" },
           },
         },
         result: listCandidatesResultSchema(),

@@ -84,6 +84,8 @@ export function V3TagOrigins() {
   const [similar, setSimilar] = useState<SimilarState | null>(null);
   const [queueLines, setQueueLines] = useState<string[]>([]);
   const [queueWords, setQueueWords] = useState<string[]>([]);
+  const [queueTotal, setQueueTotal] = useState(0);
+  const [queueCapped, setQueueCapped] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmOrigin, setConfirmOrigin] = useState<"deterministic" | "semantic_ai" | null>(null);
   const titleId = useId();
@@ -119,6 +121,14 @@ export function V3TagOrigins() {
         : [];
       setQueueWords(words);
       setQueueLines(lines);
+      setQueueTotal(
+        typeof queued.value.retained === "number"
+          ? queued.value.retained
+          : typeof queued.value.total === "number"
+            ? queued.value.total
+            : words.length,
+      );
+      setQueueCapped(queued.value.truncated === true);
     }
     setLoading(false);
   }, [filter]);
@@ -259,6 +269,12 @@ export function V3TagOrigins() {
 
         <div className={cn(SHELL, "px-5 py-4")}>
           <h2 className="text-sm font-semibold text-zinc-100">Candidate queue</h2>
+          {queueCapped && (
+            <p role="status" className={cn(MONO, "mt-1 text-[11px] text-zinc-400")}>
+              The candidate queue is capped at {queueTotal} records; older candidates
+              were dropped from state and are no longer listed.
+            </p>
+          )}
           <ul className="mt-1 border-t border-[var(--vi-edge)]">
             {queueLines.map((line, index) => (
               <li

@@ -188,8 +188,11 @@ bounded (key length, per-value bytes, per-extension bytes and key count)
 with every limit checked before persistence, and `operations.state.update`
 is the atomic read-modify-write: the store is shared per extension on the
 process-wide runtime, so concurrent jobs serialize instead of losing
-updates. The host owns job records separately. Persist precedes notify on
-every write.
+updates. Tools that accumulate their own state (Auto Tag's candidate
+queue, latest-arrival batch, and coverage history) cap and
+deterministically prune what they persist and report truncation, so a
+large Library cannot push an extension past that budget. The host owns
+job records separately. Persist precedes notify on every write.
 
 Events are five typed contracts only: `settings-changed`,
 `state-changed`, `approvals-changed`, `job-transition`,

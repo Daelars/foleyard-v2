@@ -21,7 +21,11 @@ export {
 } from "./definition";
 export {
   COVERAGE_HISTORY_KEY,
+  MAX_ARRIVAL_FILES,
+  MAX_ARRIVAL_STATE_BYTES,
   MAX_COVERAGE_SNAPSHOTS,
+  MAX_COVERAGE_STATE_BYTES,
+  MAX_COVERAGE_TAGS,
   registerAutoTagV2Handlers,
   runClapStatus,
   runCoverageHistory,
@@ -57,8 +61,11 @@ export {
   type LastRunSummary,
 } from "./handlers";
 export {
+  MAX_CANDIDATE_EXAMPLES,
+  MAX_CANDIDATE_STATE_BYTES,
   MAX_CANDIDATES,
   MAX_QUEUE_FILES,
+  MAX_RETAINED_CANDIDATES,
   MAX_TAG_FILES,
   SEED_RULES,
   cleanCandidateWord,

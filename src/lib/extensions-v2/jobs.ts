@@ -7,6 +7,7 @@ import {
   type V2JobSnapshot,
   type V2OperationServices,
 } from "@yard-core";
+import { BoundedMap } from "@/lib/bounded-map";
 import { db } from "@/lib/database/connection";
 import { settings } from "@/lib/schema";
 
@@ -57,8 +58,23 @@ function isJobManager(value: unknown): value is V2JobManager {
   );
 }
 
-/** Last emitted state per job: progress reports stay memory-only, transitions emit. */
-const lastEmittedState = new Map<string, string>();
+/**
+ * Upper bound on remembered per-job states (#316), shared by the two
+ * transition memos below. Job IDs are unique forever, so without a bound each
+ * memo would keep one entry for every job the process has ever run. The bound
+ * is comfortably larger than the retained job history
+ * (`MAX_V2_JOB_HISTORY` = 100), so any job still in history is still
+ * deduplicated; an entry that does age out only risks one duplicate
+ * `job-transition` event, never a lost one. Exported for the suite.
+ */
+export const MAX_TRACKED_JOB_STATES = 512;
+
+/**
+ * Last emitted state per job: progress reports stay memory-only, transitions
+ * emit. Bounded so a long-lived server does not retain a state string for
+ * every job ID it has ever seen (#316).
+ */
+export const lastEmittedJobState = new BoundedMap<string, string>(MAX_TRACKED_JOB_STATES);
 
 /**
  * Progress persistence is coalesced (#258): state transitions and terminal
@@ -76,7 +92,7 @@ export function createV2JobTransitionHandler(deps: {
 }): (record: { jobId: string; extensionId: string; state: string }) => void {
   const now = deps.now ?? (() => Date.now());
   const intervalMs = deps.intervalMs ?? JOB_PROGRESS_PERSIST_INTERVAL_MS;
-  const lastState = new Map<string, string>();
+  const lastState = new BoundedMap<string, string>(MAX_TRACKED_JOB_STATES);
   let lastPersistedAt = 0;
   return (record) => {
     const stateChanged = lastState.get(record.jobId) !== record.state;
@@ -104,8 +120,8 @@ export function getV2JobManager(): V2JobManager {
   const onTransition = createV2JobTransitionHandler({
     persist: persistV2JobSnapshot,
     emitTransition: (record) => {
-      if (lastEmittedState.get(record.jobId) === record.state) return;
-      lastEmittedState.set(record.jobId, record.state);
+      if (lastEmittedJobState.get(record.jobId) === record.state) return;
+      lastEmittedJobState.set(record.jobId, record.state);
       getV2Events().emit("job-transition", record.extensionId, {
         jobId: record.jobId,
         jobState: record.state,

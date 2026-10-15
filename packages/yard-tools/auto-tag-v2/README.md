@@ -99,3 +99,8 @@ Electron-ABI rebuild in this repo, so bundling it would break the
 packaged desktop build. Until a backend is installed, semantic
 commands fail naming this step instead of pretending. Audio reaches
 the backend as mono 48 kHz decoded through the existing ffmpeg path.
+The loaded towers are memoized per model directory and bounded to the
+two most recent directories (#316): an inference backend already handed
+out keeps its own reference, and a directory that ages out of the memo
+reloads on its next inference instead of every directory ever seen
+staying resident.

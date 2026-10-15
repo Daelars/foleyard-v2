@@ -1,9 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createV2JobTransitionHandler } from "./jobs";
+import {
+  createV2JobTransitionHandler,
+  lastEmittedJobState,
+  MAX_TRACKED_JOB_STATES,
+} from "./jobs";
 
 // Area: #258. Progress ticks are high-frequency and memory-only; persistence
 // is coalesced to state changes, terminals and one snapshot per interval.
+// Area: #316. Both per-job state memos are bounded, because job IDs are
+// unique forever: without a bound each memo keeps one entry per job the
+// process has ever run.
 
 describe("createV2JobTransitionHandler", () => {
   function world(intervalMs = 2000) {
@@ -59,5 +66,41 @@ describe("createV2JobTransitionHandler", () => {
       extensionId: "ext",
       state: "succeeded",
     });
+  });
+
+  it("bounds the emitted-state memo and re-emits an evicted job", () => {
+    const w = world();
+    w.handle({ jobId: "job-first", extensionId: "ext", state: "running" });
+    expect(w.emitTransition).toHaveBeenCalledTimes(1);
+
+    for (let index = 0; index < MAX_TRACKED_JOB_STATES; index += 1) {
+      w.handle({ jobId: `job-${index}`, extensionId: "ext", state: "running" });
+    }
+    const before = w.emitTransition.mock.calls.length;
+
+    // The newest job is still remembered, so a repeated report stays quiet.
+    w.handle({
+      jobId: `job-${MAX_TRACKED_JOB_STATES - 1}`,
+      extensionId: "ext",
+      state: "running",
+    });
+    expect(w.emitTransition.mock.calls.length).toBe(before);
+
+    // The first job aged out of the bound, so its state is no longer known.
+    w.handle({ jobId: "job-first", extensionId: "ext", state: "running" });
+    expect(w.emitTransition.mock.calls.length).toBe(before + 1);
+  });
+});
+
+describe("lastEmittedJobState", () => {
+  it("holds its bound under sustained insertion", () => {
+    lastEmittedJobState.clear();
+    for (let index = 0; index < MAX_TRACKED_JOB_STATES + 50; index += 1) {
+      lastEmittedJobState.set(`job-${index}`, "succeeded");
+    }
+    expect(lastEmittedJobState.size).toBe(MAX_TRACKED_JOB_STATES);
+    expect(lastEmittedJobState.has("job-0")).toBe(false);
+    expect(lastEmittedJobState.get(`job-${MAX_TRACKED_JOB_STATES + 49}`)).toBe("succeeded");
+    lastEmittedJobState.clear();
   });
 });

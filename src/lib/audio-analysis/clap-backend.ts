@@ -1,3 +1,5 @@
+import { BoundedMap } from "@/lib/bounded-map";
+
 import type { ClapBackend } from "./clap";
 
 /**
@@ -58,7 +60,25 @@ type LoadedModels = {
   ) => Promise<{ text_embeds: { data: Float32Array; dims: number[] } }>;
 };
 
-const loadedByDirectory = new Map<string, Promise<LoadedModels>>();
+/**
+ * How many model directories the loader memo keeps (#316). Loaded towers are
+ * the largest values the process holds (hundreds of megabytes per directory),
+ * so the memo keeps one active directory plus one just-replaced directory
+ * instead of retaining a bundle for every directory ever requested. Exported
+ * for the suite.
+ */
+export const MAX_LOADED_MODEL_DIRECTORIES = 2;
+
+/**
+ * Loaded towers per model directory, most-recently loaded last, bounded by
+ * `MAX_LOADED_MODEL_DIRECTORIES` (#316). Evicting an entry only drops the
+ * memo: a backend already handed out keeps its own reference, and a later
+ * request for an evicted directory loads it again. Failed loads are removed
+ * so a retry is a real retry.
+ */
+const loadedByDirectory = new BoundedMap<string, Promise<LoadedModels>>(
+  MAX_LOADED_MODEL_DIRECTORIES,
+);
 
 function normalize(vector: Float32Array): Float32Array {
   let norm = 0;

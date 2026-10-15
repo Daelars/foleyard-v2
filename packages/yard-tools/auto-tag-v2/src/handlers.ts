@@ -4,7 +4,6 @@ import {
   isV2JobCancellation,
   V2OperationError,
   type ExtensionV2Host,
-  type IndexedAudioFile,
   type V2HandlerContext,
   type V2TagAttachment,
 } from "yard-core";
@@ -31,8 +30,11 @@ import {
 } from "./definition";
 import { clapPrompt, CLAP_MODEL_ID, rankLabels } from "./semantic";
 import {
+  MAX_CANDIDATE_EXAMPLES,
+  MAX_CANDIDATE_STATE_BYTES,
   MAX_CANDIDATES,
   MAX_QUEUE_FILES,
+  MAX_RETAINED_CANDIDATES,
   MAX_TAG_FILES,
   SEED_RULES,
   cleanCandidateWord,
@@ -206,49 +208,155 @@ function readLastRun(ctx: V2HandlerContext): LastRunSummary | null {
   };
 }
 
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isCandidateRecord(entry: unknown): entry is AutoTagCandidateRecord {
+  if (!isRecordValue(entry)) return false;
+  const value = entry as Partial<AutoTagCandidateRecord>;
+  return (
+    typeof value.id === "string" &&
+    typeof value.label === "string" &&
+    (value.source === "filename_token" || value.source === "clap_suggestion" || value.source === "similar_audio_cluster") &&
+    Array.isArray(value.exampleFileIds) &&
+    typeof value.occurrenceCount === "number" &&
+    (value.status === "pending" || value.status === "promoted" || value.status === "dismissed") &&
+    typeof value.createdAt === "string" &&
+    typeof value.updatedAt === "string"
+  );
+}
+
+/**
+ * The persisted candidate queue (#288): the retained records plus how many
+ * records earlier retention passes dropped. Stored as one value so a
+ * read-modify-write keeps the records and their truncation count consistent.
+ * Legacy state stored a bare array; it reads back with `dropped: 0`.
+ */
+type CandidatesState = { records: AutoTagCandidateRecord[]; dropped: number };
+
+function normalizeCandidatesState(raw: unknown): CandidatesState {
+  const list = Array.isArray(raw)
+    ? raw
+    : isRecordValue(raw) && Array.isArray(raw.records)
+      ? raw.records
+      : [];
+  // Clone each record: the stored value comes back by reference, so mutating
+  // it in place would edit the persisted envelope before the commit.
+  const records = list.filter(isCandidateRecord).map((entry) => ({
+    ...entry,
+    exampleFileIds: [...entry.exampleFileIds],
+  }));
+  const dropped =
+    isRecordValue(raw) && typeof raw.dropped === "number"
+      ? Math.max(0, Math.floor(raw.dropped))
+      : 0;
+  return { records, dropped };
+}
+
 function readCandidates(ctx: V2HandlerContext): AutoTagCandidateRecord[] {
-  const raw = ctx.operations.state.read(CANDIDATES_KEY);
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((entry): entry is AutoTagCandidateRecord => {
-    if (typeof entry !== "object" || entry === null) return false;
-    const value = entry as Partial<AutoTagCandidateRecord>;
-    return (
-      typeof value.id === "string" &&
-      typeof value.label === "string" &&
-      (value.source === "filename_token" || value.source === "clap_suggestion" || value.source === "similar_audio_cluster") &&
-      Array.isArray(value.exampleFileIds) &&
-      typeof value.occurrenceCount === "number" &&
-      (value.status === "pending" || value.status === "promoted" || value.status === "dismissed") &&
-      typeof value.createdAt === "string" &&
-      typeof value.updatedAt === "string"
-    );
+  return normalizeCandidatesState(ctx.operations.state.read(CANDIDATES_KEY)).records;
+}
+
+function serializeBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value) ?? "").length;
+}
+
+/**
+ * Highest-occurrence first, then `id` ascending. `id` is
+ * `${source}:${label}`, so it is unique and the order is total — the same
+ * order retention uses and the listing paginates over (#288).
+ */
+function compareCandidates(a: AutoTagCandidateRecord, b: AutoTagCandidateRecord): number {
+  return b.occurrenceCount - a.occurrenceCount || a.id.localeCompare(b.id);
+}
+
+/** The keyset a candidate page resumes strictly after: its count and unique id. */
+type CandidateCursor = { count: number; id: string };
+
+function encodeCandidateCursor(entry: AutoTagCandidateRecord): string {
+  return JSON.stringify({ c: entry.occurrenceCount, i: entry.id } satisfies {
+    c: number;
+    i: string;
   });
 }
 
-function writeCandidates(ctx: V2HandlerContext, candidates: AutoTagCandidateRecord[]): void {
-  ctx.operations.state.write(CANDIDATES_KEY, candidates.slice(0, MAX_CANDIDATES * 3));
+/** Decode a listing cursor; malformed cursors are rejected, never guessed. */
+function decodeCandidateCursor(raw: unknown): CandidateCursor | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  if (typeof raw !== "string") {
+    throw new V2OperationError("input-invalid", "Candidate cursor must be a string.");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new V2OperationError(
+      "input-invalid",
+      "Candidate cursor is not readable; page again from the start.",
+    );
+  }
+  if (
+    !isRecordValue(parsed) ||
+    typeof parsed.c !== "number" ||
+    !Number.isFinite(parsed.c) ||
+    typeof parsed.i !== "string"
+  ) {
+    throw new V2OperationError(
+      "input-invalid",
+      "Candidate cursor is not readable; page again from the start.",
+    );
+  }
+  return { count: parsed.c, id: parsed.i };
 }
 
-function upsertCandidateSuggestions(
-  ctx: V2HandlerContext,
+/** True when `entry` sorts strictly after `cursor` in the listing order. */
+function isAfterCursor(entry: AutoTagCandidateRecord, cursor: CandidateCursor): boolean {
+  return (
+    entry.occurrenceCount < cursor.count ||
+    (entry.occurrenceCount === cursor.count && entry.id > cursor.id)
+  );
+}
+
+/**
+ * Cap the queue explicitly and deterministically: at most
+ * `MAX_RETAINED_CANDIDATES` records, then byte-pruned from the lowest-priority
+ * end until the serialized queue fits `MAX_CANDIDATE_STATE_BYTES`. Everything
+ * dropped is counted, so the listing can report truncation instead of losing
+ * candidates silently.
+ */
+function retainCandidates(state: CandidatesState): CandidatesState {
+  const ordered = [...state.records].sort(compareCandidates);
+  const kept = ordered.slice(0, MAX_RETAINED_CANDIDATES);
+  let dropped = state.dropped + (ordered.length - kept.length);
+  while (kept.length > 1 && serializeBytes(kept) > MAX_CANDIDATE_STATE_BYTES) {
+    kept.pop();
+    dropped += 1;
+  }
+  return { records: kept, dropped };
+}
+
+/** Fold suggestions into the queue; occurrences accumulate, examples stay capped. */
+function mergeCandidatesState(
+  state: CandidatesState,
   suggestions: Array<{
     label: string;
     source: AutoTagCandidateSource;
     confidence?: number | null;
     fileId: string;
   }>,
-): void {
-  if (suggestions.length === 0) return;
+): CandidatesState {
+  if (suggestions.length === 0) return state;
   const now = new Date().toISOString();
-  const current = readCandidates(ctx);
-  const byId = new Map(current.map((entry) => [entry.id, entry]));
+  const records = state.records.map((entry) => ({ ...entry, exampleFileIds: [...entry.exampleFileIds] }));
+  const byId = new Map(records.map((entry) => [entry.id, entry]));
   for (const suggestion of suggestions) {
     const id = candidateId(suggestion.source, suggestion.label);
     const existing = byId.get(id);
     if (existing) {
       if (existing.status !== "pending") continue;
       existing.occurrenceCount += 1;
-      if (!existing.exampleFileIds.includes(suggestion.fileId) && existing.exampleFileIds.length < 12) {
+      if (!existing.exampleFileIds.includes(suggestion.fileId) && existing.exampleFileIds.length < MAX_CANDIDATE_EXAMPLES) {
         existing.exampleFileIds.push(suggestion.fileId);
       }
       existing.confidence = Math.max(existing.confidence ?? 0, suggestion.confidence ?? 0) || null;
@@ -266,10 +374,33 @@ function upsertCandidateSuggestions(
       createdAt: now,
       updatedAt: now,
     };
-    current.push(record);
+    records.push(record);
     byId.set(id, record);
   }
-  writeCandidates(ctx, current);
+  return { ...state, records };
+}
+
+/** Synchronous merge used by the one-time mining walk, where no await may interleave. */
+function mergeCandidates(ctx: V2HandlerContext, suggestions: Parameters<typeof mergeCandidatesState>[1]): void {
+  const next = retainCandidates(
+    mergeCandidatesState(normalizeCandidatesState(ctx.operations.state.read(CANDIDATES_KEY)), suggestions),
+  );
+  ctx.operations.state.write(CANDIDATES_KEY, next);
+}
+
+/**
+ * Atomic merge used by tag jobs: `update` serializes per store, so concurrent
+ * jobs sharing the runtime fold their suggestions into one queue instead of
+ * each clobbering the other with a stale snapshot.
+ */
+async function mergeCandidatesAtomic(
+  ctx: V2HandlerContext,
+  suggestions: Parameters<typeof mergeCandidatesState>[1],
+): Promise<void> {
+  if (suggestions.length === 0) return;
+  await ctx.operations.state.update(CANDIDATES_KEY, (current) =>
+    retainCandidates(mergeCandidatesState(normalizeCandidatesState(current), suggestions)),
+  );
 }
 
 function ensureFilenameCandidates(ctx: V2HandlerContext): void {
@@ -292,7 +423,7 @@ function ensureFilenameCandidates(ctx: V2HandlerContext): void {
     walked += files.length;
     cursor = walked >= MAX_QUEUE_FILES ? null : page.nextCursor;
   } while (cursor);
-  upsertCandidateSuggestions(ctx, suggestions);
+  mergeCandidates(ctx, suggestions);
   ctx.operations.state.write(CANDIDATES_MINED_KEY, true);
 }
 
@@ -409,7 +540,7 @@ export async function runTagFiles(ctx: V2HandlerContext) {
       fileId: file.fileId,
     })),
   );
-  upsertCandidateSuggestions(ctx, filenameSuggestions);
+  await mergeCandidatesAtomic(ctx, filenameSuggestions);
 
   let semanticTagged = 0;
   let semanticAttached = 0;
@@ -442,7 +573,7 @@ export async function runTagFiles(ctx: V2HandlerContext) {
     missing: missing.length,
     failed: failedFiles.length,
   });
-  recordCoverageAtBoundary(ctx, inputRecord(ctx).scanStartedAt as string | undefined);
+  await recordCoverageAtBoundary(ctx, inputRecord(ctx).scanStartedAt as string | undefined);
   return immediateV2Result(result);
 }
 
@@ -450,7 +581,16 @@ export type AutoTagV2ListCandidatesResult = {
   words: string[];
   lines: string[];
   entries: string[];
+  /** True when retention dropped candidates, so the queue is not the full set discovered. */
   truncated: boolean;
+  /** Total pending candidates in the retained queue (not just this page). */
+  total: number;
+  /** Cursor for the next page; empty when this page is the last. */
+  nextCursor: string;
+  /** Records actually stored in the retained queue. */
+  retained: number;
+  /** The retained-record bound the queue is capped to. */
+  retainedLimit: number;
   totalFiles: number;
 };
 
@@ -481,20 +621,30 @@ function readCandidateWord(ctx: V2HandlerContext): string {
 export function runListCandidates(ctx: V2HandlerContext) {
   const raw = inputRecord(ctx);
   const limit = Math.max(1, Math.min(MAX_CANDIDATES, typeof raw.limit === "number" ? Math.floor(raw.limit) : MAX_CANDIDATES));
+  const after = decodeCandidateCursor(raw.cursor);
   const { tags } = extendedOperationsOf(ctx);
   ensureFilenameCandidates(ctx);
+  const state = normalizeCandidatesState(ctx.operations.state.read(CANDIDATES_KEY));
   const handled = new Set(tags.list().map((tag) => tag.name.toLowerCase()));
-  const all = readCandidates(ctx)
+  const all = state.records
     .filter((entry) => entry.status === "pending" && !handled.has(entry.label))
-    .sort((a, b) => b.occurrenceCount - a.occurrenceCount || a.label.localeCompare(b.label));
-  const entries = all.slice(0, limit);
+    .sort(compareCandidates);
+  // Keyset page: resume strictly after the cursor's (count, id), so a page
+  // boundary never shifts the way an offset would when the queue changes.
+  const eligible = after ? all.filter((entry) => isAfterCursor(entry, after)) : all;
+  const entries = eligible.slice(0, limit);
+  const last = entries[entries.length - 1];
   return immediateV2Result({
     words: entries.map((entry) => entry.label),
     lines: entries.map((entry) =>
       `${entry.label} - ${entry.occurrenceCount} occurrence${entry.occurrenceCount === 1 ? "" : "s"} from ${entry.source.replaceAll("_", " ")}`,
     ),
     entries: entries.map((entry) => JSON.stringify(entry)),
-    truncated: all.length > entries.length,
+    truncated: state.dropped > 0,
+    total: all.length,
+    nextCursor: eligible.length > entries.length && last ? encodeCandidateCursor(last) : "",
+    retained: state.records.length,
+    retainedLimit: MAX_RETAINED_CANDIDATES,
     totalFiles: new Set(entries.flatMap((entry) => entry.exampleFileIds)).size,
   } satisfies AutoTagV2ListCandidatesResult);
 }
@@ -544,15 +694,18 @@ export async function runPromoteCandidate(ctx: V2HandlerContext) {
     attached += 1;
   }
 
-  const candidates = readCandidates(ctx);
-  const now = new Date().toISOString();
-  for (const candidate of candidates) {
-    if (candidate.label === word && candidate.status === "pending") {
-      candidate.status = "promoted";
-      candidate.updatedAt = now;
-    }
-  }
-  writeCandidates(ctx, candidates);
+  await ctx.operations.state.update(CANDIDATES_KEY, (current) => {
+    const state = normalizeCandidatesState(current);
+    const now = new Date().toISOString();
+    return retainCandidates({
+      ...state,
+      records: state.records.map((candidate) =>
+        candidate.label === word && candidate.status === "pending"
+          ? { ...candidate, status: "promoted", updatedAt: now }
+          : candidate,
+      ),
+    });
+  });
 
   if (raw.useForFutureFilenames === true) {
     const custom = readRules(ctx).filter((rule) => !SEED_RULES.some((seed) => seed.tok === rule.tok));
@@ -570,20 +723,22 @@ export async function runPromoteCandidate(ctx: V2HandlerContext) {
   } satisfies AutoTagV2PromoteCandidateResult);
 }
 
-export function runDismissCandidate(ctx: V2HandlerContext) {
+export async function runDismissCandidate(ctx: V2HandlerContext) {
   const word = readCandidateWord(ctx);
   ensureFilenameCandidates(ctx);
-  const candidates = readCandidates(ctx);
   const now = new Date().toISOString();
   let dismissedCount = 0;
-  for (const candidate of candidates) {
-    if (candidate.label === word && candidate.status === "pending") {
-      candidate.status = "dismissed";
-      candidate.updatedAt = now;
-      dismissedCount += 1;
-    }
-  }
-  writeCandidates(ctx, candidates);
+  await ctx.operations.state.update(CANDIDATES_KEY, (current) => {
+    const state = normalizeCandidatesState(current);
+    const records = state.records.map((candidate) => {
+      if (candidate.label === word && candidate.status === "pending") {
+        dismissedCount += 1;
+        return { ...candidate, status: "dismissed" as const, updatedAt: now };
+      }
+      return candidate;
+    });
+    return retainCandidates({ ...state, records });
+  });
   return immediateV2Result({
     word,
     dismissedCount,
@@ -785,7 +940,7 @@ async function runSemanticBatch(
     }
   }
 
-  upsertCandidateSuggestions(
+  await mergeCandidatesAtomic(
     ctx,
     staged.flatMap((entry) =>
       entry.candidate
@@ -805,7 +960,7 @@ async function runSemanticBatch(
     group.push({ fileId: entry.file.fileId, confidence: entry.candidate.confidence });
     clusters.set(entry.candidate.label, group);
   }
-  upsertCandidateSuggestions(
+  await mergeCandidatesAtomic(
     ctx,
     [...clusters.entries()].flatMap(([label, group]) =>
       group.length < 2
@@ -843,7 +998,7 @@ export async function runTagSemantic(ctx: V2HandlerContext) {
     missing: result.missing.length,
     failed: result.failedFiles.length,
   });
-  recordCoverageAtBoundary(ctx, inputRecord(ctx).scanStartedAt as string | undefined);
+  await recordCoverageAtBoundary(ctx, inputRecord(ctx).scanStartedAt as string | undefined);
   return immediateV2Result(result satisfies AutoTagV2TagSemanticResult);
 }
 
@@ -895,14 +1050,23 @@ export type CoverageSnapshot = {
   tags: Record<string, number>;
   invocationId?: string;
   scanId?: string;
+  /** Tag entries dropped from `tags` because the snapshot's tag cap was reached. */
+  omittedTags?: number;
 };
 
 /** Snapshots live in extension state, oldest first, bounded. */
 export const COVERAGE_HISTORY_KEY = "coverage-history";
 export const MAX_COVERAGE_SNAPSHOTS = 30;
+/** Tag entries one snapshot keeps; the rest are counted in `omittedTags`. */
+export const MAX_COVERAGE_TAGS = 200;
+/**
+ * Serialized byte ceiling for the coverage history. A large Library's tag
+ * vocabulary can be wide, so the count cap alone is not enough to keep the
+ * shared per-extension state inside its budget (#288).
+ */
+export const MAX_COVERAGE_STATE_BYTES = 12 * 1024;
 
-function readSnapshots(ctx: V2HandlerContext): CoverageSnapshot[] {
-  const raw: unknown = ctx.operations.state.read(COVERAGE_HISTORY_KEY);
+function normalizeSnapshots(raw: unknown): CoverageSnapshot[] {
   if (!Array.isArray(raw)) return [];
   const out: CoverageSnapshot[] = [];
   for (const entry of raw) {
@@ -924,9 +1088,61 @@ function readSnapshots(ctx: V2HandlerContext): CoverageSnapshot[] {
       tags,
       ...(typeof record.invocationId === "string" ? { invocationId: record.invocationId } : {}),
       ...(typeof record.scanId === "string" ? { scanId: record.scanId } : {}),
+      ...(typeof record.omittedTags === "number"
+        ? { omittedTags: Math.max(0, Math.floor(record.omittedTags)) }
+        : {}),
     });
   }
   return out;
+}
+
+/** Keep the widest-counting tags; the rest are counted, not stored. */
+function capSnapshotTags(snapshot: CoverageSnapshot): CoverageSnapshot {
+  const entries = Object.entries(snapshot.tags);
+  if (entries.length <= MAX_COVERAGE_TAGS) return snapshot;
+  const kept = entries
+    .sort(([aName, aCount], [bName, bCount]) => bCount - aCount || aName.localeCompare(bName))
+    .slice(0, MAX_COVERAGE_TAGS);
+  return {
+    ...snapshot,
+    tags: Object.fromEntries(kept),
+    omittedTags: (snapshot.omittedTags ?? 0) + (entries.length - kept.length),
+  };
+}
+
+/**
+ * Cap the history the way candidates are capped: the newest
+ * `MAX_COVERAGE_SNAPSHOTS`, each with at most `MAX_COVERAGE_TAGS` entries, then
+ * byte-pruned from the oldest end until it fits `MAX_COVERAGE_STATE_BYTES`.
+ */
+function retainSnapshots(snapshots: CoverageSnapshot[]): CoverageSnapshot[] {
+  const kept = snapshots.map(capSnapshotTags);
+  while (kept.length > 1 && serializeBytes(kept) > MAX_COVERAGE_STATE_BYTES) kept.shift();
+  while (kept.length > MAX_COVERAGE_SNAPSHOTS) kept.shift();
+  return kept;
+}
+
+function readSnapshots(ctx: V2HandlerContext): CoverageSnapshot[] {
+  return normalizeSnapshots(ctx.operations.state.read(COVERAGE_HISTORY_KEY));
+}
+
+/**
+ * Append a snapshot through the atomic read-modify-write, then prune the
+ * history to its count and byte caps. Serialized per store, so concurrent jobs
+ * append without losing each other's entries (#288).
+ */
+async function appendSnapshot(
+  ctx: V2HandlerContext,
+  snapshot: CoverageSnapshot,
+): Promise<CoverageSnapshot[]> {
+  let kept: CoverageSnapshot[] = [];
+  await ctx.operations.state.update(COVERAGE_HISTORY_KEY, (current) => {
+    const snapshots = normalizeSnapshots(current);
+    snapshots.push(snapshot);
+    kept = retainSnapshots(snapshots);
+    return kept;
+  });
+  return kept;
 }
 
 export function runCoverageHistory(ctx: V2HandlerContext) {
@@ -935,18 +1151,39 @@ export function runCoverageHistory(ctx: V2HandlerContext) {
   } satisfies AutoTagV2CoverageHistoryResult);
 }
 
-export function runRecordCoverage(ctx: V2HandlerContext) {
-  const aggregate = aggregateLibrary(ctx);
-  const snapshots = readSnapshots(ctx);
-  snapshots.push({
+/** Parse the caller's `name:count` tag deltas into a bounded count map. */
+function parseTagDeltas(raw: unknown): Record<string, number> {
+  const tags: Record<string, number> = {};
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    if (typeof entry !== "string") continue;
+    const match = /^(.+):(\d+)$/.exec(entry.trim());
+    if (!match) continue;
+    const name = match[1]!.trim();
+    const count = Number.parseInt(match[2]!, 10);
+    if (!name || !Number.isFinite(count) || count < 0) continue;
+    tags[name] = (tags[name] ?? 0) + count;
+  }
+  return tags;
+}
+
+function countValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+/**
+ * Record the caller's bounded delta — `tagged`, `total` and per-tag counts —
+ * instead of re-aggregating the whole Library (#288). Callers that already
+ * measured coverage pay no extra scan; the contract's own inputs are honoured.
+ */
+export async function runRecordCoverage(ctx: V2HandlerContext) {
+  const input = inputRecord(ctx);
+  const snapshots = await appendSnapshot(ctx, {
     at: new Date().toISOString(),
-    tagged: aggregate.tagged,
-    total: aggregate.total,
-    tags: aggregate.tags,
+    tagged: countValue(input.tagged),
+    total: countValue(input.total),
+    tags: parseTagDeltas(input.tags),
     invocationId: ctx.invocation.invocationId,
   });
-  while (snapshots.length > MAX_COVERAGE_SNAPSHOTS) snapshots.shift();
-  ctx.operations.state.write(COVERAGE_HISTORY_KEY, snapshots);
   return immediateV2Result({
     recorded: true,
     entriesCount: snapshots.length,
@@ -1093,10 +1330,17 @@ function aggregateLibrary(
   };
 }
 
-function recordCoverageAtBoundary(ctx: V2HandlerContext, scanId?: string): void {
+/**
+ * Record coverage once per completed scan (#288). When the scan boundary is
+ * known and already present, skip the aggregation entirely so a scan split
+ * into many 500-file jobs does not re-walk the Library or duplicate its
+ * snapshot. The append itself is atomic, so two racing jobs still land one
+ * snapshot per scan.
+ */
+async function recordCoverageAtBoundary(ctx: V2HandlerContext, scanId?: string): Promise<void> {
+  if (scanId && readSnapshots(ctx).some((entry) => entry.scanId === scanId)) return;
   const aggregate = aggregateLibrary(ctx);
-  const snapshots = readSnapshots(ctx);
-  snapshots.push({
+  await appendSnapshot(ctx, {
     at: new Date().toISOString(),
     tagged: aggregate.tagged,
     total: aggregate.total,
@@ -1104,9 +1348,11 @@ function recordCoverageAtBoundary(ctx: V2HandlerContext, scanId?: string): void 
     invocationId: ctx.invocation.invocationId,
     ...(scanId ? { scanId } : {}),
   });
-  while (snapshots.length > MAX_COVERAGE_SNAPSHOTS) snapshots.shift();
-  ctx.operations.state.write(COVERAGE_HISTORY_KEY, snapshots);
 }
+
+/** Files one arrival batch keeps, and the serialized byte ceiling for them. */
+export const MAX_ARRIVAL_FILES = 100;
+export const MAX_ARRIVAL_STATE_BYTES = 12 * 1024;
 
 type ArrivalBatch = {
   batchId: string;
@@ -1120,13 +1366,21 @@ type ArrivalBatch = {
     firedRules: Array<{ token: string; tags: string[] }>;
     tags: AttachmentView[];
   }>;
+  /** Files the batch actually processed; may exceed the retained `files`. */
+  totalFiles: number;
+  /** True when the retained file list was capped by count or bytes. */
+  truncated: boolean;
 };
 
 function latestArrival(ctx: V2HandlerContext): ArrivalBatch | null {
   const value = ctx.operations.state.read(LATEST_ARRIVALS_KEY);
-  return typeof value === "object" && value !== null && Array.isArray((value as { files?: unknown }).files)
-    ? (value as ArrivalBatch)
-    : null;
+  if (!isRecordValue(value) || !Array.isArray(value.files)) return null;
+  const batch = value as unknown as ArrivalBatch;
+  return {
+    ...batch,
+    totalFiles: typeof value.totalFiles === "number" ? value.totalFiles : batch.files.length,
+    truncated: value.truncated === true,
+  };
 }
 
 function recordArrivalBatch(
@@ -1146,25 +1400,36 @@ function recordArrivalBatch(
     });
     byFile.set(attachment.fileId, list);
   }
+  const mapped = files.map((file) => {
+    const attachments = byFile.get(file.fileId) ?? [];
+    return {
+      id: file.fileId,
+      filename: file.filename,
+      tagged: attachments.length > 0,
+      firedRules: rules
+        .filter((rule) => filenameMatchesToken(file.filename, rule.tok))
+        .map((rule) => ({ token: rule.tok, tags: [...rule.tags] })),
+      tags: attachments,
+    };
+  });
+  // Cap the retained arrival list so a large scan cannot push the shared
+  // extension state past its byte budget; report the cap instead of hiding it.
+  const retained = mapped.slice(0, MAX_ARRIVAL_FILES);
+  let truncated = mapped.length > retained.length;
+  while (retained.length > 1 && serializeBytes(retained) > MAX_ARRIVAL_STATE_BYTES) {
+    retained.pop();
+    truncated = true;
+  }
   const input = inputRecord(ctx);
   ctx.operations.state.write(LATEST_ARRIVALS_KEY, {
     batchId: typeof input.batchId === "string" ? input.batchId : ctx.invocation.invocationId,
     ...(typeof input.scanStartedAt === "string" ? { scanStartedAt: input.scanStartedAt } : {}),
     invocationId: ctx.invocation.invocationId,
     completedAt: new Date().toISOString(),
-    files: files.map((file) => {
-      const attachments = byFile.get(file.fileId) ?? [];
-      return {
-        id: file.fileId,
-        filename: file.filename,
-        tagged: attachments.length > 0,
-        firedRules: rules
-          .filter((rule) => filenameMatchesToken(file.filename, rule.tok))
-          .map((rule) => ({ token: rule.tok, tags: [...rule.tags] })),
-        tags: attachments,
-      };
-    }),
-  });
+    totalFiles: mapped.length,
+    truncated,
+    files: retained,
+  } satisfies ArrivalBatch);
 }
 
 export function runCoverageSummary(ctx: V2HandlerContext) {
@@ -1238,7 +1503,7 @@ export function runLatestArrivals(ctx: V2HandlerContext) {
   });
 }
 
-export function runRemoveByOrigin(ctx: V2HandlerContext) {
+export async function runRemoveByOrigin(ctx: V2HandlerContext) {
   const input = inputRecord(ctx);
   if (input.confirm !== true) {
     throw new V2OperationError("input-invalid", "Confirm removal before changing automatic tag attachments.");
@@ -1247,7 +1512,7 @@ export function runRemoveByOrigin(ctx: V2HandlerContext) {
     throw new V2OperationError("input-invalid", "Choose deterministic or semantic AI attachments.");
   }
   const removed = extendedOperationsOf(ctx).tags.detachByOrigin(input.origin);
-  recordCoverageAtBoundary(ctx);
+  await recordCoverageAtBoundary(ctx);
   return immediateV2Result({ origin: input.origin, removed });
 }
 

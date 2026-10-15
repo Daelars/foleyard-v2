@@ -28,13 +28,27 @@ semantic with its confidence.
   `MAX_TAG_FILES` (500) bound, case-insensitive matching,
   uncovered-word extraction, queue aggregation with examples and
   counts, and input cleaning. Caps: `MAX_QUEUE_FILES` (2000) files
-  walked, `MAX_CANDIDATES` (100) entries per listing.
+  walked, `MAX_CANDIDATES` (100) entries per listing,
+  `MAX_RETAINED_CANDIDATES` (200) records retained, and a
+  `MAX_CANDIDATE_STATE_BYTES` (24 KiB) ceiling the queue is pruned to.
 - `src/handlers.ts` — preview (immediate, no side effects),
   tag-files (immediate in `direct` mode; progress plus cancellation
-  in `job` mode), list-candidates (immediate paged walk, no writes),
-  promote-candidate (find-or-create by name, attach as manual),
-  dismiss-candidate (persisted dismissed set in extension state).
-  Rule tags attach with the deterministic origin. No v1 imports, no
+  in `job` mode), list-candidates (immediate paged walk with a stable
+  keyset cursor, no writes), promote-candidate (find-or-create by name,
+  attach as manual), dismiss-candidate (marks the retained record in
+  extension state). Rule tags attach with the deterministic origin.
+  Workflow state stays inside the v2 per-extension budget: the
+  candidate queue is capped and byte-pruned deterministically, the
+  latest-arrival batch keeps at most `MAX_ARRIVAL_FILES` (100) files
+  under `MAX_ARRIVAL_STATE_BYTES` (12 KiB), and the coverage history
+  keeps `MAX_COVERAGE_SNAPSHOTS` (30) snapshots of at most
+  `MAX_COVERAGE_TAGS` (200) tags under `MAX_COVERAGE_STATE_BYTES`
+  (12 KiB). Coverage is recorded once per completed scan (deduped by
+  scan id) through the atomic `state.update`, and `record-coverage`
+  stores the caller's bounded delta instead of re-aggregating the
+  Library, so concurrent jobs do not lose snapshots or candidates.
+  Truncation is reported (`truncated`, `totalFiles`, `nextCursor`,
+  `retainedLimit`, `omittedTags`), never silent. No v1 imports, no
   direct filesystem access.
 
 ## Run-mode contract
@@ -61,7 +75,13 @@ semantic with its confidence.
   exactly what the rules fire, and uncovered words queue up as
   candidates instead of guesses.
 - **Bounds.** At most `MAX_TAG_FILES` (500) sounds per call; larger
-  batches reject with a reason instead of truncating silently.
+  batches reject with a reason instead of truncating silently. The
+  retained candidate queue, the latest-arrival batch, and coverage
+  history are each capped and byte-pruned so a large Library keeps the
+  whole v2 workflow state inside its per-extension budget; a capped
+  queue or batch reports `truncated` with its `totalFiles`/`total` and
+  `retainedLimit`, a capped snapshot reports `omittedTags`, rather than
+  dropping data silently.
 - **Off means off.** Disabled or unapproved, the tool writes nothing
   and fetches nothing: no model, no inference, no migration pressure.
 

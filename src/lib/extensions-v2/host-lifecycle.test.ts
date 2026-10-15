@@ -100,6 +100,55 @@ describe("v2 lifecycle hooks", () => {
     expect(stateRows.get(ENABLE_KEY)).toBe(false);
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("onDisabled"));
   });
+
+  it("runs onDisabled after persisted disablement", async () => {
+    const order: string[] = [];
+    getAppV2Host().registerHandler(EXT, `${EXT}.on`, () => immediateV2Result({ ok: true }));
+    getAppV2Host().registerHandler(EXT, `${EXT}.off`, () => {
+      order.push("off");
+      expect(stateRows.get(ENABLE_KEY), "disablement is persisted before the hook").toBe(false);
+      return immediateV2Result({ ok: true });
+    });
+
+    await setV2ExtensionEnabled(EXT, true);
+    await setV2ExtensionEnabled(EXT, false);
+
+    expect(order).toEqual(["off"]);
+  });
+
+  it("still enforces permissions on a disabled extension's hook", async () => {
+    const GATED = "lifecycle-gated";
+    const registry = getV2Registry();
+    if (!registry.get(GATED)) {
+      registry.register({
+        id: GATED,
+        name: "Gated Ext",
+        version: "1.0.0",
+        apiVersion: 2 as const,
+        description: "Permission-gated lifecycle hook.",
+        permissions: ["library:read"],
+        commands: [
+          { id: `${GATED}.off`, title: "Off", description: "Disable hook.", scope: "global" as const },
+        ],
+        lifecycle: { onDisabled: { commandId: `${GATED}.off` } },
+      });
+    }
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    let ran = false;
+    getAppV2Host().registerHandler(GATED, `${GATED}.off`, () => {
+      ran = true;
+      return immediateV2Result({ ok: true });
+    });
+
+    await setV2ExtensionEnabled(GATED, true);
+    await setV2ExtensionEnabled(GATED, false);
+
+    // The disable hook skips only the enabled gate; the unapproved
+    // permission still denies it.
+    expect(ran).toBe(false);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("permission-denied"));
+    errorSpy.mockRestore();
+  });
 });
 
 describe("bundled registration isolation", () => {

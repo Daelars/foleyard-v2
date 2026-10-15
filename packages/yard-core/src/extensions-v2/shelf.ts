@@ -1,5 +1,4 @@
-import type { ExtensionV2Permission } from "./definition";
-import { V2OperationError } from "./operations";
+import { createV2PermissionRequire, V2OperationError, type V2EffectivePermissions } from "./operations";
 
 /**
  * Shelf store operations for v2 handlers (Yard Core context, E1 #176).
@@ -41,7 +40,7 @@ export type V2ShelfOperations = {
 
 export type V2ShelfFactoryArgs = {
   extensionId: string;
-  effectivePermissions: readonly string[];
+  effectivePermissions: V2EffectivePermissions;
   shelf?: V2ShelfPorts;
   /** Live index lookup used for repair and add validation. */
   isLiveFile?(fileId: string): boolean;
@@ -86,11 +85,7 @@ function cleanIds(ids: readonly unknown[], limit: number): string[] {
 
 /** Shelf store bound to one invocation. See the module docblock for the permission map. */
 export function createV2ShelfOperations(args: V2ShelfFactoryArgs): V2ShelfOperations {
-  const effective = new Set(args.effectivePermissions);
-
-  const require = (permission: ExtensionV2Permission): void => {
-    if (!effective.has(permission)) throw denied(permission, args.extensionId);
-  };
+  const require = createV2PermissionRequire(args.effectivePermissions, args.extensionId);
 
   const ports = (): V2ShelfPorts => {
     if (!args.shelf) throw unsupported(args.extensionId);

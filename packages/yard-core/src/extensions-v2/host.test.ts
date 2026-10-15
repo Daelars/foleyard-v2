@@ -7,6 +7,7 @@ import {
   immediateV2Result,
   jobV2Result,
   reviewV2Result,
+  V2JobManager,
   type V2HostServices,
 } from "./index";
 import { audioFile, libraryPorts } from "./test-helpers";
@@ -268,6 +269,54 @@ describe("ExtensionV2Host.execute", () => {
       await host.jobs.waitFor(submitted.outcome.jobId);
     }
     expect(seen).toEqual(["direct", "job"]);
+  });
+
+  it("rechecks effective permissions when queued work reaches the front", async () => {
+    let granted: string[] = ["library:read"];
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const registry = new ExtensionV2Registry();
+    registry.register(createGreeterFixtureDefinition());
+    const manager = new V2JobManager({ maxConcurrent: 1 });
+    const host = new ExtensionV2Host({
+      registry,
+      isEnabled: () => true,
+      capabilities: new Set<string>(),
+      grantedPermissions: () => granted,
+      ports: libraryPorts([audioFile("a")]),
+      jobManager: manager,
+    });
+    let runs = 0;
+    host.registerHandler("fixture-greeter", "fixture-greeter.greet", async () => {
+      runs += 1;
+      await blocked;
+      return immediateV2Result({ message: "done" });
+    });
+    const request = {
+      extensionId: "fixture-greeter",
+      commandId: "fixture-greeter.greet",
+      input: { name: "Ada" },
+      selection: { fileIds: ["a"] },
+    };
+
+    const first = await host.submitJob(request);
+    const second = await host.submitJob(request);
+    const firstId = first.ok && first.outcome.kind === "job" ? first.outcome.jobId : "";
+    const secondId = second.ok && second.outcome.kind === "job" ? second.outcome.jobId : "";
+    expect(manager.getJob(secondId)?.state).toBe("queued");
+
+    // Revoking before the queued job starts must deny it, not run it.
+    granted = [];
+    release();
+
+    const denied = await manager.waitFor(secondId);
+    expect(denied.state).toBe("cancelled");
+    expect(denied.error?.code).toBe("permission-denied");
+    expect(runs).toBe(1);
+    // The already-running job keeps the permission it started with.
+    expect((await manager.waitFor(firstId)).state).toBe("succeeded");
   });
 });
 

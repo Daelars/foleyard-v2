@@ -134,6 +134,19 @@ describe("createV2ExtendedOperations", () => {
       expect.arrayContaining(["library", "libraryMutations", "collections", "tags", "embeddings", "analysis", "shelf", "folders"]),
     );
   });
+
+  it("rechecks a live effective set so a revoked mutation fails closed mid-run", () => {
+    let granted: string[] = ["library:write"];
+    const services = createV2ExtendedOperations(
+      extendedArgs({ effectivePermissions: () => granted }),
+    );
+    expect(services.libraryMutations.markRemoved(["a"])).toEqual({
+      marked: ["a"],
+      unknownIds: [],
+    });
+    granted = [];
+    expect(() => services.libraryMutations.markRemoved(["a"])).toThrowError(/"library:write"/);
+  });
 });
 
 describe("v2 extended host wiring", () => {

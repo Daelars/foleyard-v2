@@ -68,6 +68,13 @@ export type V2Runtime = {
   /** Approvals: deny by default, hydrated once per process. */
   approvals: V2PermissionApprovals;
   approvalsLoaded: boolean;
+  /**
+   * Explicit degraded state for permission/enablement policy: set when a
+   * hydration or write fails, cleared on the next success. A non-null
+   * reason means policy changes may not be durable; the change itself is
+   * never reported as success.
+   */
+  policyDegraded: string | null;
   /** Grants: destination (write) and source (read) access. */
   destinationGrants: V2DestinationGrants;
   sourceGrants: V2SourceGrants;
@@ -101,6 +108,7 @@ export function createV2Runtime(): V2Runtime {
     enablementLoaded: false,
     approvals: new V2PermissionApprovals(),
     approvalsLoaded: false,
+    policyDegraded: null,
     destinationGrants: { store: new V2GrantStore(), tokens: new Map() },
     sourceGrants: { store: new V2SourceGrantStore(), tokens: new Map() },
     workflowStates: new Map(),
@@ -128,4 +136,14 @@ export function getV2Runtime(): V2Runtime {
   const created = createV2Runtime();
   scope[RUNTIME_KEY] = created;
   return created;
+}
+
+/**
+ * Explicit degraded state for permission/enablement policy. The
+ * application surfaces it so a failed hydration or write is visible
+ * rather than silently reported as success.
+ */
+export function getV2PolicyHealth(): { degraded: boolean; reason: string | null } {
+  const reason = getV2Runtime().policyDegraded;
+  return { degraded: reason !== null, reason };
 }

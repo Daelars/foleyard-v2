@@ -146,7 +146,11 @@ replays completed file operations.
 
 - Retired v1 command ids are not routed anywhere; the request 404s.
 - Revoking approval returns the extension to deny-by-default;
-  in-flight runs fail closed at their next permission check.
+  in-flight runs fail closed at their next permission check, and queued
+  jobs recheck before starting.
+- Approval and enablement writes that cannot be persisted are reported
+  as failures (never as success) and record an explicit degraded state;
+  a failed hydration leaves policy unloaded so the next read retries.
 - Restart expires destination grants and interrupts live jobs with
   known outputs; history stays reviewable.
 - Every Tools grid card except Drop Rules v2 has a run button opening

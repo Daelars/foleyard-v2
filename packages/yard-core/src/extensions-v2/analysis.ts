@@ -1,4 +1,8 @@
-import { V2OperationError } from "./operations";
+import {
+  createV2PermissionRequire,
+  V2OperationError,
+  type V2EffectivePermissions,
+} from "./operations";
 
 /**
  * Analysis backends for v2 handlers (#195).
@@ -51,7 +55,7 @@ export type V2AnalysisOperations = {
 
 export type V2AnalysisFactoryArgs = {
   extensionId: string;
-  effectivePermissions: readonly string[];
+  effectivePermissions: V2EffectivePermissions;
   analysis?: V2AnalysisPorts;
 };
 
@@ -64,10 +68,7 @@ function denied(permission: string, extensionId: string): V2OperationError {
 
 export function createV2AnalysisOperations(args: V2AnalysisFactoryArgs): V2AnalysisOperations {
   const extensionId = args.extensionId;
-  const granted = new Set(args.effectivePermissions);
-  const require = (permission: "embeddings:read" | "embeddings:write"): void => {
-    if (!granted.has(permission)) throw denied(permission, extensionId);
-  };
+  const require = createV2PermissionRequire(args.effectivePermissions, extensionId);
   const ports = (): V2AnalysisPorts => {
     if (!args.analysis) {
       throw new V2OperationError(

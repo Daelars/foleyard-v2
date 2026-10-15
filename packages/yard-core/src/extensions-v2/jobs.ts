@@ -59,12 +59,13 @@ import {
  * refuse conflicting names), and never routes through v1 (this module
  * has no v1 dependency; see `boundaries.test.ts`).
  *
- * Disable: submits check the host gate at submit and again when a
- * queued job reaches the front; `cancelExtensionJobs` moves queued
- * work straight to `cancelled` and requests cancellation of running
- * work. Service disposal belongs to the runner: after its owned work
- * settles it disposes job-owned incomplete output through
- * `workspace.dispose`, which removes only tracked paths.
+ * Disable: submits check the host gate (enablement and the live
+ * effective permissions) at submit and again when a queued job reaches
+ * the front; `cancelExtensionJobs` moves queued work straight to
+ * `cancelled` and requests cancellation of running work. Service disposal
+ * belongs to the runner: after its owned work settles it disposes
+ * job-owned incomplete output through `workspace.dispose`, which removes
+ * only tracked paths.
  */
 
 export const MAX_CONCURRENT_V2_JOBS = 2;
@@ -183,10 +184,17 @@ export type V2JobSubmit = {
    * undeclared schema exposes no result.
    */
   resultSchema?: ExtensionV2ValueSchema;
-  /** Denial reason, or null when the submit may proceed. Checked at submit and at start. */
-  gate?: () => string | null;
+  /**
+   * Denial, or null when the submit may proceed. Checked at submit and
+   * again when a queued job reaches the front, so a revocation observed
+   * in between cancels the queued run instead of starting it.
+   */
+  gate?: () => V2JobGateDenial | null;
   run: (context: V2JobRunContext) => Promise<V2JobCompletion>;
 };
+
+/** Typed gate denial: the state that stopped the job and a readable reason. */
+export type V2JobGateDenial = { code: V2FailureCode; message: string };
 
 export type V2JobSnapshot = {
   version: number;
@@ -199,6 +207,17 @@ export class V2JobCancelledError extends Error {
   constructor(readonly jobId: string) {
     super(`Job "${jobId}" was cancelled; stop writing and unwind.`);
     this.name = "V2JobCancelledError";
+  }
+}
+
+/** Thrown by `submit` when the gate denies before a record is created. */
+export class V2JobGateDeniedError extends Error {
+  constructor(
+    readonly code: V2FailureCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "V2JobGateDeniedError";
   }
 }
 
@@ -296,7 +315,7 @@ export type V2JobManagerOptions = {
 
 type JobEntry = {
   record: V2JobRecord;
-  gate?: () => string | null;
+  gate?: () => V2JobGateDenial | null;
   run?: (context: V2JobRunContext) => Promise<V2JobCompletion>;
   /** Declared result schema; drives the bounded terminal projection. */
   resultSchema?: ExtensionV2ValueSchema;
@@ -359,7 +378,7 @@ export class V2JobManager implements V2JobStatusReader {
   submit(spec: V2JobSubmit): { record: V2JobRecord; duplicate: boolean } {
     const denied = spec.gate?.() ?? null;
     if (denied) {
-      throw new Error(denied);
+      throw new V2JobGateDeniedError(denied.code, denied.message);
     }
     if (spec.idempotencyKey !== undefined) {
       const key = idempotencyKeyFor(spec.extensionId, spec.commandId, spec.idempotencyKey);
@@ -576,7 +595,7 @@ export class V2JobManager implements V2JobStatusReader {
           cancellationRequestedAt: now,
           stoppedAt: now,
           finishedAt: now,
-          error: { code: "extension-disabled", message: denied },
+          error: { code: denied.code, message: denied.message },
         };
         this.settleEntry(next);
         continue;

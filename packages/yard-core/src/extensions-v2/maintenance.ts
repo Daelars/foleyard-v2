@@ -3,7 +3,11 @@ import {
   authorizeV2ReadablePath,
   type V2PathIo,
 } from "./filesystem";
-import { V2OperationError } from "./operations";
+import {
+  createV2PermissionRequire,
+  V2OperationError,
+  type V2EffectivePermissions,
+} from "./operations";
 import type { V2SourceGrantStore } from "./source-grants";
 
 /**
@@ -91,7 +95,7 @@ export type V2FolderOperations = {
 
 export type V2FolderFactoryArgs = {
   extensionId: string;
-  effectivePermissions: readonly string[];
+  effectivePermissions: V2EffectivePermissions;
   folders?: V2FolderScanPorts;
   /** Readable grants for folders outside the Library roots. */
   sources?: V2SourceGrantStore;
@@ -114,11 +118,7 @@ function unsupported(extensionId: string): V2OperationError {
 
 /** Folder services bound to one invocation. See the module docblock for the permission map. */
 export function createV2FolderOperations(args: V2FolderFactoryArgs): V2FolderOperations {
-  const effective = new Set(args.effectivePermissions);
-
-  const require = (permission: ExtensionV2Permission): void => {
-    if (!effective.has(permission)) throw denied(permission, args.extensionId);
-  };
+  const require = createV2PermissionRequire(args.effectivePermissions, args.extensionId);
 
   const ports = (): V2FolderScanPorts => {
     if (!args.folders) throw unsupported(args.extensionId);

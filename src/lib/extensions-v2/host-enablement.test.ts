@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AUTO_TAG_V2_ID } from "@foleyard/auto-tag-v2";
 
+import { writePersistedEnabled } from "./enablement";
 import {
   isV2ExtensionEnabled,
   setV2ExtensionEnabled,
@@ -53,6 +54,22 @@ describe("v2 host enablement", () => {
     } finally {
       await secondHost.setV2ExtensionEnabled(AUTO_TAG_V2_ID, false);
       vi.resetModules();
+    }
+  });
+
+  it("reports a failed enablement write instead of surfacing it as success", async () => {
+    const write = vi.mocked(writePersistedEnabled);
+    write.mockImplementation(() => {
+      throw new Error("enablement write failed");
+    });
+    try {
+      await expect(setV2ExtensionEnabled("enablement-write-fail", true)).rejects.toThrow(
+        /enablement write failed/,
+      );
+      // A grant that could not be persisted is not enabled in memory.
+      expect(isV2ExtensionEnabled("enablement-write-fail")).toBe(false);
+    } finally {
+      write.mockImplementation(() => {});
     }
   });
 });

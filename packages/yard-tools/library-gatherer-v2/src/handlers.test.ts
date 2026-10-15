@@ -8,6 +8,7 @@ import {
   V2GrantStore,
   V2JobCancelledError,
   V2SourceGrantStore,
+  V2_FOLDER_LIST_LIMIT,
   validateV2Value,
   type ExtensionV2Definition,
   type IndexedAudioFile,
@@ -75,6 +76,7 @@ function world(overrides?: {
   granted?: string[];
   destSeed?: string[];
   failReporterAfter?: number | null;
+  listDirectory?: V2FolderScanPorts["listDirectory"];
 }): World {
   const definition = createLibraryGathererV2Definition();
   const registry = new ExtensionV2Registry();
@@ -140,11 +142,11 @@ function world(overrides?: {
   const folderPorts: V2FolderScanPorts = {
     libraryRoots: () => ["/lib"],
     pathIo: () => fakePathIo(existing),
-    listDirectory: async (canonical) => {
+    listDirectory: overrides?.listDirectory ?? (async (canonical) => {
       const found = tree.get(canonical);
       if (!found) throw Object.assign(new Error(`ENOENT: ${canonical}`), { code: "ENOENT" });
       return found.map((item) => ({ ...item }));
-    },
+    }),
     removeEmptyDirectory: async () => {},
   };
 
@@ -246,6 +248,26 @@ describe("library-gatherer-v2 preview-gather", () => {
     expect(value.truncated).toBe(false);
     const command = w.definition.commands.find((c) => c.id === LIBRARY_GATHERER_V2_PREVIEW)!;
     expect(validateV2Value(command.result!, value, "result")).toBeNull();
+  });
+
+  it("reports a truncated source walk instead of silently dropping files", async () => {
+    // A source folder past the listing bound: the walk sees a bounded
+    // page and settles incomplete, so the preview says truncated.
+    const big = Array.from({ length: V2_FOLDER_LIST_LIMIT + 100 }, (_, index) =>
+      entry(`f-${index}.wav`, `/media/inbox/f-${index}.wav`, "file"),
+    );
+    const w = world({
+      listDirectory: async (canonical) => (canonical === "/media/inbox" ? big : []),
+    });
+    const result = await w.host.execute({
+      extensionId: LIBRARY_GATHERER_V2_ID,
+      commandId: LIBRARY_GATHERER_V2_PREVIEW,
+      input: { sourceGrantIds: [w.sourceGrantId] },
+      selection: {},
+    });
+    const value = immediateValue<LibraryGathererV2PreviewResult>(result);
+    expect(value.truncated).toBe(true);
+    expect(value.candidates).toBeLessThanOrEqual(V2_FOLDER_LIST_LIMIT);
   });
 });
 

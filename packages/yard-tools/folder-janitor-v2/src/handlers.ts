@@ -151,46 +151,39 @@ async function walkFolder(
 ): Promise<{ hasFile: boolean; complete: boolean }> {
   ctx.operations.jobs.throwIfCancelled();
   if (budget.remaining <= 0) return { hasFile: true, complete: false };
-  const subdirs: string[] = [];
-  let hasFile = false;
-  let complete = true;
-  let cursor: number | undefined = 0;
+  budget.remaining -= 1;
   const { folders } = extendedOperationsOf(ctx);
-  do {
-    if (budget.remaining <= 0) {
-      complete = false;
-      break;
+  let page;
+  try {
+    page = await folders.listFolder({ path: folderPath });
+  } catch {
+    // An unreadable/vanished folder is not walked; the missing-file
+    // pass reports its indexed contents instead.
+    return { hasFile: true, complete: false };
+  }
+  let hasFile = false;
+  const subdirs: string[] = [];
+  for (const entry of page.entries) {
+    if (entry.kind === "file") {
+      hasFile = true;
+      present.add(normalizePath(entry.path));
+    } else {
+      subdirs.push(entry.path);
     }
-    budget.remaining -= 1;
-    ctx.operations.jobs.throwIfCancelled();
-    let page;
-    try {
-      page = await folders.listFolder({ path: folderPath, cursor });
-    } catch {
-      // An unreadable/vanished folder is not walked; the missing-file
-      // pass reports its indexed contents instead.
-      return { hasFile: true, complete: false };
-    }
-    for (const entry of page.entries) {
-      if (entry.kind === "file") {
-        hasFile = true;
-        present.add(normalizePath(entry.path));
-      } else {
-        subdirs.push(entry.path);
-      }
-    }
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor !== undefined);
-  let childrenAllEmpty = true;
+  }
+  // A truncated page means the folder was not seen in full: nothing
+  // beneath it may be reported empty or missing, and the walk settles
+  // incomplete (the scan reports `truncated`).
+  let complete = !page.truncated;
   for (const sub of subdirs) {
     const child = await walkFolder(ctx, sub, present, emptyFolders, budget);
     if (!child.complete) complete = false;
-    if (child.hasFile) childrenAllEmpty = false;
+    if (child.hasFile) hasFile = true;
   }
-  if (!hasFile && childrenAllEmpty && complete) {
+  if (!hasFile && complete) {
     emptyFolders.push(normalizePath(folderPath));
   }
-  return { hasFile: hasFile || !childrenAllEmpty, complete };
+  return { hasFile, complete };
 }
 
 async function runScan(ctx: V2HandlerContext, scope: "library" | "folder") {

@@ -12,10 +12,12 @@ import type { V2DirectoryEntry, V2FolderScanPorts, V2PathIo } from "@yard-core";
  * the authorized folder services in core `maintenance.ts`: core
  * authorizes every path (Library roots or readable source grants for
  * listing, Library roots only for deletion) through the filesystem
- * guards, then calls these ports for the bytes. Removal uses a
- * non-recursive delete so a folder that gained contents between the
- * emptiness check and the removal fails instead of deleting data.
- * No v1 extension modules imported.
+ * guards, then calls these ports for the bytes. Listing streams the
+ * directory and stops at the caller's bound (#315), so a large folder
+ * is never read or statted in full. Removal uses a non-recursive delete
+ * so a folder that gained contents between the emptiness check and the
+ * removal fails instead of deleting data. No v1 extension modules
+ * imported.
  */
 
 const nodePathIo: V2PathIo = {
@@ -36,31 +38,50 @@ const nodePathIo: V2PathIo = {
 export type V2FolderScanDeps = {
   libraryRoots?: () => readonly string[] | Promise<readonly string[]>;
   pathIo?: () => V2PathIo;
-  listDirectory?: (canonicalPath: string) => Promise<V2DirectoryEntry[]>;
+  listDirectory?: (canonicalPath: string, limit: number) => Promise<V2DirectoryEntry[]>;
   removeEmptyDirectory?: (canonicalPath: string) => Promise<void>;
 };
 
-async function listDirectoryEntries(canonicalPath: string): Promise<V2DirectoryEntry[]> {
-  const names = await fs.promises.readdir(canonicalPath, { withFileTypes: true });
-  return Promise.all(
-    names.map(async (entry): Promise<V2DirectoryEntry> => {
-      const entryPath = path.join(canonicalPath, entry.name);
-      if (!entry.isFile()) {
-        return { name: entry.name, path: entryPath, kind: "directory", size: null };
-      }
-      try {
-        const stats = await fs.promises.stat(entryPath);
-        return {
-          name: entry.name,
-          path: entryPath,
-          kind: stats.isFile() ? "file" : "directory",
-          size: stats.isFile() ? stats.size : null,
-        };
-      } catch {
-        return { name: entry.name, path: entryPath, kind: "file", size: null };
-      }
-    }),
-  );
+async function toDirectoryEntry(
+  canonicalPath: string,
+  entry: fs.Dirent,
+): Promise<V2DirectoryEntry> {
+  const entryPath = path.join(canonicalPath, entry.name);
+  if (!entry.isFile()) {
+    return { name: entry.name, path: entryPath, kind: "directory", size: null };
+  }
+  try {
+    const stats = await fs.promises.stat(entryPath);
+    return {
+      name: entry.name,
+      path: entryPath,
+      kind: stats.isFile() ? "file" : "directory",
+      size: stats.isFile() ? stats.size : null,
+    };
+  } catch {
+    return { name: entry.name, path: entryPath, kind: "file", size: null };
+  }
+}
+
+/**
+ * At most `limit` entries of one directory (#315). The directory is read
+ * as a stream and abandoned at the bound, so a large folder is never
+ * pulled into one array, and only the entries actually returned are
+ * statted.
+ */
+async function listDirectoryEntries(
+  canonicalPath: string,
+  limit: number,
+): Promise<V2DirectoryEntry[]> {
+  const entries: V2DirectoryEntry[] = [];
+  if (!Number.isFinite(limit) || limit <= 0) return entries;
+  const directory = await fs.promises.opendir(canonicalPath);
+  // Breaking out of the async iterator closes the handle (its `return`).
+  for await (const dirent of directory) {
+    entries.push(await toDirectoryEntry(canonicalPath, dirent));
+    if (entries.length >= limit) break;
+  }
+  return entries;
 }
 
 /** Node-backed folder ports; pass deps only in tests. */

@@ -83,25 +83,30 @@ describe("v2 folder permission confinement", () => {
 });
 
 describe("v2 listFolder", () => {
-  it("lists a Library folder with stable paging", async () => {
+  it("lists a Library folder sorted and complete when under the bound", async () => {
     const { operations } = setup();
-    const first = await operations.listFolder({ path: "/lib", limit: 2 });
-    expect(first.root).toBe("/lib");
-    expect(first.total).toBe(3);
-    expect(first.entries.map((entry) => entry.name)).toEqual(["a.mp3", "empty"]);
-    expect(first.nextCursor).toBe(2);
-    const second = await operations.listFolder({ path: "/lib", limit: 2, cursor: first.nextCursor! });
-    expect(second.entries.map((entry) => entry.name)).toEqual(["full"]);
-    expect(second.nextCursor).toBeNull();
+    const page = await operations.listFolder({ path: "/lib" });
+    expect(page.root).toBe("/lib");
+    expect(page.entries.map((entry) => entry.name)).toEqual(["a.mp3", "empty", "full"]);
+    expect(page.truncated).toBe(false);
   });
 
-  it("bounds each page to the folder-list limit", async () => {
-    const names = Array.from({ length: V2_FOLDER_LIST_LIMIT + 50 }, (_, index) => `f-${index}.mp3`);
+  it("stops at the advertised bound instead of materializing the folder", async () => {
+    // A large synthetic directory: the port records how far past the
+    // page the operation asks it to read. The operation must ask for one
+    // entry past the limit (to detect truncation) and never the whole
+    // folder, so it never materializes or stats the directory in full.
+    const requested: number[] = [];
+    const names = Array.from({ length: 5_000 }, (_, index) => `f-${index}.mp3`);
     const ports: V2FolderScanPorts = {
       libraryRoots: () => ["/lib"],
       pathIo: () => fakePathIo(["/lib", "/lib/big"]),
-      listDirectory: async () =>
-        names.map((name) => ({ name, path: `/lib/big/${name}`, kind: "file" as const, size: 1 })),
+      listDirectory: async (_canonicalPath, limit) => {
+        requested.push(limit);
+        return names
+          .slice(0, limit)
+          .map((name) => ({ name, path: `/lib/big/${name}`, kind: "file" as const, size: 1 }));
+      },
       removeEmptyDirectory: async () => {},
     };
     const operations = createV2FolderOperations({
@@ -110,9 +115,50 @@ describe("v2 listFolder", () => {
       folders: ports,
     });
     const page = await operations.listFolder({ path: "/lib/big", limit: 10_000 });
+    expect(requested).toEqual([V2_FOLDER_LIST_LIMIT + 1]);
     expect(page.entries).toHaveLength(V2_FOLDER_LIST_LIMIT);
-    expect(page.total).toBe(V2_FOLDER_LIST_LIMIT + 50);
-    expect(page.nextCursor).toBe(V2_FOLDER_LIST_LIMIT);
+    expect(page.truncated).toBe(true);
+  });
+
+  it("reports a folder exactly at the bound as complete, not truncated", async () => {
+    const names = Array.from({ length: V2_FOLDER_LIST_LIMIT }, (_, index) => `f-${index}.mp3`);
+    const ports: V2FolderScanPorts = {
+      libraryRoots: () => ["/lib"],
+      pathIo: () => fakePathIo(["/lib", "/lib/big"]),
+      listDirectory: async (_canonicalPath, limit) =>
+        names
+          .slice(0, limit)
+          .map((name) => ({ name, path: `/lib/big/${name}`, kind: "file" as const, size: 1 })),
+      removeEmptyDirectory: async () => {},
+    };
+    const operations = createV2FolderOperations({
+      extensionId: "folder-janitor-v2",
+      effectivePermissions: ["files:read"],
+      folders: ports,
+    });
+    const page = await operations.listFolder({ path: "/lib/big" });
+    expect(page.entries).toHaveLength(V2_FOLDER_LIST_LIMIT);
+    expect(page.truncated).toBe(false);
+  });
+
+  it("clamps a non-finite limit to the advertised bound instead of reading everything", async () => {
+    const requested: number[] = [];
+    const ports: V2FolderScanPorts = {
+      libraryRoots: () => ["/lib"],
+      pathIo: () => fakePathIo(["/lib"]),
+      listDirectory: async (_canonicalPath, limit) => {
+        requested.push(limit);
+        return [];
+      },
+      removeEmptyDirectory: async () => {},
+    };
+    const operations = createV2FolderOperations({
+      extensionId: "folder-janitor-v2",
+      effectivePermissions: ["files:read"],
+      folders: ports,
+    });
+    await operations.listFolder({ path: "/lib", limit: Number.NaN });
+    expect(requested).toEqual([V2_FOLDER_LIST_LIMIT + 1]);
   });
 
   it("denies folders outside the Library roots", async () => {
@@ -170,6 +216,26 @@ describe("v2 deleteEmptyFolder", () => {
     const result = await operations.deleteEmptyFolder({ path: "/lib/empty" });
     expect(result).toEqual({ removed: "/lib/empty" });
     expect(removed).toEqual(["/lib/empty"]);
+  });
+
+  it("checks emptiness with a single bounded entry, not the whole folder", async () => {
+    const requested: number[] = [];
+    const ports: V2FolderScanPorts = {
+      libraryRoots: () => ["/lib"],
+      pathIo: () => fakePathIo(["/lib", "/lib/empty"]),
+      listDirectory: async (_canonicalPath, limit) => {
+        requested.push(limit);
+        return [];
+      },
+      removeEmptyDirectory: async () => {},
+    };
+    const operations = createV2FolderOperations({
+      extensionId: "folder-janitor-v2",
+      effectivePermissions: ["files:delete"],
+      folders: ports,
+    });
+    await operations.deleteEmptyFolder({ path: "/lib/empty" });
+    expect(requested).toEqual([1]);
   });
 
   it("refuses non-empty folders, roots, and outside paths", async () => {

@@ -27,10 +27,15 @@ import type { V2SourceGrantStore } from "./source-grants";
  *   delete time against the Library roots. Source-grant roots never
  *   authorize deletion: cleanup stays inside the Library.
  *
- * Bounds: each listing returns at most `V2_FOLDER_LIST_LIMIT` entries
- * with cursor paging, sorted by name so pages are stable. Deletion
- * removes one empty directory only — never files, never non-empty
- * folders, never a Library root itself.
+ * Bounds: each listing returns at most `V2_FOLDER_LIST_LIMIT` entries.
+ * The bound holds before the filesystem work begins: the operation asks
+ * its port for one entry past the page it will show (enough to know the
+ * folder holds more) and never the whole folder, so an oversized
+ * directory is neither materialized nor statted in full. An oversized
+ * folder comes back `truncated: true` — a bounded page the caller must
+ * narrow — never a silent partial list. Deletion removes one empty
+ * directory only — never files, never non-empty folders, never a Library
+ * root itself.
  *
  * Validation-to-use limits, stated honestly: containment and
  * emptiness are authorized at check time. Another local process can
@@ -59,8 +64,15 @@ export type V2FolderScanPorts = {
   /** Configured readable Library roots. */
   libraryRoots(): readonly string[] | Promise<readonly string[]>;
   pathIo(): V2PathIo;
-  /** Entries of one canonical directory, unsorted. */
-  listDirectory(canonicalPath: string): Promise<V2DirectoryEntry[]>;
+  /**
+   * At most `limit` entries of one canonical directory, in directory
+   * order. Implementations must stop once `limit` entries are collected —
+   * reading no further and statting only what they return — so an
+   * oversized folder is never materialized or statted in full. The
+   * operation detects an oversized folder by asking for one entry past
+   * the page it will show.
+   */
+  listDirectory(canonicalPath: string, limit: number): Promise<V2DirectoryEntry[]>;
   /** Remove one canonical directory that the caller verified empty. */
   removeEmptyDirectory(canonicalPath: string): Promise<void>;
 };
@@ -70,18 +82,21 @@ export type V2ListFolderInput = {
   path?: string;
   /** Readable source grant covering a folder outside the Library roots. */
   grantId?: string;
+  /** Page size; clamped to [1, `V2_FOLDER_LIST_LIMIT`]. Defaults to the limit. */
   limit?: number;
-  /** Entry offset for paging; defaults to 0. */
-  cursor?: number;
 };
 
 export type V2ListFolderResult = {
   /** Canonical folder that was listed. */
   root: string;
+  /** At most the requested limit, sorted by name. */
   entries: V2DirectoryEntry[];
-  /** Next offset, or null when the listing is complete. */
-  nextCursor: number | null;
-  total: number;
+  /**
+   * True when the folder held more entries than the limit: `entries` is
+   * a bounded page, not the whole folder, so the caller must narrow the
+   * folder to list the rest. Never a silent partial list.
+   */
+  truncated: boolean;
 };
 
 export type V2FolderOperations = {
@@ -97,6 +112,12 @@ export type V2FolderFactoryArgs = {
   sources?: V2SourceGrantStore;
   now?: string;
 };
+
+/** Clamp a caller-supplied page size to [1, `V2_FOLDER_LIST_LIMIT`]. */
+function clampFolderListLimit(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return V2_FOLDER_LIST_LIMIT;
+  return Math.max(1, Math.min(V2_FOLDER_LIST_LIMIT, Math.floor(value)));
+}
 
 function denied(permission: string, extensionId: string): V2OperationError {
   return new V2OperationError(
@@ -168,32 +189,26 @@ export function createV2FolderOperations(args: V2FolderFactoryArgs): V2FolderOpe
           "List a folder with its path or a readable source grant; neither was provided.",
         );
       }
-      const limit = input.limit === undefined
-        ? V2_FOLDER_LIST_LIMIT
-        : Math.max(1, Math.min(V2_FOLDER_LIST_LIMIT, Math.floor(input.limit)));
-      const cursor = input.cursor === undefined
-        ? 0
-        : Math.max(0, Math.floor(input.cursor));
-      let entries: V2DirectoryEntry[];
+      const limit = clampFolderListLimit(input.limit);
+      let listing: V2DirectoryEntry[];
       try {
-        entries = await ports().listDirectory(canonical);
+        // One entry past the page is enough to know the folder holds
+        // more; the port stops at this bound, so the whole folder is
+        // never materialized or statted.
+        listing = await ports().listDirectory(canonical, limit + 1);
       } catch (error) {
         throw new V2OperationError(
           "input-invalid",
           `Folder ${JSON.stringify(input.path ?? canonical)} cannot be listed: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
-      const sorted = [...entries].sort((left, right) =>
-        left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
-      );
-      const page = sorted.slice(cursor, cursor + limit);
-      const next = cursor + page.length;
-      return {
-        root: canonical,
-        entries: page,
-        nextCursor: next < sorted.length ? next : null,
-        total: sorted.length,
-      };
+      const truncated = listing.length > limit;
+      const entries = [...listing]
+        .sort((left, right) =>
+          left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+        )
+        .slice(0, limit);
+      return { root: canonical, entries, truncated };
     },
     async deleteEmptyFolder(input: { path: string }): Promise<{ removed: string }> {
       require("files:delete");
@@ -223,7 +238,9 @@ export function createV2FolderOperations(args: V2FolderFactoryArgs): V2FolderOpe
       }
       let entries: V2DirectoryEntry[];
       try {
-        entries = await ports().listDirectory(canonical);
+        // One entry is enough to tell empty from non-empty; the port
+        // stops at the bound rather than listing the whole folder.
+        entries = await ports().listDirectory(canonical, 1);
       } catch (error) {
         throw new V2OperationError(
           "input-invalid",

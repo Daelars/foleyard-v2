@@ -1,4 +1,4 @@
-import type { IndexedAudioFile } from "../domain/audio-file";
+import { isOwnedAudioFile, type IndexedAudioFile } from "../domain/audio-file";
 
 import type { ExtensionV2Permission, ExtensionV2Setting } from "./definition";
 import { validateV2SettingValue } from "./definition";
@@ -325,7 +325,7 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
 
   const liveRecord = (fileId: string): IndexedAudioFile => {
     const record = library.getFileById(fileId);
-    if (!record || record.removedAt !== null) {
+    if (!record || !isOwnedAudioFile(record)) {
       throw new V2OperationError(
         "input-invalid",
         `Sound ${JSON.stringify(fileId)} is not in the Library index; refresh the selection and retry.`,
@@ -371,7 +371,7 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
       getFile(id: string): IndexedAudioFile | null {
         require("library:read");
         const record = library.getFileById(id);
-        return record && record.removedAt === null ? record : null;
+        return record && isOwnedAudioFile(record) ? record : null;
       },
       listPage(cursor: string | null = null, limit = 100) {
         require("library:read");
@@ -397,7 +397,7 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
         const byId = new Map(found.map((file) => [file.id, file]));
         const missing = ids.filter((id) => {
           const file = byId.get(id);
-          return !file || file.removedAt !== null;
+          return !file || !isOwnedAudioFile(file);
         });
         if (missing.length > 0) {
           throw new V2OperationError(

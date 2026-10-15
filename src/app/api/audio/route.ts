@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { getFileById, getLibraryRoots } from "@/lib/db";
+import { getOwnedFileById, getLibraryRoots } from "@/lib/db";
 import { recordRecentMakePackFile } from "@/lib/extensions-v2/recent-source-store";
 import { resolveExistingPathWithinRoots } from "@/lib/filesystem-boundary";
 
@@ -109,8 +109,8 @@ export async function GET(request: NextRequest) {
     return errorResponse("No file identified", 400);
   }
 
-  const indexedFile = getFileById(id);
-  if (!indexedFile || indexedFile.removedAt) {
+  const indexedFile = getOwnedFileById(id);
+  if (!indexedFile) {
     return errorResponse("File not found", 404);
   }
 

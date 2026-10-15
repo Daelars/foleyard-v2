@@ -63,6 +63,10 @@ its save-search replaces the retired v1 tool.
 - B04 (expected-to-fail, #140): a late tag failure can erase a newer edit.
 - Deleting a Collection removes membership rows, never audio files (file
   deletion is a separate destructive path — see `docs/filesystem.md`).
+- Detaching a Library root (#271) hides that root's files from Collection
+  counts and membership reads but keeps membership, tags, favourites and
+  embeddings; re-adding the root restores them. Only `forget` deletes them
+  (`docs/adr/library-root-detachment.md`).
 
 ## Source map (real file paths)
 

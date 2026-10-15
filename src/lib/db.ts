@@ -28,6 +28,8 @@ export {
   getAllFilesIncludingRemoved,
   getScanCleanupRows,
   getFileById,
+  getOwnedFileById,
+  getOwnedFilesByIds,
   getFileByPath,
   getFileIdsScannedSince,
   getFilesByIds,
@@ -85,6 +87,14 @@ export {
   listEmbeddings,
   upsertFileEmbedding,
 } from "@/lib/database/embedding-repository";
+
+export {
+  detachLibraryRoot,
+  forgetLibraryRoot,
+  listPendingRootChanges,
+  reattachLibraryRoot,
+  recoverPendingRootChanges,
+} from "@/lib/database/root-detachment";
 
 import { sqlite } from "@/lib/database/connection";
 import { SqliteAudioFileRepository } from "@/lib/database/file-repository";

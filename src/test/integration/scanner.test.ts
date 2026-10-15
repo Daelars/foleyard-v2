@@ -73,6 +73,7 @@ vi.mock("@/lib/db", () => ({
   getLibraryRoots: () => state.settings!.getLibraryRoots(),
   getLibraryStats: () => state.settings!.getLibraryStats(),
   setLibraryRoots: (roots: string[]) => state.settings!.setLibraryRoots(roots),
+  recoverPendingRootChanges: () => ({ completed: 0, dropped: 0 }),
 }));
 
 vi.mock("@/lib/metadata", () => ({

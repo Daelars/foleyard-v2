@@ -11,7 +11,7 @@ import { getDesktopBridge } from "@/lib/desktop";
 
 import type { LibraryTabProps, ValidationResult } from "@/components/settings/types";
 
-export function V3SettingsLibraryTab({ settings, onSaveRoot, onRemoveRoot, scanStatus, onStartScan }: LibraryTabProps) {
+export function V3SettingsLibraryTab({ settings, onSaveRoot, onRemoveRoot, onForgetRoot, scanStatus, onStartScan }: LibraryTabProps) {
   const [rootDraft, setRootDraft] = useState("");
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
@@ -104,11 +104,23 @@ export function V3SettingsLibraryTab({ settings, onSaveRoot, onRemoveRoot, scanS
     await onRemoveRoot(path);
   };
 
+  const handleForgetRoot = async (path: string) => {
+    await onForgetRoot(path);
+  };
+
   const handleConfirmRemoveRoot = async () => {
     const path = confirmRemoveRoot;
     setConfirmRemoveRoot(null);
     if (path) {
       await handleRemoveRoot(path);
+    }
+  };
+
+  const handleConfirmForgetRoot = async () => {
+    const path = confirmRemoveRoot;
+    setConfirmRemoveRoot(null);
+    if (path) {
+      await handleForgetRoot(path);
     }
   };
 
@@ -194,9 +206,18 @@ export function V3SettingsLibraryTab({ settings, onSaveRoot, onRemoveRoot, scanS
                       <Button
                         tone="danger"
                         size="sm"
+                        title="Remove this root and detach its files (keeps tags, favorites and Collections)"
                         onClick={() => void handleConfirmRemoveRoot()}
                       >
-                        Sure?
+                        Remove
+                      </Button>
+                      <Button
+                        tone="danger"
+                        size="sm"
+                        title="Remove this root and permanently delete its indexed files and organization data"
+                        onClick={() => void handleConfirmForgetRoot()}
+                      >
+                        Delete data
                       </Button>
                       <Button
                         tone="ghost"

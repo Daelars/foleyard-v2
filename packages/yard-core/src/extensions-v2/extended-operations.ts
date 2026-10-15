@@ -1,3 +1,4 @@
+import { isOwnedAudioFile } from "../domain/audio-file";
 import type { V2HandlerContext } from "./host";
 import {
   createV2CollectionOperations,
@@ -118,12 +119,12 @@ export function createV2ExtendedOperations(
 
   const isLiveFile = (fileId: string): boolean => {
     const record = args.library.getFileById(fileId);
-    return record !== null && record.removedAt === null;
+    return record !== null && isOwnedAudioFile(record);
   };
   const liveFileIds = (fileIds: string[]): string[] => {
     const live: string[] = [];
     for (const record of args.library.getFilesByIds(fileIds)) {
-      if (record.removedAt === null) live.push(record.id);
+      if (isOwnedAudioFile(record)) live.push(record.id);
     }
     return live;
   };

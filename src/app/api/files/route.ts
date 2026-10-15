@@ -5,7 +5,7 @@ import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, parsePageInteger } from "@/lib/api/pa
 import { encodeFileCursor } from "@/lib/database/file-cursor";
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteFiles } from '@/lib/files/delete-files';
-import { attachTagToFile, detachTagFromFile, getAttachmentsForFiles, getFileCount, getFiles, getFilesByIds, getTagsForFiles, setFavorites, setFileTagBatch, toggleFavorite } from '@/lib/db';
+import { attachTagToFile, detachTagFromFile, getAttachmentsForFiles, getFileCount, getFiles, getOwnedFilesByIds, getTagsForFiles, setFavorites, setFileTagBatch, toggleFavorite } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -139,13 +139,10 @@ function hydrateByIds(idsParam: string) {
   if (ids.length > MAX_HYDRATE_IDS) {
     return errorResponse(`ids must contain at most ${MAX_HYDRATE_IDS} entries`, 400);
   }
-  const byId = new Map(getFilesByIds(ids).map((file) => [file.id, file]));
+  const byId = new Map(getOwnedFilesByIds(ids).map((file) => [file.id, file]));
   const files = ids
     .map((id) => byId.get(id) ?? null)
-    .filter(
-      (file): file is NonNullable<ReturnType<typeof byId.get>> =>
-        file !== null && file.removedAt === null,
-    );
+    .filter((file): file is NonNullable<ReturnType<typeof byId.get>> => file !== null);
   return NextResponse.json({ files: withTags(files) });
 }
 

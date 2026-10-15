@@ -58,51 +58,67 @@ export function useTags() {
     tagsRef.current = tags;
   });
 
-  const loadTags = useCallback(async () => {
+  const loadTags = useCallback(async (): Promise<TagRecord[] | null> => {
     try {
       const res = await fetch("/api/tags");
       if (!res.ok) {
-        return;
+        return null;
       }
       const data = await res.json();
-      setTags(
-        ((data.tags ?? []) as TagRecord[]).map((tag) => ({
-          ...tag,
-          color: resolveItemColor(tag.name, tag.color),
-        })),
-      );
+      const next = ((data.tags ?? []) as TagRecord[]).map((tag) => ({
+        ...tag,
+        color: resolveItemColor(tag.name, tag.color),
+      }));
+      setTags(next);
+      return next;
     } catch {
       // Sidebar keeps its last data.
+      return null;
     }
   }, []);
 
   const createTag = useCallback(
     async (name: string, color?: string) => {
-      if (!name.trim()) {
+      const trimmed = name.trim();
+      if (!trimmed) {
         return null;
       }
+      let serverMessage: string | null = null;
       try {
+        // Name and colour travel in one durable request, so the create either
+        // lands whole or not at all (#293).
         const res = await fetch("/api/tags", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name.trim() }),
+          body: JSON.stringify(color ? { name: trimmed, color } : { name: trimmed }),
         });
+        const data = (await res.json().catch(() => null)) as
+          | { id?: string; error?: string }
+          | null;
         if (!res.ok) {
-          throw new Error();
+          serverMessage = data?.error ?? `Failed to create tag (${res.status})`;
+          throw new Error(serverMessage);
         }
-        const data = (await res.json()) as { id?: string };
-        if (color && data.id) {
-          await fetch("/api/tags", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tagId: data.id, color }),
-          });
-        }
-        void loadTags();
+        await loadTags();
         toast.success("Tag created");
-        return data.id ?? null;
+        return data?.id ?? null;
       } catch {
-        toast.error("Failed to create tag");
+        // Reconcile with the server: a response that was lost may still have
+        // persisted. If the refreshed list now carries the name, the create
+        // did land — report it as the success it was. Otherwise keep the
+        // caller's draft and explain the recovery.
+        const refreshed = await loadTags();
+        if (serverMessage === null && refreshed) {
+          const existing = refreshed.find((tag) => tag.name.trim() === trimmed);
+          if (existing) {
+            toast.success("Tag created");
+            return existing.id;
+          }
+        }
+        toast.error(
+          serverMessage ??
+            "Couldn't create the tag. Your entry was kept — check the connection and try again.",
+        );
         return null;
       }
     },

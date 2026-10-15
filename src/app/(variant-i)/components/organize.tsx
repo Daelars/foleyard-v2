@@ -16,6 +16,7 @@ import {
 } from "@/components/variant-i";
 import { ITEM_COLOR_PRESETS, onColorText, resolveItemColor } from "@/lib/item-colors";
 import { cn } from "@/lib/utils";
+import { draftNamePersisted } from "@/app/library/creation-draft";
 
 import type {
   CollectionsSectionProps,
@@ -89,28 +90,46 @@ function V3TagsSection({
   const [showTagComposer, setShowTagComposer] = useState(false);
   const [tagName, setTagName] = useState("");
   const [tagColor, setTagColor] = useState(ITEM_COLOR_PRESETS[4]);
+  const [pendingTag, setPendingTag] = useState<string | null>(null);
+  const [tagsSnapshot, setTagsSnapshot] = useState(tags);
   const [editingTag, setEditingTag] = useState<string | null>(null);
   const [tagDraft, setTagDraft] = useState("");
   const [confirmTagDeleteId, setConfirmTagDeleteId] = useState<string | null>(
     null,
   );
 
+  // A refresh after a failed submit resynchronizes the draft if the tag
+  // actually persisted, using React's adjust-state-during-render pattern.
+  if (tags !== tagsSnapshot) {
+    setTagsSnapshot(tags);
+    if (pendingTag !== null && draftNamePersisted(pendingTag, tags.map((tag) => tag.name))) {
+      setTagName("");
+      setTagColor(ITEM_COLOR_PRESETS[4]);
+      setShowTagComposer(false);
+      setPendingTag(null);
+    }
+  }
+
   const createTag = () => {
     const name = tagName.trim();
     if (!isComposerNameValid(tagName)) {
       return;
     }
-    onCreateTag(name, tagColor).then((id) => {
-      if (id) {
-        onSelectTag(id);
-        setEditingTag(id);
-        setTagDraft(name);
+    void onCreateTag(name, tagColor).then((id) => {
+      if (!id) {
+        // Keep the name and colour so the user can retry.
+        setPendingTag(name);
+        return;
       }
+      onSelectTag(id);
+      setEditingTag(id);
+      setTagDraft(name);
+      setTagName("");
+      setTagColor(ITEM_COLOR_PRESETS[4]);
+      setShowTagComposer(false);
+      setConfirmTagDeleteId(null);
+      setPendingTag(null);
     });
-    setTagName("");
-    setTagColor(ITEM_COLOR_PRESETS[4]);
-    setShowTagComposer(false);
-    setConfirmTagDeleteId(null);
   };
 
   const commitTagRename = () => {
@@ -210,23 +229,47 @@ function V3CollectionsSection({
   const [showComposer, setShowComposer] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(ITEM_COLOR_PRESETS[0]);
+  const [pendingCollection, setPendingCollection] = useState<string | null>(null);
+  const [collectionsSnapshot, setCollectionsSnapshot] = useState(collections);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // A refresh after a failed submit resynchronizes the draft if the collection
+  // actually persisted, using React's adjust-state-during-render pattern.
+  if (collections !== collectionsSnapshot) {
+    setCollectionsSnapshot(collections);
+    if (
+      pendingCollection !== null &&
+      draftNamePersisted(
+        pendingCollection,
+        collections.map((collection) => collection.name),
+      )
+    ) {
+      setNewName("");
+      setNewColor(ITEM_COLOR_PRESETS[0]);
+      setShowComposer(false);
+      setPendingCollection(null);
+    }
+  }
 
   const createCollection = () => {
     const name = newName.trim();
     if (!isComposerNameValid(newName)) {
       return;
     }
-    onCreateCollection(name, newColor).then((id) => {
-      if (id) {
-        setExpanded(id);
+    void onCreateCollection(name, newColor).then((id) => {
+      if (!id) {
+        // Keep the name and colour so the user can retry.
+        setPendingCollection(name);
+        return;
       }
+      setExpanded(id);
+      setNewName("");
+      setNewColor(ITEM_COLOR_PRESETS[0]);
+      setShowComposer(false);
+      setPendingCollection(null);
     });
-    setNewName("");
-    setNewColor(ITEM_COLOR_PRESETS[0]);
-    setShowComposer(false);
   };
 
   const commitRename = () => {

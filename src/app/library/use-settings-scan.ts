@@ -134,9 +134,7 @@ export function useSettingsScan(callbacks: SettingsScanCallbacks) {
   }, []);
 
   const handleSaveRoot = useCallback(
-    async (path: string) => {
-      await saveLibraryRoot(path);
-    },
+    async (path: string) => saveLibraryRoot(path),
     [saveLibraryRoot],
   );
 
@@ -217,9 +215,10 @@ export function useSettingsScan(callbacks: SettingsScanCallbacks) {
     }
   }, []);
 
-  const handleStartScan = useCallback(async () => {
-    await startLibraryScan();
-  }, [startLibraryScan]);
+  const handleStartScan = useCallback(
+    async () => startLibraryScan(),
+    [startLibraryScan],
+  );
 
   const handleRemoveDefaultChange = useCallback((value: RemoveDefault) => {
     setRemoveDefault(value);

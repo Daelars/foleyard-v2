@@ -17,10 +17,10 @@ export interface SettingsDialogProps {
     libraryRoots: string[];
     stats: { activeFiles: number; removedFiles: number };
   };
-  onSaveRoot: (path: string) => Promise<void>;
+  onSaveRoot: (path: string) => Promise<boolean>;
   onRemoveRoot: (path: string) => Promise<void>;
   scanStatus: ScanStatusResponse;
-  onStartScan: () => Promise<void>;
+  onStartScan: () => Promise<boolean>;
   collections: { id: string; name: string; fileCount?: number; isSmart?: boolean; filter?: string | null }[];
   tags: { id: string; name: string; color: string }[];
   onCreateCollection: (name: string, color?: string) => Promise<string | null | void>;

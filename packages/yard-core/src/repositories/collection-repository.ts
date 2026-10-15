@@ -6,7 +6,7 @@ export interface CollectionRepository {
   collectionExists(id: string): boolean;
   collectionNameExists(name: string, exceptId?: string): boolean;
   getCollectionById(id: string): Collection | null;
-  createCollection(name: string, isSmart?: boolean, filter?: string): string;
+  createCollection(name: string, isSmart?: boolean, filter?: string, color?: string | null): string;
   createSmartCollection(name: string, filter: string): string;
   renameCollection(id: string, name: string): void;
   updateCollectionColor(id: string, color: string | null): void;

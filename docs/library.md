@@ -48,6 +48,8 @@ list on the client.
 
 - Root outside readable storage or containing no audio: validation fails,
   root not saved.
+- Adding a Library root reports success only after the root is saved; a
+  failed save keeps the entered path so the user can retry.
 - Removed-then-rescanned files can reappear (finding B10,
   expected-to-fail): removal is undone by rescan.
 - Collection-branch counts disagree with the main list (finding B03,

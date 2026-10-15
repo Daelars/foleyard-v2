@@ -1,5 +1,6 @@
 import { errorResponse } from "@/lib/api/errors";
 import { readMutationBody } from "@/lib/api/body";
+import { parseOptionalColor } from "@/lib/api/color";
 import { ApiError, mutationError } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from 'next/server';
 import {
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await readMutationBody(request);
-    const { name, fileId, collectionId, isSmart, filter } = body;
+    const { name, fileId, collectionId, isSmart, filter, color } = body;
 
     if (fileId && collectionId) {
       attachFileToCollection(fileId, collectionId);
@@ -57,7 +58,8 @@ export async function POST(request: NextRequest) {
 
     if (trimmedName) {
       if (collectionNameExists(trimmedName)) throw new ApiError("A collection with that name already exists", 409);
-      const id = createCollection(trimmedName, !!isSmart, filter ?? null);
+      const createColor = parseOptionalColor(color);
+      const id = createCollection(trimmedName, !!isSmart, filter ?? null, createColor);
       return NextResponse.json({ success: true, id });
     }
 

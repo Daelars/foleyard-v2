@@ -4,23 +4,62 @@ import { useRef, useState } from "react";
 import { Filter, ListMusic, Pencil, Plus, Tag as TagIcon, Trash2, X } from "lucide-react";
 
 import { Button, Field, TagChip } from "@/components/variant-i";
+import { draftNamePersisted } from "@/app/library/creation-draft";
 
 import type { MetadataTabProps } from "@/components/settings/types";
 
 export function V3SettingsMetadataTab({ collections, tags, onCreateCollection, onDeleteCollection, onRenameCollection, onConvertToRegularCollection, onCreateTag, onDeleteTag }: MetadataTabProps) {
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newTagName, setNewTagName] = useState("");
+  const [pendingCollection, setPendingCollection] = useState<string | null>(null);
+  const [pendingTag, setPendingTag] = useState<string | null>(null);
+  const [collectionsSnapshot, setCollectionsSnapshot] = useState(collections);
+  const [tagsSnapshot, setTagsSnapshot] = useState(tags);
   const [confirmingDelete, setConfirmingDelete] = useState<
     { kind: "collection" | "tag"; id: string } | null
   >(null);
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const tagInputRef = useRef<HTMLInputElement>(null);
+
+  // A refresh after a failed submit resynchronizes the draft with server truth
+  // (a lost response that actually landed). React's "adjust state when a prop
+  // changes" pattern is used because resetting in an effect is rejected by the
+  // compiler lint rules.
+  if (collections !== collectionsSnapshot) {
+    setCollectionsSnapshot(collections);
+    if (
+      pendingCollection !== null &&
+      draftNamePersisted(pendingCollection, collections.map((c) => c.name))
+    ) {
+      setNewCollectionName("");
+      setPendingCollection(null);
+    }
+  }
+  if (tags !== tagsSnapshot) {
+    setTagsSnapshot(tags);
+    if (
+      pendingTag !== null &&
+      draftNamePersisted(pendingTag, tags.map((t) => t.name))
+    ) {
+      setNewTagName("");
+      setPendingTag(null);
+    }
+  }
+
   const handleCreateCollection = async () => {
     const name = newCollectionName.trim();
     if (!name) return;
 
-    await onCreateCollection(name);
-    setNewCollectionName("");
+    // Keep the draft until the durable create is confirmed; the hook resolves
+    // a lost response against the refreshed list before reporting failure.
+    const id = await onCreateCollection(name);
+    if (id) {
+      setNewCollectionName("");
+      setPendingCollection(null);
+    } else {
+      setPendingCollection(name);
+    }
+    collectionInputRef.current?.focus();
   };
 
   const handleDeleteCollection = async (id: string) => {
@@ -32,8 +71,16 @@ export function V3SettingsMetadataTab({ collections, tags, onCreateCollection, o
     const name = newTagName.trim();
     if (!name) return;
 
-    await onCreateTag(name);
-    setNewTagName("");
+    // Keep the draft until the durable create is confirmed; the hook resolves
+    // a lost response against the refreshed list before reporting failure.
+    const id = await onCreateTag(name);
+    if (id) {
+      setNewTagName("");
+      setPendingTag(null);
+    } else {
+      setPendingTag(name);
+    }
+    tagInputRef.current?.focus();
   };
 
   const handleDeleteTag = async (id: string) => {

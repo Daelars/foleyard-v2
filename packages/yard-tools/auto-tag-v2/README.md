@@ -83,9 +83,16 @@ Three commands, one model, no bundled weights:
   whether inference is installed. Safe to run any time, including
   offline.
 - **Download CLAP model** fetches with progress and cancellation,
-  but only with explicit confirmation naming the size. Interrupted
-  downloads clean their sidecars; completed files skip, so retrying
-  resumes per file. First run offline simply finds nothing.
+  but only with explicit confirmation naming the size. One download
+  has one owner: a second request for the same model is rejected
+  while a transfer is active (the lock lives on the process-wide
+  runtime, so it holds across route bundles), and it clears on
+  success, failure, or cancellation. A cancelled or interrupted file
+  keeps its partial, so retrying resumes it with a range request and
+  reports the bytes already on disk; a server that ignores ranges
+  restarts the file instead of doubling it. Completed files skip, so
+  a retry never re-fetches them. First run offline simply finds
+  nothing.
 - **Tag with CLAP** embeds each sound, ranks the approved tags by
   cosine, and attaches matches at or above 0.5 (at most 3 per file)
   with confidence, marked semantic. Vectors land in the embedding

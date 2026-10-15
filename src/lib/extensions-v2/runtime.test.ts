@@ -51,6 +51,20 @@ describe("process-wide v2 runtime", () => {
     expect(secondSources.getV2SourceGrantStore()).toBe(firstSources.getV2SourceGrantStore());
   });
 
+  it("shares one single-flight model download coordinator across module instances", async () => {
+    vi.resetModules();
+    const firstRuntime = await import("./runtime");
+    const first = firstRuntime.getV2Runtime().modelDownloads;
+
+    vi.resetModules();
+    const secondRuntime = await import("./runtime");
+    const second = secondRuntime.getV2Runtime().modelDownloads;
+
+    // A download in one route bundle is the active transfer the other sees.
+    expect(second).toBe(first);
+    expect(getV2Runtime().modelDownloads).toBe(first);
+  });
+
   it("hides the runtime behind a structural guard, not instanceof", () => {
     // A re-evaluated runtime module defines a new V2Runtime-shaped class;
     // identity checks alone would rebuild the runtime and re-split state.

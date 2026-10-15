@@ -23,7 +23,8 @@ marketplace, or public authoring SDK.
   and grants, host execution, jobs, plans, and the HTTP transport codec.
 - `src/lib/extensions-v2/runtime.ts` owns the one process-wide v2
   runtime: registration, host execution, plans, grants, jobs,
-  enablement, approvals, and events. Next compiles each route into its
+  enablement, approvals, events, and the single-flight analysis model
+  downloads. Next compiles each route into its
   own bundle, so module state forks per route subtree even though the
   process is one realm; every module reads its slice through
   `getV2Runtime()` instead of keeping a per-bundle copy, and the

@@ -9,6 +9,8 @@ import {
   type V2JobManager,
 } from "@yard-core";
 
+import { ModelDownloadCoordinator } from "./model-downloads";
+
 /**
  * The one process-owned v2 extension runtime (Application context).
  *
@@ -24,9 +26,9 @@ import {
  * invisible to the subscription that owned it.
  *
  * One object now owns registration, host execution, plans, grants,
- * jobs, enablement, approvals, and events, and is created once per
- * process. Every module reads its slice through `getV2Runtime()`; no
- * module keeps a second copy.
+ * jobs, enablement, approvals, events, and single-flight model
+ * downloads, and is created once per process. Every module reads its
+ * slice through `getV2Runtime()`; no module keeps a second copy.
  *
  * The guard is structural, not `instanceof`: a re-evaluated module
  * (tests simulate bundles with `vi.resetModules()`) must still
@@ -72,6 +74,12 @@ export type V2Runtime = {
   sourceGrants: V2SourceGrants;
   /** Host-owned events: the bus every adapter and renderer subscription shares. */
   events: V2EventBus;
+  /**
+   * Local analysis model transfers: one owner per model across the
+   * process, so two route bundles (or two jobs) never start a competing
+   * download for the same model (#289).
+   */
+  modelDownloads: ModelDownloadCoordinator;
 };
 
 const RUNTIME_KEY = Symbol.for("foleyard.v2.runtime");
@@ -94,6 +102,7 @@ export function createV2Runtime(): V2Runtime {
     destinationGrants: { store: new V2GrantStore(), tokens: new Map() },
     sourceGrants: { store: new V2SourceGrantStore(), tokens: new Map() },
     events: new V2EventBus(),
+    modelDownloads: new ModelDownloadCoordinator(),
   };
 }
 

@@ -20,6 +20,7 @@ const { execSync } = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
 const REGISTRY_PATH = path.join(root, "docs", "manifest.json");
+const { resolveExamples } = require("./examples.cjs");
 
 function readRegistry() {
   if (!fs.existsSync(REGISTRY_PATH)) {
@@ -51,23 +52,18 @@ function readRegistry() {
 }
 
 /**
- * Runnable examples derived from `examples/<area>/<name>/run.ts` (#249):
- * the directory is the single source, not a hardcoded list.
+ * Runnable examples from the single declaration (#310):
+ * `examples/manifest.json` names each example and the runtime that runs
+ * it on the primary development platform; `scripts/examples.cjs`
+ * reconciles that declaration with the `examples/` directory. The staged
+ * manifest therefore advertises exactly the set CI executes.
  */
 function listExamples() {
-  const examplesDir = path.join(root, "examples");
-  const found = [];
-  if (!fs.existsSync(examplesDir)) return found;
-  for (const area of fs.readdirSync(examplesDir, { withFileTypes: true })) {
-    if (!area.isDirectory()) continue;
-    const areaDir = path.join(examplesDir, area.name);
-    for (const example of fs.readdirSync(areaDir, { withFileTypes: true })) {
-      if (!example.isDirectory()) continue;
-      if (!fs.existsSync(path.join(areaDir, example.name, "run.ts"))) continue;
-      found.push({ id: `${area.name}/${example.name}`, runnableIn: "repository" });
-    }
-  }
-  return found.sort((left, right) => left.id.localeCompare(right.id));
+  return resolveExamples(root).map((example) => ({
+    id: example.id,
+    runtime: example.runtime,
+    runnableIn: "repository",
+  }));
 }
 
 function parseOutDir(argv) {
@@ -167,6 +163,14 @@ const documents = registry.documents.map((entry) => {
   };
 });
 
+let examples;
+try {
+  examples = listExamples();
+} catch (error) {
+  console.error(`prepare-docs: ${error.message}`);
+  process.exit(1);
+}
+
 const manifest = {
   manifestId: registry.manifestId,
   productVersion,
@@ -175,7 +179,7 @@ const manifest = {
   sourceRevision,
   sourceDirty,
   documents,
-  examples: listExamples(),
+  examples,
 };
 
 fs.mkdirSync(outDir, { recursive: true });

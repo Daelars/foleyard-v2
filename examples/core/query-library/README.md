@@ -6,7 +6,8 @@ prints rows, and closes the database.
 
 ## Prerequisites
 
-- `bun` (runs TypeScript natively).
+- `node` 22.6+ (runs TypeScript by stripping types natively; this is the
+  runtime declared for the example in `examples/manifest.json`).
 - Native module: `better-sqlite3` must be installed (`bun install`).
   The native binding is required; without it this example cannot run.
 
@@ -21,18 +22,16 @@ filename) without depending on app internals.
 ## Invocation
 
 ```bash
-bun run example:query-library
-# or directly
-bun examples/core/query-library/run.ts
-```
-
-Note: on platforms where Bun cannot load the `better-sqlite3` native module
-(Bun on Windows reports `ERR_DLOPEN_FAILED`), the same file runs under Node
-22.6+ (which strips types natively):
-
-```bash
 node examples/core/query-library/run.ts
+# or through the package.json script (runs the same Node entry point)
+bun run example:query-library
 ```
+
+This example loads the native `better-sqlite3` module, which Bun cannot
+dlopen on Windows (`ERR_DLOPEN_FAILED`), so Node is the supported runtime
+on the primary development platform. `node scripts/run-examples.cjs` and CI
+read the runtime from `examples/manifest.json`, the single example
+declaration.
 
 ## Expected output
 

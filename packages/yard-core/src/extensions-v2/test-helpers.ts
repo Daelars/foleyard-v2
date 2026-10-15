@@ -1,4 +1,6 @@
 import type { IndexedAudioFile } from "../domain/audio-file";
+import type { V2ArchiveEntry, V2ArchivePorts, V2FileContentPorts } from "./operations";
+import { V2OutputConflictError, type V2FileVersion } from "./output-ownership";
 import type { V2LibraryPorts, V2PathIo } from "./index";
 
 /**
@@ -90,6 +92,106 @@ export function fakePathIo(
       const normalized = normalizePath(candidate.split("/"));
       if (links.has(normalized)) return { exists: true, isLink: true };
       return { exists: existing.has(normalized), isLink: false };
+    },
+  };
+}
+
+export type MemoryV2Outputs = {
+  ports: V2FileContentPorts;
+  archive: V2ArchivePorts;
+  bytes: Map<string, Uint8Array>;
+  /** An entry this job never created (a pre-existing or third-party file). */
+  seed(canonicalPath: string, text: string): void;
+  /** Replace the entry at a path with a different file, i.e. a new identity. */
+  replace(canonicalPath: string, text: string): void;
+};
+
+/**
+ * In-memory file/archive ports that honour the output-ownership
+ * contract: creation is exclusive (a claimed destination rejects with
+ * `V2OutputConflictError`), and every write is a new version, so a
+ * replacement at a previously owned path is a different entry.
+ */
+export function memoryOutputPorts(
+  opts: {
+    roots?: string[];
+    dirs?: string[];
+    links?: Record<string, string>;
+    initialText?: Record<string, string>;
+  } = {},
+): MemoryV2Outputs {
+  const roots = opts.roots ?? ["/lib"];
+  const bytes = new Map<string, Uint8Array>();
+  const versions = new Map<string, V2FileVersion>();
+  const existing = new Set<string>([...roots, ...(opts.dirs ?? [])]);
+  let counter = 0;
+
+  const write = (path: string, data: Uint8Array): V2FileVersion => {
+    counter += 1;
+    const version: V2FileVersion = { device: "memory", fileId: String(counter) };
+    bytes.set(path, data);
+    versions.set(path, version);
+    existing.add(path);
+    return version;
+  };
+
+  const seed = (path: string, text: string): void => {
+    bytes.set(path, new TextEncoder().encode(text));
+    existing.add(path);
+  };
+
+  for (const [path, text] of Object.entries(opts.initialText ?? {})) seed(path, text);
+
+  const claim = (path: string): void => {
+    if (bytes.has(path)) throw new V2OutputConflictError(path);
+  };
+
+  const ports: V2FileContentPorts = {
+    readFileBytes: async (path) => {
+      const data = bytes.get(path);
+      if (!data) throw new Error(`missing ${path}`);
+      return data;
+    },
+    copyFile: async (source, dest) => {
+      const data = bytes.get(source);
+      if (!data) throw new Error(`missing ${source}`);
+      claim(dest);
+      return write(dest, data);
+    },
+    writeFileBytes: async (dest, data) => {
+      claim(dest);
+      return write(dest, data);
+    },
+    deleteFileIfVersion: async (path, version) => {
+      const current = versions.get(path);
+      if (!current || current.device !== version.device || current.fileId !== version.fileId) {
+        return { removed: false };
+      }
+      bytes.delete(path);
+      versions.delete(path);
+      existing.delete(path);
+      return { removed: true };
+    },
+    libraryRoots: () => roots,
+    pathIo: () => fakePathIo([...existing], opts.links ?? {}),
+  };
+
+  const archive: V2ArchivePorts = {
+    createZipArchive: async (entries: V2ArchiveEntry[], dest) => {
+      claim(dest);
+      const version = write(dest, new TextEncoder().encode(`zip:${entries.length}`));
+      return { bytesWritten: entries.length, version };
+    },
+  };
+
+  return {
+    ports,
+    archive,
+    bytes,
+    seed,
+    // A replacement is a different file at the same path: a new version.
+    replace: (path, text) => {
+      write(path, new TextEncoder().encode(text));
     },
   };
 }

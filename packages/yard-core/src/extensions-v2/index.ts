@@ -135,6 +135,13 @@ export {
   type V2GrantAuthorization,
 } from "./grants";
 export {
+  V2_OUTPUT_CONFLICT_CODE,
+  V2OutputConflictError,
+  isV2OutputConflict,
+  sameV2FileVersion,
+  type V2FileVersion,
+} from "./output-ownership";
+export {
   V2SourceGrantStore,
   type V2SourceGrant,
   type V2SourceGrantAuthorization,

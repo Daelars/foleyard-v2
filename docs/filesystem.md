@@ -52,11 +52,18 @@ into a per-extension grant ID; handlers consume the ID, never the
 token. Readable Library roots and writable destination grants stay
 distinct; missing, expired, or foreign grants deny. Operation
 services authorize the actual call, including derived output and
-temporary paths, and job-owned cleanup removes only the current
-job's resources. The B12 manifest-sidecar class is fixed by
-construction (the manifest travels as an in-memory archive entry,
-never a predictable dot-tmp file), and the fix is pinned by the Make
-Pack v2 integration suite instead of an expected-failure entry.
+temporary paths. Output creation is exclusive
+(`src/lib/extensions-v2/output-files.ts`): the create is the claim, so
+a pre-existing file is never truncated and two concurrent jobs cannot
+both own one destination; a lost race reports the documented conflict
+outcome. Cleanup removes only the entry that job created — each
+created output is tracked with the file version (device and file id)
+captured from its creating handle, so a replacement at a previously
+owned path survives (`workspace.dispose`). The B12 manifest-sidecar
+class is fixed by construction (the manifest travels as an in-memory
+archive entry, never a predictable dot-tmp file), and the fix is pinned
+by the Make Pack v2 integration suite instead of an expected-failure
+entry.
 
 ## Contracts
 
@@ -64,6 +71,14 @@ Pack v2 integration suite instead of an expected-failure entry.
   `registerGrant`, `resolveWritablePath` in
   `src/lib/filesystem-boundary.ts`. Grant tokens are opaque, single-app,
   in-memory session secrets — not persisted, not shareable across restarts.
+- v2 output ownership: `V2FileVersion`, `V2OutputConflictError`, and
+  `sameV2FileVersion` in
+  `packages/yard-core/src/extensions-v2/output-ownership.ts`, over the
+  node primitives in `src/lib/extensions-v2/output-files.ts`. Creation
+  is exclusive (the create is the claim) and removal is version-checked,
+  so a pre-existing or concurrently claimed destination is never
+  truncated and a replacement at a previously owned path is never
+  deleted.
 
 ## Failure behavior and limitations
 
@@ -82,11 +97,17 @@ Pack v2 integration suite instead of an expected-failure entry.
 - Export no longer deletes a manifest sidecar (finding B12, #136; fixed
   and removed from the ledger).
 - Time-of-check/time-of-use: validation and use are separate steps; a
-  hostile local process can replace directories between them.
+  hostile local process can replace directories between them. Output
+  cleanup re-reads the created entry's version immediately before
+  unlinking, which narrows — but cannot eliminate — that window.
 
 ## Source map (real file paths)
 
 - `src/lib/filesystem-boundary.ts` — grants, readable/writable resolution
+- `src/lib/extensions-v2/output-files.ts` — exclusive creation, created
+  version, version-checked removal (shared by file and archive output)
+- `packages/yard-core/src/extensions-v2/output-ownership.ts` — version
+  type, conflict error, comparison (framework-free)
 - `src/lib/files/delete-files.ts` — soft removal + permanent unlink
 - `src/app/api/desktop/grants/route.ts` — grant issuance
 - `src/app/api/desktop/file/route.ts`, `src/app/api/desktop/path/route.ts` —

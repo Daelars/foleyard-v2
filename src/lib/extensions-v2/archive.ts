@@ -4,6 +4,8 @@ import path from "node:path";
 
 import type { V2ArchiveEntry, V2ArchivePorts } from "@yard-core";
 
+import { createV2OutputExclusive, removeV2FileIfVersion } from "./output-files";
+
 /**
  * Application archive-output service (Application context, R3/R8).
  *
@@ -20,8 +22,10 @@ import type { V2ArchiveEntry, V2ArchivePorts } from "@yard-core";
  *
  * Limits (ZIP32, no ZIP64): at most 65,535 entries, 4 GiB per entry,
  * 4 GiB central-directory offset/size. Violations reject before any
- * misleading success, and a failed write removes the partial output
- * so cancellation/interruption never leaves a corrupt archive behind.
+ * misleading success. The archive is created exclusively (#267): an
+ * existing file is never truncated, and a failed write removes the
+ * partial archive this call created — version-checked, so a replacement
+ * at the same path is never deleted.
  */
 
 const MAX_ZIP32_VALUE = 0xffffffff;
@@ -157,7 +161,10 @@ export function createV2ArchivePorts(): V2ArchivePorts {
       );
 
       await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
-      const handle = await fs.promises.open(destPath, "w");
+      // Exclusive claim: an existing archive is never truncated, and the
+      // version comes from the creating handle so cleanup can never
+      // mistake a replacement for this call's partial output.
+      const { handle, version } = await createV2OutputExclusive(destPath);
       const central: Array<{ name: Buffer; crc: number; size: number; offset: number; modifiedAt: Date }> = [];
       let offset = 0;
       let bytesWritten = 0;
@@ -212,11 +219,11 @@ export function createV2ArchivePorts(): V2ArchivePorts {
         bytesWritten += end.length;
       } catch (error) {
         await handle.close();
-        await fs.promises.rm(destPath, { force: true });
+        await removeV2FileIfVersion(destPath, version);
         throw error;
       }
       await handle.close();
-      return { bytesWritten };
+      return { bytesWritten, version };
     },
   };
 }

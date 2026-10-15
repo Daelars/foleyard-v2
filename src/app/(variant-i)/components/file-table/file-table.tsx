@@ -19,7 +19,7 @@ import { V3DirectoryRow, DirectoryScanAction } from "./directory-row";
 import { V3EmptyState } from "./empty-state";
 import { V3FileRow } from "./file-row";
 import { V3RowMenuItems } from "./row-menu";
-import { RowContextMenu, useRowContextMenu } from "../context-menu";
+import { RowContextMenu, useRowContextMenu, type RowMenuTarget } from "../context-menu";
 import { MenuSeparator } from "@/components/variant-i";
 
 export type { FileTableProps } from "@/components/FileTable/types";
@@ -78,14 +78,20 @@ export const V3FileTable = memo(function V3FileTable({
   // inline closure per row would defeat it and re-render every visible
   // row on every table re-render).
   const handleFileContextMenu = useCallback(
-    (event: React.MouseEvent, file: FileTableProps["files"][number]) => {
-      rowMenu.openMenu({ kind: "file", file }, event.clientX, event.clientY);
+    (
+      target: RowMenuTarget,
+      file: FileTableProps["files"][number],
+    ) => {
+      rowMenu.openMenu({ kind: "file", file }, target);
     },
     [rowMenu.openMenu],
   );
   const handleDirectoryContextMenu = useCallback(
-    (event: React.MouseEvent, dir: FileTableProps["directories"][number]) => {
-      rowMenu.openMenu({ kind: "directory", dir }, event.clientX, event.clientY);
+    (
+      target: RowMenuTarget,
+      dir: FileTableProps["directories"][number],
+    ) => {
+      rowMenu.openMenu({ kind: "directory", dir }, target);
     },
     [rowMenu.openMenu],
   );

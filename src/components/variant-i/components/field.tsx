@@ -6,6 +6,8 @@ import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+import { createTypeahead, typeaheadMatch } from "./menu-keyboard";
+
 /** Inset well field: darker than buttons, red-lit when invalid. */
 export function Field({
   className,
@@ -69,6 +71,12 @@ export function PageButton({
  * positioned inside the card: cards use overflow-hidden for their corner
  * bloom, which would clip an in-card menu to invisibility. It measures from
  * the trigger on open and repositions on scroll/resize.
+ *
+ * Keyboard contract (the roles it advertises): the trigger is the tab stop
+ * and opens the listbox, focus then moves to the listbox, which names the
+ * active option through `aria-activedescendant`. Arrow keys move with
+ * wrapping, Home/End jump to the ends, typing runs a sticky typeahead, Enter
+ * and Space pick, and Escape, Tab and picking all return focus to the trigger.
  */
 export function Select({
   label,
@@ -99,8 +107,18 @@ export function Select({
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const typeaheadRef = useRef<ReturnType<typeof createTypeahead> | null>(null);
   const listId = useId();
   const selected = options.find((option) => option.value === value) ?? options[0];
+  const selectedIndex = Math.max(
+    0,
+    options.findIndex((option) => option.value === value),
+  );
+  const activeIndex =
+    options.length === 0 ? 0 : Math.min(highlight, options.length - 1);
+  const optionId = (index: number) => `${listId}-option-${index}`;
+  const typeahead = () => (typeaheadRef.current ??= createTypeahead());
 
   const measure = useCallback(() => {
     const trigger = triggerRef.current;
@@ -116,10 +134,21 @@ export function Select({
     );
   }, [options.length]);
 
-  const openMenu = () => {
-    setHighlight(Math.max(0, options.findIndex((option) => option.value === value)));
+  const openMenu = (initialIndex = selectedIndex) => {
+    typeahead().cancel();
+    setHighlight(
+      options.length === 0
+        ? 0
+        : Math.min(Math.max(0, initialIndex), options.length - 1),
+    );
     measure();
     setOpen(true);
+  };
+
+  const closeToTrigger = () => {
+    typeahead().cancel();
+    setOpen(false);
+    triggerRef.current?.focus();
   };
 
   useEffect(() => {
@@ -142,9 +171,26 @@ export function Select({
     };
   }, [open, measure]);
 
+  // The listbox is where the keyboard goes while the menu is open: the
+  // trigger hands over on open and takes focus back on every close.
+  useEffect(() => {
+    if (!open) return;
+    listRef.current?.focus({ preventScroll: true });
+  }, [open]);
+
+  // Keep the named option inside the scroll viewport as the highlight roves.
+  useEffect(() => {
+    if (!open) return;
+    const active = menuRef.current?.querySelectorAll<HTMLElement>('[role="option"]')[activeIndex];
+    if (typeof active?.scrollIntoView === "function") {
+      active.scrollIntoView({ block: "nearest" });
+    }
+  }, [open, activeIndex]);
+
   const pick = (index: number) => {
     const option = options[index];
     if (!option) return;
+    typeahead().cancel();
     onChange?.(option.value);
     setOpen(false);
     triggerRef.current?.focus();
@@ -158,18 +204,22 @@ export function Select({
         aria-label={label}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-controls={listId}
+        aria-controls={open ? listId : undefined}
         onClick={() => {
           if (open) {
-            setOpen(false);
+            closeToTrigger();
           } else {
             openMenu();
           }
         }}
         onKeyDown={(event) => {
-          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          if (open) return;
+          if (event.key === "ArrowDown") {
             event.preventDefault();
-            if (!open) openMenu();
+            openMenu(selectedIndex);
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            openMenu(options.length - 1);
           }
         }}
         className={cn(
@@ -213,35 +263,80 @@ export function Select({
           )}
         >
           <div
+            ref={listRef}
             id={listId}
             role="listbox"
             aria-label={label}
+            aria-activedescendant={
+              options.length > 0 ? optionId(activeIndex) : undefined
+            }
             tabIndex={-1}
             onKeyDown={(event) => {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setHighlight((index) => (index + 1) % options.length);
-              } else if (event.key === "ArrowUp") {
-                event.preventDefault();
-                setHighlight((index) => (index - 1 + options.length) % options.length);
-              } else if (event.key === "Enter") {
-                event.preventDefault();
-                pick(highlight);
-              } else if (event.key === "Escape") {
-                event.preventDefault();
-                setOpen(false);
-                triggerRef.current?.focus();
+              const move = (step: number) => {
+                if (options.length === 0) return;
+                setHighlight(
+                  (index) => (index + step + options.length) % options.length,
+                );
+              };
+
+              switch (event.key) {
+                case "ArrowDown":
+                  event.preventDefault();
+                  move(1);
+                  break;
+                case "ArrowUp":
+                  event.preventDefault();
+                  move(-1);
+                  break;
+                case "Home":
+                  event.preventDefault();
+                  if (options.length > 0) setHighlight(0);
+                  break;
+                case "End":
+                  event.preventDefault();
+                  if (options.length > 0) setHighlight(options.length - 1);
+                  break;
+                case "Enter":
+                case " ":
+                  event.preventDefault();
+                  pick(activeIndex);
+                  break;
+                case "Escape":
+                  event.preventDefault();
+                  closeToTrigger();
+                  break;
+                case "Tab":
+                  // Close and let Tab continue from the trigger.
+                  closeToTrigger();
+                  break;
+                default: {
+                  if (
+                    event.key.length !== 1 ||
+                    event.ctrlKey ||
+                    event.metaKey ||
+                    event.altKey
+                  ) {
+                    break;
+                  }
+                  const match = typeaheadMatch(
+                    options.map((option) => option.label),
+                    typeahead().push(event.key),
+                    activeIndex,
+                  );
+                  if (match !== -1) setHighlight(match);
+                }
               }
             }}
             className="vi-scroll grid max-h-[208px] gap-0.5 overflow-y-auto outline-none"
           >
             {options.map((option, index) => {
               const isSelected = option.value === value;
-              const isHighlighted = index === highlight;
+              const isHighlighted = index === activeIndex;
               return (
                 <button
                   key={option.value}
                   type="button"
+                  id={optionId(index)}
                   role="option"
                   aria-selected={isSelected}
                   tabIndex={-1}

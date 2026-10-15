@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 
-import { BulkBar, Menu, MenuItem, type RemoveStage } from "@/components/variant-i";
+import { BulkBar, Menu, MenuItem, useMenuKeyboard, type RemoveStage } from "@/components/variant-i";
 import type { FileTableFileTag } from "@/components/FileTable/types";
 
 export type BulkRemoveStage =
@@ -56,6 +56,14 @@ export function V3SelectionBulkBar({
   const [tagPos, setTagPos] = useState<{ top: number; left: number } | null>(null);
   const tagTriggerRef = useRef<HTMLButtonElement>(null);
   const tagMenuRef = useRef<HTMLDivElement>(null);
+  const closeTagMenu = useCallback(() => setTagOpen(false), []);
+  // Same menu contract as every other popup: focus in on open, roving
+  // arrows, Escape back to the trigger (see useMenuKeyboard).
+  const tagMenuKeyboardRef = useMenuKeyboard({
+    menuRef: tagMenuRef,
+    onClose: closeTagMenu,
+    returnFocusRef: tagTriggerRef,
+  });
 
   const measure = useCallback(() => {
     const trigger = tagTriggerRef.current;
@@ -73,20 +81,12 @@ export function V3SelectionBulkBar({
         setTagOpen(false);
       }
     };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setTagOpen(false);
-        tagTriggerRef.current?.focus();
-      }
-    };
     const onReposition = () => measure();
     document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
     window.addEventListener("scroll", onReposition, true);
     window.addEventListener("resize", onReposition);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("scroll", onReposition, true);
       window.removeEventListener("resize", onReposition);
     };
@@ -107,7 +107,7 @@ export function V3SelectionBulkBar({
       </button>
       {tagOpen && tagPos ? (
         <div
-          ref={tagMenuRef}
+          ref={tagMenuKeyboardRef}
           role="menu"
           aria-label="Tag selected sounds"
           style={{ top: tagPos.top, left: tagPos.left }}

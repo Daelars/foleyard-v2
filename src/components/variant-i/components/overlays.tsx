@@ -121,6 +121,10 @@ export function MenuItem({
       type="button"
       role="menuitem"
       aria-disabled={props.disabled || undefined}
+      // Menu items are not tab stops. The menu moves focus to its first
+      // enabled item on open and roves from there (useMenuKeyboard), so Tab
+      // stays on the trigger that opens the menu.
+      tabIndex={-1}
       className={cn(
         "flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[13px] outline-none transition-[background-color,color,transform] duration-100",
         "motion-safe:active:scale-[0.99]",

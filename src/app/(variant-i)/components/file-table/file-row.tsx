@@ -15,6 +15,8 @@ import { fileTableGridClass } from "@/components/FileTable/layout";
 import { RowWaveform } from "@/components/FileTable/row-waveform";
 import type { FileTableFileRecord, SelectModifiers } from "@/components/FileTable/types";
 
+import { isContextMenuKey, rowMenuTargetFromEvent, type RowMenuTarget } from "../context-menu";
+
 export const V3FileRow = memo(function V3FileRow({
   desktop,
   file,
@@ -52,7 +54,7 @@ export const V3FileRow = memo(function V3FileRow({
     file: FileTableFileRecord,
     index: number,
   ) => void;
-  onContextMenu: (event: React.MouseEvent, file: FileTableFileRecord) => void;
+  onContextMenu: (target: RowMenuTarget, file: FileTableFileRecord) => void;
   virtualIndex: number;
   start: number;
 }) {
@@ -95,7 +97,15 @@ export const V3FileRow = memo(function V3FileRow({
           metaKey: event.metaKey,
         })
       }
-      onContextMenu={(event) => onContextMenu(event, file)}
+      onContextMenu={(event) => onContextMenu(rowMenuTargetFromEvent(event), file)}
+      onKeyDown={(event) => {
+        if (!isContextMenuKey(event)) return;
+        event.preventDefault();
+        onContextMenu(
+          { x: 0, y: 0, anchor: event.currentTarget, keyboard: true },
+          file,
+        );
+      }}
     >
       {isSelected && (
         <span

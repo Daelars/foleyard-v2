@@ -49,18 +49,26 @@ describe("file embeddings store", () => {
     expect(embeddings.getEmbedding(fileB, "stub")).toBeNull();
   });
 
-  it("reads all vectors for a model in one indexed query (#233)", () => {
+  it("pages vectors for a model through the model-first index (#298)", () => {
     embeddings.upsertEmbedding(fileA, "stub", 2, floatBytes([1, 0]));
     embeddings.upsertEmbedding(fileB, "stub", 2, floatBytes([0, 1]));
     embeddings.upsertEmbedding(fileA, "other", 2, floatBytes([1, 1]));
 
-    const listed = embeddings.listEmbeddings("stub");
-    expect(listed.map((row) => row.fileId).sort()).toEqual([fileA, fileB].sort());
-    expect(listed[0]!.dim).toBe(2);
-    expect(listed[0]!.vec.byteLength).toBe(8);
+    const [lower, upper] = [fileA, fileB].sort();
+    const first = embeddings.listEmbeddingsPage("stub", { after: null, limit: 1 });
+    expect(first.rows.map((row) => row.fileId)).toEqual([lower]);
+    expect(first.rows[0]!.dim).toBe(2);
+    expect(first.rows[0]!.vec.byteLength).toBe(8);
+    expect(first.hasMore).toBe(true);
+
+    const second = embeddings.listEmbeddingsPage("stub", { after: first.rows[0]!.fileId, limit: 1 });
+    expect(second.rows.map((row) => row.fileId)).toEqual([upper]);
+    expect(second.hasMore).toBe(false);
 
     const plan = sqlite
-      .prepare("EXPLAIN QUERY PLAN SELECT file_id, dim, vec FROM file_embeddings WHERE model = 'stub'")
+      .prepare(
+        "EXPLAIN QUERY PLAN SELECT file_id, dim, vec FROM file_embeddings WHERE model = 'stub' AND file_id > '' ORDER BY file_id LIMIT 2",
+      )
       .all()
       .map((row) => (row as { detail: string }).detail)
       .join(" | ");
@@ -68,12 +76,22 @@ describe("file embeddings store", () => {
     expect(plan).not.toContain("TEMP B-TREE");
   });
 
+  it("clamps the page size and never reads a whole model at once", () => {
+    embeddings.upsertEmbedding(fileA, "stub", 2, floatBytes([1, 0]));
+    embeddings.upsertEmbedding(fileB, "stub", 2, floatBytes([0, 1]));
+
+    const page = embeddings.listEmbeddingsPage("stub", { after: null, limit: 1_000 });
+    expect(page.rows.length).toBeLessThanOrEqual(512);
+    expect(page.rows).toHaveLength(2);
+    expect(page.hasMore).toBe(false);
+  });
+
   it("re-upserts replace and file removal leaves no orphans", () => {
     embeddings.upsertEmbedding(fileA, "stub", 2, floatBytes([1, 0]));
     embeddings.upsertEmbedding(fileA, "stub", 2, floatBytes([0, 1]));
-    expect(embeddings.listEmbeddingIds("stub")).toEqual([fileA]);
+    expect([...embeddings.getEmbedding(fileA, "stub")!.vec]).toEqual([...floatBytes([0, 1])]);
     embeddings.deleteEmbeddingsForFile(fileA);
-    expect(embeddings.listEmbeddingIds("stub")).toEqual([]);
+    expect(embeddings.listEmbeddingsPage("stub", { after: null, limit: 10 }).rows).toEqual([]);
     expect(embeddings.getEmbedding(fileA, "stub")).toBeNull();
   });
 });

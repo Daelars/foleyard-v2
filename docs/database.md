@@ -36,7 +36,7 @@ Tables in `src/lib/schema.ts` (mirrored by DDL in `migrations.ts`):
 | `files` | indexed audio files + scan metadata, favorites, `removed_at` |
 | `tags` / `file_tags` | tags and file membership; each attachment carries `origin` (`manual`/`deterministic`/`semantic_ai`, default `manual`), nullable `confidence`, and `created_at` |
 | `tag_aliases` | retired tag names resolving to their surviving tag |
-| `file_embeddings` | per-file model vectors (`file_id`, `model`, `dim`, `vec` blob) for similarity search |
+| `file_embeddings` | per-file model vectors (`file_id`, `model`, `dim`, `vec` blob) for similarity search; read in bounded keyset pages (#298) |
 | `collections` / `file_collections` | regular + smart Collections and membership |
 | `files_fts` | FTS5 trigram index over `files.filename` (#251), external content kept in sync by triggers |
 
@@ -107,6 +107,8 @@ Database paths (`src/lib/database-path.ts`):
 ## Source map (real file paths)
 
 - `src/lib/schema.ts` — Drizzle table declarations
+- `src/lib/database/embedding-repository.ts` — model-keyed vector store,
+  bounded keyset page reads for similarity search (#298)
 - `src/lib/database/connection.ts` — pragmas, lazy `db`/`sqlite` proxies
 - `src/lib/database/prepared-statements.ts` — bounded statement cache
 - `src/lib/database/filename-search.ts` — FTS5-vs-LIKE filename predicate

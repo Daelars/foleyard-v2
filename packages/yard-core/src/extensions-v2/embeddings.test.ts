@@ -4,7 +4,10 @@ import {
   cosineSimilarity,
   createV2EmbeddingOperations,
   denyV2EmbeddingOperations,
+  SIMILARITY_CHUNK_SIZE,
   STUB_EMBEDDING_MODEL,
+  type V2EmbeddingPage,
+  type V2EmbeddingPageRequest,
   type V2EmbeddingPorts,
 } from "./embeddings";
 
@@ -12,26 +15,65 @@ import {
 // the real permission checks: storing needs embeddings:write, reading
 // needs embeddings:read, removed sounds never rank.
 
-function portsDouble(): V2EmbeddingPorts & { rows: Map<string, { dim: number; vec: Uint8Array }> } {
-  const rows = new Map<string, { dim: number; vec: Uint8Array }>();
-  const key = (fileId: string, model: string) => `${model}:${fileId}`;
+function f32(values: number[]): Uint8Array {
+  return new Uint8Array(new Float32Array(values).buffer);
+}
+
+type PagedPorts = {
+  ports: V2EmbeddingPorts;
+  calls: { get: number; page: number; maxRequestedLimit: number };
+};
+
+/**
+ * In-memory embedding port that only exposes a bounded, keyset-paged
+ * reader — there is no API that hands back every vector at once, so a
+ * test cannot accidentally accept an unbounded read (#298). `maxRowsPerPage`
+ * forces smaller pages so chunk-boundary stability is exercised.
+ */
+function pagedPorts(
+  byModel: Record<string, Record<string, number[]>>,
+  options: { maxRowsPerPage?: number } = {},
+): PagedPorts {
+  const calls = { get: 0, page: 0, maxRequestedLimit: 0 };
+  const cap = options.maxRowsPerPage ?? Number.POSITIVE_INFINITY;
   return {
-    rows,
-    upsert: (fileId, model, dim, vec) => {
-      rows.set(key(fileId, model), { dim, vec });
-    },
-    get: (fileId, model) => rows.get(key(fileId, model)) ?? null,
-    listIds: (model) =>
-      [...rows.keys()].filter((entry) => entry.startsWith(`${model}:`)).map((entry) => entry.slice(model.length + 1)),
-    removeFile: (fileId) => {
-      for (const entry of [...rows.keys()]) {
-        if (entry.endsWith(`:${fileId}`)) rows.delete(entry);
-      }
+    calls,
+    ports: {
+      upsert: () => {},
+      get: (fileId, model) => {
+        calls.get += 1;
+        const vec = byModel[model]?.[fileId];
+        return vec ? { dim: vec.length, vec: f32(vec) } : null;
+      },
+      listPage: (model: string, request: V2EmbeddingPageRequest): V2EmbeddingPage => {
+        calls.page += 1;
+        calls.maxRequestedLimit = Math.max(calls.maxRequestedLimit, request.limit);
+        const ids = Object.keys(byModel[model] ?? {})
+          .sort()
+          .filter((id) => request.after === null || id > request.after);
+        const rows = ids.slice(0, Math.min(request.limit, cap)).map((id) => ({
+          fileId: id,
+          dim: byModel[model]![id]!.length,
+          vec: f32(byModel[model]![id]!),
+        }));
+        return { rows, hasMore: ids.length > rows.length };
+      },
+      removeFile: () => {},
     },
   };
 }
 
 const FULL = ["embeddings:read", "embeddings:write", "library:read"];
+
+/** Brute-force ranking with the same total order the operations promise. */
+function rank(files: Array<{ fileId: string; score: number }>): string[] {
+  return [...files]
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return left.fileId < right.fileId ? -1 : left.fileId > right.fileId ? 1 : 0;
+    })
+    .map((entry) => entry.fileId);
+}
 
 describe("cosineSimilarity", () => {
   it("ranks identical vectors first and silence last", () => {
@@ -44,7 +86,14 @@ describe("cosineSimilarity", () => {
 
 describe("createV2EmbeddingOperations", () => {
   it("stores and ranks by cosine, skipping self and removed sounds", () => {
-    const ports = portsDouble();
+    const { ports } = pagedPorts({
+      [STUB_EMBEDDING_MODEL]: {
+        a: [1, 0],
+        b: [0.9, 0.1],
+        c: [0, 1],
+        gone: [1, 0],
+      },
+    });
     const ops = createV2EmbeddingOperations({
       extensionId: "ext",
       effectivePermissions: FULL,
@@ -54,8 +103,6 @@ describe("createV2EmbeddingOperations", () => {
     expect(ops.store("a", STUB_EMBEDDING_MODEL, [1, 0])).toEqual({ dim: 2 });
     ops.store("b", STUB_EMBEDDING_MODEL, [0.9, 0.1]);
     ops.store("c", STUB_EMBEDDING_MODEL, [0, 1]);
-    // A vector whose sound left the index after it was stored.
-    ports.upsert("gone", STUB_EMBEDDING_MODEL, 2, new Uint8Array(new Float32Array([1, 0]).buffer));
     expect(ops.get("a", STUB_EMBEDDING_MODEL)?.dim).toBe(2);
     const similar = ops.findSimilar("a", { topN: 10 });
     expect(similar.map((entry) => entry.fileId)).toEqual(["b", "c"]);
@@ -63,47 +110,89 @@ describe("createV2EmbeddingOperations", () => {
     expect(ops.findSimilar("missing")).toEqual([]);
   });
 
-  it("ranks from one batched read and one liveness check (#233)", () => {
-    const f32 = (values: number[]) => new Uint8Array(new Float32Array(values).buffer);
-    const rows = new Map<string, { dim: number; vec: Uint8Array }>([
-      ["a", { dim: 2, vec: f32([1, 0]) }],
-      ["b", { dim: 2, vec: f32([0.9, 0.1]) }],
-      ["c", { dim: 2, vec: f32([0, 1]) }],
-      ["gone", { dim: 2, vec: f32([1, 0]) }],
-    ]);
-    const calls = { list: 0, listIds: 0, get: 0, live: 0 };
+  // #298: the ranking walk must page candidates and keep only a bounded
+  // top-N, so a Library far larger than one page never materialises in
+  // one array. Ordering must not depend on where the page boundaries fall.
+  it("streams candidates in bounded pages and keeps top-N stable across pages", () => {
+    const vectors: Record<string, number[]> = {};
+    for (let index = 0; index < 1000; index += 1) {
+      const id = `f${String(index).padStart(4, "0")}`;
+      // A spread of directions plus duplicates so ties are real.
+      const angle = (index % 50) / 50;
+      vectors[id] = [Math.cos(angle), Math.sin(angle), 0.001 * (index % 7)];
+    }
+    vectors.target = [1, 0, 0];
+    const { ports, calls } = pagedPorts({ [STUB_EMBEDDING_MODEL]: vectors });
     const ops = createV2EmbeddingOperations({
       extensionId: "ext",
       effectivePermissions: ["embeddings:read"],
-      embeddings: {
-        upsert: () => {},
-        get: (fileId) => {
-          calls.get += 1;
-          return rows.get(fileId) ?? null;
-        },
-        listIds: () => {
-          calls.listIds += 1;
-          return [...rows.keys()];
-        },
-        list: () => {
-          calls.list += 1;
-          return [...rows.entries()].map(([fileId, row]) => ({ fileId, ...row }));
-        },
-        removeFile: () => {},
-      },
+      embeddings: ports,
+    });
+
+    const expected = rank(
+      Object.entries(vectors)
+        .filter(([id]) => id !== "target")
+        .map(([id, vec]) => ({
+          fileId: id,
+          score: cosineSimilarity([1, 0, 0], vec),
+        })),
+    ).slice(0, 10);
+
+    const similar = ops.findSimilar("target", { topN: 10 });
+    expect(similar.map((entry) => entry.fileId)).toEqual(expected);
+    expect(calls.page).toBeGreaterThan(1);
+    expect(calls.maxRequestedLimit).toBeLessThanOrEqual(SIMILARITY_CHUNK_SIZE);
+    expect(calls.get).toBe(1);
+
+    // Same best-N when the port hands back one row at a time: the result
+    // depends on the ordering, not on the chunk boundaries.
+    const small = pagedPorts({ [STUB_EMBEDDING_MODEL]: vectors }, { maxRowsPerPage: 1 });
+    const smallOps = createV2EmbeddingOperations({
+      extensionId: "ext",
+      effectivePermissions: ["embeddings:read"],
+      embeddings: small.ports,
+    });
+    expect(smallOps.findSimilar("target", { topN: 10 }).map((entry) => entry.fileId)).toEqual(expected);
+    expect(small.calls.page).toBe(Object.keys(vectors).length);
+  });
+
+  it("excludes removed sounds and vectors from another model", () => {
+    const { ports } = pagedPorts({
+      [STUB_EMBEDDING_MODEL]: { a: [1, 0], b: [0.9, 0.1], gone: [1, 0] },
+      "other-model": { foreign: [1, 0] },
+    });
+    const ops = createV2EmbeddingOperations({
+      extensionId: "ext",
+      effectivePermissions: ["embeddings:read"],
+      embeddings: ports,
+      liveFileIds: (ids) => ids.filter((id) => id !== "gone"),
+    });
+    expect(ops.findSimilar("a", { topN: 10 }).map((entry) => entry.fileId)).toEqual(["b"]);
+  });
+
+  it("ranks with one batched liveness check per page (#233, #298)", () => {
+    const { ports, calls } = pagedPorts({
+      [STUB_EMBEDDING_MODEL]: { a: [1, 0], b: [0.9, 0.1], c: [0, 1], gone: [1, 0] },
+    });
+    let liveChecks = 0;
+    const ops = createV2EmbeddingOperations({
+      extensionId: "ext",
+      effectivePermissions: ["embeddings:read"],
+      embeddings: ports,
       liveFileIds: (fileIds) => {
-        calls.live += 1;
+        liveChecks += 1;
         return fileIds.filter((fileId) => fileId !== "gone");
       },
     });
 
     const similar = ops.findSimilar("a", { topN: 2 });
     expect(similar.map((entry) => entry.fileId)).toEqual(["b", "c"]);
-    expect(calls).toEqual({ list: 1, listIds: 0, get: 1, live: 1 });
+    expect(liveChecks).toBe(calls.page);
+    expect(calls.maxRequestedLimit).toBeLessThanOrEqual(SIMILARITY_CHUNK_SIZE);
   });
 
   it("denies reads and writes outside the effective set", () => {
-    const ports = portsDouble();
+    const { ports } = pagedPorts({ [STUB_EMBEDDING_MODEL]: { a: [1, 0] } });
     const reader = createV2EmbeddingOperations({
       extensionId: "ext",
       effectivePermissions: ["embeddings:read", "library:read"],

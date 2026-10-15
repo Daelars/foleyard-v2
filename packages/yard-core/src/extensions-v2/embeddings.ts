@@ -14,13 +14,39 @@ import { V2OperationError } from "./operations";
 /** Placeholder model until the CLAP job (#195) registers its own. */
 export const STUB_EMBEDDING_MODEL = "audio-stub-v1";
 
-/** Narrow repository surface behind the embedding services. */
+/**
+ * Candidate vectors per similarity page (#298). The ranking walk pulls
+ * one page at a time and keeps only a bounded top-N, so its memory does
+ * not grow with the Library.
+ */
+export const SIMILARITY_CHUNK_SIZE = 256;
+
+/** Keyset request for one page of a model's vectors, ordered by file id. */
+export type V2EmbeddingPageRequest = {
+  /** Last file id of the previous page; null starts at the beginning. */
+  after: string | null;
+  /** Maximum rows wanted; the store clamps this to its own page bound. */
+  limit: number;
+};
+
+/** One bounded page of a model's stored vectors. */
+export type V2EmbeddingPage = {
+  rows: Array<{ fileId: string; dim: number; vec: Uint8Array }>;
+  /** True when more rows exist after this page. */
+  hasMore: boolean;
+};
+
+/**
+ * Narrow repository surface behind the embedding services.
+ *
+ * The batched reader is a page, not a full listing (#298): no method
+ * hands back a model's whole vector set, so similarity ranking is bounded
+ * by the page size rather than the Library.
+ */
 export type V2EmbeddingPorts = {
   upsert(fileId: string, model: string, dim: number, vec: Uint8Array): void;
   get(fileId: string, model: string): { dim: number; vec: Uint8Array } | null;
-  listIds(model: string): string[];
-  /** One batched read of every vector for a model (#233). */
-  list?(model: string): Array<{ fileId: string; dim: number; vec: Uint8Array }>;
+  listPage(model: string, request: V2EmbeddingPageRequest): V2EmbeddingPage;
   removeFile(fileId: string): void;
 };
 
@@ -110,6 +136,16 @@ function cosineSimilarityTyped(a: Float32Array, b: Float32Array): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
+/**
+ * Total order for ranked matches: score descending, then file id
+ * ascending. The id tiebreaker makes the result independent of the page
+ * boundaries a candidate was read in (#298).
+ */
+function compareSimilar(left: V2SimilarFile, right: V2SimilarFile): number {
+  if (right.score !== left.score) return right.score - left.score;
+  return left.fileId < right.fileId ? -1 : left.fileId > right.fileId ? 1 : 0;
+}
+
 export function createV2EmbeddingOperations(args: V2EmbeddingFactoryArgs): V2EmbeddingOperations {
   const extensionId = args.extensionId;
   const granted = new Set(args.effectivePermissions);
@@ -157,34 +193,42 @@ export function createV2EmbeddingOperations(args: V2EmbeddingFactoryArgs): V2Emb
       if (!target) return [];
       const targetVec = bytesToFloat32(target.vec);
 
-      // One batched read of every vector for the model (#233): the model-first
-      // index serves `list`, and the fallback keeps fixture hosts working.
-      const candidates = port.list
-        ? port.list(model)
-        : port.listIds(model).flatMap((candidateId) => {
-            const row = port.get(candidateId, model);
-            return row ? [{ fileId: candidateId, ...row }] : [];
+      // Stream candidates in bounded pages (#298): only the current page,
+      // one batched liveness check, and the running top-N are ever held, so
+      // peak memory is a function of SIMILARITY_CHUNK_SIZE and topN, never
+      // of how many vectors the model has stored.
+      const best: V2SimilarFile[] = [];
+      let after: string | null = null;
+      for (;;) {
+        const page = port.listPage(model, { after, limit: SIMILARITY_CHUNK_SIZE });
+        if (page.rows.length === 0) break;
+
+        // One batched liveness check per page instead of a lookup per candidate.
+        const liveSet =
+          args.liveFileIds !== undefined
+            ? new Set(args.liveFileIds(page.rows.map((candidate) => candidate.fileId)))
+            : null;
+        const isLiveCandidate = (candidateId: string): boolean =>
+          liveSet ? liveSet.has(candidateId) : live(candidateId);
+
+        for (const candidate of page.rows) {
+          if (candidate.fileId === fileId || !isLiveCandidate(candidate.fileId)) continue;
+          if (candidate.dim !== target.dim) continue;
+          best.push({
+            fileId: candidate.fileId,
+            score: cosineSimilarityTyped(targetVec, bytesToFloat32(candidate.vec)),
           });
+        }
 
-      // One batched liveness check instead of a point lookup per candidate.
-      const liveSet =
-        args.liveFileIds !== undefined
-          ? new Set(args.liveFileIds(candidates.map((candidate) => candidate.fileId)))
-          : null;
-      const isLiveCandidate = (candidateId: string): boolean =>
-        liveSet ? liveSet.has(candidateId) : live(candidateId);
+        // Trim to the bound before the next page, so it never accumulates.
+        best.sort(compareSimilar);
+        if (best.length > topN) best.length = topN;
 
-      const scored: V2SimilarFile[] = [];
-      for (const candidate of candidates) {
-        if (candidate.fileId === fileId || !isLiveCandidate(candidate.fileId)) continue;
-        if (candidate.dim !== target.dim) continue;
-        scored.push({
-          fileId: candidate.fileId,
-          score: cosineSimilarityTyped(targetVec, bytesToFloat32(candidate.vec)),
-        });
+        after = page.rows[page.rows.length - 1]!.fileId;
+        if (!page.hasMore) break;
       }
-      scored.sort((left, right) => right.score - left.score);
-      return scored.slice(0, topN);
+
+      return best;
     },
   };
 }

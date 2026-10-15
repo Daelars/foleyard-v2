@@ -1,10 +1,23 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
 import { sqlite as defaultSqlite } from "./connection";
 import * as schema from "@/lib/schema";
 
 import type Database from "better-sqlite3";
+
+/**
+ * Upper bound on one similarity page (#298). The repository clamps a
+ * caller's `limit` to this, so no read can be widened into "every vector
+ * for a model" through the paged API.
+ */
+export const MAX_EMBEDDING_PAGE_SIZE = 512;
+
+/** Clamp a caller's page size into [1, MAX_EMBEDDING_PAGE_SIZE]. */
+function clampPageSize(limit: number): number {
+  if (!Number.isFinite(limit)) return MAX_EMBEDDING_PAGE_SIZE;
+  return Math.max(1, Math.min(MAX_EMBEDDING_PAGE_SIZE, Math.floor(limit)));
+}
 
 /**
  * SQLite vector store for similarity search (#192). One row per file
@@ -45,35 +58,48 @@ export class SqliteEmbeddingRepository {
     return found ? { dim: found.dim, vec: found.vec as Buffer } : null;
   }
 
-  listEmbeddingIds(model: string): string[] {
-    return this.db
-      .select({ fileId: schema.fileEmbeddings.fileId })
-      .from(schema.fileEmbeddings)
-      .where(eq(schema.fileEmbeddings.model, model))
-      .all()
-      .map((entry) => entry.fileId);
-  }
-
   /**
-   * One batched read of every vector for a model (#233), served by
-   * `idx_file_embeddings_model`. Similarity search then needs one liveness
-   * check for the candidate ids instead of a query per file.
+   * One bounded page of a model's vectors, ordered by file id (#298).
+   * Keyset paging over `(model, file_id)` serves `idx_file_embeddings_model`
+   * without an `OFFSET` scan, and the one-extra-row probe makes `hasMore`
+   * exact at the page boundary. The caller passes the last file id it saw
+   * back as `after`; peak memory is one page of vectors, not the model.
    */
-  listEmbeddings(model: string): Array<{ fileId: string; dim: number; vec: Buffer }> {
-    return this.db
+  listEmbeddingsPage(
+    model: string,
+    request: { after: string | null; limit: number },
+  ): {
+    rows: Array<{ fileId: string; dim: number; vec: Buffer }>;
+    hasMore: boolean;
+  } {
+    const limit = clampPageSize(request.limit);
+    const after = request.after;
+    const rows = this.db
       .select({
         fileId: schema.fileEmbeddings.fileId,
         dim: schema.fileEmbeddings.dim,
         vec: schema.fileEmbeddings.vec,
       })
       .from(schema.fileEmbeddings)
-      .where(eq(schema.fileEmbeddings.model, model))
-      .all()
-      .map((entry) => ({
+      .where(
+        after === null
+          ? eq(schema.fileEmbeddings.model, model)
+          : and(
+              eq(schema.fileEmbeddings.model, model),
+              gt(schema.fileEmbeddings.fileId, after),
+            ),
+      )
+      .orderBy(asc(schema.fileEmbeddings.fileId))
+      .limit(limit + 1)
+      .all();
+    return {
+      rows: rows.slice(0, limit).map((entry) => ({
         fileId: entry.fileId,
         dim: entry.dim,
         vec: entry.vec as Buffer,
-      }));
+      })),
+      hasMore: rows.length > limit,
+    };
   }
 
   deleteEmbeddingsForFile(fileId: string): void {
@@ -93,7 +119,9 @@ export const upsertFileEmbedding = (fileId: string, model: string, dim: number, 
   getEmbeddingRepo().upsertEmbedding(fileId, model, dim, vec);
 export const getFileEmbedding = (fileId: string, model: string) =>
   getEmbeddingRepo().getEmbedding(fileId, model);
-export const listEmbeddingIds = (model: string) => getEmbeddingRepo().listEmbeddingIds(model);
-export const listEmbeddings = (model: string) => getEmbeddingRepo().listEmbeddings(model);
+export const listEmbeddingsPage = (
+  model: string,
+  request: { after: string | null; limit: number },
+) => getEmbeddingRepo().listEmbeddingsPage(model, request);
 export const deleteEmbeddingsForFile = (fileId: string) =>
   getEmbeddingRepo().deleteEmbeddingsForFile(fileId);

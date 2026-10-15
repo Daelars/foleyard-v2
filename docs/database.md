@@ -81,7 +81,7 @@ Database paths (`src/lib/database-path.ts`):
 | --- | --- |
 | Web/dev | `<cwd>/foleyard.sqlite` |
 | Desktop (`FOLEYARD_DESKTOP=1`) | `%APPDATA%/Foleyard/foleyard.sqlite` |
-| Legacy import (once, copy) | `soundslop.sqlite`, `%APPDATA%/SoundSlop/*` |
+| Legacy import (once, SQLite snapshot) | `soundslop.sqlite`, `%APPDATA%/SoundSlop/*` |
 
 ## Contracts
 
@@ -100,8 +100,14 @@ Database paths (`src/lib/database-path.ts`):
 
 - Probe failures (unreadable ledger, bad handle) report `unavailable` rather
   than throwing, so identity endpoints stay up when the DB is down.
-- `ensureDesktopDatabaseInitialized` copies a legacy/project database only
-  when the target does not exist; it never merges or overwrites.
+- `ensureDesktopDatabaseInitialized` migrates a legacy/project database only
+  when the target does not exist; it never merges or overwrites. The
+  migration is a `VACUUM INTO` SQLite snapshot (`copyDatabaseSnapshot`), not a
+  file copy, so committed transactions still in the source write-ahead log
+  are included and the target is a self-contained database. The snapshot is
+  written to a sibling `<target>.migrating` file and renamed into place only
+  once complete, so a failed migration leaves no partial target and does not
+  suppress a retry.
 - WAL files (`foleyard.sqlite-wal`/`-shm`) are normal operation artifacts,
   not corruption. Foreign-key enforcement is on: deleting referenced rows
   without clearing join rows fails instead of orphaning.
@@ -117,8 +123,9 @@ Database paths (`src/lib/database-path.ts`):
 - `src/lib/database/migrations.ts` — DDL, `CURRENT_SCHEMA_VERSION`,
   `getDatabaseVersionInfo`, `initializeDatabaseSchema`
 - `src/lib/database/deletion-journal.ts` — `pending_deletions` storage
-- `src/lib/database-path.ts` — web/desktop/legacy path resolution
-- `electron/main/database.cjs` — packaged desktop DB ensure/reset
+- `src/lib/database-path.ts` — web/desktop/legacy path resolution and the
+  WAL-safe `VACUUM INTO` snapshot migration
+- `electron/main/database.cjs` — packaged desktop DB ensure/snapshot/reset
 - `src/lib/runtime-info.ts` — surfaces the version probe in snapshots
 
 ## Examples

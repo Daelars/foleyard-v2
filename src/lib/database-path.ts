@@ -1,6 +1,9 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { createRequire } from "node:module";
+
+const loadNativeModule = createRequire(import.meta.url);
 
 const DATABASE_FILENAME = "foleyard.sqlite";
 const LEGACY_DATABASE_FILENAMES = ["soundslop.sqlite"];
@@ -38,6 +41,42 @@ export function getDatabasePath() {
   return getProjectDatabasePath();
 }
 
+/**
+ * Copies `sourcePath` into `targetPath` as one consistent SQLite snapshot.
+ *
+ * `VACUUM INTO` reads through the SQLite engine, so committed transactions
+ * still held in the source's write-ahead log are included; a plain copy of
+ * the main database file would silently drop them (#270). The snapshot is
+ * written to a sibling temporary file and only renamed into place once it is
+ * complete, so a failed copy leaves no partial target behind and the next
+ * startup can retry.
+ */
+export function copyDatabaseSnapshot(sourcePath: string, targetPath: string) {
+  const BetterSqlite3 = loadNativeModule(
+    "better-sqlite3",
+  ) as typeof import("better-sqlite3");
+  const temporaryPath = `${targetPath}.migrating`;
+  fs.rmSync(temporaryPath, { force: true });
+
+  try {
+    const source = new BetterSqlite3(sourcePath, {
+      readonly: true,
+      fileMustExist: true,
+    });
+
+    try {
+      source.prepare("VACUUM INTO ?").run(temporaryPath);
+    } finally {
+      source.close();
+    }
+
+    fs.renameSync(temporaryPath, targetPath);
+  } catch (error) {
+    fs.rmSync(temporaryPath, { force: true });
+    throw error;
+  }
+}
+
 export function ensureDesktopDatabaseInitialized(databasePath = getDatabasePath()) {
   const isDesktopMode = isDesktopDatabaseMode();
 
@@ -62,7 +101,7 @@ export function ensureDesktopDatabaseInitialized(databasePath = getDatabasePath(
 
   for (const candidatePath of candidatePaths) {
     if (candidatePath !== databasePath && fs.existsSync(candidatePath)) {
-      fs.copyFileSync(candidatePath, databasePath);
+      copyDatabaseSnapshot(candidatePath, databasePath);
       return;
     }
   }

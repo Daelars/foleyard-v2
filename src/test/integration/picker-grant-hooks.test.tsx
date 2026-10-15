@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import fs from "node:fs";
+
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
@@ -83,7 +85,12 @@ describe("extension dialogs run the picker-to-grant flow", () => {
       await result.current.handlePickDest();
     });
 
-    expect(result.current.destPath).toBe(scratch.directory("out"));
+    // Sync and async realpath disagree on Windows 8.3 short names
+    // (`RUNNER~1` vs `runneradmin` on CI), so compare via the same async
+    // canonicalization the implementation uses.
+    expect(await fs.promises.realpath(result.current.destPath)).toBe(
+      await fs.promises.realpath(scratch.directory("out")),
+    );
     expect(result.current.grantId).toEqual(expect.any(String));
     expect(result.current.grantId.length).toBeGreaterThan(0);
   });
@@ -95,13 +102,18 @@ describe("extension dialogs run the picker-to-grant flow", () => {
       await result.current.handlePickFolder();
     });
     expect(result.current.sources).toEqual([
-      { path: scratch.directory("incoming"), grantId: expect.any(String) },
+      {
+        path: await fs.promises.realpath(scratch.directory("incoming")),
+        grantId: expect.any(String),
+      },
     ]);
 
     await act(async () => {
       await result.current.handlePickDest();
     });
-    expect(result.current.destPath).toBe(scratch.directory("out"));
+    expect(await fs.promises.realpath(result.current.destPath)).toBe(
+      await fs.promises.realpath(scratch.directory("out")),
+    );
     expect(result.current.grantId).toEqual(expect.any(String));
   });
 });

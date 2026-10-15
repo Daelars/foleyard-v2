@@ -20,9 +20,12 @@ import {
   DEFAULT_ALLOWED_FORMATS,
   DEFAULT_TINY_THRESHOLD_BYTES,
   MAX_FOLDER_LISTINGS,
+  MAX_SCAN_ISSUE_DETAILS,
   MAX_SCAN_RECORDS,
+  MAX_SCAN_TRUNCATION_REASONS,
   normalizePath,
   parseAllowedFormats,
+  summarizeIssueKinds,
   toReportArrays,
   type JanitorIssue,
   type JanitorRecord,
@@ -39,6 +42,15 @@ import {
  * empty folder through the authorized delete op, which rechecks
  * Library-root containment and emptiness at delete time. No v1 imports,
  * no recursive `rmdir`, no `fs.stat`.
+ *
+ * Honesty (#285): a scan reports its reviewed scope (`scannedRoots`,
+ * `scannedFiles`), and when any bound cut the review short it sets
+ * `truncated` and names the exact reason in `truncationReasons` — a
+ * partial report is never presented as a complete or clean one.
+ * `delete-folders` deletes exactly the folders the reviewed plan lists
+ * and accounts for every one of them in its result (`reviewed` ==
+ * `deleted` + `failedPaths`); the reviewed scope is the only scope, and
+ * a fresh apply prepares a fresh plan.
  */
 
 export type FolderJanitorV2ScanResult = {
@@ -48,7 +60,14 @@ export type FolderJanitorV2ScanResult = {
   issuePaths: string[];
   issueMessages: string[];
   issueFileIds: string[];
+  /** Total issues found; stays accurate even when the detail arrays are bounded. */
+  issueTotal: number;
+  /** Per-kind counts as `"kind=count"` strings (see `summarizeIssueKinds`). */
+  issueSummary: string[];
+  /** True when any scan bound cut the review short. */
   truncated: boolean;
+  /** Why the review is incomplete; empty when `truncated` is false. */
+  truncationReasons: string[];
 };
 
 export type FolderJanitorV2RemoveResult = {
@@ -58,11 +77,28 @@ export type FolderJanitorV2RemoveResult = {
 };
 
 export type FolderJanitorV2DeleteResult = {
+  /** Folders in the reviewed plan. `deleted` + `failedPaths.length` == this. */
+  reviewed: number;
   deleted: number;
   deletedPaths: string[];
   failedPaths: string[];
   failedReasons: string[];
 };
+
+/** Exact reason the record cap truncated a scan; names the bound. */
+function recordCapReason(): string {
+  return `Reached the ${MAX_SCAN_RECORDS}-file scan cap, so later indexed files were not reviewed. Narrow the scope or rescan for a complete report.`;
+}
+
+/** Exact reason the folder-walk budget truncated a scan; names the bound. */
+function listingBudgetReason(): string {
+  return `Reached the ${MAX_FOLDER_LISTINGS}-listing folder walk budget, so part of the folder tree was not reviewed. Narrow the scope or rescan for a complete report.`;
+}
+
+/** Exact reason an unlistable folder truncated a scan. */
+function unlistedFolderReason(path: string): string {
+  return `Folder ${JSON.stringify(path)} could not be listed, so part of the folder tree was not reviewed.`;
+}
 
 function readScanOptions(ctx: V2HandlerContext): {
   tinyThresholdBytes: number;
@@ -102,12 +138,12 @@ function readScanOptions(ctx: V2HandlerContext): {
 async function collectRecords(
   ctx: V2HandlerContext,
   filterUnderRoot: string | null,
-): Promise<{ records: JanitorRecord[]; roots: Set<string>; truncated: boolean }> {
+): Promise<{ records: JanitorRecord[]; roots: Set<string>; reason: string | null }> {
   const records: JanitorRecord[] = [];
   const roots = new Set<string>();
   const underRoot = filterUnderRoot ? normalizePath(filterUnderRoot) : null;
   let cursor: string | null = null;
-  let truncated = false;
+  let reason: string | null = null;
   do {
     ctx.operations.jobs.throwIfCancelled();
     const page = ctx.operations.library.listPage(cursor, 500);
@@ -126,13 +162,18 @@ async function collectRecords(
         fileSize: file.fileSize ?? null,
       });
       if (records.length >= MAX_SCAN_RECORDS) {
-        truncated = true;
+        reason = recordCapReason();
         break;
       }
     }
-    cursor = truncated ? null : page.nextCursor;
+    if (reason) break;
+    // During index paging the page count total is not knowable, so report
+    // completed == total (the renderer shows the running count), then real
+    // totals once the folder walk knows its roots.
+    ctx.operations.jobs.reportProgress(records.length, records.length);
+    cursor = page.nextCursor;
   } while (cursor !== null);
-  return { records, roots, truncated };
+  return { records, roots, reason };
 }
 
 /**
@@ -140,7 +181,8 @@ async function collectRecords(
  * present file paths (normalized) and empty folders. Mirrors v1: a
  * folder with no files and only empty subfolders is itself empty.
  * Returns whether the subtree held any file. Bounded by a listing
- * budget so a pathological tree cannot run forever.
+ * budget so a pathological tree cannot run forever; every bound that
+ * cuts the walk short adds a truncation reason.
  */
 async function walkFolder(
   ctx: V2HandlerContext,
@@ -148,9 +190,13 @@ async function walkFolder(
   present: Set<string>,
   emptyFolders: string[],
   budget: { remaining: number },
+  reasons: Set<string>,
 ): Promise<{ hasFile: boolean; complete: boolean }> {
   ctx.operations.jobs.throwIfCancelled();
-  if (budget.remaining <= 0) return { hasFile: true, complete: false };
+  if (budget.remaining <= 0) {
+    reasons.add(listingBudgetReason());
+    return { hasFile: true, complete: false };
+  }
   const subdirs: string[] = [];
   let hasFile = false;
   let complete = true;
@@ -158,6 +204,7 @@ async function walkFolder(
   const { folders } = extendedOperationsOf(ctx);
   do {
     if (budget.remaining <= 0) {
+      reasons.add(listingBudgetReason());
       complete = false;
       break;
     }
@@ -169,6 +216,7 @@ async function walkFolder(
     } catch {
       // An unreadable/vanished folder is not walked; the missing-file
       // pass reports its indexed contents instead.
+      reasons.add(unlistedFolderReason(folderPath));
       return { hasFile: true, complete: false };
     }
     for (const entry of page.entries) {
@@ -183,7 +231,7 @@ async function walkFolder(
   } while (cursor !== undefined);
   let childrenAllEmpty = true;
   for (const sub of subdirs) {
-    const child = await walkFolder(ctx, sub, present, emptyFolders, budget);
+    const child = await walkFolder(ctx, sub, present, emptyFolders, budget, reasons);
     if (!child.complete) complete = false;
     if (child.hasFile) childrenAllEmpty = false;
   }
@@ -205,8 +253,12 @@ async function runScan(ctx: V2HandlerContext, scope: "library" | "folder") {
       );
     }
   }
-  const { records, roots, truncated: recordsTruncated } = await collectRecords(ctx, root);
+  const collected = await collectRecords(ctx, root);
+  const records = collected.records;
+  const roots = collected.roots;
   const issues: JanitorIssue[] = deriveIndexIssues(records, options);
+  const reasons = new Set<string>();
+  if (collected.reason) reasons.add(collected.reason);
 
   // Folder walk: empty folders + a present-path set for missing-file
   // detection. scan-folder walks the one folder; scan-library walks
@@ -220,7 +272,7 @@ async function runScan(ctx: V2HandlerContext, scope: "library" | "folder") {
   let done = records.length;
   ctx.operations.jobs.reportProgress(Math.min(done, total), total);
   for (const walkRoot of walkRoots) {
-    const result = await walkFolder(ctx, walkRoot, present, emptyFolders, budget);
+    const result = await walkFolder(ctx, walkRoot, present, emptyFolders, budget, reasons);
     if (!result.complete) walkComplete = false;
     done += 1;
     ctx.operations.jobs.reportProgress(Math.min(done, total), total);
@@ -250,15 +302,24 @@ async function runScan(ctx: V2HandlerContext, scope: "library" | "folder") {
     }
   }
 
-  const arrays = toReportArrays(issues);
+  const arrays = toReportArrays(issues.slice(0, MAX_SCAN_ISSUE_DETAILS));
   const scannedRoots = (scope === "folder" && root ? [root] : [...roots]).map((entry) =>
     normalizePath(entry),
   );
+  const truncationReasons = [...reasons].slice(0, MAX_SCAN_TRUNCATION_REASONS);
+  if (reasons.size > MAX_SCAN_TRUNCATION_REASONS) {
+    truncationReasons.push(
+      `…and ${reasons.size - MAX_SCAN_TRUNCATION_REASONS} more reason(s) the review was incomplete; narrow the scope and rescan.`,
+    );
+  }
   return immediateV2Result({
     scannedFiles: records.length,
     scannedRoots,
     ...arrays,
-    truncated: recordsTruncated || !walkComplete,
+    issueTotal: issues.length,
+    issueSummary: summarizeIssueKinds(issues),
+    truncated: truncationReasons.length > 0,
+    truncationReasons,
   } satisfies FolderJanitorV2ScanResult);
 }
 
@@ -288,6 +349,14 @@ export function runRemoveFiles(ctx: V2HandlerContext) {
 }
 
 function readDeleteFolders(ctx: V2HandlerContext): string[] {
+  // Applying deletes exactly the reviewed scope: on apply the folders come
+  // from the host-validated plan record, never from a fresh client payload.
+  if (ctx.runMode === "apply" && !ctx.plan) {
+    throw new V2OperationError(
+      "input-invalid",
+      "Delete Folders must be applied from a reviewed plan; prepare and review one first.",
+    );
+  }
   const source =
     ctx.plan?.options && typeof ctx.plan.options === "object"
       ? (ctx.plan.options as Record<string, unknown>)
@@ -328,7 +397,7 @@ export async function runDeleteFolders(ctx: V2HandlerContext) {
         tables: [
           {
             id: "folders",
-            title: "Folders",
+            title: "Folders to delete",
             columns: ["Folder"],
             rows: folders.map((folder) => [folder]),
           },
@@ -337,9 +406,10 @@ export async function runDeleteFolders(ctx: V2HandlerContext) {
           {
             tone: "warning",
             message:
-              "Only empty folders inside a Library root are deleted. Each folder is rechecked for emptiness and containment at delete time; anything else fails with a reason.",
+              "This review lists every folder that will be deleted. Applying removes exactly these folders, after rechecking that each is still empty and still inside a Library root; anything else fails with a reason.",
           },
         ],
+        details: { folders, reviewedCount: folders.length },
         reversibility: "irreversible-files",
         reversibilityNote:
           "Deleted folders are removed from disk and cannot be restored by this tool. Only empty folders are ever deleted.",
@@ -356,7 +426,8 @@ export async function runDeleteFolders(ctx: V2HandlerContext) {
   for (const folder of folders) {
     // Cancellation between folders stops further deletions and settles
     // the job as cancelled; folders already deleted stay deleted (there
-    // is no partial state to roll back for a completed rmdir).
+    // is no partial state to roll back for a completed rmdir), and the
+    // next run re-checks each folder so the remaining work is recoverable.
     ctx.operations.jobs.throwIfCancelled();
     try {
       const removed = await folderOps.deleteEmptyFolder({ path: folder });
@@ -370,6 +441,7 @@ export async function runDeleteFolders(ctx: V2HandlerContext) {
     ctx.operations.jobs.reportProgress(done, folders.length);
   }
   return immediateV2Result({
+    reviewed: folders.length,
     deleted: deletedPaths.length,
     deletedPaths,
     failedPaths,

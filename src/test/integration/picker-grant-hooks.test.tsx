@@ -101,13 +101,12 @@ describe("extension dialogs run the picker-to-grant flow", () => {
     await act(async () => {
       await result.current.handlePickFolder();
     });
-    // Same canonicalization on both sides: the picker's path is
-    // implementation-produced, the fixture's is sync realpath.
-    expect(result.current.sources).toHaveLength(1);
-    expect(await fs.promises.realpath(result.current.sources[0]!.path)).toBe(
-      await fs.promises.realpath(scratch.directory("incoming")),
-    );
-    expect(result.current.sources[0]?.grantId).toEqual(expect.any(String));
+    expect(result.current.sources).toEqual([
+      {
+        path: await fs.promises.realpath(scratch.directory("incoming")),
+        grantId: expect.any(String),
+      },
+    ]);
 
     await act(async () => {
       await result.current.handlePickDest();

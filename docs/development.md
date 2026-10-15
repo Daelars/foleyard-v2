@@ -35,6 +35,7 @@ bun run test           # npx vitest run
 bun run test:coverage  # npx vitest run --coverage
 bun run build          # next build (web); desktop via build:desktop
 node scripts/check-v2-boundaries.cjs  # v2 dependency boundary (also in CI)
+node scripts/check-command-inventories.cjs  # command inventories + READMEs vs definitions (also in CI)
 bun run docs:prepare   # stage version-matched docs (also in CI)
 bun run docs:check     # verify staged docs (also in CI)
 ```
@@ -111,6 +112,8 @@ thresholds and `bun run test:coverage` are the source of truth.
 - `src/test/fixtures.ts` — fixture isolation
 - `src/test/integration/` — integration suite incl. `it.fails` ledger tests
 - `scripts/check-expected-failures.cjs` — ledger count check (CI)
+- `scripts/check-command-inventories.cjs` — command inventories and package
+  READMEs checked against the v2 definitions (CI)
 - `scripts/dev-desktop.cjs`, `scripts/verify-workspace-root.cjs`,
   `scripts/rebuild-traced.cjs`, `scripts/clean-binary.cjs` — dev/build tooling
 

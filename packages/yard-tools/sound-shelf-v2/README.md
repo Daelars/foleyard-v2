@@ -13,14 +13,22 @@ add/remove/clear/list. Not favorites, not a smart Collection.
 
 ## Layout
 
-- `src/definition.ts` — v2 definition: id `sound-shelf-v2`, four
-  commands (`.add-selected`, `.remove-selected`, `.clear`, `.list`), no
-  settings, eight contributions (palette ×4, file-context-menu ×2,
-  selection-actions, sidebar). One permission: `library:read` (matching
-  v1). No `requiredCapabilities`: the host exposes its derived capability set and these commands need none of the desktop-only ones.
+- `src/definition.ts` — v2 definition: id `sound-shelf-v2` (commands
+  under **Commands** below), no settings, eight contributions
+  (palette ×4, file-context-menu ×2, selection-actions, sidebar). One
+  permission: `library:read` (matching v1). No `requiredCapabilities`: the host exposes its derived capability set and these commands need none of the desktop-only ones.
 - `src/handlers.ts` — command handlers. Every effect runs through the
   v2 shelf op (E1 #176). No v1 imports, no direct storage access, no
   favorites and no Collections.
+
+## Commands
+
+The definition declares 4 commands:
+
+- `sound-shelf-v2.add-selected` — add the selected sounds to the shelf.
+- `sound-shelf-v2.remove-selected` — remove the selected sounds from the shelf.
+- `sound-shelf-v2.clear` — empty the shelf.
+- `sound-shelf-v2.list` — list the shelf, repairing dead entries.
 
 ## Run-mode contract
 

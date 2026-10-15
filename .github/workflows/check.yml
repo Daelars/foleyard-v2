@@ -7,6 +7,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Changed-code coverage diffs against the pull request base ref.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -19,6 +22,25 @@ jobs:
       - run: bun run lint
       - run: bun run test
       - run: bun run test:coverage
+      # Per-subsystem figures (machine-readable) for trend review.
+      - run: bun run coverage:report
+      # A new product path that no test executes fails the pull request; the
+      # merge base is the comparison point.
+      - name: Changed-code coverage
+        if: github.event_name == 'pull_request'
+        env:
+          COVERAGE_BASE_REF: origin/${{ github.base_ref }}
+        run: bun run coverage:changed
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage/coverage-summary.json
+            coverage/coverage-final.json
+            coverage/subsystem-summary.json
+          if-no-files-found: warn
       - run: bun run build
       - run: node scripts/check-expected-failures.cjs
       - run: node scripts/check-v2-boundaries.cjs

@@ -215,8 +215,29 @@ describe("desktop and supply chain", () => {
         } else {
           const simulate = electronFake.ipcMain.handlers["desktop:simulate-update"];
           expect(simulate).toBeDefined();
-          await simulate();
-          expect(sends[0]?.[0]).toBe("desktop:update-available");
+          // The simulator plays the update as a timed sequence, and this test
+          // used to call it without waiting for those timers. Only the events
+          // whose delays had elapsed when the file's coverage was snapshotted
+          // were recorded as executed, so the electron/** figure (#303) moved
+          // with how long the rest of the file took: electron/main/auto-updater.cjs
+          // read 4/16 to 6/16 functions across identical runs here, and 3/16 on
+          // a CI runner that finished the file in 616ms. Fake timers step
+          // through all four events, so the sequence is exercised and asserted
+          // the same way everywhere.
+          vi.useFakeTimers();
+          try {
+            await simulate();
+            vi.advanceTimersByTime(2000);
+          } finally {
+            vi.useRealTimers();
+          }
+          expect(sends.map((send) => send[0])).toEqual([
+            "desktop:update-available",
+            "desktop:update-download-progress",
+            "desktop:update-download-progress",
+            "desktop:update-download-progress",
+            "desktop:update-ready",
+          ]);
         }
       } finally {
         autoUpdater.setUpdateWindow(null);

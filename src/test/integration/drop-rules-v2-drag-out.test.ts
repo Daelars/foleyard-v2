@@ -181,11 +181,17 @@ describe("Drop Rules drag-out through the real routes", () => {
     const value = prepared.body.outcome!.value;
     expect(value.staged).toBe(true);
     expect(value.outputName).toBe("001-hit.wav");
-    expect(path.dirname(value.dragPath)).toBe(fs.realpathSync(staging));
+    // Same canonicalization call the implementation uses: sync and async
+    // realpath disagree on short-name tmpdirs on some Windows runners.
+    expect(await fs.promises.realpath(path.dirname(value.dragPath))).toBe(
+      await fs.promises.realpath(staging),
+    );
 
     // The extension's copy really landed on disk, byte for byte.
     expect(fs.readFileSync(value.dragPath, "utf8")).toBe("audio");
-    expect(fs.realpathSync(value.dragPath)).toBe(fs.realpathSync(path.join(staging, "001-hit.wav")));
+    expect(await fs.promises.realpath(value.dragPath)).toBe(
+      await fs.promises.realpath(path.join(staging, "001-hit.wav")),
+    );
 
     // Every returned drag path passes the same readable containment check.
     const verified = await callRoute<{ path: string }>(desktopPathPOST, {
@@ -216,7 +222,11 @@ describe("Drop Rules drag-out through the real routes", () => {
     expect(prepared.status).toBe(200);
     const value = prepared.body.outcome!.value;
     expect(value.staged).toBe(false);
-    expect(value.dragPath).toBe(fs.realpathSync(sourceFile));
+    // Same canonicalization call the implementation uses: sync and async
+    // realpath disagree on short-name tmpdirs on some Windows runners.
+    expect(await fs.promises.realpath(value.dragPath)).toBe(
+      await fs.promises.realpath(sourceFile),
+    );
     expect(fs.readdirSync(staging)).toEqual([]);
   });
 

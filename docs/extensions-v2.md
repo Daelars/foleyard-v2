@@ -89,9 +89,11 @@ the registry rejects unresolved references).
 - Hooks run on enable and disable **after** enablement is persisted and
   **before** the `contributions-changed` notification; the PATCH route
   awaits that ordering.
-- Hooks execute through the normal host path as that extension (single
-  invocation, availability and permissions apply). They are not exempt
-  from permission checks.
+- A disable hook must run after the extension is already disabled, so
+  the lifecycle path skips only the enabled gate. Everything else —
+  ownership, that the command is actually a declared hook, availability,
+  capabilities, and effective permissions — still applies: a hook can
+  never bypass a permission check.
 - Hook failures are isolated and reported to the server log; the
   enablement change stands and the caller never sees a rejection, so a
   broken hook cannot leave enablement and persisted state disagreeing.
@@ -144,6 +146,18 @@ canonical-path containment, traversal and link-escape denial, and
 existing-ancestor resolution; job-owned cleanup removes only resources
 the current job owns.
 
+Permission and enablement changes are durable and live (#266). An
+approval or enablement write that cannot be persisted is reported as a
+failure, never as success, and records an explicit degraded state
+(`policyHealth` on `GET /api/extensions-v2/extensions`). A grant that
+could not be written is rolled back; a revocation stands fail-closed in
+memory even if its write fails. A hydration failure leaves policy
+unloaded (deny by default) so the next read retries instead of freezing
+on a false "loaded". Operation services re-read the effective set at
+every permission check, so a revocation fails a running handler closed
+at its next check; a queued job rechecks before starting and is
+cancelled with the typed reason when its permissions were revoked.
+
 These services are built for trusted bundled code. They are not a
 sandbox against hostile JavaScript. Do not claim untrusted extension
 isolation.
@@ -156,7 +170,11 @@ interrupted. Concurrency is bounded (max 2). Cancellation is
 cooperative: the host records request vs stop times and never reports
 stopped while work still writes. Restart marks live jobs interrupted
 with known outputs; filesystem effects never replay. Duplicate
-invocation keys return the existing job.
+invocation keys return the existing job. A submit checks enablement and
+effective permissions, and a queued job rechecks them when it reaches
+the front, so work queued before a revocation is cancelled (with the
+typed reason) instead of starting; a running handler fails closed at
+its next operation permission check.
 
 A terminal job exposes a bounded summary over the polling route
 (#279): `job.result.value` is the handler's declared result projected

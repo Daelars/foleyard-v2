@@ -1,5 +1,9 @@
 import type { V2LibraryReadPorts } from "./operations";
-import { V2OperationError } from "./operations";
+import {
+  createV2PermissionRequire,
+  V2OperationError,
+  type V2EffectivePermissions,
+} from "./operations";
 
 /**
  * Embedding vectors and similarity search for v2 handlers (#192).
@@ -37,7 +41,7 @@ export type V2EmbeddingOperations = {
 
 export type V2EmbeddingFactoryArgs = {
   extensionId: string;
-  effectivePermissions: readonly string[];
+  effectivePermissions: V2EffectivePermissions;
   embeddings?: V2EmbeddingPorts;
   /** Live index lookup so removed sounds never rank. */
   isLiveFile?(fileId: string): boolean;
@@ -112,10 +116,7 @@ function cosineSimilarityTyped(a: Float32Array, b: Float32Array): number {
 
 export function createV2EmbeddingOperations(args: V2EmbeddingFactoryArgs): V2EmbeddingOperations {
   const extensionId = args.extensionId;
-  const granted = new Set(args.effectivePermissions);
-  const require = (permission: "embeddings:read" | "embeddings:write"): void => {
-    if (!granted.has(permission)) throw denied(permission, extensionId);
-  };
+  const require = createV2PermissionRequire(args.effectivePermissions, extensionId);
   const ports = (): V2EmbeddingPorts => {
     if (!args.embeddings) {
       throw new V2OperationError(

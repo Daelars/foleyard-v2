@@ -43,7 +43,21 @@ export async function PATCH(
   }
   // Await so the response lands after the declared lifecycle hook has run
   // (after persist, before notify); hook failures are isolated and logged.
-  await setV2ExtensionEnabled(extensionId, enabled);
+  // A persistence failure is reported as an error, never as success.
+  try {
+    await setV2ExtensionEnabled(extensionId, enabled);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: "persistence-failed",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({
     ok: true,
     extensionId,

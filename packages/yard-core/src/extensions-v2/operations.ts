@@ -21,7 +21,9 @@ import type { V2FailureCode } from "./invocation";
  * directly. They receive exactly this surface, bound to one invocation:
  * every method first checks the invocation's effective permissions
  * (deny-by-default; an unauthorized handler that omits its own check
- * still cannot read or write), then authorizes the actual operation,
+ * still cannot read or write; the set is re-read live when the host
+ * supplies a provider, so a revocation fails a running handler closed at
+ * its next check), then authorizes the actual operation,
  * including derived output and temporary paths.
  *
  * Explicit permission map (never inferred from method names):
@@ -73,6 +75,43 @@ function denied(permission: string, extensionId: string): V2OperationError {
     "permission-denied",
     `Extension "${extensionId}" lacks the "${permission}" permission for this operation; grant it to use this command.`,
   );
+}
+
+/**
+ * Effective permissions for one invocation. A static list is the
+ * preflight snapshot; a function is a live provider the host supplies so
+ * a revocation is observed at a running handler's next permission check
+ * instead of a set frozen at preflight.
+ */
+export type V2EffectivePermissions = readonly string[] | (() => readonly string[]);
+
+/** Current effective permissions for a source (static list or live provider). */
+function resolveV2EffectivePermissions(
+  source: V2EffectivePermissions,
+): readonly string[] {
+  return typeof source === "function" ? source() : source;
+}
+
+/**
+ * Build a `require(permission)` that reads the live effective set on
+ * every call. A provider is re-evaluated per call, so a revoked
+ * permission fails the running operation closed at its next check; a
+ * static list is snapshotted once.
+ */
+export function createV2PermissionRequire(
+  source: V2EffectivePermissions,
+  extensionId: string,
+): (permission: ExtensionV2Permission) => void {
+  if (typeof source === "function") {
+    const provider = source;
+    return (permission) => {
+      if (!provider().includes(permission)) throw denied(permission, extensionId);
+    };
+  }
+  const snapshot = new Set<string>(source);
+  return (permission) => {
+    if (!snapshot.has(permission)) throw denied(permission, extensionId);
+  };
 }
 
 export const V2_OPERATIONS_PAGE_LIMIT = 500;
@@ -158,7 +197,8 @@ export type V2NamedSelectionSource = {
 export type V2OperationFactoryArgs = {
   extensionId: string;
   invocationId: string;
-  effectivePermissions: readonly string[];
+  /** Preflight snapshot, or a live provider re-read at every permission check. */
+  effectivePermissions: V2EffectivePermissions;
   grants: V2GrantStore;
   /** Readable source grants for copying files from external folders (Library Gatherer v2). */
   sources?: V2SourceGrantStore;
@@ -350,7 +390,6 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
   }
   const workflowState =
     args.workflowState ?? new V2WorkflowStateStore(extensionId, args.extensionState!);
-  const effective = new Set(args.effectivePermissions);
   /** Created entries by canonical path, with the version identity captured at creation. */
   const owned = new Map<string, V2FileVersion>();
   const jobs: V2JobReporter = args.jobs ?? {
@@ -358,9 +397,7 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
     throwIfCancelled: () => {},
   };
 
-  const require = (permission: ExtensionV2Permission): void => {
-    if (!effective.has(permission)) throw denied(permission, extensionId);
-  };
+  const require = createV2PermissionRequire(args.effectivePermissions, extensionId);
 
   const settingKey = (settingId: string): string => {
     checkKey(settingId, "Setting ID");
@@ -711,7 +748,7 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
             extensionId,
             invocationId: args.invocationId,
             commandId: binding.commandId,
-            effectivePermissions: [...effective],
+            effectivePermissions: resolveV2EffectivePermissions(args.effectivePermissions),
             capabilities: [...binding.capabilities],
           },
           spec,

@@ -149,6 +149,18 @@ describe("createV2OperationServices permission confinement", () => {
       /"files:copy"/,
     );
   });
+
+  it("rechecks a live effective set so a mid-run revocation fails closed at the next call", () => {
+    let granted: string[] = ["library:read"];
+    const services = createV2OperationServices(
+      servicesArgs({ effectivePermissions: () => granted }),
+    );
+    // Approved at the start of the run: the operation succeeds.
+    expect(services.library.getFile("a")!.id).toBe("a");
+    // Revoked mid-run: the next permission check fails closed.
+    granted = [];
+    expect(() => services.library.getFile("a")).toThrowError(/"library:read"/);
+  });
 });
 
 describe("v2 file operations and grants", () => {

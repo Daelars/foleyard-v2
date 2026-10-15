@@ -59,7 +59,6 @@ import { createRecentSelectionSource, createShelfSelectionSource } from "./sourc
 function ensureEnablementLoaded(): void {
   const runtime = getV2Runtime();
   if (runtime.enablementLoaded) return;
-  runtime.enablementLoaded = true;
   try {
     // Retirement adoption first: retired v1 tools hand their
     // enablement and approvals to their v2 port exactly once.
@@ -69,9 +68,14 @@ function ensureEnablementLoaded(): void {
     for (const extensionId of listPersistedEnabled()) {
       runtime.enabled.add(extensionId);
     }
+    runtime.enablementLoaded = true;
+    runtime.policyDegraded = null;
   } catch {
     // Missing or broken settings storage: memory-only enablement,
-    // disabled by default, same as before persistence existed.
+    // disabled by default. `enablementLoaded` stays false so the next
+    // call retries instead of freezing on a partial read.
+    runtime.policyDegraded =
+      "Extension enablement could not be read; extensions stay disabled until storage recovers.";
   }
 }
 
@@ -109,7 +113,11 @@ export function unregisterV2Extension(extensionId: string): void {
   try {
     writePersistedEnabled(extensionId, false);
   } catch {
-    // Persistence failure keeps the in-memory state.
+    // The in-memory removal stands (the extension is gone from this
+    // process); the persisted disablement could not be written, so
+    // record the degraded state rather than claiming durability.
+    getV2Runtime().policyDegraded =
+      `Disablement of "${extensionId}" could not be persisted; a restart may re-enable it.`;
   }
   getV2Events().emit("contributions-changed", "*");
 }
@@ -132,7 +140,10 @@ async function runV2LifecycleHook(
   const commandId = getV2Registry().get(extensionId)?.lifecycle?.[hook]?.commandId;
   if (!commandId) return;
   try {
-    const result = await getAppV2Host().execute({
+    // The lifecycle path skips only the enabled gate, so a disable hook
+    // can run after the extension is disabled while every other check
+    // (ownership, availability, permissions, grants) still applies.
+    const result = await getAppV2Host().runLifecycleHook({
       extensionId,
       commandId,
       selection: { fileIds: [] },
@@ -151,6 +162,11 @@ async function runV2LifecycleHook(
  * V2 extensions are disabled by default and persist explicit enablement.
  * State and persistence update synchronously; declared lifecycle hooks run
  * after persist and before notify (async callers can await that ordering).
+ *
+ * Durability (#266): a write failure is never reported as success.
+ * Enabling rolls back (no unpersisted enablement); disabling stays
+ * fail-closed in memory (the extension is disabled now) and records an
+ * explicit degraded state, because it may return on restart.
  */
 export async function setV2ExtensionEnabled(
   extensionId: string,
@@ -173,8 +189,13 @@ export async function setV2ExtensionEnabled(
   }
   try {
     writePersistedEnabled(extensionId, value);
-  } catch {
-    // Persistence failure keeps the in-memory state; the next toggle retries.
+    runtime.policyDegraded = null;
+  } catch (error) {
+    if (value) runtime.enabled.delete(extensionId);
+    runtime.policyDegraded = value
+      ? "Extension enablement could not be persisted; it was not enabled."
+      : "Extension disablement could not be persisted; it is disabled now but may return on restart.";
+    throw error;
   }
   if (before !== value) {
     // Persist precedes notify; the hook runs between them.
@@ -187,13 +208,20 @@ function createOperations(binding: {
   extensionId: string;
   invocationId: string;
   effectivePermissions: string[];
+  resolveEffectivePermissions?: () => readonly string[];
   reporter?: V2JobReporter;
 }): V2OperationServices {
   const declarations = getV2Registry().get(binding.extensionId)?.settings;
   const library = createV2LibraryPorts();
   const extensionState = createV2ExtensionStatePorts();
+  // Live view of the effective set: the host passes a provider that
+  // re-reads the approval policy, so a revocation is enforced at a
+  // running handler's next permission check (base and extended groups).
+  const effectivePermissions =
+    binding.resolveEffectivePermissions ?? binding.effectivePermissions;
   const base = createV2OperationServices({
     ...binding,
+    effectivePermissions,
     grants: getV2GrantStore(),
     sources: getV2SourceGrantStore(),
     library,
@@ -217,7 +245,7 @@ function createOperations(binding: {
     ...base,
     ...createV2ExtendedOperations({
       extensionId: binding.extensionId,
-      effectivePermissions: binding.effectivePermissions,
+      effectivePermissions,
       library,
       mutations: createV2LibraryMutationPorts(),
       collections: createV2CollectionPorts(),

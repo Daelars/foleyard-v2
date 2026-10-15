@@ -100,10 +100,14 @@ export function adoptRetiredV1Enablement(
       // either way: the tool is retired and nothing reads it again.
       if (readPersistedEnabled(v2Id) === undefined) {
         const enabled = stored === "true" || stored === true;
-        writePersistedEnabled(v2Id, enabled);
+        // Grant approval before writing enablement: if approval
+        // persistence fails, the whole adoption retries instead of
+        // leaving the port enabled but unapproved (deny-by-default would
+        // make it unusable while appearing enabled).
         if (enabled) {
           setV2Approval(v2Id, declaredPermissions(v2Id));
         }
+        writePersistedEnabled(v2Id, enabled);
       }
       deleteV2SettingsRow(v1Key);
     }

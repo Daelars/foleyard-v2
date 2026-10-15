@@ -58,7 +58,20 @@ export async function POST(
       );
     }
   }
-  setV2Approval(extensionId, permissions);
+  try {
+    setV2Approval(extensionId, permissions);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: "persistence-failed",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ ok: true, extensionId, permissions });
 }
 
@@ -73,6 +86,19 @@ export async function DELETE(
       { status: 404 },
     );
   }
-  revokeV2Approval(extensionId);
+  try {
+    revokeV2Approval(extensionId);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: "persistence-failed",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ ok: true, extensionId });
 }

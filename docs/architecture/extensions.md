@@ -57,8 +57,13 @@ commandId, selection, input }`:
    schema, availability, effective permissions, grant re-auth) for
    direct execution, job submit, and plan apply alike, then runs the
    handler with an engine-owned `runMode` and narrow operation
-   services. Operation errors map to typed failure codes; a v2
-   failure is final and never falls through to another system.
+   services. The operation services re-read the live effective set at
+   every permission check (#266), so a revocation fails a running
+   handler closed at its next check; a queued job rechecks before
+   starting, and a disable lifecycle hook runs through the same
+   preflight with only the enabled gate skipped. Operation errors map to
+   typed failure codes; a v2 failure is final and never falls through to
+   another system.
 4. **Services.** Handlers use paged Library reads, named selection
    sources (shelf reads `v2shelf:sound-shelf-v2`, recent reads the
    recent record), authorized file/archive output, namespaced

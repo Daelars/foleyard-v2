@@ -1,8 +1,11 @@
 import type { ScanFileRecord } from "../services/library/scan-types";
 
-import type { ExtensionV2Permission } from "./definition";
 import { screenV2CandidatePath } from "./filesystem";
-import { V2OperationError } from "./operations";
+import {
+  createV2PermissionRequire,
+  V2OperationError,
+  type V2EffectivePermissions,
+} from "./operations";
 
 /**
  * Library index mutations for v2 handlers (Yard Core context, E1 #176).
@@ -49,7 +52,7 @@ export type V2LibraryMutationOperations = {
 
 export type V2LibraryMutationFactoryArgs = {
   extensionId: string;
-  effectivePermissions: readonly string[];
+  effectivePermissions: V2EffectivePermissions;
   mutations?: V2LibraryMutationPorts;
   /** Reads the index to resolve IDs to paths. */
   resolveByIds(ids: string[]): Array<{ id: string; path: string }>;
@@ -124,13 +127,10 @@ function checkRecord(record: unknown, index: number): ScanFileRecord {
 export function createV2LibraryMutationOperations(
   args: V2LibraryMutationFactoryArgs,
 ): V2LibraryMutationOperations {
-  const effective = new Set(args.effectivePermissions);
   const nowOption = args.now;
   const clock = typeof nowOption === "function" ? nowOption : () => nowOption ?? new Date().toISOString();
 
-  const require = (permission: ExtensionV2Permission): void => {
-    if (!effective.has(permission)) throw denied(permission, args.extensionId);
-  };
+  const require = createV2PermissionRequire(args.effectivePermissions, args.extensionId);
 
   const ports = (): V2LibraryMutationPorts => {
     if (!args.mutations) throw unsupported(args.extensionId);

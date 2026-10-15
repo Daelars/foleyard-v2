@@ -2,7 +2,11 @@ import type { Collection } from "../domain/collection";
 import type { FileTagAttachment, Tag, TagOrigin } from "../domain/tag";
 
 import type { ExtensionV2Permission } from "./definition";
-import { V2OperationError } from "./operations";
+import {
+  createV2PermissionRequire,
+  V2OperationError,
+  type V2EffectivePermissions,
+} from "./operations";
 
 /**
  * Collection and tag operations for v2 handlers (Yard Core context, E1 #176).
@@ -135,7 +139,7 @@ export type V2TagOperations = {
 
 export type V2OrganizationFactoryArgs = {
   extensionId: string;
-  effectivePermissions: readonly string[];
+  effectivePermissions: V2EffectivePermissions;
   collections?: V2CollectionPorts;
   tags?: V2TagPorts;
   /** Live index lookup for membership targets. */
@@ -191,11 +195,7 @@ function checkFilter(value: unknown): string {
 
 /** Collection services bound to one invocation. See the module docblock for the permission map. */
 export function createV2CollectionOperations(args: V2OrganizationFactoryArgs): V2CollectionOperations {
-  const effective = new Set(args.effectivePermissions);
-
-  const require = (permission: ExtensionV2Permission): void => {
-    if (!effective.has(permission)) throw denied(permission, args.extensionId);
-  };
+  const require = createV2PermissionRequire(args.effectivePermissions, args.extensionId);
 
   const ports = (): V2CollectionPorts => {
     if (!args.collections) throw unsupported("Collections", args.extensionId);
@@ -286,11 +286,7 @@ export function createV2CollectionOperations(args: V2OrganizationFactoryArgs): V
 
 /** Tag services bound to one invocation. See the module docblock for the permission map. */
 export function createV2TagOperations(args: V2OrganizationFactoryArgs): V2TagOperations {
-  const effective = new Set(args.effectivePermissions);
-
-  const require = (permission: ExtensionV2Permission): void => {
-    if (!effective.has(permission)) throw denied(permission, args.extensionId);
-  };
+  const require = createV2PermissionRequire(args.effectivePermissions, args.extensionId);
 
   const ports = (): V2TagPorts => {
     if (!args.tags) throw unsupported("Tags", args.extensionId);

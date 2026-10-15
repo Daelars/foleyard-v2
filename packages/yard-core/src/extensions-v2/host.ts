@@ -36,8 +36,10 @@ import {
 } from "./plans";
 import {
   sanitizeV2IdempotencyKey,
+  V2JobGateDeniedError,
   V2JobManager,
   type V2JobCompletion,
+  type V2JobGateDenial,
   type V2JobRecord,
 } from "./jobs";
 import { computeEffectiveV2Permissions } from "./permissions";
@@ -129,6 +131,13 @@ export type V2HostServices = {
     extensionId: string;
     invocationId: string;
     effectivePermissions: string[];
+    /**
+     * Live effective-permission provider. When present, the operation
+     * services re-read it at every permission check, so a revocation
+     * fails a running handler closed at its next check; absent, the
+     * preflight snapshot stands.
+     */
+    resolveEffectivePermissions?: () => readonly string[];
     reporter?: V2JobReporter;
   }) => V2OperationServices;
   /**
@@ -274,7 +283,10 @@ export class ExtensionV2Host {
    * validation → authorized selection resolution (the first expensive
    * step). Neither `execute` nor `submitJob` runs a handler without it.
    */
-  private async preflight(request: V2ExecuteRequest): Promise<V2Preflight> {
+  private async preflight(
+    request: V2ExecuteRequest,
+    options?: { lifecycleHook?: boolean },
+  ): Promise<V2Preflight> {
     const invocationId = createV2InvocationId();
 
     const ownership = resolveV2Ownership(
@@ -287,7 +299,27 @@ export class ExtensionV2Host {
     }
     const { definition, command } = ownership;
 
-    if (!this.services.isEnabled(request.extensionId)) {
+    if (options?.lifecycleHook) {
+      // A lifecycle hook may run after its extension is disabled (the
+      // disable hook runs post-disablement). Only the enabled gate is
+      // skipped: the command must actually be a declared hook, and every
+      // other check below (availability, permissions, grants) still runs.
+      const lifecycle = definition.lifecycle;
+      const declared =
+        lifecycle?.onEnabled?.commandId === request.commandId ||
+        lifecycle?.onDisabled?.commandId === request.commandId;
+      if (!declared) {
+        return {
+          ok: false,
+          result: fail(
+            "extension-disabled",
+            `Command "${request.commandId}" is not a declared lifecycle hook of "${definition.name}"; it cannot run through the lifecycle path.`,
+            request,
+            invocationId,
+          ),
+        };
+      }
+    } else if (!this.services.isEnabled(request.extensionId)) {
       return {
         ok: false,
         result: fail(
@@ -415,12 +447,21 @@ export class ExtensionV2Host {
     checked: Extract<V2Preflight, { ok: true }>,
     reporter?: V2JobReporter,
   ): V2OperationServices {
-    const { invocation, effective } = checked;
+    const { invocation, effective, definition } = checked;
+    // Live provider: the operation services re-read the effective set at
+    // every permission check, so a revocation is enforced against a
+    // handler that is already running instead of the preflight snapshot.
+    const resolveEffectivePermissions = (): string[] =>
+      computeEffectiveV2Permissions(
+        definition.permissions,
+        grantedList(this.services.grantedPermissions(invocation.extensionId)),
+      );
     const base = this.services.createOperations
       ? this.services.createOperations({
           extensionId: invocation.extensionId,
           invocationId: invocation.invocationId,
           effectivePermissions: effective,
+          resolveEffectivePermissions,
           ...(reporter ? { reporter } : {}),
         })
       : (() => {
@@ -447,7 +488,7 @@ export class ExtensionV2Host {
             extensionId: invocation.extensionId,
             invocationId: invocation.invocationId,
             commandId: checked.command.id,
-            effectivePermissions: effective,
+            effectivePermissions: resolveEffectivePermissions(),
             capabilities: capabilityList(this.services.capabilities),
           },
           spec,
@@ -487,6 +528,29 @@ export class ExtensionV2Host {
   async execute(request: V2ExecuteRequest): Promise<V2ExecutionResult> {
     const checked = await this.preflight(request);
     if (!checked.ok) return checked.result;
+    return this.runDirect(checked, request);
+  }
+
+  /**
+   * Run one declared lifecycle hook through the normal execution path.
+   *
+   * The enabled gate is the one check intentionally skipped: a disable
+   * hook must run after its extension is already disabled. Everything
+   * else — ownership, that the command is actually a declared hook,
+   * availability, input, selection, capabilities, and effective
+   * permissions — still applies, so a hook can never bypass another
+   * check. The application calls this only for `lifecycle` commands.
+   */
+  async runLifecycleHook(request: V2ExecuteRequest): Promise<V2ExecutionResult> {
+    const checked = await this.preflight(request, { lifecycleHook: true });
+    if (!checked.ok) return checked.result;
+    return this.runDirect(checked, request);
+  }
+
+  private async runDirect(
+    checked: Extract<V2Preflight, { ok: true }>,
+    request: V2ExecuteRequest,
+  ): Promise<V2ExecutionResult> {
     const { command } = checked;
 
     const operations = this.operationsFor(checked);
@@ -600,10 +664,37 @@ export class ExtensionV2Host {
     const extensionId = checked.invocation.extensionId;
 
     const handler = this.handlers.get(`${extensionId} ${checked.invocation.commandId}`)!;
-    const gate = (): string | null =>
-      this.services.isEnabled(extensionId)
-        ? null
-        : `Extension "${checked.definition.name}" is disabled; enable it to run "${command.title}".`;
+    // The gate runs at submit and again when queued work reaches the
+    // front. It re-evaluates availability against the *live* approved
+    // permissions, so a revocation observed while the job is queued
+    // cancels it (with the typed reason) instead of letting it start.
+    const gate = (): V2JobGateDenial | null => {
+      if (!this.services.isEnabled(extensionId)) {
+        return {
+          code: "extension-disabled",
+          message: `Extension "${checked.definition.name}" is disabled; enable it to run "${command.title}".`,
+        };
+      }
+      const granted = grantedList(this.services.grantedPermissions(extensionId));
+      const availability = evaluateV2SnapshotAvailability(
+        checked.definition,
+        command,
+        checked.selection,
+        request.input,
+        {
+          enabled: true,
+          capabilities: this.services.capabilities,
+          grantedPermissions: granted,
+        } satisfies V2AvailabilityState,
+      );
+      if (!availability.available) {
+        return {
+          code: availabilityFailureCode(availability.code) as V2FailureCode,
+          message: availability.reason,
+        };
+      }
+      return null;
+    };
     let submitted: { record: V2JobRecord; duplicate: boolean };
     try {
       submitted = this.jobs.submit({
@@ -654,7 +745,7 @@ export class ExtensionV2Host {
     } catch (error) {
       return {
         ok: false,
-        code: "extension-disabled",
+        code: error instanceof V2JobGateDeniedError ? error.code : "extension-disabled",
         message: error instanceof Error ? error.message : String(error),
         invocationId,
         extensionId,

@@ -36,6 +36,7 @@ import {
 } from "./library-mutations";
 import {
   denyAllV2Operations,
+  type V2EffectivePermissions,
   type V2LibraryReadPorts,
   type V2OperationServices,
 } from "./operations";
@@ -90,7 +91,7 @@ export type V2ExtendedOperationServices = V2OperationServices & {
 
 export type V2ExtendedOperationFactoryArgs = {
   extensionId: string;
-  effectivePermissions: readonly string[];
+  effectivePermissions: V2EffectivePermissions;
   /** Index reads used to resolve mutation and membership targets. */
   library: V2LibraryReadPorts;
   mutations?: V2LibraryMutationPorts;

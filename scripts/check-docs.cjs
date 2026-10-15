@@ -2,9 +2,13 @@
 //
 // `docs/manifest.json` is the single registry (#236): the application, the
 // staging script and this checker all read it. Checks:
-// - the registry parses, has unique ids, and every path exists in the checkout,
+// - the registry parses and every entry is well formed: status, audience,
+//   safe paths, no duplicate ids/paths, and the required current documents,
+// - the staged output came from `docs:prepare` (its staging stamp and the
+//   exact file set it declares), so a stale or extra file fails,
 // - manifest.json exists in the staged dir,
-// - the staged manifest's document set equals the registry (id, path, status),
+// - the staged manifest's document set equals the registry (id, path, status)
+//   with no duplicate ids or paths,
 // - manifest productVersion matches root package.json (and coreVersion
 //   matches packages/yard-core/package.json),
 // - each manifest sha256 matches the staged file content,
@@ -16,14 +20,17 @@
 //
 // Usage: node scripts/check-docs.cjs --dir <staged-dir>
 // (also accepts --out or a positional dir; defaults to
-// staged-docs/foleyard-docs). Exits non-zero with a clear message on failure.
+// staged-docs/foleyard-docs). Run `node scripts/prepare-docs.cjs` first:
+// docs:prepare -> docs:check is the only supported order. Exits non-zero with
+// a clear message on failure.
 
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
+const { validateRegistry } = require("./docs-registry.cjs");
+
 const root = path.resolve(__dirname, "..");
-const REGISTRY_PATH = path.join(root, "docs", "manifest.json");
 
 function parseStagedDir(argv) {
   for (let i = 0; i < argv.length; i++) {
@@ -80,45 +87,28 @@ function listFilesRecursive(dir, extension) {
   return out;
 }
 
+function listAllFiles(dir) {
+  return listFilesRecursive(dir, "");
+}
+
 const errors = [];
 const stagedDir = parseStagedDir(process.argv.slice(2));
 
-// 1. Registry parses and every source exists in the checkout.
-let registry = null;
-if (!fs.existsSync(REGISTRY_PATH)) {
-  errors.push("docs/manifest.json not found; it is the single registry");
-} else {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8"));
-    if (Array.isArray(parsed.documents) && parsed.documents.length > 0) {
-      registry = parsed;
-    } else {
-      errors.push("docs/manifest.json declares no documents");
-    }
-  } catch (error) {
-    errors.push(`docs/manifest.json is not valid JSON: ${error.message}`);
-  }
-}
-if (registry) {
-  const ids = new Set();
-  for (const entry of registry.documents) {
-    if (typeof entry.id !== "string" || typeof entry.path !== "string") {
-      errors.push(`manifest entry needs id and path: ${JSON.stringify(entry)}`);
-      continue;
-    }
-    if (ids.has(entry.id)) errors.push(`duplicate manifest id "${entry.id}"`);
-    ids.add(entry.id);
-    if (!fs.existsSync(path.join(root, entry.path))) {
-      errors.push(`registry source missing in checkout: ${entry.path} (id "${entry.id}")`);
-    }
-  }
-}
-const registryDocuments = registry ? registry.documents : [];
+// 1. Registry parses; every entry is well formed (status, audience, safe
+// paths, no duplicate ids/paths, required current documents) and every source
+// exists in the checkout. Validated by the same module the stager uses.
+const registryValidation = validateRegistry(root);
+const registryDocuments = registryValidation.documents;
+for (const error of registryValidation.errors) errors.push(error);
 
-// 2. Manifest exists in the staged dir.
+// 2. Manifest exists in the staged dir. docs:prepare must populate it first;
+// this check never creates or repairs the staged output.
 const manifestPath = path.join(stagedDir, "manifest.json");
 if (!fs.existsSync(manifestPath)) {
-  errors.push(`manifest.json not found in staged dir: ${manifestPath}`);
+  errors.push(
+    `staged output missing at ${stagedDir}: manifest.json was not staged. ` +
+      "Run `npm run docs:prepare` then `npm run docs:check` (that is the only supported order).",
+  );
 }
 let manifest = null;
 if (fs.existsSync(manifestPath)) {
@@ -140,6 +130,14 @@ if (manifest) {
   if (manifest.manifestId !== "foleyard-docs") {
     errors.push(`manifest manifestId is "${manifest.manifestId}", expected "foleyard-docs"`);
   }
+  // The staging stamp is written only by prepare-docs.cjs, so its absence
+  // means the output was not staged by docs:prepare.
+  if (typeof manifest.stagedAt !== "string" || Number.isNaN(Date.parse(manifest.stagedAt))) {
+    errors.push(
+      "staged manifest has no valid stagedAt stamp; the output was not produced by staging. " +
+        "Run `npm run docs:prepare` then `npm run docs:check` (that is the only supported order).",
+    );
+  }
   if (manifest.productVersion !== productVersion) {
     errors.push(
       `manifest productVersion "${manifest.productVersion}" does not match package.json "${productVersion}"`,
@@ -154,6 +152,25 @@ if (manifest) {
 
 // 4. Staged document set equals the registry, and each sha256 matches.
 if (manifest && Array.isArray(manifest.documents)) {
+  // A Map collapses duplicate ids, which would hide an extra entry; catch
+  // duplicates before building it.
+  const seenStagedIds = new Set();
+  const seenStagedPaths = new Set();
+  for (const doc of manifest.documents) {
+    if (doc && typeof doc.id === "string") {
+      if (seenStagedIds.has(doc.id)) {
+        errors.push(`staged manifest has duplicate id "${doc.id}"`);
+      }
+      seenStagedIds.add(doc.id);
+    }
+    if (doc && typeof doc.path === "string") {
+      if (seenStagedPaths.has(doc.path)) {
+        errors.push(`staged manifest has duplicate path "${doc.path}"`);
+      }
+      seenStagedPaths.add(doc.path);
+    }
+  }
+
   const stagedById = new Map(manifest.documents.map((doc) => [doc.id, doc]));
   for (const entry of registryDocuments) {
     const staged = stagedById.get(entry.id);
@@ -177,6 +194,9 @@ if (manifest && Array.isArray(manifest.documents)) {
     if (!registryIds.has(doc.id)) {
       errors.push(`staged manifest has unknown id "${doc.id}" (registry is the single source)`);
     }
+    if (typeof doc.sha256 !== "string" || doc.sha256.length === 0) {
+      errors.push(`staged manifest entry "${doc.id}" has no sha256`);
+    }
     const stagedPath = path.join(stagedDir, doc.path);
     if (!fs.existsSync(stagedPath)) {
       errors.push(`staged file missing: ${doc.path} (id "${doc.id}")`);
@@ -195,6 +215,22 @@ if (manifest && Array.isArray(manifest.documents)) {
 for (const required of ["docs/index.md", "README.md"]) {
   if (!fs.existsSync(path.join(stagedDir, required))) {
     errors.push(`required staged file missing: ${required}`);
+  }
+}
+
+// 5b. The staged tree holds exactly the registry documents plus the staged
+// manifest. prepare-docs cleans the output before staging, so any other file
+// is stale output that would otherwise ship in the packaged build.
+{
+  const expected = new Set(registryDocuments.map((entry) => entry.path));
+  expected.add("manifest.json");
+  for (const abs of listAllFiles(stagedDir)) {
+    const relative = path.relative(stagedDir, abs).split(path.sep).join("/");
+    if (!expected.has(relative)) {
+      errors.push(
+        `stale file in staged output: ${relative} (not declared by docs/manifest.json)`,
+      );
+    }
   }
 }
 
@@ -382,5 +418,5 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `check-docs: OK — ${registryDocuments.length} registry sources, staged set matches docs/manifest.json, manifest identity (product ${productVersion}, core ${coreVersion}), ${linkCount} relative .md links checked, ${ALLOWLISTED_PATHS.length} allowlisted historical references, staged dir ${stagedDir}.`,
+  `check-docs: OK — ${registryDocuments.length} registry sources, clean staged output, staged set matches docs/manifest.json, manifest identity (product ${productVersion}, core ${coreVersion}), ${linkCount} relative .md links checked, ${ALLOWLISTED_PATHS.length} allowlisted historical references, staged dir ${stagedDir}.`,
 );

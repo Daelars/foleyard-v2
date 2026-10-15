@@ -69,10 +69,10 @@ parity is unchanged.
 
 Docs bundle: packaged builds resolve docs from staged `foleyard-docs/`
 resources (`process.resourcesPath`, or `FOLEYARD_DOCS_ROOT`). Staging
-runs through `node scripts/prepare-docs.cjs` into
+runs through `node scripts/prepare-docs.cjs` into a cleaned
 `staged-docs/foleyard-docs`, declared in `electron-builder.yml`
 `extraResources` and verified by `node scripts/check-docs.cjs`
-(both run in CI). ASAR note: app code ships inside the ASAR with only
+(both run in CI, in that order). ASAR note: app code ships inside the ASAR with only
 `*.node` and `ffmpeg-static` unpacked (`asarUnpack`); staged docs live
 under `resources/` outside the archive, readable without extracting app code.
 

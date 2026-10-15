@@ -9,8 +9,8 @@
 
 Defines the contributor loop: install, run, check, test, cover, and build
 the app, with fixture-isolated tests, the expected-failures ledger
-(`docs/expected-failures.md`) and the coverage thresholds in
-`vitest.config.ts`.
+(`docs/expected-failures.md`) and the per-subsystem coverage floors declared in
+`scripts/coverage-scope.cjs` and enforced by `vitest.config.ts`.
 
 ## Responsibilities and boundaries
 
@@ -33,6 +33,8 @@ bunx tsc --noEmit      # typecheck (package.json: typecheck)
 bun run lint           # eslint . + theme CSS lint
 bun run test           # npx vitest run
 bun run test:coverage  # npx vitest run --coverage
+bun run coverage:report   # per-subsystem figures + coverage/subsystem-summary.json
+bun run coverage:changed  # changed-code gate (COVERAGE_BASE_REF defaults to development)
 bun run build          # next build (web); desktop via build:desktop
 node scripts/check-v2-boundaries.cjs  # v2 dependency boundary (also in CI)
 bun run docs:prepare   # stage version-matched docs (also in CI)
@@ -74,9 +76,55 @@ checkout never ships and is never read by production builds.
 
 ## Contracts
 
-- Internal scripts contract in `package.json`; coverage thresholds in
-  `vitest.config.ts` sit one point below the measured baseline so ordinary
-  churn does not fail the run. Raise them as coverage rises.
+- Internal scripts contract in `package.json`; coverage scope, exclusions and
+  subsystem floors in `scripts/coverage-scope.cjs`, consumed directly by
+  `vitest.config.ts`. Floors sit one point below the measured baseline so
+  ordinary churn does not fail the run. Raise them as coverage rises; never
+  lower them to make a run pass.
+
+## Coverage by shipped subsystem
+
+One aggregate number hid which part of the product was tested. Coverage is
+measured and floored per subsystem (issue #303):
+
+| Subsystem | Measured roots |
+| --- | --- |
+| Application UI | `src/components` |
+| Application server routes | `src/app/api` |
+| Application (aggregate) | `src` |
+| Desktop runtime | `electron` |
+| Yard Core | `packages/yard-core` |
+| Yard Tools | `packages/yard-tools` |
+| Build and release scripts | `scripts` |
+
+`npm run test:coverage` fails when any subsystem or the global total drops
+below its floor in `scripts/coverage-scope.cjs`. `npm run coverage:report`
+prints the same figures and writes `coverage/subsystem-summary.json`; CI
+uploads it with `coverage-summary.json` and `coverage-final.json` for trend
+review.
+
+Two honest caveats, not regressions:
+
+- Desktop runtime counts the Electron main-process modules the desktop
+  integration tests require in-process. `electron/main.cjs`, `next-server.cjs`,
+  `window.cjs` and `preload.cjs` start the real app and sit at 0%; they are
+  verified by the desktop integration suite, not by unit coverage.
+- Build and release scripts are low because most run as child processes, whose
+  v8 coverage is not merged into the parent run. The security-critical pieces
+  (postinstall digest verification, the doc-bundle checks) are exercised
+  in-process or by subprocess assertions; the floor holds that figure.
+
+Exclusions are explicit: vendored shadcn/base-ui and dotmatrix registry
+primitives are listed file by file, as are the hand-written re-export barrels,
+so first-party components beside them stay measured. Only test fixtures,
+throwaway prototypes and dev benchmarking harnesses are excluded by directory.
+`coverage-reporting.test.ts` fails when a product file on disk is neither
+measured nor declared out with a reason.
+
+Changed-code coverage gates the edge the floors cannot:
+`npm run coverage:changed` diffs the merge base and fails when a changed line
+in a measured file has no executed statement or function. It runs in CI on
+pull requests against `origin/<base branch>`.
 
 ## Failure behavior and limitations
 
@@ -101,13 +149,18 @@ service permissions via `guardHostServices`), E04 (drop-rules write with
 no writable path).
 
 The September 2026 coverage snapshot and target-shape plan moved to the
-`Daelars/foleyard-archive` checkout. The live suite, `vitest.config.ts`
-thresholds and `bun run test:coverage` are the source of truth.
+`Daelars/foleyard-archive` checkout. The live suite, the floors in
+`scripts/coverage-scope.cjs` and `bun run test:coverage` are the source of
+truth.
 
 ## Source map (real file paths)
 
-- `package.json` — scripts (`dev`, `dev:desktop`, `typecheck`, `lint`, `test`, `test:coverage`, `build`)
-- `vitest.config.ts` — suite + coverage thresholds
+- `package.json` — scripts (`dev`, `dev:desktop`, `typecheck`, `lint`, `test`, `test:coverage`, `coverage:report`, `coverage:changed`, `build`)
+- `scripts/coverage-scope.cjs` — coverage scope, exclusions and subsystem floors
+- `vitest.config.ts` — suite + coverage config fed by `coverage-scope.cjs`
+- `scripts/coverage-report.cjs` — per-subsystem report + `coverage/subsystem-summary.json`
+- `scripts/check-changed-coverage.cjs` — changed-code coverage gate (CI)
+- `src/test/integration/coverage-reporting.test.ts` — guard for the reporting logic above
 - `src/test/fixtures.ts` — fixture isolation
 - `src/test/integration/` — integration suite incl. `it.fails` ledger tests
 - `scripts/check-expected-failures.cjs` — ledger count check (CI)

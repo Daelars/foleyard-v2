@@ -1,11 +1,19 @@
 import { configDefaults, defineConfig } from "vitest/config";
 import path from "path";
 
+// Coverage scope, exclusions and subsystem floors live in one place
+// (scripts/coverage-scope.cjs) so the thresholds, the per-subsystem report and
+// the changed-code gate cannot drift. See issue #303 and docs/development.md.
+//
 // Collect by pattern, not by tree root. Naming three roots meant a test placed
 // under electron/ or scripts/ was silently never run, and only *.test.ts was
 // matched, so a *.test.tsx file would vanish too. test-collection.test.ts holds
 // this to the repo's actual contents; UNCOLLECTED_BY_DESIGN there is the one
 // place a test file is allowed to sit outside this pattern.
+import coverageScope from "./scripts/coverage-scope.cjs";
+
+const coverage = coverageScope.coverageConfig();
+
 export default defineConfig({
   test: {
     globals: true,
@@ -19,30 +27,20 @@ export default defineConfig({
       // 410 passing tests read as health while a third of the source was never
       // executed. Vitest 4 does this by default; do not narrow `include` to
       // only what tests touch.
-      include: ["src/**/*.{ts,tsx}", "packages/**/src/**/*.{ts,tsx}"],
-      exclude: [
-        "**/*.test.{ts,tsx}",
-        "**/*.d.ts",
-        // Shared test fixtures: exercised by tests, not product code.
-        "src/test/**",
-        // Generated shadcn primitives: vendored, not our behaviour to assert.
-        "src/components/ui/**",
-        // Throwaway prototypes, deleted when their design question is answered.
-        "src/app/prototype/**",
-        // Next.js framework entrypoints with no logic of their own.
-        "src/app/{layout,globals}.{ts,tsx}",
-        "**/index.ts",
-      ],
-      reporter: ["text-summary", "json-summary", "html"],
+      include: coverage.include,
+      exclude: coverage.exclude,
+      // `json` writes coverage-final.json for the changed-code gate;
+      // `json-summary` feeds the per-subsystem report; both are CI artifacts.
+      reporter: ["text-summary", "json-summary", "json", "html"],
       reportsDirectory: "coverage",
-      // Measured 2026-09-05 and recorded in docs/test-coverage-baseline.md,
-      // rounded down a point so ordinary churn does not fail the run. Raise
-      // these as coverage rises; never lower them to make a run pass.
+      // Global floors, plus an independent floor for each shipped subsystem
+      // (Application UI, Application server routes, Desktop runtime, Yard Core,
+      // Yard Tools, build and release scripts). Floors sit one point below the
+      // measured baseline; raise them as coverage rises, never lower them to
+      // make a run pass.
       thresholds: {
-        lines: 37.5,
-        branches: 31,
-        functions: 34,
-        statements: 36.5,
+        ...coverageScope.GLOBAL_FLOORS,
+        ...coverage.thresholds,
       },
     },
   },

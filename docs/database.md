@@ -65,6 +65,12 @@ of permanent deletion (#269): the intent is committed before the settings and
 index change and cleared once both agree; `SqliteLibraryRootService.recover()`
 finishes interrupted removals on the next scan (see `docs/library.md`).
 
+`files.removed_at` is a durable exclusion (#275): the scan's batch and single
+upserts use `COALESCE(excluded.removed_at, removed_at)`, so a rediscovered
+path keeps its removal, and `batchUpdateFileMetadata` never writes it. Only the
+explicit `restoreFiles` write clears it; a root re-add clears `detached_at`
+but leaves the exclusion in place.
+
 Baseline behavior: pre-ledger databases are upgraded in place and baselined
 to `CURRENT_SCHEMA_VERSION` without data loss; version recording is wrapped
 in a transaction and treated as diagnostic (schema application failure is

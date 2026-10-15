@@ -77,6 +77,8 @@ vi.mock("@/lib/db", () => ({
     state.files!.markFileRemoved(path, removedAt),
   batchMarkRemoved: (paths: string[], removedAt: string, now: string) =>
     state.files!.batchMarkRemoved(paths, removedAt, now),
+  restoreFiles: (paths: string[], now: string) =>
+    state.files!.restoreFiles(paths, now),
 }));
 
 import {
@@ -509,6 +511,38 @@ describe("database correctness", () => {
     expect(files.getFileByPath("/lib/up.wav")?.filename).toBe("up.wav");
     files.upsertFile({ ...rec, duration: 9 });
     expect(files.getFileByPath("/lib/up.wav")?.duration).toBe(9);
+  });
+
+  it("keeps an exclusion through upserts and restores it only through the explicit action", async () => {
+    const seeded = seed(["/lib/keep.wav", "/lib/drop.wav"]);
+    const drop = seeded.find((file) => file.path.endsWith("drop.wav"))!;
+    files.batchMarkRemoved([drop.path], NOW(), NOW());
+
+    // A scan rediscovering the path re-upserts the same record; the exclusion
+    // survives both the batch path and the single-row path (#275).
+    files.batchUpsertFiles([audioFileRecord({ path: drop.path, filename: "drop.wav" })], NOW());
+    files.upsertFile(audioFileRecord({ path: drop.path, filename: "drop.wav" }));
+    expect(files.getFileByPath(drop.path)?.removedAt).not.toBeNull();
+    expect(files.getFileCount()).toBe(1);
+
+    // Restoring is a deliberate request, made through the route.
+    const restored = await callRoute<{ success: boolean; restored: number }>(patchFilesRoute, {
+      method: "PATCH",
+      url: "http://localhost/api/files",
+      body: { action: "restoreFiles", fileIds: [drop.id] },
+    });
+    expect(restored.status).toBe(200);
+    expect(restored.body.restored).toBe(1);
+    expect(files.getFileByPath(drop.path)?.removedAt).toBeNull();
+    expect(files.getFileCount()).toBe(2);
+
+    // Malformed input is refused without touching the database.
+    const bad = await callRoute(patchFilesRoute, {
+      method: "PATCH",
+      url: "http://localhost/api/files",
+      body: { action: "restoreFiles", fileIds: "not-an-array" },
+    });
+    expect(bad.status).toBe(400);
   });
 
   it.fails("converts a smart collection atomically within the bind limit (B09)", () => {

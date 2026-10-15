@@ -36,6 +36,19 @@ permanent delete unlinks the file (see `docs/filesystem.md`) and marks it
 removed. The `use-library-files.ts` hook loads and coordinates the file
 list on the client.
 
+### Durable exclusions (#275)
+
+A removal is an **exclusion**, not a transient "missing" flag: a user
+removal (a file or Folder Janitor `remove-files`) stays out of the Library
+until the user deliberately restores it. Scan reconciliation re-sees the
+path on disk and re-upserts the row, but a null incoming `removedAt` keeps
+the existing value (`COALESCE` in `batchUpsertFiles`/`upsertFile`), so the
+file does not come back. Metadata refreshes, restarts, and a Library-root
+detach/re-add (#271) all preserve the exclusion. The only action that
+re-admits a row is the explicit restore — `restoreFiles` in
+`src/lib/database/file-repository.ts` (`PATCH /api/files`
+`{ action: "restoreFiles", fileIds }`); nothing else clears `removed_at`.
+
 ### Root detachment (#271)
 
 Removing a Library root is soft by default. The root's indexed Audio files
@@ -67,13 +80,18 @@ decision is `docs/adr/library-root-detachment.md`.
   `ownedFileWhere` / `notDetachedWhere` in
   `src/lib/database/file-ownership.ts`; root changes in
   `src/lib/database/root-detachment.ts`.
+- Exclusion: `AudioFile.removedAt`; upserts preserve it
+  (`src/lib/database/files/batch.ts`, `files/writes.ts`); the explicit
+  restore is `restoreFiles` in `src/lib/database/file-repository.ts`.
 
 ## Failure behavior and limitations
 
 - Root outside readable storage or containing no audio: validation fails,
   root not saved.
-- Removed-then-rescanned files can reappear (finding B10,
-  expected-to-fail): removal is undone by rescan.
+- A user exclusion survives later scans, metadata refreshes, restarts and a
+  root detach/re-add; only the explicit `restoreFiles` action clears it
+  (#275, fixed). The old B10 expected-failure ("removal undone by rescan")
+  no longer applies.
 - Collection-branch counts disagree with the main list (finding B03,
   expected-to-fail); root ownership is order-dependent across multiple
   roots (finding I03, expected-to-fail).

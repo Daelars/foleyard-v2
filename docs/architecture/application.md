@@ -96,8 +96,10 @@ open/close state. No global store; no EventBus.
   404 unknown ids, 500 handler); the UI surfaces them via toasts, not traps.
 - Unconfigured library roots: scan/gather/janitor adapters fail fast with
   `No library roots configured` instead of scanning the world.
-- Removed files (`removed_at`) are filtered by default; rescan can restore
-  rows whose files reappear (known finding B10, expected-to-fail).
+- Removed files (`removed_at`) are filtered by default. A removal is a
+  durable exclusion (#275): a rescan, metadata refresh, restart or
+  root re-add never re-admits a removed file; only the explicit
+  `PATCH /api/files { action: "restoreFiles" }` action does.
 - Collection-branch counts can disagree with the main file list (finding
   B03, expected-to-fail).
 

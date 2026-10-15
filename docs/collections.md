@@ -63,6 +63,9 @@ its save-search replaces the retired v1 tool.
 - B04 (expected-to-fail, #140): a late tag failure can erase a newer edit.
 - Deleting a Collection removes membership rows, never audio files (file
   deletion is a separate destructive path — see `docs/filesystem.md`).
+- Smart counts are cached per query string, bounded to the 128 most recently
+  used queries (#316); a query past the bound refetches on its next open
+  instead of being retained for the whole session.
 
 ## Source map (real file paths)
 

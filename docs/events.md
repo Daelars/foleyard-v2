@@ -98,6 +98,10 @@ const unsubscribe = getV2Events().subscribe("settings-changed", reread);
   `!app.isPackaged`, so it is unreachable in packaged builds.
 - Scan callbacks are optional and synchronous to the run; missed polls just
   delay the UI, they do not lose scan results.
+- The server deduplicates `job-transition` with an entry-bounded per-job memo
+  (#316): past 512 distinct job IDs the oldest state is forgotten, so a job
+  whose entry aged out can emit `job-transition` once more for a state already
+  reported. Duplicates are possible; losses are not.
 
 ## Source map (real file paths)
 

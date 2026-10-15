@@ -8,15 +8,29 @@
  * saving the same search share one count round-trip.
  */
 
+import { BoundedMap } from "@/lib/bounded-map";
+
 export { extractSmartQuery } from "@/lib/smart-collection-filter";
 
 function cacheKey(query: string): string {
   return query.trim();
 }
 
-/** Per-query-string count cache shared by every smart collection. */
+/**
+ * Upper bound on cached query strings (#316). Counts are one number per
+ * distinct trimmed query the session has opened; without a bound a long
+ * session retains a count for every search the user ever typed. Exported for
+ * the suite.
+ */
+export const MAX_CACHED_SMART_COUNTS = 128;
+
+/**
+ * Per-query-string count cache shared by every smart collection, bounded to
+ * the most recently used queries (#316). An evicted query is a refetch, never
+ * a wrong badge.
+ */
 export class SmartCollectionCountCache {
-  private counts = new Map<string, number>();
+  private counts = new BoundedMap<string, number>(MAX_CACHED_SMART_COUNTS);
 
   get(query: string): number | undefined {
     return this.counts.get(cacheKey(query));

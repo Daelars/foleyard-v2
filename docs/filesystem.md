@@ -53,8 +53,10 @@ single-use picker proof the native picker minted into a per-extension
 grant ID; handlers consume the ID, never the proof. A caller-supplied
 directory path is never accepted as consent — no proof, no grant.
 Readable Library roots and writable destination grants stay
-distinct; missing, expired, or foreign grants deny. Operation
-services authorize the actual call, including derived output and
+distinct; missing, expired, or foreign grants deny. A gather destination
+must additionally sit under a configured Library root, so a copied file
+can be indexed with valid root and directory ownership (#271, #282).
+Operation services authorize the actual call, including derived output and
 temporary paths. Output creation is exclusive
 (`src/lib/extensions-v2/output-files.ts`): the create is the claim, so
 a pre-existing file is never truncated and two concurrent jobs cannot

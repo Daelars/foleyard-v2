@@ -12,6 +12,7 @@ import {
   V2GrantStore,
   V2OperationError,
   V2OutputConflictError,
+  V2SourceGrantStore,
   type V2ArchivePorts,
   type V2ExtensionStatePorts,
   type V2FileContentPorts,
@@ -362,6 +363,83 @@ describe("v2 file operations and grants", () => {
     expect(rejected).toHaveLength(1);
     expect(String((rejected[0] as PromiseRejectedResult).reason)).toMatch(/already exists/i);
     expect(archive.calls).toHaveLength(1);
+  });
+});
+
+describe("v2 gather destination ownership", () => {
+  const NOW = "2026-09-06T00:00:00.000Z";
+
+  function gatherSetup(opts: {
+    destPath: string;
+    roots?: string[];
+    dirs?: string[];
+    initialText?: Record<string, string>;
+  }) {
+    const grants = new V2GrantStore(() => NOW);
+    const grant = grants.issue("fixture-greeter", opts.destPath);
+    const sources = new V2SourceGrantStore(() => NOW);
+    const sourceGrant = sources.issue("fixture-greeter", "/inbox");
+    const { ports, bytes } = fileFake({
+      roots: opts.roots ?? ["/lib"],
+      dirs: [opts.destPath, "/inbox", ...(opts.dirs ?? [])],
+      initialText: opts.initialText ?? { "/inbox/kick.wav": "kick" },
+    });
+    const services = createV2OperationServices(
+      servicesArgs({ grants, sources, files: ports }),
+    );
+    return { services, grant, sourceGrant, bytes };
+  }
+
+  it("resolves an owned destination with its Library root and relative directory", async () => {
+    const { services, grant } = gatherSetup({ destPath: "/lib/Drums" });
+    const resolved = await services.files.resolveLibraryDestination(grant.grantId);
+    expect(resolved).toEqual({ rootPath: "/lib/Drums", libraryRoot: "/lib", directory: "Drums" });
+  });
+
+  it("refuses a destination outside every Library root", async () => {
+    const { services, grant } = gatherSetup({ destPath: "/outside", dirs: ["/outside"] });
+    await expect(services.files.resolveLibraryDestination(grant.grantId)).rejects.toThrowError(
+      /Library root/,
+    );
+  });
+
+  it("copies from a source grant into an owned destination and returns ownership", async () => {
+    const { services, grant, sourceGrant, bytes } = gatherSetup({ destPath: "/lib/Drums" });
+    const created = await services.files.copyFromSource(
+      sourceGrant.grantId,
+      "/inbox/kick.wav",
+      "kick.wav",
+      grant.grantId,
+    );
+    expect(created).toEqual({ path: "/lib/Drums/kick.wav", libraryRoot: "/lib", directory: "Drums" });
+    expect(new TextDecoder().decode(bytes.get("/lib/Drums/kick.wav")!)).toBe("kick");
+  });
+
+  it("never copies into a destination outside the Library roots", async () => {
+    const { services, grant, sourceGrant } = gatherSetup({
+      destPath: "/outside",
+      dirs: ["/outside"],
+    });
+    await expect(
+      services.files.copyFromSource(sourceGrant.grantId, "/inbox/kick.wav", "kick.wav", grant.grantId),
+    ).rejects.toThrowError(/Library root/);
+    expect(services.workspace.ownedPaths()).toEqual([]);
+  });
+
+  it("disposes only the named subset of job-owned copies", async () => {
+    const { services, grant, sourceGrant, bytes } = gatherSetup({
+      destPath: "/lib",
+      initialText: { "/inbox/kick.wav": "kick", "/inbox/snare.wav": "snare" },
+    });
+    await services.files.copyFromSource(sourceGrant.grantId, "/inbox/kick.wav", "kick.wav", grant.grantId);
+    await services.files.copyFromSource(sourceGrant.grantId, "/inbox/snare.wav", "snare.wav", grant.grantId);
+    expect(services.workspace.ownedPaths().sort()).toEqual(["/lib/kick.wav", "/lib/snare.wav"]);
+
+    const disposed = await services.workspace.dispose(["/lib/kick.wav"]);
+    expect(disposed.removed).toEqual(["/lib/kick.wav"]);
+    expect(bytes.has("/lib/kick.wav")).toBe(false);
+    expect(bytes.has("/lib/snare.wav")).toBe(true);
+    expect(services.workspace.ownedPaths()).toEqual(["/lib/snare.wav"]);
   });
 });
 

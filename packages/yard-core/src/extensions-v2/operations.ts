@@ -6,6 +6,7 @@ import type { V2PlanManager, V2PlanPrepareSpec } from "./plans";
 import {
   authorizeV2ReadablePath,
   authorizeV2WritablePath,
+  resolveV2LibraryLocation,
   type V2PathIo,
 } from "./filesystem";
 import type { V2GrantStore } from "./grants";
@@ -206,16 +207,27 @@ export type V2FileOperations = {
    * Copy a file from a readable source grant into a writable destination
    * grant (Library Gatherer v2). The source path must sit under the
    * source grant's root; the destination must sit under the destination
-   * grant's root and is created exclusively — an existing entry is never
-   * overwritten. The created entry is tracked by version for job-owned
-   * cleanup.
+   * grant's root and inside a configured Library root, and is created
+   * exclusively — an existing entry is never overwritten. The created
+   * entry is tracked by version for job-owned cleanup, and the returned
+   * `libraryRoot`/`directory` are the ownership a gathered index record
+   * must carry so it is never rootless (#271).
    */
   copyFromSource(
     sourceGrantId: string,
     sourcePath: string,
     outputName: string,
     destGrantId: string,
-  ): Promise<{ path: string }>;
+  ): Promise<{ path: string; libraryRoot: string; directory: string | null }>;
+  /**
+   * Resolve a writable destination grant to the Library root that owns
+   * it and the grant root's directory relative to that root. Fails when
+   * the grant is unknown, expired, foreign, or outside every configured
+   * Library root, so a gather can refuse a destination before copying.
+   */
+  resolveLibraryDestination(
+    grantId: string,
+  ): Promise<{ rootPath: string; libraryRoot: string; directory: string | null }>;
 };
 
 export type V2ArchiveOperations = {
@@ -257,7 +269,15 @@ export type V2PlanOperations = {
 
 export type V2WorkspaceOperations = {
   ownedPaths(): string[];
-  dispose(): Promise<{ removed: string[] }>;
+  /**
+   * Remove job-owned entries by version. With no argument, every tracked
+   * entry is disposed. With a list, only those tracked entries are
+   * disposed, so a partial failure or a cancellation between index
+   * batches can remove exactly the copies that were not yet indexed and
+   * leave the indexed ones intact. A replacement at a previously owned
+   * path (a different version) is never removed.
+   */
+  dispose(paths?: readonly string[]): Promise<{ removed: string[] }>;
 };
 
 export type V2OperationServices = {
@@ -391,6 +411,31 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
   };
 
   /**
+   * Authorize a gather destination grant and resolve the Library root
+   * that owns it. A destination outside every configured Library root is
+   * refused before anything is copied, so a gather can never write into a
+   * folder the Library does not own (#271).
+   */
+  const authorizeGatherDestination = async (grantId: string) => {
+    const authorized = grants.authorize(grantId, extensionId, args.now);
+    if (!authorized.ok) {
+      throw new V2OperationError("permission-denied", authorized.message);
+    }
+    const ownership = await resolveV2LibraryLocation(
+      authorized.grant.rootPath,
+      await files.libraryRoots(),
+      files.pathIo(),
+    );
+    if (!ownership.ok) {
+      throw new V2OperationError(
+        "permission-denied",
+        `Destination folder is not an authorized Library root: ${ownership.message}`,
+      );
+    }
+    return { grant: authorized.grant, ownership };
+  };
+
+  /**
    * Create one output exclusively and record its version. A lost race or
    * a pre-existing file is the documented conflict outcome; the entry is
    * never truncated and never tracked, so nothing is cleaned up that this
@@ -493,7 +538,7 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
         sourcePath: string,
         outputName: string,
         destGrantId: string,
-      ): Promise<{ path: string }> {
+      ): Promise<{ path: string; libraryRoot: string; directory: string | null }> {
         require("files:copy");
         jobs.throwIfCancelled();
         checkOutputName(outputName);
@@ -523,8 +568,29 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
             `Source ${JSON.stringify(sourcePath)} is not readable: ${source.message}`,
           );
         }
+        // The destination must be an owned Library root, so the copied file
+        // can be indexed with valid root and directory ownership (#271).
+        const { ownership } = await authorizeGatherDestination(destGrantId);
         const dest = await authorizedOutput(destGrantId, outputName);
-        return { path: await createOwned(outputName, dest, () => files.copyFile(source.canonicalPath, dest)) };
+        const created = await createOwned(outputName, dest, () =>
+          files.copyFile(source.canonicalPath, dest),
+        );
+        return {
+          path: created,
+          libraryRoot: ownership.libraryRoot,
+          directory: ownership.directory,
+        };
+      },
+      async resolveLibraryDestination(
+        grantId: string,
+      ): Promise<{ rootPath: string; libraryRoot: string; directory: string | null }> {
+        require("files:copy");
+        const { ownership } = await authorizeGatherDestination(grantId);
+        return {
+          rootPath: ownership.canonicalPath,
+          libraryRoot: ownership.libraryRoot,
+          directory: ownership.directory,
+        };
       },
     },
     archive: {
@@ -686,9 +752,16 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
       ownedPaths(): string[] {
         return [...owned.keys()];
       },
-      async dispose(): Promise<{ removed: string[] }> {
+      async dispose(paths?: readonly string[]): Promise<{ removed: string[] }> {
+        const targets = paths === undefined ? [...owned.keys()] : [...new Set(paths)];
         const removed: string[] = [];
-        for (const [path, version] of owned) {
+        for (const path of targets) {
+          const version = owned.get(path);
+          if (!version) continue;
+          // Stop tracking regardless of the outcome: the entry leaves this
+          // job's ownership, and a replacement at the same path is a
+          // different version that must survive.
+          owned.delete(path);
           try {
             // Version-checked: a replacement at this path is not ours.
             if ((await files.deleteFileIfVersion(path, version)).removed) removed.push(path);
@@ -696,7 +769,6 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
             continue;
           }
         }
-        owned.clear();
         return { removed };
       },
     },
@@ -723,6 +795,7 @@ export function denyAllV2Operations(extensionId: string): V2OperationServices {
       copyToOutput: () => denyAsync(),
       createOutputText: () => denyAsync(),
       copyFromSource: () => denyAsync(),
+      resolveLibraryDestination: () => denyAsync(),
     },
     archive: {
       createZip: () => denyAsync(),

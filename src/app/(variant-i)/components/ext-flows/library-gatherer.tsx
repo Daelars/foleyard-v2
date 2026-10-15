@@ -99,7 +99,10 @@ export function V3LibraryGathererDialog({
         )}
       </SettingRow>
 
-      <SettingRow title="Main library destination">
+      <SettingRow
+        title="Main library destination"
+        description="Choose a folder inside your Library; gathered files are indexed there."
+      >
         <div className="flex items-center gap-2">
           <p className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-400">
             {gather.destPath || "No destination chosen"}
@@ -159,7 +162,12 @@ export function V3LibraryGathererDialog({
         <SettingRow title="Gather complete">
           <p className="text-[13px] text-zinc-300">
             {gather.result.copied.toLocaleString()} files copied,{" "}
-            {gather.result.skipped.toLocaleString()} skipped.
+            {gather.result.skipped.toLocaleString()} skipped
+            {gather.result.missing > 0 ? `, ${gather.result.missing.toLocaleString()} missing` : ""}
+            {gather.result.failedSources.length > 0
+              ? `, ${gather.result.failedSources.length.toLocaleString()} failed`
+              : ""}
+            .
           </p>
           <p className="mt-1 font-mono text-[10px] text-zinc-600">
             {gather.result.inserted} new library records.

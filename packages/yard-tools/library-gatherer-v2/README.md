@@ -22,7 +22,8 @@ into one main Foleyard library.
   dedupe (`name.ext`, `name 2.ext`, …), and the parallel-array result
   shape. No services, no filesystem, no v1 imports.
 - `src/handlers.ts` — `preview-gather` (bounded source walk, no side
-  effects) and `gather` (source-copy op + library-mutation insert, job
+  effects) and `gather` (owned-destination check, source-copy op +
+  library-mutation insert with resolved root/directory ownership, job
   with progress and cancellation). No v1 imports, no direct filesystem
   imports, no recursive copy.
 
@@ -32,17 +33,32 @@ into one main Foleyard library.
   (bounded, cancellable), filters audio files, and plans flat output
   names. No side effects, no destination needed.
 - **gather** — job (also runs in `direct` execute with progress/cancel
-  as no-ops). Copies each planned file into the destination grant
-  through the source-copy op (never overwrites: the destination is
-  created exclusively, so an existing name is skipped or fails with a
-  reason, per `skip-duplicates`) and inserts
-  index records via the library-mutation op. Cancellation disposes
-  job-owned copies by version identity and settles honestly.
+  as no-ops). The destination must be an owned Library root: a grant
+  whose folder is outside every configured Library root is refused
+  before anything is copied, and every copied file is indexed with the
+  Library root and directory the copy op resolved (`libraryRoot` plus
+  the destination's root-relative `directory`), so no record is ever
+  rootless (#271, #282). Copies never overwrite: an existing name is
+  skipped or fails with a reason, per `skip-duplicates`. A successful
+  run reports copied, skipped, missing (a source that vanished between
+  planning and copying), and failed-file outcomes.
 
 ## Policies
 
 - **Sources are readable grants.** External folders arrive as source
   grants (E1 #176); expired or foreign grants deny with a reason.
+- **Destinations are owned Library roots.** The destination grant's
+  folder must sit under a configured Library root; otherwise the gather
+  fails before copying. The copy op returns the owning root and the
+  folder's root-relative directory, and each index record carries them,
+  so a gathered file stays a valid input to browse, search, playback,
+  scan and Folder Janitor (#271, #282).
+- **Recoverable copy → index.** Cancellation is checked before the
+  copy-to-index transition and between index batches. A cancellation or
+  index failure disposes exactly the job-owned copies that were not yet
+  indexed (version-checked, #267): no orphan file survives and a retry
+  re-copies cleanly instead of treating copied files as unexplained
+  duplicates.
 - **Bounds.** Up to `MAX_SOURCE_LISTINGS` (5,000) directory listings per
   preview/gather walk and `MAX_GATHER_FILES` (500) files copied per
   gather; exceeding either sets `truncated` with a reason.
@@ -61,7 +77,8 @@ into one main Foleyard library.
 | v1 workflow | v2 behavior | Notes |
 | --- | --- | --- |
 | Preview gather | Same, via `preview-gather` | Bounded walk, audio filter, planned names; no side effects |
-| Gather into library | Same, via `gather` + destination grant | Source-copy op + library-mutation insert; job with progress + cancellation |
+| Gather into library | Same, via `gather` + destination grant | Owned-root destination + source-copy op + library-mutation insert; job with progress + cancellation |
+| Gathered file ownership | Owned Library root + directory | Records carry the resolved root/directory; a destination outside every root is refused before copying (#271, #282) |
 | Source folders | Readable source grants | v1 took raw paths; v2 requires authorized grants (expired/foreign deny) |
 | Preserve folder names | Same, own namespace | `library-gatherer-v2.preserve-folder-names`; flat prefix, not subfolders |
 | Skip duplicates | Same, own namespace | `library-gatherer-v2.skip-duplicates`; collisions skip or fail with reason, never overwrite |
@@ -69,7 +86,8 @@ into one main Foleyard library.
 | `gather.preview` / `gather.write` capabilities | Permission-only | Matches the make-pack-v2 precedent |
 
 Explicitly unsupported / deliberately changed: raw-path sources (grants
-required), recursive folder-structure output (flat destination with
+required), destinations outside a configured Library root (they are refused
+before copying), recursive folder-structure output (flat destination with
 name prefixes), overwriting existing destination files, and silent v1→v2
 settings migration.
 

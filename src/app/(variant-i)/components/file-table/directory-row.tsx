@@ -12,6 +12,8 @@ import { getDirectorySubtitle } from "@/lib/directory-navigation";
 import { fileTableGridClass } from "@/components/FileTable/layout";
 import type { FileTableDirectory } from "@/components/FileTable/types";
 
+import { isContextMenuKey, rowMenuTargetFromEvent, type RowMenuTarget } from "../context-menu";
+
 export const V3DirectoryRow = memo(function V3DirectoryRow({
   dir,
   start,
@@ -27,7 +29,7 @@ export const V3DirectoryRow = memo(function V3DirectoryRow({
   folderJanitorEnabled?: boolean;
   onScanFolder?: (folderPath: string) => void;
   desktop?: boolean;
-  onContextMenu: (event: React.MouseEvent, dir: FileTableDirectory) => void;
+  onContextMenu: (target: RowMenuTarget, dir: FileTableDirectory) => void;
 }) {
   return (
     <div
@@ -40,8 +42,16 @@ export const V3DirectoryRow = memo(function V3DirectoryRow({
         transform: `translateY(${start}px)`,
       }}
       onClick={() => onNavigate(dir)}
-      onContextMenu={(event) => onContextMenu(event, dir)}
+      onContextMenu={(event) => onContextMenu(rowMenuTargetFromEvent(event), dir)}
       onKeyDown={(event) => {
+        if (isContextMenuKey(event)) {
+          event.preventDefault();
+          onContextMenu(
+            { x: 0, y: 0, anchor: event.currentTarget, keyboard: true },
+            dir,
+          );
+          return;
+        }
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onNavigate(dir);

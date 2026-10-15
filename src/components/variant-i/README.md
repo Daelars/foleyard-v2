@@ -14,6 +14,8 @@ src/components/variant-i/
     provider.tsx    VariantIProvider host (scope marker + keyframes)
     button.tsx      Button, IconButton, PlayButton
     field.tsx       Field, Kbd, Select (floating viewport-fixed popup)
+    menu-keyboard.ts  shared popup contract: focus-in, roving arrows, Home/End,
+                    typeahead, disabled skipping, Escape/Tab close + focus return
     controls.tsx    Switch, Checkbox, Radio
     feedback.tsx    StatusBadge, TagChip, AIScore, Alert, Progress, Toast, DotMatrixStatus
     containers.tsx  Surface, Card, Tabs, TabPanel, Rail, Accordion
@@ -74,5 +76,12 @@ attribute is removed and the original presentation resumes.
   `prefers-reduced-motion`.
 - Dynamic values (progress, waveforms, measured positions, tag colors)
   arrive as props; the library never fabricates data.
+- Popups own their keyboard contract. `Select` opens its listbox on the
+  trigger, moves focus into it, names the active option through
+  `aria-activedescendant`, and returns focus to the trigger on close. Menus
+  attach `useMenuKeyboard` to the element carrying `role="menu"`: it focuses
+  the first enabled `menuitem`, roves with the arrow keys (wrapping, skipping
+  disabled items), honours Home/End and typeahead, and closes on Escape (with
+  focus back on the trigger) or Tab.
 - The library does not import from `src/app/prototype/**` or route-local
   state; specimen fixtures live in the specimen route.

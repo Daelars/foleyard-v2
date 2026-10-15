@@ -17,6 +17,7 @@ import {
   Scrubber,
   Slider,
   TransportPanel,
+  useMenuKeyboard,
 } from "@/components/variant-i";
 import { useAudioPlayback } from "@/components/AudioPlayer/use-audio-playback";
 import type {
@@ -154,6 +155,14 @@ const V3AudioPlayerContent = forwardRef<
   const [collPos, setCollPos] = useState<{ top: number; left: number } | null>(null);
   const collTriggerRef = useRef<HTMLButtonElement>(null);
   const collMenuRef = useRef<HTMLDivElement>(null);
+  const closeCollMenu = useCallback(() => setCollOpen(false), []);
+  // The popup owns its keyboard contract: focus in on open, roving arrows,
+  // Escape back to the trigger (see useMenuKeyboard).
+  const collMenuKeyboardRef = useMenuKeyboard({
+    menuRef: collMenuRef,
+    onClose: closeCollMenu,
+    returnFocusRef: collTriggerRef,
+  });
 
   const measureCollMenu = useCallback(() => {
     const trigger = collTriggerRef.current;
@@ -171,20 +180,12 @@ const V3AudioPlayerContent = forwardRef<
         setCollOpen(false);
       }
     };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setCollOpen(false);
-        collTriggerRef.current?.focus();
-      }
-    };
     const onReposition = () => measureCollMenu();
     document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
     window.addEventListener("scroll", onReposition, true);
     window.addEventListener("resize", onReposition);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("scroll", onReposition, true);
       window.removeEventListener("resize", onReposition);
     };
@@ -340,7 +341,7 @@ const V3AudioPlayerContent = forwardRef<
 
       {collOpen && collPos ? (
         <div
-          ref={collMenuRef}
+          ref={collMenuKeyboardRef}
           role="menu"
           aria-label="Collections"
           style={{ top: collPos.top, left: collPos.left }}

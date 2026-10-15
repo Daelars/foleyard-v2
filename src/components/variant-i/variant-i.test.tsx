@@ -97,6 +97,31 @@ describe("Switch / Checkbox / Radio", () => {
 });
 
 describe("Select", () => {
+  const TAG_FILTERS = [
+    { value: "all", label: "All tags" },
+    { value: "weather", label: "Weather" },
+    { value: "ambient", label: "Ambient" },
+  ];
+
+  function renderSelect(onChange = vi.fn()) {
+    render(
+      <Select
+        label="Tag filter"
+        value="all"
+        onChange={onChange}
+        options={TAG_FILTERS}
+      />,
+    );
+    return {
+      onChange,
+      trigger: screen.getByRole("button", { name: "Tag filter" }),
+    };
+  }
+
+  function activeOptionId() {
+    return screen.getByRole("listbox").getAttribute("aria-activedescendant");
+  }
+
   it("opens a popup, picks with Enter, and focuses the trigger", () => {
     const onChange = vi.fn();
     render(
@@ -131,6 +156,87 @@ describe("Select", () => {
     expect(screen.getByRole("listbox")).toBeTruthy();
     fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
     expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("takes keyboard focus into the listbox on the trigger and reports the active option", () => {
+    const { trigger } = renderSelect();
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+    const listbox = screen.getByRole("listbox");
+    const options = screen.getAllByRole("option");
+    expect(document.activeElement).toBe(listbox);
+    // The active option is the selected one; the listbox names it so screen
+    // readers follow the roving highlight.
+    expect(listbox.getAttribute("aria-activedescendant")).toBe(options[0]?.id);
+    expect(options.every((option) => option.tabIndex === -1)).toBe(true);
+  });
+
+  it("opens on the last option with ArrowUp", () => {
+    const { trigger } = renderSelect();
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowUp" });
+    const options = screen.getAllByRole("option");
+    expect(activeOptionId()).toBe(options[2]?.id);
+  });
+
+  it("wraps the highlight with the arrow keys and honours Home and End", () => {
+    const { onChange, trigger } = renderSelect();
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const listbox = screen.getByRole("listbox");
+    const options = screen.getAllByRole("option");
+
+    fireEvent.keyDown(listbox, { key: "ArrowUp" });
+    expect(activeOptionId()).toBe(options[2]?.id);
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    expect(activeOptionId()).toBe(options[0]?.id);
+
+    fireEvent.keyDown(listbox, { key: "End" });
+    expect(activeOptionId()).toBe(options[2]?.id);
+    fireEvent.keyDown(listbox, { key: "Home" });
+    expect(activeOptionId()).toBe(options[0]?.id);
+
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    fireEvent.keyDown(listbox, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledWith("weather");
+  });
+
+  it("returns focus to the trigger when the listbox closes", () => {
+    const { trigger } = renderSelect();
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+
+    fireEvent.click(trigger);
+    fireEvent.keyDown(screen.getByRole("listbox"), { key: "Tab" });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("moves the highlight by typeahead and keeps the buffer sticky", () => {
+    const { onChange, trigger } = renderSelect();
+    fireEvent.click(trigger);
+    const listbox = screen.getByRole("listbox");
+    const options = screen.getAllByRole("option");
+
+    // "a" alone would reach "Weather"; "aw" does not, so the highlight stays
+    // on Ambient only while the letters accumulate.
+    fireEvent.keyDown(listbox, { key: "a" });
+    expect(activeOptionId()).toBe(options[2]?.id);
+    fireEvent.keyDown(listbox, { key: "w" });
+    expect(activeOptionId()).toBe(options[2]?.id);
+
+    fireEvent.keyDown(listbox, { key: "Escape" });
+    fireEvent.click(trigger);
+    fireEvent.keyDown(screen.getByRole("listbox"), { key: "w" });
+    expect(activeOptionId()).toBe(options[1]?.id);
+    fireEvent.keyDown(screen.getByRole("listbox"), { key: "Enter" });
+    expect(onChange).toHaveBeenCalledWith("weather");
   });
 });
 

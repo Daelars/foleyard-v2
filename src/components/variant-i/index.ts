@@ -17,6 +17,13 @@ export {
 } from "./components/button";
 export type { ButtonProps, ButtonTone, ButtonSize } from "./components/button";
 export { Field, Kbd, Select, PageButton } from "./components/field";
+export {
+  createTypeahead,
+  enabledMenuItems,
+  typeaheadMatch,
+  useMenuKeyboard,
+  TYPEAHEAD_RESET_MS,
+} from "./components/menu-keyboard";
 export { Switch, Checkbox, Radio } from "./components/controls";
 export {
   StatusBadge,

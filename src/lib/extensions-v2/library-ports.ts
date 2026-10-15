@@ -1,8 +1,8 @@
 import {
   collectionExists,
-  getFileById,
+  getOwnedFileById,
   getFiles,
-  getFilesByIds,
+  getOwnedFilesByIds,
 } from "@/lib/db";
 import { decodeFileCursor, encodeFileCursor } from "@/lib/database/file-cursor";
 import type { IndexedAudioFile, V2LibraryPorts, V2LibraryReadPorts } from "@yard-core";
@@ -31,8 +31,8 @@ function toIndexed(file: {
 /** Paged Library reads over the application repositories. */
 export function createV2LibraryPorts(): V2LibraryPorts & V2LibraryReadPorts {
   return {
-    getFileById: (id) => getFileById(id),
-    getFilesByIds: (ids) => getFilesByIds(ids),
+    getFileById: (id) => getOwnedFileById(id),
+    getFilesByIds: (ids) => getOwnedFilesByIds(ids),
     listPage: (cursor, limit) => {
       // Opaque keyset cursors (#256): the decoded ordering drives the query,
       // and one probe row makes `nextCursor` exact at page boundaries.

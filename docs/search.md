@@ -25,6 +25,9 @@ vector search in this path.
 - The search endpoint doubles as the browse endpoint: favorites,
   Collection, tag, directory, and library-root filters compose with the
   query rather than living on a separate route.
+- Every read shares one ownership predicate: files whose root is detached
+  (#271) are excluded from search, browse, counts, favorites, Collection and
+  tag reads until the root is re-added (`docs/adr/library-root-detachment.md`).
 - Collection terminology throughout; smart Collections reuse the same
   substring predicate client-side (see `docs/collections.md`).
 
@@ -37,7 +40,9 @@ default `DEFAULT_PAGE_SIZE`), `offset` (default 0) and the opaque `cursor`
 (see cursor pagination below); see `src/lib/api/pagination.ts` and
 `src/app/api/files/route.ts`.
 Reads build Drizzle filters in `src/lib/database/files/reads.ts`:
-`removedAt IS NULL` unless `showRemoved`, favorite equality, library-root
+`removedAt IS NULL` unless `showRemoved`, plus `detached_at IS NULL`
+unconditionally (a detached root's files are never browsable, #271),
+favorite equality, library-root
 equality (+ `directory IS NULL` when `atLibraryRoot`), tag membership via
 `fileTags` subselect, directory normalization via
 `normalizeDirectoryPath` (`yard-core` filter-service), and

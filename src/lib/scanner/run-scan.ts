@@ -15,6 +15,7 @@ import {
   getLibraryRoots,
   getLibraryStats,
   reconcileMovedFiles,
+  recoverPendingRootChanges,
   analyzeStatistics,
   setLibraryRoots,
   toggleFavorite,
@@ -59,6 +60,9 @@ function getRunner(): ScanRunner {
       metadataExtractor: {
         extract: extractMetadata,
       },
+      // Root removals interrupted before the index caught up are reconciled
+      // before the scan reads the index (#271).
+      recoverRootChanges: recoverPendingRootChanges,
       // Post-scan auto-tag (#194, #234): fire and forget with the files
       // the scan actually added or updated. The runner fires onComplete
       // even for failed runs because arrivals that landed are real; a

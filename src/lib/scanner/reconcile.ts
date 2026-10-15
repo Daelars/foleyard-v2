@@ -49,6 +49,7 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
         existing.fileSize !== stats.size ||
         existing.mtimeMs !== mtimeMs ||
         existing.removedAt !== null ||
+        (existing.detachedAt ?? null) !== null ||
         normalizeStoredDirectory(existing.directory) !== normalizeStoredDirectory(directory);
       const ownershipChanged = existing?.libraryRoot !== normalizedRoot;
 

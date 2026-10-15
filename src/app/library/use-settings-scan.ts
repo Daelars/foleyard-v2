@@ -172,6 +172,40 @@ export function useSettingsScan(callbacks: SettingsScanCallbacks) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleForgetRoot = useCallback(async (path: string) => {
+    const previous = settings;
+    const nextRoots = previous.libraryRoots.filter((root) => root !== path);
+    setSettings({
+      ...previous,
+      libraryRoot: nextRoots[0] ?? null,
+      libraryRoots: nextRoots,
+    });
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "forget", path }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to remove library folder");
+      }
+      setSettings((current) => ({
+        libraryRoot: data.libraryRoot,
+        libraryRoots: data.libraryRoots ?? (data.libraryRoot ? [data.libraryRoot] : []),
+        onboardingVersion: data.onboardingVersion ?? current.onboardingVersion,
+        stats: data.stats,
+      }));
+      callbacksRef.current.onScanSettled();
+    } catch (error) {
+      setSettings(previous);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to remove library folder",
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const settingsRef = useRef(settings);
   useEffect(() => {
     settingsRef.current = settings;
@@ -259,6 +293,7 @@ export function useSettingsScan(callbacks: SettingsScanCallbacks) {
     saveLibraryRoot,
     handleSaveRoot,
     handleRemoveRoot,
+    handleForgetRoot,
     handleCompleteOnboarding,
     startLibraryScan,
     handleStartScan,

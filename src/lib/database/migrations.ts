@@ -68,7 +68,7 @@ function backfillLibraryRoots(sqlite: Database.Database) {
   apply();
 }
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 export type DatabaseVersionInfo = {
   state: "ready" | "not-initialized" | "unavailable";
@@ -191,10 +191,20 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
       FOREIGN KEY (file_id) REFERENCES files(id),
       FOREIGN KEY (collection_id) REFERENCES collections(id)
     );
+
+    -- Durable intent for a Library root removal (#271): committed before the
+    -- settings and index change, cleared once both agree, reconciled on the
+    -- next scan after a crash.
+    CREATE TABLE IF NOT EXISTS pending_root_changes (
+      root TEXT PRIMARY KEY,
+      mode TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   ensureColumn(sqlite, "files", "mtime_ms", "mtime_ms INTEGER");
   ensureColumn(sqlite, "files", "removed_at", "removed_at TEXT");
+  ensureColumn(sqlite, "files", "detached_at", "detached_at TEXT");
   ensureColumn(sqlite, "files", "last_scanned_at", "last_scanned_at TEXT");
   ensureColumn(sqlite, "files", "directory", "directory TEXT");
   ensureColumn(sqlite, "files", "library_root", "library_root TEXT");
@@ -217,6 +227,10 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
   // Library-root plus directory lookups and the distinct-directory scan (#255).
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_active_root_directory ON files(library_root, directory) WHERE removed_at IS NULL`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_removed_at ON files(removed_at)`);
+  // Root detachment (#271): the ownership predicate filters detached_at, and
+  // root removal/reattach updates rows by (library_root, detached_at).
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_detached_at ON files(detached_at)`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_root_detached ON files(library_root, detached_at)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_is_favorite ON files(is_favorite)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_directory ON files(directory)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_files_library_root ON files(library_root)`);

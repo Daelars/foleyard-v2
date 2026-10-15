@@ -98,6 +98,7 @@ the absolute path under the docs root, and reads it as UTF-8.
 | yard-core architecture | `architecture/yard-core` | current |
 | Extension architecture | `architecture/extensions` | current |
 | Filesystem access ADR | `adr/filesystem-access` | current |
+| Library root detachment ADR | `adr/library-root-detachment` | current |
 | New surface promotion ADR | `adr/new-surface-promotion` | current |
 | Product overview | `readme` | current |
 

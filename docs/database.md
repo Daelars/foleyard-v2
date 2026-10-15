@@ -11,7 +11,7 @@ A single SQLite file (better-sqlite3 + Drizzle) stores the library index,
 organization data, and settings. Schema is created and evolved by hand-rolled
 SQL in `src/lib/database/migrations.ts`; there is no drizzle-kit workflow
 (the config would point at a nonexistent `./foleyard.db`, so it stays
-unwired by design). `CURRENT_SCHEMA_VERSION = 2` with a `schema_migrations`
+unwired by design). `CURRENT_SCHEMA_VERSION = 3` with a `schema_migrations`
 ledger records what was applied.
 
 There is no remote database, no public data SDK, and no external provider.
@@ -33,7 +33,8 @@ Tables in `src/lib/schema.ts` (mirrored by DDL in `migrations.ts`):
 | Table | Purpose |
 | --- | --- |
 | `settings` | key/value store (library roots, onboarding, extension flags/values) |
-| `files` | indexed audio files + scan metadata, favorites, `removed_at` |
+| `files` | indexed audio files + scan metadata, favorites, `removed_at`, root-detachment `detached_at` |
+| `pending_root_changes` | durable intent for an interrupted Library root removal (`root`, `mode` = `detach`/`forget`, `created_at`) (#271) |
 | `tags` / `file_tags` | tags and file membership; each attachment carries `origin` (`manual`/`deterministic`/`semantic_ai`, default `manual`), nullable `confidence`, and `created_at` |
 | `tag_aliases` | retired tag names resolving to their surviving tag |
 | `file_embeddings` | per-file model vectors (`file_id`, `model`, `dim`, `vec` blob) for similarity search |
@@ -54,10 +55,15 @@ desktop initialization, and runs `initializeDatabaseSchema`. Both proxies
 share one connection whose `prepare` memoizes statements by SQL text, so
 Drizzle queries and raw repository statements recompile only for SQL they
 have not run before. Migration applies `CREATE TABLE IF NOT EXISTS`
-plus `ensureColumn` backfills (`mtime_ms`, `removed_at`, `last_scanned_at`,
-`directory`, `library_root`, `codec`, `is_smart`, `filter`, `color`), creates
-indexes, backfills `library_root` ownership from configured roots, then
-records version 1 in `schema_migrations`.
+plus `ensureColumn` backfills (`mtime_ms`, `removed_at`, `detached_at`,
+`last_scanned_at`, `directory`, `library_root`, `codec`, `is_smart`, `filter`,
+`color`), creates indexes, backfills `library_root` ownership from configured
+roots, then records version 1 in `schema_migrations`.
+
+Root-detachment rows (`pending_root_changes`) follow the journal-then-act shape
+of permanent deletion (#269): the intent is committed before the settings and
+index change and cleared once both agree; `SqliteLibraryRootService.recover()`
+finishes interrupted removals on the next scan (see `docs/library.md`).
 
 Baseline behavior: pre-ledger databases are upgraded in place and baselined
 to `CURRENT_SCHEMA_VERSION` without data loss; version recording is wrapped
@@ -81,7 +87,7 @@ Database paths (`src/lib/database-path.ts`):
 
 ## Contracts
 
-- Internal: `CURRENT_SCHEMA_VERSION = 2`; `schema_migrations(version,
+- Internal: `CURRENT_SCHEMA_VERSION = 3`; `schema_migrations(version,
   applied_at)` ledger; `DatabaseVersionInfo { state, migration,
   appliedVersion? }`.
 - `getDatabaseVersionInfo(sqlite?)` is a read-only probe: with no handle it

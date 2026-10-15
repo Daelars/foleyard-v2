@@ -1152,6 +1152,7 @@ function AppV3Content() {
         settings={settingsScan.settings}
         onSaveRoot={settingsScan.handleSaveRoot}
         onRemoveRoot={settingsScan.handleRemoveRoot}
+        onForgetRoot={settingsScan.handleForgetRoot}
         scanStatus={settingsScan.scanStatus}
         onStartScan={settingsScan.handleStartScan}
         collections={org.collections}

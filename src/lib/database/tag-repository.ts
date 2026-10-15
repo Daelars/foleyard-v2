@@ -6,6 +6,7 @@ import type { TagRepository } from "@yard-core";
 import type { FileTagAttachment, Tag, TagOrigin } from "@yard-core";
 
 import { sqlite as defaultSqlite } from "./connection";
+import { ownedFileFilter, ownedFileWhere } from "./file-ownership";
 import { chunkArray, SQLITE_MAX_VARIABLES } from "./sql-parameters";
 import * as schema from "@/lib/schema";
 
@@ -29,7 +30,8 @@ export class SqliteTagRepository implements TagRepository {
       .select({ tag: schema.tags })
       .from(schema.fileTags)
       .innerJoin(schema.tags, eq(schema.fileTags.tagId, schema.tags.id))
-      .where(eq(schema.fileTags.fileId, fileId))
+      .innerJoin(schema.files, eq(schema.fileTags.fileId, schema.files.id))
+      .where(and(eq(schema.fileTags.fileId, fileId), ownedFileFilter()))
       .orderBy(asc(schema.tags.name))
       .all();
 
@@ -231,24 +233,24 @@ export class SqliteTagRepository implements TagRepository {
   } {
     const total = (
       this.sqlite
-        .prepare("SELECT COUNT(*) AS n FROM files WHERE removed_at IS NULL")
+        .prepare(`SELECT COUNT(*) AS n FROM files WHERE ${ownedFileWhere("files")}`)
         .get() as { n: number }
     ).n;
     const tagged = (
       this.sqlite
         .prepare(
-          "SELECT COUNT(DISTINCT ft.file_id) AS n FROM file_tags ft JOIN files f ON f.id = ft.file_id WHERE f.removed_at IS NULL",
+          `SELECT COUNT(DISTINCT ft.file_id) AS n FROM file_tags ft JOIN files f ON f.id = ft.file_id WHERE ${ownedFileWhere("f")}`,
         )
         .get() as { n: number }
     ).n;
     const tagRows = this.sqlite
       .prepare(
-        "SELECT t.name AS name, COUNT(*) AS n FROM file_tags ft JOIN tags t ON t.id = ft.tag_id JOIN files f ON f.id = ft.file_id WHERE f.removed_at IS NULL GROUP BY t.id",
+        `SELECT t.name AS name, COUNT(*) AS n FROM file_tags ft JOIN tags t ON t.id = ft.tag_id JOIN files f ON f.id = ft.file_id WHERE ${ownedFileWhere("f")} GROUP BY t.id`,
       )
       .all() as Array<{ name: string; n: number }>;
     const originRows = this.sqlite
       .prepare(
-        "SELECT ft.origin AS origin, COUNT(DISTINCT ft.file_id) AS n FROM file_tags ft JOIN files f ON f.id = ft.file_id WHERE f.removed_at IS NULL GROUP BY ft.origin",
+        `SELECT ft.origin AS origin, COUNT(DISTINCT ft.file_id) AS n FROM file_tags ft JOIN files f ON f.id = ft.file_id WHERE ${ownedFileWhere("f")} GROUP BY ft.origin`,
       )
       .all() as Array<{ origin: string; n: number }>;
     const tags: Record<string, number> = {};
@@ -278,7 +280,7 @@ export class SqliteTagRepository implements TagRepository {
     }>;
     matched: number;
   } {
-    const conditions = ["f.removed_at IS NULL"];
+    const conditions = [ownedFileWhere("f")];
     const params: unknown[] = [];
     let joins = "";
     let groupBy = "";

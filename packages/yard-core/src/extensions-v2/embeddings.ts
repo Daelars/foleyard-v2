@@ -1,5 +1,6 @@
 import type { V2LibraryReadPorts } from "./operations";
 import { V2OperationError } from "./operations";
+import { isOwnedAudioFile } from "../domain/audio-file";
 
 /**
  * Embedding vectors and similarity search for v2 handlers (#192).
@@ -205,6 +206,6 @@ export function denyV2EmbeddingOperations(extensionId: string): V2EmbeddingOpera
 export function liveFileViaLibrary(library: V2LibraryReadPorts): (fileId: string) => boolean {
   return (fileId) => {
     const record = library.getFileById(fileId);
-    return record !== null && record.removedAt === null;
+    return record !== null && isOwnedAudioFile(record);
   };
 }

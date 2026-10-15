@@ -36,6 +36,25 @@ permanent delete unlinks the file (see `docs/filesystem.md`) and marks it
 removed. The `use-library-files.ts` hook loads and coordinates the file
 list on the client.
 
+### Root detachment (#271)
+
+Removing a Library root is soft by default. The root's indexed Audio files
+are marked detached (`files.detached_at`) and every Library read — search,
+browse, directory listing, counts, favourites, Collection and tag reads,
+playback and waveform — treats them as not owned through one shared
+predicate (`ownedFileWhere` in `src/lib/database/file-ownership.ts`;
+`isOwnedAudioFile` in yard-core). The rows are **not** deleted: tags,
+favourites, Collection membership and embeddings survive.
+
+Re-adding the same root reattaches those records by path and identity with
+their organization data; nothing else clears detachment. Root removal is one
+recoverable operation: a durable intent (`pending_root_changes`) is committed
+before a single transaction drops the root from settings and marks its files,
+then the intent is cleared; an interrupted removal is reconciled on the next
+scan. An explicit `forget` action (`POST /api/settings { action: "forget" }`)
+removes the root **and** deletes its files and organization data. The full
+decision is `docs/adr/library-root-detachment.md`.
+
 ## Contracts
 
 - `AudioFileRepository` / `SettingsRepository` interfaces in
@@ -43,6 +62,11 @@ list on the client.
   repositories wired in `src/lib/db.ts`.
 - `ScanFileRecord` / `PathValidation` shapes in
   `packages/yard-core/src/services/library/scan-types.ts`.
+- Ownership: `AudioFile.detachedAt` (null when owned) and
+  `isOwnedAudioFile` in `packages/yard-core/src/domain/audio-file.ts`;
+  `ownedFileWhere` / `notDetachedWhere` in
+  `src/lib/database/file-ownership.ts`; root changes in
+  `src/lib/database/root-detachment.ts`.
 
 ## Failure behavior and limitations
 
@@ -53,6 +77,9 @@ list on the client.
 - Collection-branch counts disagree with the main list (finding B03,
   expected-to-fail); root ownership is order-dependent across multiple
   roots (finding I03, expected-to-fail).
+- Detached records stay invisible until their root is re-added; a detached
+  root nested inside an owned root is rediscovered by that owned root's scan
+  (#309, overlapping roots).
 
 ## Source map (real file paths)
 
@@ -60,6 +87,8 @@ list on the client.
 - `packages/yard-core/src/services/library/scan-types.ts` — scan/file record shapes,
   `SUPPORTED_AUDIO_EXTENSIONS`
 - `src/lib/database/file-repository.ts` — file repository facade
+- `src/lib/database/file-ownership.ts` — the shared ownership predicate
+- `src/lib/database/root-detachment.ts` — detach/forget/reattach + recovery journal
 - `src/lib/database/files/reads.ts` — Drizzle browse/search reads
 - `src/lib/database/files/writes.ts` — index writes
 - `src/lib/database/files/batch.ts`, `src/lib/database/files/context.ts` — batching/context
@@ -83,3 +112,4 @@ covers extension authoring instead.
 - `docs/search.md` — query, pagination, sort, LIKE escaping
 - `docs/filesystem.md` — grants, readable/writable resolution, permanent delete
 - `docs/collections.md` — Collections, tags, favorites
+- `docs/adr/library-root-detachment.md` — the root removal decision

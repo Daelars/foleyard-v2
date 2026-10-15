@@ -12,6 +12,9 @@ import {
   applyBulkFavorite,
   applyBulkTag,
   describeFilesQuery,
+  idleFilesPaging,
+  InFlightRequests,
+  nextPageRequest,
   pageLimit,
   rollbackBulkFavorite,
   rollbackBulkTags,
@@ -57,6 +60,9 @@ interface FilesPage {
   nextCursor?: string | null;
 }
 
+/** Outcome of a removal request; null when the request failed. */
+type FilesRemoval = { removedIds: Set<string>; failed: Array<{ id: string }> } | null;
+
 /** Stable empty list so stale gating does not churn consumer identities. */
 const NO_FILES: FileRecord[] = [];
 
@@ -86,10 +92,28 @@ export function useLibraryFiles(input: LibraryFilesInput) {
   });
 
   const filesRequestIdRef = useRef(0);
-  const filesQueryRef = useRef<string | null>(null);
-  const filesNextCursorRef = useRef<string | null>(null);
-  const isLoadingMoreFilesRef = useRef(false);
+  /**
+   * Paging state for the active request generation (#278). Cursor, more-rows
+   * flag and page lock live together so they always describe one query.
+   */
+  const filesPagingRef = useRef(idleFilesPaging(0));
   const directoriesRequestIdRef = useRef(0);
+  /** Coalesces duplicate mutation requests per request generation (#278). */
+  const mutationRequestsRef = useRef(new InFlightRequests<boolean>());
+  /** Coalesces duplicate removal requests per request generation (#278). */
+  const removalRequestsRef = useRef(new InFlightRequests<FilesRemoval>());
+
+  /**
+   * Runs one mutation request per (generation, signature). A duplicate in the
+   * same generation joins the in-flight request instead of submitting again,
+   * and a request from a superseded generation can never release the newer
+   * one's lock (#278).
+   */
+  const mutateOnce = useCallback(
+    (signature: string, start: () => Promise<boolean>) =>
+      mutationRequestsRef.current.run(filesRequestIdRef.current, signature, start),
+    [],
+  );
 
   // Callbacks are mirrored so loader identities stay stable across renders.
   const callbacksRef = useRef<LibraryFilesCallbacks>({
@@ -164,9 +188,10 @@ export function useLibraryFiles(input: LibraryFilesInput) {
   const loadFiles = useCallback(async () => {
     const requestId = filesRequestIdRef.current + 1;
     filesRequestIdRef.current = requestId;
-    filesQueryRef.current = null;
-    filesNextCursorRef.current = null;
-    isLoadingMoreFilesRef.current = false;
+    // A new generation owns fresh paging state: any page still in flight for
+    // the previous generation is superseded and can no longer hold or release
+    // a lock, continue a cursor, or append rows (#278).
+    filesPagingRef.current = idleFilesPaging(requestId);
     setHasMoreFiles(false);
     setFilesError(null);
 
@@ -246,13 +271,19 @@ export function useLibraryFiles(input: LibraryFilesInput) {
       if (filesRequestIdRef.current !== requestId) {
         return;
       }
-      filesQueryRef.current = described.query;
-      filesNextCursorRef.current =
-        typeof data.nextCursor === "string" ? data.nextCursor : null;
+      const hasMore = data.hasMore === true && pageFiles.length > 0;
+      filesPagingRef.current = {
+        generation: requestId,
+        query: described.query,
+        cursor: typeof data.nextCursor === "string" ? data.nextCursor : null,
+        hasMore,
+        inFlight: false,
+      };
       setFiles(pageFiles);
       setLoadedViewKey(currentViewKey);
-      setHasMoreFiles(data.hasMore === true && pageFiles.length > 0);
-      noteFavoritesTotal(data.favoritesTotal);    } catch {
+      setHasMoreFiles(hasMore);
+      noteFavoritesTotal(data.favoritesTotal);
+    } catch {
       if (filesRequestIdRef.current === requestId) {
         setFilesError("Failed to load library");
       }
@@ -275,22 +306,19 @@ export function useLibraryFiles(input: LibraryFilesInput) {
   ]);
 
   const loadMoreFiles = useCallback(async () => {
-    // Pagination reuses the stored list query (filters plus sort) and its
-    // opaque keyset cursor, so the next page continues the server's global
-    // order without a deep OFFSET (#256).
-    const query = filesQueryRef.current;
-    const cursor = filesNextCursorRef.current;
-    if (
-      query === null ||
-      cursor === null ||
-      !hasMoreFiles ||
-      isLoadingFiles ||
-      isLoadingMoreFilesRef.current
-    ) {
+    // Pagination reuses the generation's stored list query (filters plus sort)
+    // and its opaque keyset cursor, so the next page continues the server's
+    // global order without a deep OFFSET (#256). The generation check is what
+    // keeps a stale page from unlocking or appending to a newer query (#278).
+    const requestId = filesRequestIdRef.current;
+    const request = nextPageRequest(filesPagingRef.current, requestId);
+    if (request === null) {
       return;
     }
-    isLoadingMoreFilesRef.current = true;
-    const requestId = filesRequestIdRef.current;
+    // Claim the lock inside the generation that owns the cursor; releasing it
+    // is identity-checked in the `finally` below.
+    filesPagingRef.current = { ...filesPagingRef.current, inFlight: true };
+    const { query, cursor } = request;
     const params = new URLSearchParams(query);
     params.set("limit", String(pageLimit()));
     params.set("cursor", cursor);
@@ -304,18 +332,32 @@ export function useLibraryFiles(input: LibraryFilesInput) {
       if (filesRequestIdRef.current !== requestId) {
         return;
       }
-      filesNextCursorRef.current =
-        typeof data.nextCursor === "string" ? data.nextCursor : null;
+      const hasMore = data.hasMore === true && pageFiles.length > 0;
+      filesPagingRef.current = {
+        generation: requestId,
+        query,
+        cursor: typeof data.nextCursor === "string" ? data.nextCursor : null,
+        hasMore,
+        inFlight: false,
+      };
       setFiles((current) => [...current, ...pageFiles]);
-      setHasMoreFiles(data.hasMore === true && pageFiles.length > 0);
+      setHasMoreFiles(hasMore);
     } catch {
       if (filesRequestIdRef.current === requestId) {
+        filesPagingRef.current = { ...filesPagingRef.current, inFlight: false };
         toast.error("Failed to load more files");
       }
     } finally {
-      isLoadingMoreFilesRef.current = false;
+      // Release only the lock this request owns. A superseded page must never
+      // re-enable loading for the newer transition that replaced it (#278).
+      if (
+        filesPagingRef.current.generation === requestId &&
+        filesPagingRef.current.inFlight
+      ) {
+        filesPagingRef.current = { ...filesPagingRef.current, inFlight: false };
+      }
     }
-  }, [hasMoreFiles, isLoadingFiles]);
+  }, []);
 
   const loadDirectories = useCallback(async () => {
     const requestId = directoriesRequestIdRef.current + 1;
@@ -366,44 +408,47 @@ export function useLibraryFiles(input: LibraryFilesInput) {
       if (targets.size === 0) {
         return true;
       }
-      const snapshot = filesRef.current;
-      const previous = snapshotBulkFavorites(snapshot, batch.ids);
-      const selectedSnapshot = callbacksRef.current.getSelectedFile();
-      setFiles((prev) => applyBulkFavorite(prev, batch.ids, batch.isFavorite));
-      callbacksRef.current.syncSelectedFile((prev) =>
-        prev && targets.has(prev.id) ? { ...prev, isFavorite: batch.isFavorite } : prev,
-      );
-      try {
-        const response = await fetch("/api/files", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "setFavorites", ids: batch.ids, isFavorite: batch.isFavorite }),
-        });
-        if (!response.ok) {
-          const body = (await response.json().catch(() => null)) as {
-            error?: string;
-          } | null;
-          throw new Error(body?.error ?? "Failed to update favorite status");
+      const signature = `favorites:${batch.isFavorite}:${[...targets].sort().join(",")}`;
+      return mutateOnce(signature, async () => {
+        const snapshot = filesRef.current;
+        const previous = snapshotBulkFavorites(snapshot, batch.ids);
+        const selectedSnapshot = callbacksRef.current.getSelectedFile();
+        setFiles((prev) => applyBulkFavorite(prev, batch.ids, batch.isFavorite));
+        callbacksRef.current.syncSelectedFile((prev) =>
+          prev && targets.has(prev.id) ? { ...prev, isFavorite: batch.isFavorite } : prev,
+        );
+        try {
+          const response = await fetch("/api/files", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "setFavorites", ids: batch.ids, isFavorite: batch.isFavorite }),
+          });
+          if (!response.ok) {
+            const body = (await response.json().catch(() => null)) as {
+              error?: string;
+            } | null;
+            throw new Error(body?.error ?? "Failed to update favorite status");
+          }
+          const data = (await response.json()) as { favoritesTotal?: number };
+          noteFavoritesTotal(data.favoritesTotal);
+          return true;
+        } catch (error) {
+          setFiles((prev) => rollbackBulkFavorite(prev, previous));
+          if (selectedSnapshot && targets.has(selectedSnapshot.id)) {
+            callbacksRef.current.syncSelectedFile((prev) =>
+              prev && prev.id === selectedSnapshot.id
+                ? { ...prev, isFavorite: selectedSnapshot.isFavorite }
+                : prev,
+            );
+          }
+          if (!silent) {
+            toast.error(error instanceof Error ? error.message : "Failed to update favorite status");
+          }
+          return false;
         }
-        const data = (await response.json()) as { favoritesTotal?: number };
-        noteFavoritesTotal(data.favoritesTotal);
-        return true;
-      } catch (error) {
-        setFiles((prev) => rollbackBulkFavorite(prev, previous));
-        if (selectedSnapshot && targets.has(selectedSnapshot.id)) {
-          callbacksRef.current.syncSelectedFile((prev) =>
-            prev && prev.id === selectedSnapshot.id
-              ? { ...prev, isFavorite: selectedSnapshot.isFavorite }
-              : prev,
-          );
-        }
-        if (!silent) {
-          toast.error(error instanceof Error ? error.message : "Failed to update favorite status");
-        }
-        return false;
-      }
+      });
     },
-    [noteFavoritesTotal],
+    [mutateOnce, noteFavoritesTotal],
   );
 
   const toggleFavorite = useCallback(
@@ -427,66 +472,69 @@ export function useLibraryFiles(input: LibraryFilesInput) {
     if (targets.size === 0) {
       return true;
     }
-    const callbacks = callbacksRef.current;
-    const snapshot = filesRef.current;
-    const previous = snapshotBulkTags(snapshot, batch.fileIds);
-    const selectedSnapshot = callbacks.getSelectedFile();
-    const tags = callbacks.getTags();
-    setFiles((prev) => applyBulkTag(prev, batch.fileIds, batch.tagId, batch.attached, tags));
-    if (selectedSnapshot && targets.has(selectedSnapshot.id)) {
-      callbacks.syncSelectedFile((prev) => {
-        if (!prev || prev.id !== selectedSnapshot.id) {
-          return prev;
-        }
-        const hasTag = prev.tags.some((tag) => tag.id === batch.tagId);
-        if (batch.attached && !hasTag) {
-          const known = tags.find((tag) => tag.id === batch.tagId);
-          return {
-            ...prev,
-            tags: [...prev.tags, { ...(known ?? { id: batch.tagId, name: "" }), origin: "manual" as const }],
-          };
-        }
-        if (!batch.attached && hasTag) {
-          return { ...prev, tags: prev.tags.filter((tag) => tag.id !== batch.tagId) };
-        }
-        return prev;
-      });
-    }
-    try {
-      const response = await fetch("/api/files", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "setFileTag",
-          fileIds: batch.fileIds,
-          tagId: batch.tagId,
-          attached: batch.attached,
-        }),
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(body?.error ?? "Failed to update tag");
-      }
-      const data = (await response.json()) as { favoritesTotal?: number };
-      noteFavoritesTotal(data.favoritesTotal);
-      return true;
-    } catch (error) {
-      setFiles((prev) => rollbackBulkTags(prev, previous));
+    const signature = `tags:${batch.tagId}:${batch.attached}:${[...targets].sort().join(",")}`;
+    return mutateOnce(signature, async () => {
+      const callbacks = callbacksRef.current;
+      const snapshot = filesRef.current;
+      const previous = snapshotBulkTags(snapshot, batch.fileIds);
+      const selectedSnapshot = callbacks.getSelectedFile();
+      const tags = callbacks.getTags();
+      setFiles((prev) => applyBulkTag(prev, batch.fileIds, batch.tagId, batch.attached, tags));
       if (selectedSnapshot && targets.has(selectedSnapshot.id)) {
-        callbacks.syncSelectedFile((prev) =>
-          prev && prev.id === selectedSnapshot.id
-            ? { ...prev, tags: selectedSnapshot.tags }
-            : prev,
-        );
+        callbacks.syncSelectedFile((prev) => {
+          if (!prev || prev.id !== selectedSnapshot.id) {
+            return prev;
+          }
+          const hasTag = prev.tags.some((tag) => tag.id === batch.tagId);
+          if (batch.attached && !hasTag) {
+            const known = tags.find((tag) => tag.id === batch.tagId);
+            return {
+              ...prev,
+              tags: [...prev.tags, { ...(known ?? { id: batch.tagId, name: "" }), origin: "manual" as const }],
+            };
+          }
+          if (!batch.attached && hasTag) {
+            return { ...prev, tags: prev.tags.filter((tag) => tag.id !== batch.tagId) };
+          }
+          return prev;
+        });
       }
-      if (!silent) {
-        toast.error(error instanceof Error ? error.message : "Failed to update tag");
+      try {
+        const response = await fetch("/api/files", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "setFileTag",
+            fileIds: batch.fileIds,
+            tagId: batch.tagId,
+            attached: batch.attached,
+          }),
+        });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(body?.error ?? "Failed to update tag");
+        }
+        const data = (await response.json()) as { favoritesTotal?: number };
+        noteFavoritesTotal(data.favoritesTotal);
+        return true;
+      } catch (error) {
+        setFiles((prev) => rollbackBulkTags(prev, previous));
+        if (selectedSnapshot && targets.has(selectedSnapshot.id)) {
+          callbacks.syncSelectedFile((prev) =>
+            prev && prev.id === selectedSnapshot.id
+              ? { ...prev, tags: selectedSnapshot.tags }
+              : prev,
+          );
+        }
+        if (!silent) {
+          toast.error(error instanceof Error ? error.message : "Failed to update tag");
+        }
+        return false;
       }
-      return false;
-    }
-  }, [noteFavoritesTotal]);
+    });
+  }, [mutateOnce, noteFavoritesTotal]);
 
   const toggleFileTag = useCallback(
     async (fileId: string, tagId: string, silent = false) => {
@@ -526,36 +574,47 @@ export function useLibraryFiles(input: LibraryFilesInput) {
 
   const removeMany = useCallback(
     async (ids: string[], permanent: boolean, mode: "bulk" | "single") => {
-      const snapshot = filesRef.current;
       const targets = new Set(ids);
-      setFiles((prev) => prev.filter((file) => !targets.has(file.id)));
-      try {
-        const res = await fetch("/api/files", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileIds: ids, permanent }),
-        });
-        if (!res.ok) {
-          throw new Error();
-        }
-        const data = (await res.json()) as {
-          removed?: string[];
-          failed?: Array<{ id: string }>;
-        };
-        const removedIds = new Set(data.removed ?? ids);
-        // Server truth wins: restore anything the server did not remove.
-        setFiles((prev) => [
-          ...prev,
-          ...snapshot.filter((file) => targets.has(file.id) && !removedIds.has(file.id)),
-        ]);
-        callbacksRef.current.onFilesRemoved(removedIds, mode);
-        void loadFavoritesCount();
-        return { removedIds, failed: data.failed ?? [] };
-      } catch {
-        setFiles(snapshot);
-        toast.error("Failed to remove files");
-        return null;
-      }
+      // Coalesce a duplicate removal of the same targets in the same
+      // generation, so a double submit cannot delete twice or restore stale
+      // rows from a superseded request (#278). Mode is part of the signature
+      // because it decides which selection state is cleared on success.
+      const signature = `remove:${mode}:${permanent}:${[...targets].sort().join(",")}`;
+      return removalRequestsRef.current.run(
+        filesRequestIdRef.current,
+        signature,
+        async () => {
+          const snapshot = filesRef.current;
+          setFiles((prev) => prev.filter((file) => !targets.has(file.id)));
+          try {
+            const res = await fetch("/api/files", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fileIds: ids, permanent }),
+            });
+            if (!res.ok) {
+              throw new Error();
+            }
+            const data = (await res.json()) as {
+              removed?: string[];
+              failed?: Array<{ id: string }>;
+            };
+            const removedIds = new Set(data.removed ?? ids);
+            // Server truth wins: restore anything the server did not remove.
+            setFiles((prev) => [
+              ...prev,
+              ...snapshot.filter((file) => targets.has(file.id) && !removedIds.has(file.id)),
+            ]);
+            callbacksRef.current.onFilesRemoved(removedIds, mode);
+            void loadFavoritesCount();
+            return { removedIds, failed: data.failed ?? [] };
+          } catch {
+            setFiles(snapshot);
+            toast.error("Failed to remove files");
+            return null;
+          }
+        },
+      );
     },
     [loadFavoritesCount],
   );

@@ -5,6 +5,9 @@ import {
   applyBulkFavorite,
   applyBulkTag,
   describeFilesQuery,
+  idleFilesPaging,
+  InFlightRequests,
+  nextPageRequest,
   rollbackBulkFavorite,
   rollbackBulkTags,
   snapshotBulkFavorites,
@@ -99,6 +102,84 @@ describe("origin filter query", () => {
     expect(cleared.kind).toBe("list");
     if (cleared.kind !== "list") return;
     expect(cleared.fetchParams).not.toContain("origin=");
+  });
+});
+
+// Area: #278. A page request is only valid when the cursor, more-rows flag,
+// lock and request generation all describe the same active query, and duplicate
+// requests within one generation share a single promise.
+describe("page request state", () => {
+  it("refuses a page until the generation owns a cursor with more rows", () => {
+    const idle = idleFilesPaging(3);
+    expect(idle).toMatchObject({ generation: 3, cursor: null, hasMore: false });
+    expect(nextPageRequest(idle, 3)).toBeNull();
+    expect(nextPageRequest(idle, 4)).toBeNull();
+
+    const loaded = {
+      ...idle,
+      query: "libraryRoot=%2Flib",
+      cursor: "cursor-1",
+      hasMore: true,
+    };
+    expect(nextPageRequest(loaded, 3)).toEqual({
+      query: "libraryRoot=%2Flib",
+      cursor: "cursor-1",
+    });
+    // A different generation may not continue this cursor.
+    expect(nextPageRequest(loaded, 4)).toBeNull();
+    // Neither may a page while this generation's page is in flight.
+    expect(nextPageRequest({ ...loaded, inFlight: true }, 3)).toBeNull();
+    // Nor when the server reported no more rows.
+    expect(nextPageRequest({ ...loaded, hasMore: false }, 3)).toBeNull();
+  });
+});
+
+// Area: #278. Duplicate requests within a generation share one promise, and a
+// superseded request can never release the entry a newer request installed.
+describe("in-flight request coalescing", () => {
+  it("runs one request per generation and signature, then releases it", async () => {
+    const requests = new InFlightRequests<number>();
+    let started = 0;
+    const start = async () => {
+      started += 1;
+      return started;
+    };
+
+    const first = requests.run(1, "favorites:a", start);
+    const duplicate = requests.run(1, "favorites:a", start);
+    expect(duplicate).toBe(first);
+    expect(requests.has(1, "favorites:a")).toBe(true);
+
+    // A different key in the same generation is its own request.
+    const other = requests.run(1, "favorites:b", start);
+    expect(other).not.toBe(first);
+    expect(started).toBe(2);
+
+    expect(await first).toBe(1);
+    expect(await other).toBe(2);
+    await Promise.resolve();
+    expect(requests.has(1, "favorites:a")).toBe(false);
+  });
+
+  it("does not let a superseded request release a newer generation's lock", async () => {
+    const requests = new InFlightRequests<number>();
+    let resolveStale!: (value: number) => void;
+    const stale = requests.run(
+      1,
+      "favorites:a",
+      () => new Promise<number>((resolve) => { resolveStale = resolve; }),
+    );
+    expect(requests.has(1, "favorites:a")).toBe(true);
+
+    // The newer generation starts its own request under the same signature.
+    const fresh = requests.run(2, "favorites:a", async () => 2);
+    expect(await fresh).toBe(2);
+
+    // The stale request lands late and must not disturb the newer entry.
+    resolveStale(1);
+    expect(await stale).toBe(1);
+    expect(requests.has(2, "favorites:a")).toBe(false);
+    expect(requests.has(1, "favorites:a")).toBe(false);
   });
 });
 

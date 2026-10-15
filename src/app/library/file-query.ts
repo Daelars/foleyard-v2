@@ -306,3 +306,83 @@ export function rollbackBulkTags(
 export function pageLimit(): number {
   return PAGE_LIMIT;
 }
+
+/**
+ * The paging state of the active file-list request generation (#278). The
+ * cursor, the more-rows flag and the in-flight lock all belong to one
+ * generation, so they can never describe different query states: starting a
+ * new load replaces the whole object and invalidates every earlier page.
+ */
+export interface FilesPaging {
+  /** The files request generation that owns this cursor and lock. */
+  generation: number;
+  /** The list query the cursor continues, or null until a list load lands. */
+  query: string | null;
+  /** Opaque keyset cursor for the next page, or null when exhausted. */
+  cursor: string | null;
+  /** Whether the server reported more rows for this query. */
+  hasMore: boolean;
+  /** True while a page for this generation is in flight. */
+  inFlight: boolean;
+}
+
+/** Paging state for a generation with no resolvable next page yet. */
+export function idleFilesPaging(generation: number): FilesPaging {
+  return { generation, query: null, cursor: null, hasMore: false, inFlight: false };
+}
+
+/**
+ * The page a caller may start, or null when the cursor, flag and generation do
+ * not describe the same active query (#278). Every "may I page?" decision runs
+ * through here so paging and the full load cannot disagree about whether a
+ * request is already in flight.
+ */
+export function nextPageRequest(
+  paging: FilesPaging,
+  generation: number,
+): { query: string; cursor: string } | null {
+  if (
+    paging.generation !== generation ||
+    paging.query === null ||
+    paging.cursor === null ||
+    !paging.hasMore ||
+    paging.inFlight
+  ) {
+    return null;
+  }
+  return { query: paging.query, cursor: paging.cursor };
+}
+
+/**
+ * Coalesces duplicate in-flight requests within the same generation (#278).
+ * Two identical requests in one generation share one promise, so a double
+ * submit cannot send duplicate work. Entries are keyed by generation, so a
+ * request from a superseded generation neither joins nor releases the newer
+ * generation's entry — the release is identity-checked, never key-checked.
+ */
+export class InFlightRequests<T> {
+  private readonly entries = new Map<string, Promise<T>>();
+
+  /** Runs `start` once per generation/signature; later calls join it. */
+  run(generation: number, signature: string, start: () => Promise<T>): Promise<T> {
+    const key = `${generation}:${signature}`;
+    const existing = this.entries.get(key);
+    if (existing) {
+      return existing;
+    }
+    const promise = start().finally(() => {
+      // Release only the promise this request owns. A superseded request
+      // resolving must not delete an entry a newer request installed.
+      if (this.entries.get(key) === promise) {
+        this.entries.delete(key);
+      }
+    });
+    this.entries.set(key, promise);
+    return promise;
+  }
+
+  /** Whether a request for this generation and signature is in flight. */
+  has(generation: number, signature: string): boolean {
+    return this.entries.has(`${generation}:${signature}`);
+  }
+}

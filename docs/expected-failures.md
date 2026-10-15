@@ -17,4 +17,3 @@ the same change.
 - I03 — scanner: order-dependent root ownership (#139)
 - B04 — client-mutation-lifecycle: late tag failure erases newer edit (#140)
 - B04 — client-mutation-lifecycle: stale deletion restores old root (#140)
-- B11 — client-mutation-lifecycle: stale page unlocks duplicate request (#140)

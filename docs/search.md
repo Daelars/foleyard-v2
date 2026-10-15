@@ -64,6 +64,13 @@ silent restart. Plain `offset` still works for existing callers. The
 extension library port (`createV2LibraryPorts().listPage`) uses the same
 opaque cursor contract internally; see `src/lib/database/file-cursor.ts`.
 
+On the client, the cursor, the more-rows flag and the page lock belong to
+one request generation (`use-library-files.ts`): a new load replaces them
+together, a superseded page can neither continue the new query's cursor nor
+release its lock, and a duplicate page or mutation request in the same
+generation is coalesced instead of resubmitted (#278; see
+`src/app/library/file-query.ts` `nextPageRequest` and `InFlightRequests`).
+
 ## Contracts
 
 - Internal GET query contract above; invalid `limit`/`offset` → 400,
@@ -79,9 +86,9 @@ opaque cursor contract internally; see `src/lib/database/file-cursor.ts`.
   only; metadata fields (codec, duration) and tag names are not
   substring-searched by `q`. A database without FTS5 keeps working on
   the LIKE path.
-- Stale pagination can unlock a duplicate request (finding B11,
-  expected-to-fail, #140): an old page response releases a newer
-  request's lock in `use-library-files.ts`.
+- Pagination state is per request generation (#278): a superseded page is
+  inert and a duplicate page or mutation request in the active generation is
+  coalesced rather than submitted twice.
 
 ## Source map (real file paths)
 
@@ -107,4 +114,4 @@ library query against the checkout.
 
 - `docs/library.md` — browsing and removal over the same index
 - `docs/collections.md` — Collection/tag filters and smart-query reuse
-- `docs/development.md` — expected-failures ledger (B03, B11)
+- `docs/development.md` — expected-failures ledger (B03)

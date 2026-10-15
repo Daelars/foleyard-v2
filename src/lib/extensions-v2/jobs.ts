@@ -15,7 +15,7 @@ import { createV2FileContentPorts, getV2GrantStore } from "./filesystem";
 import { getV2Events } from "./events";
 import { createV2LibraryPorts } from "./library-ports";
 import { getV2Runtime } from "./runtime";
-import { createV2ExtensionStatePorts, createV2SettingsPorts } from "./settings-state";
+import { createV2ExtensionStatePorts, createV2SettingsPorts, getV2WorkflowState } from "./settings-state";
 
 /**
  * Application v2 job wiring (Application context, R4).
@@ -112,6 +112,7 @@ export function buildV2JobOperations(binding: {
   effectivePermissions: string[];
   reporter: V2JobReporter;
 }): V2OperationServices {
+  const extensionState = createV2ExtensionStatePorts();
   return createV2OperationServices({
     ...binding,
     grants: getV2GrantStore(),
@@ -119,7 +120,10 @@ export function buildV2JobOperations(binding: {
     files: createV2FileContentPorts(),
     archive: createV2ArchivePorts(),
     settings: createV2SettingsPorts(),
-    extensionState: createV2ExtensionStatePorts(),
+    extensionState,
+    // Same versioned store the host uses, so a job and a direct call
+    // never lose each other's state updates.
+    workflowState: getV2WorkflowState(binding.extensionId, extensionState),
     selectionSources: [],
     jobs: binding.reporter,
   });

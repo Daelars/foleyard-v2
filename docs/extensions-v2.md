@@ -180,10 +180,16 @@ targets/options, authorization context, expiry, and invocation.
 Single use, 15-minute default TTL capped at 1 hour. Apply revalidates
 targets, grants, permissions, and availability.
 
-Settings are author-declared and validated with reset semantics.
-Workflow state is versioned with transactional migrations; a failed
-migration preserves prior data or disables with a diagnosis. The host
-owns job records separately. Persist precedes notify on every write.
+Settings are author-declared and validated with reset semantics; reset-all
+writes each declared setting under its canonical namespaced row. Workflow
+state is versioned with a declared per-version migration path; a failed
+migration preserves prior data or disables with a diagnosis. State is
+bounded (key length, per-value bytes, per-extension bytes and key count)
+with every limit checked before persistence, and `operations.state.update`
+is the atomic read-modify-write: the store is shared per extension on the
+process-wide runtime, so concurrent jobs serialize instead of losing
+updates. The host owns job records separately. Persist precedes notify on
+every write.
 
 Events are five typed contracts only: `settings-changed`,
 `state-changed`, `approvals-changed`, `job-transition`,
@@ -386,15 +392,20 @@ always a reread of the owning store. Provenance: API v2 typed bus.
 Prerequisites: an extension with a `V2WorkflowStateStore` envelope.
 
 ```ts
-await store.migrateTo(2, {
-  1: (data) => ({ ...data, packName: String(data.name ?? "") }),
+// In a handler: a declared path keyed by source version, applied in order.
+const { from, to } = ctx.operations.state.migrateTo(2, {
+  0: (data) => ({ ...data, packName: String(data.name ?? "") }),
+  1: (data) => ({ ...data, schema: "pack/v2" }),
 });
 ```
 
-Expected: transactional per-version steps; failure preserves prior
-data and disables with an actionable diagnosis; reset recovers.
-Legacy unversioned blobs read as version 0. Provenance: API v2
-`extension-data.ts`.
+Expected: transactional per-version steps (success commits once at the
+target version); a missing step, a throw, or an over-bounds result
+preserves prior data and disables with an actionable diagnosis; reset
+recovers. Legacy unversioned blobs read as version 0. Writes and
+`state.update` reject oversized keys and values before persisting, and
+`state.update` serializes concurrent read-modify-writes. Provenance: API
+v2 `extension-data.ts`.
 
 ## Related documentation
 

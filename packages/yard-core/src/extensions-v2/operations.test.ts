@@ -12,6 +12,7 @@ import {
   V2GrantStore,
   V2OperationError,
   V2OutputConflictError,
+  V2WorkflowStateStore,
   type V2ArchivePorts,
   type V2ExtensionStatePorts,
   type V2FileContentPorts,
@@ -413,6 +414,113 @@ describe("v2 settings and state", () => {
     expect(services.settings.get("fixture-greeter.formality")).toBe("formal");
     expect(() => services.settings.get("other-ext.key")).toThrowError(/own namespace/);
     expect(() => services.settings.set("other-ext.key", 1)).toThrowError(/own namespace/);
+  });
+
+  it("resets every declared setting under its canonical namespaced identifier", () => {
+    // Registry validation requires declared setting IDs to carry the
+    // extension prefix (`fixture-greeter.formality`), so reset-all must
+    // write `extension:fixture-greeter:setting:fixture-greeter.formality`
+    // — never a second prefix.
+    const rows = new Map<string, unknown>();
+    const settings: V2SettingsPorts = {
+      readRaw: (key) => rows.get(key),
+      writeRaw: (key, value) => {
+        rows.set(key, value);
+      },
+    };
+    const declarations = [
+      {
+        id: "fixture-greeter.formality",
+        label: "Formality",
+        type: "enum" as const,
+        defaultValue: "casual",
+        options: [
+          { label: "Casual", value: "casual" },
+          { label: "Formal", value: "formal" },
+        ],
+      },
+      {
+        id: "fixture-greeter.verbose",
+        label: "Verbose",
+        type: "boolean" as const,
+        defaultValue: false,
+      },
+    ];
+    const services = createV2OperationServices(
+      servicesArgs({ settings, settingsDeclarations: declarations }),
+    );
+
+    services.settings.set("fixture-greeter.formality", "formal");
+    services.settings.set("fixture-greeter.verbose", true);
+    services.settings.reset();
+
+    expect(rows.get("extension:fixture-greeter:setting:fixture-greeter.formality")).toBe("casual");
+    expect(rows.get("extension:fixture-greeter:setting:fixture-greeter.verbose")).toBe(false);
+    expect([...rows.keys()].filter((key) => key.includes("fixture-greeter.fixture-greeter"))).toEqual([]);
+    // The reset round-trips: reads observe the restored defaults.
+    expect(services.settings.get("fixture-greeter.formality")).toBe("casual");
+    expect(services.settings.get("fixture-greeter.verbose")).toBe(false);
+  });
+
+  it("persists workflow state through the versioned, bounded envelope", () => {
+    const blobs = new Map<string, Record<string, unknown>>();
+    const extensionState: V2ExtensionStatePorts = {
+      readAll: (extensionId) => blobs.get(extensionId) ?? {},
+      writeAll: (extensionId, state) => {
+        blobs.set(extensionId, state);
+      },
+    };
+    const services = createV2OperationServices(servicesArgs({ extensionState }));
+
+    services.state.write("draft", { step: 1 });
+    expect(blobs.get("fixture-greeter")).toMatchObject({
+      __v2envelope: true,
+      schemaVersion: 0,
+      data: { draft: { step: 1 } },
+    });
+    expect(() => services.state.write("k".repeat(300), 1)).toThrowError(/State key/);
+    expect(JSON.parse(JSON.stringify(blobs.get("fixture-greeter"))).data).toEqual({
+      draft: { step: 1 },
+    });
+  });
+
+  it("serializes concurrent read-modify-write updates from two invocations", async () => {
+    const blobs = new Map<string, Record<string, unknown>>();
+    const extensionState: V2ExtensionStatePorts = {
+      readAll: (extensionId) => blobs.get(extensionId) ?? {},
+      writeAll: (extensionId, state) => {
+        blobs.set(extensionId, state);
+      },
+    };
+    // One process-wide store per extension: two job-bound invocation
+    // services share it, so their read-modify-write operations serialize.
+    const store = new V2WorkflowStateStore("fixture-greeter", extensionState);
+    const first = createV2OperationServices(
+      servicesArgs({ extensionId: "fixture-greeter", extensionState, workflowState: store }),
+    );
+    const second = createV2OperationServices(
+      servicesArgs({ extensionId: "fixture-greeter", extensionState, workflowState: store }),
+    );
+
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let firstRan = false;
+    const firstUpdate = first.state.update("history", async (current) => {
+      firstRan = true;
+      await held;
+      return [...(Array.isArray(current) ? current : []), "first"];
+    });
+    while (!firstRan) await Promise.resolve();
+    const secondUpdate = second.state.update("history", async (current) => [
+      ...(Array.isArray(current) ? current : []),
+      "second",
+    ]);
+    release();
+    await Promise.all([firstUpdate, secondUpdate]);
+
+    expect(store.read("history")).toEqual(["first", "second"]);
   });
 
   it("keeps extension state isolated between extensions", () => {

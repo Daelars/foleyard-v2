@@ -24,19 +24,26 @@ import type { V2EventBus } from "./events";
  *   configuration, not workflow memory.
  * - Workflow state (`V2WorkflowStateStore`): namespaced key/value memory
  *   for in-progress work, stored as a versioned envelope with bounded
- *   keys and bytes. `migrateTo` runs transactional migrations on a copy:
- *   success commits atomically, failure preserves the prior data and
+ *   keys and bytes. `migrateTo` runs a declared migration path
+ *   transactionally on a copy: every per-version step runs in order,
+ *   success commits once, and failure preserves the prior data and
  *   disables the store with an actionable diagnosis until reset or a
- *   successful migration. Legacy unversioned blobs (written before this
- *   ticket) read as version 0.
+ *   successful migration. `update` is the atomic read-modify-write: it
+ *   is serialized per store, so two concurrent jobs of one extension
+ *   cannot lose each other's updates. Legacy unversioned blobs (written
+ *   before this ticket) read as version 0.
  * - Host-owned job records stay separate (jobs.ts) and are never
  *   reachable through these stores.
  *
  * Bounds and retention: at most `MAX_V2_STATE_KEYS` keys and
- * `MAX_V2_STATE_BYTES` serialized bytes per extension; settings are
- * bounded by their declarations (one row per declared setting plus
- * diagnosis rows). State persists until `reset()` or a migration
- * replaces it; there is no cross-extension listing.
+ * `MAX_V2_STATE_BYTES` serialized bytes per extension; a single key is
+ * limited to `MAX_V2_STATE_KEY_BYTES` and a single value may not exceed
+ * the whole per-extension byte budget. Keys and values are checked
+ * before anything is persisted, so a rejected write leaves the stored
+ * envelope byte-for-byte unchanged. Settings are bounded by their
+ * declarations (one row per declared setting plus diagnosis rows).
+ * State persists until `reset()` or a migration replaces it; there is no
+ * cross-extension listing.
  *
  * Persist-before-notify: every mutating method writes through its ports
  * first and emits its event afterwards, so subscribers that re-read on
@@ -47,6 +54,10 @@ import type { V2EventBus } from "./events";
 
 export const MAX_V2_STATE_KEYS = 128;
 export const MAX_V2_STATE_BYTES = 65_536;
+/** Largest accepted state key, in UTF-8 bytes. */
+export const MAX_V2_STATE_KEY_BYTES = 256;
+/** Largest accepted single state value; never larger than the whole budget. */
+export const MAX_V2_STATE_VALUE_BYTES = MAX_V2_STATE_BYTES;
 
 const STATE_ENVELOPE_MARKER = "__v2envelope";
 
@@ -169,14 +180,36 @@ function isEnvelope(value: unknown): value is V2WorkflowStateEnvelope {
   );
 }
 
+function checkStateKey(key: string): void {
+  if (typeof key !== "string" || !key.trim()) {
+    throw new V2OperationError("input-invalid", "State key must be a non-empty string.");
+  }
+  const bytes = new TextEncoder().encode(key).length;
+  if (bytes > MAX_V2_STATE_KEY_BYTES) {
+    throw new V2OperationError(
+      "input-invalid",
+      `State key is ${bytes} bytes; the key limit is ${MAX_V2_STATE_KEY_BYTES} bytes. Shorten the key.`,
+    );
+  }
+}
+
 function checkStateValue(key: string, value: unknown): void {
+  let text: string;
   try {
-    const text = JSON.stringify(value);
-    if (text === undefined) throw new Error("unserializable");
+    const serialized = JSON.stringify(value);
+    if (serialized === undefined) throw new Error("unserializable");
+    text = serialized;
   } catch {
     throw new V2OperationError(
       "input-invalid",
       `State ${JSON.stringify(key)} must be JSON-serializable; functions and symbols are rejected.`,
+    );
+  }
+  const bytes = new TextEncoder().encode(text).length;
+  if (bytes > MAX_V2_STATE_VALUE_BYTES) {
+    throw new V2OperationError(
+      "input-invalid",
+      `State value for ${JSON.stringify(key)} is ${bytes} bytes, exceeding the per-extension limit of ${MAX_V2_STATE_VALUE_BYTES} for a single value. Remove or trim keys.`,
     );
   }
 }
@@ -203,15 +236,30 @@ export type V2WorkflowStateOptions = {
   clock?: () => string;
 };
 
+/** One declared migration step: it upgrades stored version `n` to `n + 1`. */
+export type V2StateMigrationStep = (
+  data: Record<string, unknown>,
+) => Record<string, unknown>;
+
 /**
- * Versioned workflow state with transactional migrations. A failed
- * migration preserves the prior envelope byte-for-byte and disables the
- * store with an actionable diagnosis; writes stay disabled until
- * `reset()` or a successful `migrateTo`.
+ * A declared migration path keyed by the version each step upgrades from:
+ * `{ 0: fn, 1: fn, 2: fn }` walks a stored version-0 envelope to version 3.
+ */
+export type V2StateMigrationPath = Record<number, V2StateMigrationStep>;
+
+/**
+ * Versioned workflow state with a declared migration path and serialized
+ * read-modify-write updates. A failed migration preserves the prior
+ * envelope byte-for-byte and disables the store with an actionable
+ * diagnosis; writes stay disabled until `reset()` or a successful
+ * `migrateTo`. Concurrent `update` calls are serialized per store, so
+ * two jobs sharing one store never lose each other's updates.
  */
 export class V2WorkflowStateStore {
   private disabledDiagnosis: string | null = null;
   private readonly clock: () => string;
+  /** Tail of the per-store serialization queue for `update`. */
+  private pending: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly extensionId: string,
@@ -231,9 +279,7 @@ export class V2WorkflowStateStore {
   }
 
   read(key: string): unknown {
-    if (!key.trim()) {
-      throw new V2OperationError("input-invalid", "State key must be a non-empty string.");
-    }
+    checkStateKey(key);
     return this.loaded().data[key];
   }
 
@@ -243,9 +289,7 @@ export class V2WorkflowStateStore {
 
   write(key: string, value: unknown): void {
     this.throwIfDisabled("write");
-    if (!key.trim()) {
-      throw new V2OperationError("input-invalid", "State key must be a non-empty string.");
-    }
+    checkStateKey(key);
     checkStateValue(key, value);
     const current = this.loaded();
     const next = { ...current.data, [key]: value };
@@ -257,9 +301,7 @@ export class V2WorkflowStateStore {
 
   remove(key: string): void {
     this.throwIfDisabled("remove");
-    if (!key.trim()) {
-      throw new V2OperationError("input-invalid", "State key must be a non-empty string.");
-    }
+    checkStateKey(key);
     const current = this.loaded();
     if (!(key in current.data)) return;
     const next = { ...current.data };
@@ -269,14 +311,51 @@ export class V2WorkflowStateStore {
   }
 
   /**
-   * Transactional migration: `migrate` runs against a copy of the
-   * current data. Success commits the new version atomically; a throw
-   * (or an unserializable/over-bounds result) preserves the prior
-   * envelope and disables the store with the error as diagnosis.
+   * Atomic read-modify-write of one key. The updater runs inside this
+   * store's serialization queue, so concurrent updates (and every other
+   * `update` on the same store) run one at a time: the second writer
+   * reads the first writer's committed value instead of a stale
+   * snapshot, and neither update is lost. The commit re-reads the
+   * current envelope and merges only this key, so a synchronous `write`
+   * to another key that landed while the updater awaited is preserved.
+   */
+  update(key: string, updater: (current: unknown) => unknown | Promise<unknown>): Promise<void> {
+    return this.enqueue(async () => {
+      this.throwIfDisabled("update");
+      checkStateKey(key);
+      const snapshot = this.loaded();
+      const nextValue = await updater(snapshot.data[key]);
+      checkStateValue(key, nextValue);
+      const latest = this.loaded();
+      const next = { ...latest.data, [key]: nextValue };
+      checkStateBounds(next);
+      this.commit(latest.schemaVersion, next);
+      this.options?.events?.emit("state-changed", this.extensionId, { keys: [key] });
+    });
+  }
+
+  /** Run `task` after every previously queued update has settled. */
+  private enqueue<T>(task: () => T | Promise<T>): Promise<T> {
+    const run = this.pending.then(task, task);
+    this.pending = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /**
+   * Transactional migration along a declared path. Either a single step
+   * function (upgrading the stored version straight to `targetVersion`)
+   * or a path keyed by source version, whose steps run in ascending
+   * order. Every step works on a copy: success commits once at
+   * `targetVersion`, and a throw, an unserializable/over-bounds result,
+   * or a missing declared step preserves the prior envelope and disables
+   * the store with the error as diagnosis.
    */
   migrateTo(
     targetVersion: number,
-    migrate: (data: Record<string, unknown>) => Record<string, unknown>,
+    migration: V2StateMigrationStep | V2StateMigrationPath,
   ): { from: number; to: number } {
     const current = this.loaded();
     if (targetVersion <= current.schemaVersion) {
@@ -287,7 +366,20 @@ export class V2WorkflowStateStore {
     }
     let next: Record<string, unknown>;
     try {
-      next = migrate({ ...current.data });
+      if (typeof migration === "function") {
+        next = migration({ ...current.data });
+      } else {
+        next = { ...current.data };
+        for (let version = current.schemaVersion; version < targetVersion; version += 1) {
+          const step = migration[version];
+          if (typeof step !== "function") {
+            throw new Error(
+              `no declared migration step from version ${version} to version ${version + 1}`,
+            );
+          }
+          next = step({ ...next });
+        }
+      }
       if (typeof next !== "object" || next === null || Array.isArray(next)) {
         throw new Error("migration must return a data record");
       }

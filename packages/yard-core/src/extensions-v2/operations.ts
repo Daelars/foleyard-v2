@@ -2,6 +2,7 @@ import type { IndexedAudioFile } from "../domain/audio-file";
 
 import type { ExtensionV2Permission, ExtensionV2Setting } from "./definition";
 import { validateV2SettingValue } from "./definition";
+import { V2WorkflowStateStore, type V2StateMigrationPath, type V2StateMigrationStep } from "./extension-data";
 import type { V2PlanManager, V2PlanPrepareSpec } from "./plans";
 import {
   authorizeV2ReadablePath,
@@ -35,7 +36,10 @@ import type { V2FailureCode } from "./invocation";
  *   against the extension definition; corrupt persisted rows read as the
  *   declared default)
  * - state.* → extension-namespaced by construction; only the owning
- *   extension's keys are reachable, so no cross-extension access is possible
+ *   extension's keys are reachable, so no cross-extension access is
+ *   possible. State is the versioned, bounded store (size/key limits,
+ *   declared migrations); `state.update` is the serialized atomic
+ *   read-modify-write, so concurrent jobs cannot lose updates
  * - jobs.* → the current invocation's reporter only
  * - plans.prepare → the invocation's own extension/command binding; a
  *   handler cannot prepare plans for another extension (R5)
@@ -162,7 +166,15 @@ export type V2OperationFactoryArgs = {
   files: V2FileContentPorts;
   archive: V2ArchivePorts;
   settings: V2SettingsPorts;
-  extensionState: V2ExtensionStatePorts;
+  /** Raw namespaced state blob for this extension; the operations slice wraps it in the versioned store. */
+  extensionState?: V2ExtensionStatePorts;
+  /**
+   * The process-wide versioned workflow state for this extension
+   * (`getV2WorkflowState`). When absent, the slice builds an isolated
+   * store over `extensionState`, so a test or a host without the shared
+   * runtime still gets bounded, migration-aware state.
+   */
+  workflowState?: V2WorkflowStateStore;
   jobs?: V2JobReporter;
   selectionSources?: readonly V2NamedSelectionSource[];
   now?: string;
@@ -238,6 +250,22 @@ export type V2ExtensionStateOperations = {
   read(key: string): unknown;
   write(key: string, value: unknown): void;
   remove(key: string): void;
+  /**
+   * Atomic read-modify-write of one key, serialized per extension across
+   * the process: concurrent jobs sharing the runtime cannot lose each
+   * other's updates (the second writer reads the first writer's
+   * committed value rather than a stale snapshot).
+   */
+  update(key: string, updater: (current: unknown) => unknown | Promise<unknown>): Promise<void>;
+  /**
+   * Run a declared versioned migration path (`{ 0: step, 1: step, … }`)
+   * or a single step function. Transactional: a failure preserves the
+   * prior envelope and disables state until reset or a successful retry.
+   */
+  migrateTo(
+    targetVersion: number,
+    migration: V2StateMigrationStep | V2StateMigrationPath,
+  ): { from: number; to: number };
 };
 
 export type V2JobOperations = {
@@ -309,9 +337,19 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
     files,
     archive,
     settings,
-    extensionState,
     selectionSources = [],
   } = args;
+  // Workflow state always goes through the versioned store: production
+  // passes the one process-wide store from the runtime (so concurrent
+  // jobs serialize), and a host without it gets an isolated store over
+  // the same ports.
+  if (!args.workflowState && !args.extensionState) {
+    throw new Error(
+      "createV2OperationServices needs a workflowState or extensionState binding.",
+    );
+  }
+  const workflowState =
+    args.workflowState ?? new V2WorkflowStateStore(extensionId, args.extensionState!);
   const effective = new Set(args.effectivePermissions);
   /** Created entries by canonical path, with the version identity captured at creation. */
   const owned = new Map<string, V2FileVersion>();
@@ -624,32 +662,31 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
         }
         if (settingId !== undefined) {
           const declared = declaredSetting(settingId);
-          if (declared) settings.writeRaw(settingKey(settingId), declared.defaultValue);
+          if (declared) settings.writeRaw(settingKey(declared.id), declared.defaultValue);
           return;
         }
         for (const declared of args.settingsDeclarations) {
-          settings.writeRaw(settingKey(`${extensionId}.${declared.id}`), declared.defaultValue);
+          // Declared IDs carry the extension prefix (registry-enforced), so
+          // write the canonical identifier directly — never a second prefix.
+          settings.writeRaw(settingKey(declared.id), declared.defaultValue);
         }
       },
     },
     state: {
       read(key: string): unknown {
-        checkKey(key, "State key");
-        return extensionState.readAll(extensionId)[key];
+        return workflowState.read(key);
       },
       write(key: string, value: unknown): void {
-        checkKey(key, "State key");
-        assertSerializable(value, `State ${JSON.stringify(key)}`);
-        const current = extensionState.readAll(extensionId);
-        extensionState.writeAll(extensionId, { ...current, [key]: value });
+        workflowState.write(key, value);
       },
       remove(key: string): void {
-        checkKey(key, "State key");
-        const current = extensionState.readAll(extensionId);
-        if (!(key in current)) return;
-        const next = { ...current };
-        delete next[key];
-        extensionState.writeAll(extensionId, next);
+        workflowState.remove(key);
+      },
+      update(key, updater): Promise<void> {
+        return workflowState.update(key, updater);
+      },
+      migrateTo(targetVersion, migration) {
+        return workflowState.migrateTo(targetVersion, migration);
       },
     },
     jobs: {
@@ -736,6 +773,8 @@ export function denyAllV2Operations(extensionId: string): V2OperationServices {
       read: () => deny(),
       write: () => deny(),
       remove: () => deny(),
+      update: () => denyAsync(),
+      migrateTo: () => deny(),
     },
     jobs: {
       reportProgress: () => {},

@@ -71,10 +71,17 @@ Library settings are read and written through `GET`/`POST /api/settings`
 actions (`validate`, `save`, `remove`, `onboarding_complete`); the scanner
 validates a root before it is stored.
 
-Workflow state is one versioned envelope per extension with transactional
-migrations; a failed migration preserves prior data or disables the
-extension with a diagnosis. Host-owned job records and approvals live
-apart from authored settings.
+Workflow state is one versioned envelope per extension with a declared
+per-version migration path; a failed migration preserves prior data or
+disables the extension with a diagnosis. State lives behind the single
+`V2WorkflowStateStore` per extension on the process-wide v2 runtime:
+writes enforce key (`MAX_V2_STATE_KEY_BYTES`) and byte
+(`MAX_V2_STATE_BYTES`, one key at most that budget) limits before
+persisting anything, and `state.update` is a read-modify-write
+serialized per store, so concurrent jobs cannot lose each other's
+updates. Host-owned job records and approvals live apart from authored
+settings. Reset-all writes every declared setting under its canonical
+`extension:<extensionId>:setting:<extensionId>.<shortId>` row.
 
 ## Contracts
 

@@ -23,12 +23,13 @@ marketplace, or public authoring SDK.
   and grants, host execution, jobs, plans, and the HTTP transport codec.
 - `src/lib/extensions-v2/runtime.ts` owns the one process-wide v2
   runtime: registration, host execution, plans, grants, jobs,
-  enablement, approvals, and events. Next compiles each route into its
-  own bundle, so module state forks per route subtree even though the
-  process is one realm; every module reads its slice through
-  `getV2Runtime()` instead of keeping a per-bundle copy, and the
-  creation guard is structural so a re-evaluated module reuses the
-  existing runtime.
+  enablement, approvals, workflow state, and events. Next compiles each
+  route into its own bundle, so module state forks per route subtree even
+  though the process is one realm; every module reads its slice through
+  `getV2Runtime()` instead of keeping a per-bundle copy, and the creation
+  guard is structural so a re-evaluated module reuses the existing
+  runtime. One versioned workflow-state store per extension is cached
+  there, so the host and the job runner address the same instance.
 - `src/lib/extensions-v2/host.ts` composes the production registry and
   per-port handlers behind `getAppV2Host()`, held on that runtime.
 - The renderer owns all UI: V3 adapters in
@@ -62,7 +63,12 @@ commandId, selection, input }`:
    sources (shelf reads `v2shelf:sound-shelf-v2`, recent reads the
    recent record), authorized file/archive output, namespaced
    settings/state, and job reporting — never raw DB, routes, React,
-   or Electron. Every output is created exclusively (the create is the
+   or Electron. Workflow state is the versioned, bounded
+   `V2WorkflowStateStore` (one per extension on the runtime): key and
+   byte limits are checked before persistence, `migrateTo` walks a
+   declared per-version path transactionally, and `state.update` is the
+   serialized read-modify-write, so concurrent jobs cannot lose
+   updates. Every output is created exclusively (the create is the
    claim, so a pre-existing file is never truncated and concurrent jobs
    cannot both claim a destination) and tracked with the created file's
    version, so cancellation cleanup removes only entries that job made.
@@ -106,6 +112,12 @@ tool packages import `yard-core` and relatives only.
   value and the projection and redacts diagnostics, while
   `exposedV2JobRecord` (transport) adds the bounded value and the
   state-derived diagnostic.
+- Workflow state is the versioned envelope from
+  `packages/yard-core/src/extensions-v2/extension-data.ts`: bounded keys
+  and values checked before persistence, a declared per-version
+  migration path committed in one transaction, and a serialized
+  `update` read-modify-write. Production caches one store per extension
+  on the runtime (`getV2WorkflowState`).
 - No provider contracts (waveform/metadata/search) exist; extension
   points mark them `unavailable`.
 
@@ -121,6 +133,8 @@ tool packages import `yard-core` and relatives only.
 
 - `packages/yard-tools/*-v2/src/{definition,handlers}.ts`
 - `packages/yard-core/src/extensions-v2/{registry,catalog,availability,permissions,grants,host,jobs,plans,transport,operations}.ts`
+- `packages/yard-core/src/extensions-v2/extension-data.ts` — versioned,
+  bounded workflow state and declared migrations
 - `packages/yard-core/src/extensions-v2/terminal-results.ts` — bounded
   result projection and diagnostic redaction
 - `packages/yard-core/src/extensions-v2/output-ownership.ts` — created-file

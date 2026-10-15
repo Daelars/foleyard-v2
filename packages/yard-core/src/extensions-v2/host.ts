@@ -611,6 +611,7 @@ export class ExtensionV2Host {
         commandId: checked.invocation.commandId,
         invocationId,
         ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
+        ...(command.result !== undefined ? { resultSchema: command.result } : {}),
         gate,
         run: async (context) => {
           const operations = this.operationsFor(checked, context.reporter);

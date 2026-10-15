@@ -158,6 +158,16 @@ stopped while work still writes. Restart marks live jobs interrupted
 with known outputs; filesystem effects never replay. Duplicate
 invocation keys return the existing job.
 
+A terminal job exposes a bounded summary over the polling route
+(#279): `job.result.value` is the handler's declared result projected
+onto the command `result` schema — undeclared fields dropped, strings,
+array lengths, and the serialized projection hard-capped — and
+`job.result.diagnostic` carries a bounded, redacted message for a
+failed, cancelled, or interrupted job (no stacks, no absolute host
+paths). The raw handler value and the projection stay in memory; a
+persisted snapshot never carries a value, a grant, a stack, or a
+private path.
+
 Job persistence is coalesced (#258): state transitions and terminal
 records persist immediately, while per-file progress ticks persist at
 most once per two seconds, so a 500-file job performs a bounded number
@@ -345,11 +355,14 @@ curl -X POST '/api/extensions-v2/jobs/<jobId>/cancel'
 ```
 
 Expected: submit returns 202 with a `vjob_` ID; status polls show
-queued, running, then a terminal state with partial outcomes;
-cancel moves running work to cancellation-requested and settles
-cancelled after owned cleanup. Duplicate invocation keys return the
-existing job. Reload-safe: poll by ID after reconnect. Provenance:
-API v2 jobs, app `jobs.ts` with settings-table snapshot persistence.
+queued, running, then a terminal state with partial outcomes; a
+succeeded job's declared result is bounded and returned as
+`job.result.value`, while a failed or cancelled job returns a bounded,
+redacted `job.result.diagnostic`; cancel moves running work to
+cancellation-requested and settles cancelled after owned cleanup.
+Duplicate invocation keys return the existing job. Reload-safe: poll by
+ID after reconnect. Provenance: API v2 jobs, app `jobs.ts` with
+settings-table snapshot persistence.
 
 ### 8. Subscribe to events
 

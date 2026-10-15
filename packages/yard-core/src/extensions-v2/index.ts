@@ -101,6 +101,7 @@ export {
   MAX_V2_JOB_SNAPSHOT_RETAINED,
   V2_JOB_MAX_TRACKED_ERRORS,
   V2_JOB_SNAPSHOT_VERSION,
+  exposedV2JobRecord,
   isV2JobCancellation,
   persistedV2JobRecord,
   sanitizeV2IdempotencyKey,
@@ -119,6 +120,19 @@ export {
   type V2JobStatusReader,
   type V2JobSubmit,
 } from "./jobs";
+export {
+  V2_JOB_DIAGNOSTIC_MAX_CHARS,
+  V2_JOB_RESULT_MAX_BYTES,
+  V2_JOB_RESULT_MAX_ITEMS,
+  V2_JOB_RESULT_MAX_STRING,
+  projectV2JobResultValue,
+  redactV2JobDiagnosticMessage,
+  terminalV2JobDiagnostic,
+  type V2JobDiagnostic,
+  type V2JobDiagnosticCode,
+  type V2JobResultProjection,
+  type V2JobTerminalResult,
+} from "./terminal-results";
 export {
   buildEffectiveV2Catalog,
   computeEffectiveV2Permissions,

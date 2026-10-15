@@ -7,6 +7,8 @@ import {
   describeFilesQuery,
   idleFilesPaging,
   InFlightRequests,
+  MutationOwnership,
+  mutationOwnershipKey,
   nextPageRequest,
   rollbackBulkFavorite,
   rollbackBulkTags,
@@ -234,14 +236,23 @@ describe("single-item optimistic updates", () => {
     const previous = snapshotBulkFavorites(files, ["b"]);
     expect(previous).toEqual(new Map([["b", true]]));
 
-    const rolled = rollbackBulkFavorite(files, previous);
+    const rolled = rollbackBulkFavorite(files, previous, new Set(["b"]));
     expect(rolled).toBe(files);
 
     const changed = applyBulkFavorite(files, ["b"], false);
-    const restored = rollbackBulkFavorite(changed, previous);
+    const restored = rollbackBulkFavorite(changed, previous, new Set(["b"]));
     expect(restored[0]).toBe(files[0]);
     expect(restored[1].isFavorite).toBe(true);
     expect(restored[2]).toBe(files[2]);
+  });
+
+  it("leaves a favourite a newer mutation now owns (#277)", () => {
+    const files = [file("a"), file("b", true)];
+    const previous = snapshotBulkFavorites(files, ["b"]);
+    const changed = applyBulkFavorite(files, ["b"], false);
+
+    // Ownership moved to a newer batch, so the old failure is inert.
+    expect(rollbackBulkFavorite(changed, previous, new Set())).toBe(changed);
   });
 
   it("snapshots and rolls back a single row's tags in place", () => {
@@ -252,8 +263,61 @@ describe("single-item optimistic updates", () => {
 
     const detached = applyBulkTag(files, ["a"], "t1", false, []);
     expect(detached[0].tags).toEqual([]);
-    const restored = rollbackBulkTags(detached, previous);
-    expect(restored[0].tags).toBe(tagged.tags);
+    const restored = rollbackBulkTags(detached, previous, "t1", new Set(["a"]));
+    expect(restored[0].tags).toEqual(tagged.tags);
     expect(restored[1]).toBe(files[1]);
+  });
+
+  it("reverts only the batch's own tag, leaving a newer tag intact (#277)", () => {
+    const tags = [
+      { id: "t1", name: "thunder", color: "#fff" },
+      { id: "t2", name: "rain", color: "#000" },
+    ];
+    const files = [file("a"), file("b")];
+    const previous = snapshotBulkTags(files, ["a"]);
+    const both = applyBulkTag(
+      applyBulkTag(files, ["a"], "t1", true, tags),
+      ["a"],
+      "t2",
+      true,
+      tags,
+    );
+
+    // The failing batch only owns t1; t2's later success must survive.
+    const rolled = rollbackBulkTags(both, previous, "t1", new Set(["a"]));
+    expect(rolled[0].tags.map((tag) => tag.id)).toEqual(["t2"]);
+  });
+});
+
+// Area: #277. Ownership is tracked per (record, field) so a late failure only
+// reverts what it still owns and a newer edit of the same record wins.
+describe("mutation ownership", () => {
+  it("names different fields of one record distinctly", () => {
+    expect(mutationOwnershipKey("f1", { kind: "favorite" })).not.toBe(
+      mutationOwnershipKey("f1", { kind: "tag", tagId: "t1" }),
+    );
+    expect(mutationOwnershipKey("f1", { kind: "tag", tagId: "t1" })).not.toBe(
+      mutationOwnershipKey("f1", { kind: "tag", tagId: "t2" }),
+    );
+  });
+
+  it("hands a field to the newest claimant and honours identity-checked release", () => {
+    const ownership = new MutationOwnership();
+    const key = mutationOwnershipKey("f1", { kind: "favorite" });
+
+    ownership.claim([key], 1);
+    expect(ownership.owns(key, 1)).toBe(true);
+
+    // A newer mutation takes the field; the older one no longer owns it.
+    ownership.claim([key], 2);
+    expect(ownership.owns(key, 1)).toBe(false);
+    expect(ownership.owns(key, 2)).toBe(true);
+
+    // The stale release must not drop the newer owner.
+    ownership.release([key], 1);
+    expect(ownership.owns(key, 2)).toBe(true);
+
+    ownership.release([key], 2);
+    expect(ownership.owns(key, 2)).toBe(false);
   });
 });

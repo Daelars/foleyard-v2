@@ -246,19 +246,26 @@ export function snapshotBulkTags(
 }
 
 /**
- * Per-batch rollback: restores only the favourite flags this batch changed,
- * leaving every other field (and every other file) at its current value so
- * concurrent edits to the same files are not clobbered.
+ * Per-batch rollback scoped to the records this batch still owns (#277):
+ * restores only the favourite flags of `ownedIds`, leaving every other field
+ * (and every other file) at its current value so a newer edit is not erased.
  */
 export function rollbackBulkFavorite(
   current: FileRecord[],
   previousById: Map<string, boolean>,
+  ownedIds: ReadonlySet<string>,
 ): FileRecord[] {
-  if (previousById.size === 0) {
+  const owned = new Map<string, boolean>();
+  previousById.forEach((isFavorite, id) => {
+    if (ownedIds.has(id)) {
+      owned.set(id, isFavorite);
+    }
+  });
+  if (owned.size === 0) {
     return current;
   }
-  if (previousById.size === 1) {
-    const [id, isFavorite] = previousById.entries().next().value as [string, boolean];
+  if (owned.size === 1) {
+    const [id, isFavorite] = owned.entries().next().value as [string, boolean];
     const index = current.findIndex((file) => file.id === id);
     if (index === -1 || current[index].isFavorite === isFavorite) {
       return current;
@@ -268,39 +275,58 @@ export function rollbackBulkFavorite(
     return next;
   }
   return current.map((file) =>
-    previousById.has(file.id)
-      ? { ...file, isFavorite: previousById.get(file.id) as boolean }
+    owned.has(file.id)
+      ? { ...file, isFavorite: owned.get(file.id) as boolean }
       : file,
   );
 }
 
 /**
- * Per-batch rollback: restores only the tag lists this batch changed,
- * leaving every other field at its current value so concurrent edits to the
- * same files are not clobbered.
+ * Reverts one record's presence for a single tag to its captured state (#277).
+ * A failed detach re-attaches the tag at the position it held; a failed attach
+ * drops it. No other tag on the record is touched.
+ */
+export function revertTag(
+  record: FileRecord,
+  previousTags: FileRecord["tags"],
+  tagId: string,
+): FileRecord {
+  const previousTag = previousTags.find((tag) => tag.id === tagId);
+  const hasTag = record.tags.some((tag) => tag.id === tagId);
+  if (previousTag && !hasTag) {
+    const next = record.tags.slice();
+    const index = Math.min(previousTags.indexOf(previousTag), next.length);
+    next.splice(index, 0, previousTag);
+    return { ...record, tags: next };
+  }
+  if (!previousTag && hasTag) {
+    return { ...record, tags: record.tags.filter((tag) => tag.id !== tagId) };
+  }
+  return record;
+}
+
+/**
+ * Per-batch, per-tag rollback scoped to the records this batch still owns
+ * (#277): only the one tag the batch set is reverted, so a newer attach of a
+ * different tag — or a newer batch that took over the same (file, tag) pair —
+ * survives a late failure.
  */
 export function rollbackBulkTags(
   current: FileRecord[],
   previousTagsById: Map<string, FileRecord["tags"]>,
+  tagId: string,
+  ownedIds: ReadonlySet<string>,
 ): FileRecord[] {
-  if (previousTagsById.size === 0) {
+  if (previousTagsById.size === 0 || ownedIds.size === 0) {
     return current;
   }
-  if (previousTagsById.size === 1) {
-    const [id, tags] = previousTagsById.entries().next().value as [string, FileRecord["tags"]];
-    const index = current.findIndex((file) => file.id === id);
-    if (index === -1 || current[index].tags === tags) {
-      return current;
+  return current.map((file) => {
+    if (!ownedIds.has(file.id)) {
+      return file;
     }
-    const next = current.slice();
-    next[index] = { ...current[index], tags };
-    return next;
-  }
-  return current.map((file) =>
-    previousTagsById.has(file.id)
-      ? { ...file, tags: previousTagsById.get(file.id) as FileRecord["tags"] }
-      : file,
-  );
+    const previous = previousTagsById.get(file.id);
+    return previous ? revertTag(file, previous, tagId) : file;
+  });
 }
 
 export function pageLimit(): number {
@@ -384,5 +410,51 @@ export class InFlightRequests<T> {
   /** Whether a request for this generation and signature is in flight. */
   has(generation: number, signature: string): boolean {
     return this.entries.has(`${generation}:${signature}`);
+  }
+}
+
+/**
+ * Identifies the record field an optimistic mutation writes (#277), so
+ * ownership can be tracked per field rather than per record: two batches that
+ * edit different tags or different files never contend.
+ */
+export function mutationOwnershipKey(
+  fileId: string,
+  field: { kind: "favorite" } | { kind: "tag"; tagId: string },
+): string {
+  return field.kind === "favorite"
+    ? `${fileId}:favorite`
+    : `${fileId}:tag:${field.tagId}`;
+}
+
+/**
+ * Tracks which optimistic mutation most recently wrote each (record, field)
+ * (#277). A batch claims the fields it changes; a later batch touching the same
+ * field takes ownership; and a failure reverts a field only while the failing
+ * batch is still its owner. That is what stops a late failure from restoring a
+ * value a newer edit already superseded.
+ */
+export class MutationOwnership {
+  private readonly latest = new Map<string, number>();
+
+  /** Records that `token` now owns each key, superseding any earlier writer. */
+  claim(keys: Iterable<string>, token: number): void {
+    for (const key of keys) {
+      this.latest.set(key, token);
+    }
+  }
+
+  /** Whether `token` is still the most recent writer for `key`. */
+  owns(key: string, token: number): boolean {
+    return this.latest.get(key) === token;
+  }
+
+  /** Drops the keys this token still owns, leaving newer owners in place. */
+  release(keys: Iterable<string>, token: number): void {
+    for (const key of keys) {
+      if (this.latest.get(key) === token) {
+        this.latest.delete(key);
+      }
+    }
   }
 }

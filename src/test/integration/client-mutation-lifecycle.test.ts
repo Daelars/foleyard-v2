@@ -67,8 +67,8 @@ import {
 // Area: client mutation lifecycle (#140). Replaces eight files and 61 tests
 // that exercised extracted reducers with 5 integration tests importing
 // use-library-files.ts directly, driven with deferred promises so requests
-// complete out of order — the live B04 cases, plus the B11 stale-page case
-// fixed in #278.
+// complete out of order — the B04 cases fixed in #277, plus the B11
+// stale-page case fixed in #278.
 
 type JsonResponse = { ok: boolean; json: () => Promise<unknown> };
 const okJson = (data: unknown): JsonResponse => ({
@@ -164,7 +164,7 @@ describe("client mutation lifecycle", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
-  it.fails("a late-failing tag mutation does not erase a later success (B04)", async () => {
+  it("a late-failing tag mutation does not erase a later success (B04)", async () => {
     const fetch = stubFetch();
     const { result } = renderHook(({ input }) => useLibraryFiles(input), {
       initialProps: { input: baseInput() },
@@ -218,7 +218,7 @@ describe("client mutation lifecycle", () => {
     ).toEqual(["t2"]);
   });
 
-  it.fails("a stale deletion failure does not restore the previous root's files (B04)", async () => {
+  it("a stale deletion failure does not restore the previous root's files (B04)", async () => {
     const fetch = stubFetch();
     const { result, rerender } = renderHook(({ input }) => useLibraryFiles(input), {
       initialProps: { input: baseInput() },
@@ -486,7 +486,7 @@ describe("client mutation lifecycle", () => {
     expect(favNext.find((f) => f.id === "a")!.isFavorite).toBe(true);
     expect(favNext.find((f) => f.id === "b")!.isFavorite).toBe(false);
     const favSnapshot = snapshotBulkFavorites(favFiles, ["a"]);
-    const favRolled = rollbackBulkFavorite(favNext, favSnapshot);
+    const favRolled = rollbackBulkFavorite(favNext, favSnapshot, new Set(["a"]));
     expect(favRolled.find((f) => f.id === "a")!.isFavorite).toBe(false);
     expect(consumeFavoritesTotal(7)).toBe(7);
     expect(consumeFavoritesTotal("7")).toBeNull();

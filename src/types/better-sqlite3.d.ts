@@ -5,8 +5,13 @@ declare module "better-sqlite3" {
     run: (...params: unknown[]) => unknown;
   };
 
+  type DatabaseOptions = {
+    readonly?: boolean;
+    fileMustExist?: boolean;
+  };
+
   class Database {
-    constructor(filename: string);
+    constructor(filename: string, options?: DatabaseOptions);
     readonly name: string;
     close(): void;
     pragma(statement: string, options?: { simple?: boolean }): unknown;

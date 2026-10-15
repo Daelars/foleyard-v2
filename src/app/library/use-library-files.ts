@@ -14,8 +14,11 @@ import {
   describeFilesQuery,
   idleFilesPaging,
   InFlightRequests,
+  MutationOwnership,
+  mutationOwnershipKey,
   nextPageRequest,
   pageLimit,
+  revertTag,
   rollbackBulkFavorite,
   rollbackBulkTags,
   snapshotBulkFavorites,
@@ -102,6 +105,13 @@ export function useLibraryFiles(input: LibraryFilesInput) {
   const mutationRequestsRef = useRef(new InFlightRequests<boolean>());
   /** Coalesces duplicate removal requests per request generation (#278). */
   const removalRequestsRef = useRef(new InFlightRequests<FilesRemoval>());
+  /** Monotonic id of the newest optimistic mutation (#277). */
+  const mutationSeqRef = useRef(0);
+  /**
+   * Which mutation last wrote each (file, field) (#277). A late failure only
+   * reverts fields it still owns, so it cannot resurrect a superseded value.
+   */
+  const ownershipRef = useRef(new MutationOwnership());
 
   /**
    * Runs one mutation request per (generation, signature). A duplicate in the
@@ -413,6 +423,14 @@ export function useLibraryFiles(input: LibraryFilesInput) {
         const snapshot = filesRef.current;
         const previous = snapshotBulkFavorites(snapshot, batch.ids);
         const selectedSnapshot = callbacksRef.current.getSelectedFile();
+        // This batch owns the favourite field of every id it edits. A newer
+        // batch on the same file takes that ownership, so a late failure here
+        // can only revert fields it still owns (#277).
+        const token = ++mutationSeqRef.current;
+        const fields = batch.ids.map((id) => mutationOwnershipKey(id, { kind: "favorite" }));
+        const owns = (id: string) =>
+          ownershipRef.current.owns(mutationOwnershipKey(id, { kind: "favorite" }), token);
+        ownershipRef.current.claim(fields, token);
         setFiles((prev) => applyBulkFavorite(prev, batch.ids, batch.isFavorite));
         callbacksRef.current.syncSelectedFile((prev) =>
           prev && targets.has(prev.id) ? { ...prev, isFavorite: batch.isFavorite } : prev,
@@ -433,8 +451,9 @@ export function useLibraryFiles(input: LibraryFilesInput) {
           noteFavoritesTotal(data.favoritesTotal);
           return true;
         } catch (error) {
-          setFiles((prev) => rollbackBulkFavorite(prev, previous));
-          if (selectedSnapshot && targets.has(selectedSnapshot.id)) {
+          const ownedIds = new Set(batch.ids.filter(owns));
+          setFiles((prev) => rollbackBulkFavorite(prev, previous, ownedIds));
+          if (selectedSnapshot && owns(selectedSnapshot.id)) {
             callbacksRef.current.syncSelectedFile((prev) =>
               prev && prev.id === selectedSnapshot.id
                 ? { ...prev, isFavorite: selectedSnapshot.isFavorite }
@@ -445,6 +464,10 @@ export function useLibraryFiles(input: LibraryFilesInput) {
             toast.error(error instanceof Error ? error.message : "Failed to update favorite status");
           }
           return false;
+        } finally {
+          // Release only what this batch still owns, so a newer batch's
+          // ownership is never dropped by this one settling late (#277).
+          ownershipRef.current.release(fields, token);
         }
       });
     },
@@ -479,6 +502,20 @@ export function useLibraryFiles(input: LibraryFilesInput) {
       const previous = snapshotBulkTags(snapshot, batch.fileIds);
       const selectedSnapshot = callbacks.getSelectedFile();
       const tags = callbacks.getTags();
+      // This batch owns the (file, tag) field of every id it edits. A newer
+      // batch of the same tag, or a newer edit of a different tag on the same
+      // file, does not contend; only an overlapping (file, tag) pair transfers
+      // ownership (#277).
+      const token = ++mutationSeqRef.current;
+      const fields = batch.fileIds.map((id) =>
+        mutationOwnershipKey(id, { kind: "tag", tagId: batch.tagId }),
+      );
+      const owns = (id: string) =>
+        ownershipRef.current.owns(
+          mutationOwnershipKey(id, { kind: "tag", tagId: batch.tagId }),
+          token,
+        );
+      ownershipRef.current.claim(fields, token);
       setFiles((prev) => applyBulkTag(prev, batch.fileIds, batch.tagId, batch.attached, tags));
       if (selectedSnapshot && targets.has(selectedSnapshot.id)) {
         callbacks.syncSelectedFile((prev) => {
@@ -520,11 +557,15 @@ export function useLibraryFiles(input: LibraryFilesInput) {
         noteFavoritesTotal(data.favoritesTotal);
         return true;
       } catch (error) {
-        setFiles((prev) => rollbackBulkTags(prev, previous));
-        if (selectedSnapshot && targets.has(selectedSnapshot.id)) {
+        // Revert only this batch's tag, and only on the files it still owns,
+        // so a newer tag on the same file is preserved (#277).
+        const ownedIds = new Set(batch.fileIds.filter(owns));
+        setFiles((prev) => rollbackBulkTags(prev, previous, batch.tagId, ownedIds));
+        if (selectedSnapshot && owns(selectedSnapshot.id)) {
+          const previousTags = previous.get(selectedSnapshot.id) ?? selectedSnapshot.tags;
           callbacks.syncSelectedFile((prev) =>
             prev && prev.id === selectedSnapshot.id
-              ? { ...prev, tags: selectedSnapshot.tags }
+              ? revertTag(prev, previousTags, batch.tagId)
               : prev,
           );
         }
@@ -532,6 +573,10 @@ export function useLibraryFiles(input: LibraryFilesInput) {
           toast.error(error instanceof Error ? error.message : "Failed to update tag");
         }
         return false;
+      } finally {
+        // Release only what this batch still owns, so a newer batch's
+        // ownership is never dropped by this one settling late (#277).
+        ownershipRef.current.release(fields, token);
       }
     });
   }, [mutateOnce, noteFavoritesTotal]);
@@ -579,9 +624,10 @@ export function useLibraryFiles(input: LibraryFilesInput) {
       // generation, so a double submit cannot delete twice or restore stale
       // rows from a superseded request (#278). Mode is part of the signature
       // because it decides which selection state is cleared on success.
+      const generation = filesRequestIdRef.current;
       const signature = `remove:${mode}:${permanent}:${[...targets].sort().join(",")}`;
       return removalRequestsRef.current.run(
-        filesRequestIdRef.current,
+        generation,
         signature,
         async () => {
           const snapshot = filesRef.current;
@@ -600,16 +646,26 @@ export function useLibraryFiles(input: LibraryFilesInput) {
               failed?: Array<{ id: string }>;
             };
             const removedIds = new Set(data.removed ?? ids);
-            // Server truth wins: restore anything the server did not remove.
-            setFiles((prev) => [
-              ...prev,
-              ...snapshot.filter((file) => targets.has(file.id) && !removedIds.has(file.id)),
-            ]);
+            // Reconcile only while this removal still owns the active list. If
+            // a load moved to another view meanwhile, that generation owns the
+            // rows now and a superseded response must not touch them (#277).
+            if (filesRequestIdRef.current === generation) {
+              // Server truth wins: restore anything the server did not remove.
+              setFiles((prev) => [
+                ...prev,
+                ...snapshot.filter((file) => targets.has(file.id) && !removedIds.has(file.id)),
+              ]);
+            }
             callbacksRef.current.onFilesRemoved(removedIds, mode);
             void loadFavoritesCount();
             return { removedIds, failed: data.failed ?? [] };
           } catch {
-            setFiles(snapshot);
+            // A failed removal restores its snapshot only in the generation
+            // that captured it; after a view move the old root's files must
+            // not come back (#277).
+            if (filesRequestIdRef.current === generation) {
+              setFiles(snapshot);
+            }
             toast.error("Failed to remove files");
             return null;
           }

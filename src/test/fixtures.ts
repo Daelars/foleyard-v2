@@ -194,7 +194,7 @@ export function createExtensionContext(
 
 /**
  * A promise a test resolves or rejects on demand, for asserting what happens
- * when requests complete out of order. B04 is a live out-of-order defect, and
+ * when requests complete out of order. The mutation races fixed in #277 and
  * the pagination races fixed in #278 are only reachable this way.
  */
 export function deferred<T = void>() {

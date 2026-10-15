@@ -3,7 +3,7 @@ import {
   type ExtensionV2Command,
   type ExtensionV2Definition,
 } from "./definition";
-import type { V2FailureCode } from "./invocation";
+import type { V2FailureCode, V2SelectionSnapshot } from "./invocation";
 import { V2OperationError } from "./operations";
 import type { ExtensionV2Registry } from "./registry";
 
@@ -130,6 +130,13 @@ export type V2PlanRecord = {
   commandId: string;
   invocationId: string;
   targets: V2PlanTargets;
+  /**
+   * The validated selection/context snapshot the plan was prepared from
+   * (e.g. a drop's `dropFileCount`). Apply re-evaluates availability with
+   * this original context, so a drop plan is never rejected at apply for
+   * lacking the context its preview was prepared with.
+   */
+  selection: V2SelectionSnapshot;
   /** Canonical hash of `{ targets, options }`; apply must echo both byte-identically. */
   bindingHash: string;
   options: unknown;
@@ -330,6 +337,8 @@ export class V2PlanManager {
       commandId: string;
       effectivePermissions: readonly string[];
       capabilities: readonly string[];
+      /** Validated context the plan binds to; defaults to the target IDs. */
+      selection?: V2SelectionSnapshot;
     },
     spec: V2PlanPrepareSpec,
   ): V2PlanRecord {
@@ -359,12 +368,27 @@ export class V2PlanManager {
     }
     const ttlMs = Math.max(1, Math.min(V2_PLAN_MAX_TTL_MS, Math.floor(spec.ttlMs ?? V2_PLAN_TTL_MS)));
     const createdAt = this.clock();
+    const selection: V2SelectionSnapshot = binding.selection
+      ? {
+          fileIds: [...binding.selection.fileIds],
+          ...(binding.selection.folderPath !== undefined
+            ? { folderPath: binding.selection.folderPath }
+            : {}),
+          ...(binding.selection.collectionId !== undefined
+            ? { collectionId: binding.selection.collectionId }
+            : {}),
+          ...(binding.selection.dropFileCount !== undefined
+            ? { dropFileCount: binding.selection.dropFileCount }
+            : {}),
+        }
+      : { fileIds: [...fileIds] };
     const record: V2PlanRecord = {
       planId: createPlanId(),
       extensionId: binding.extensionId,
       commandId: binding.commandId,
       invocationId: binding.invocationId,
       targets: { fileIds: [...fileIds] },
+      selection,
       bindingHash: bindingHashFor({ fileIds: [...fileIds] }, spec.options ?? null),
       options: spec.options ?? null,
       grantIds: [...grantIds],

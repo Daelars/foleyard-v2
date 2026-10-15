@@ -101,6 +101,8 @@ function world(overrides?: {
   files?: IndexedAudioFile[];
   bytes?: Array<[string, string]>;
   failReporterAfter?: number | null;
+  /** Make the used-report write throw a cancellation, as a cancel mid-bookkeeping would. */
+  cancelUsedReport?: boolean;
 }): World {
   const definition = createDropRulesV2Definition();
   const registry = new ExtensionV2Registry();
@@ -147,6 +149,9 @@ function world(overrides?: {
       return version;
     },
     writeFileBytes: async (dest, data) => {
+      if (overrides?.cancelUsedReport && dest.endsWith("foleyard-used.json")) {
+        throw new V2JobCancelledError("cancelled while writing the used report");
+      }
       const version = claim(dest);
       bytes.set(dest, data);
       return version;
@@ -364,6 +369,88 @@ describe("drop-rules-v2 apply", () => {
     expect(value.copied).toBe(1);
     expect(value.failedFiles).toEqual(["a.mp3"]);
     expect(new TextDecoder().decode(w.bytes.get("/out/001-a.mp3"))).toBe("ORIGINAL");
+  });
+
+  it("lists destination conflicts and missing sources in the review plan", async () => {
+    const w = world({ bytes: [["/out/001-a.mp3", "ORIGINAL"]] });
+    const result = await w.host.execute({
+      extensionId: DROP_RULES_V2_ID,
+      commandId: DROP_RULES_V2_APPLY,
+      input: { fileIds: ["a", "b", "gone"], destGrantId: w.grantId },
+      selection: dropSelection(["a", "b", "gone"]),
+    });
+    expect(result).toMatchObject({ ok: true });
+    const outcome = (result as { outcome: { kind: string; planId: string } }).outcome;
+    expect(outcome.kind).toBe("review-required");
+    const reviewed = w.host.reviewPlan(outcome.planId);
+    if (!reviewed.ok) throw new Error(reviewed.message);
+    const details = reviewed.review.details as {
+      conflicts: string[];
+      missing: string[];
+      names: string[];
+    };
+    expect(details.conflicts).toEqual(["001-a.mp3"]);
+    expect(details.missing).toEqual(["gone"]);
+    expect(details.names).toEqual(["001-a.mp3", "002-b.mp3"]);
+    expect(
+      reviewed.review.notices.some(
+        (notice) => notice.tone === "warning" && notice.message.includes("001-a.mp3"),
+      ),
+    ).toBe(true);
+    expect(
+      reviewed.review.notices.some(
+        (notice) => notice.tone === "warning" && notice.message.includes("gone"),
+      ),
+    ).toBe(true);
+    expect(reviewed.review.tables[0].rows).toEqual([
+      ["a.mp3", "001-a.mp3", "conflict"],
+      ["b.mp3", "002-b.mp3", "ready"],
+    ]);
+    // Reviewing only plans: nothing was written.
+    expect(w.bytes.has("/out/002-b.mp3")).toBe(false);
+  });
+
+  it("keeps failure arrays and warnings consistent when the used report collides", async () => {
+    const w = world({
+      bytes: [["/out/foleyard-used.json", '{"previous":true}']],
+    });
+    const value = await applyViaJob(
+      w,
+      { fileIds: ["a", "b"], destGrantId: w.grantId },
+      ["a", "b"],
+    );
+    expect(value.copied).toBe(2);
+    expect(value.skipped).toEqual([]);
+    expect(value.missing).toEqual([]);
+    expect(value.usedReportWritten).toBe(false);
+    // Parallel arrays: one reason per failed output, none dangling.
+    expect(value.failedFiles).toEqual(["foleyard-used.json"]);
+    expect(value.failedReasons).toHaveLength(value.failedFiles.length);
+    expect(value.warnings.join(" ")).toMatch(/used-sounds report/);
+    // The previous report is never overwritten.
+    expect(new TextDecoder().decode(w.bytes.get("/out/foleyard-used.json"))).toBe(
+      '{"previous":true}',
+    );
+  });
+
+  it("settles cancelled instead of swallowing cancellation during the used-report write", async () => {
+    const w = world({ cancelUsedReport: true });
+    const submitted = await w.host.submitJob({
+      extensionId: DROP_RULES_V2_ID,
+      commandId: DROP_RULES_V2_APPLY,
+      input: { fileIds: ["a", "b"], destGrantId: w.grantId },
+      selection: dropSelection(["a", "b"]),
+    });
+    expect(submitted.ok).toBe(true);
+    if (!submitted.ok || submitted.outcome.kind !== "job") {
+      throw new Error("expected a job outcome");
+    }
+    const settled = await w.host.jobs.waitFor(submitted.outcome.jobId);
+    expect(settled.state).toBe("cancelled");
+    // Job-owned partials were disposed; no misleading success, no report.
+    expect(w.bytes.has("/out/001-a.mp3")).toBe(false);
+    expect(w.bytes.has("/out/002-b.mp3")).toBe(false);
+    expect(w.bytes.has("/out/foleyard-used.json")).toBe(false);
   });
 
   it("requires a destination grant", async () => {

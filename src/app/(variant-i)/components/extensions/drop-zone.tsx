@@ -7,15 +7,21 @@ import { Puzzle } from "lucide-react";
 import { validateV2DropCandidates, type ExtensionV2Catalog } from "@yard-core";
 
 import {
-  invokeV2Command,
   resolveV2UiPoint,
   type V2UiState,
 } from "@/lib/extensions-v2/contributions";
+import {
+  resolveDropFilesFromLibrary,
+} from "@/lib/extensions-v2/drop-context";
 import {
   screenV2DropAudio,
   type V2DropOffer,
 } from "@/components/extensions-v2/menus";
 import { useV2FocusRestore } from "@/components/extensions-v2/shared";
+import {
+  useV2DropInvocation,
+  type ResolveDropFiles,
+} from "@/components/extensions-v2/use-v2-drop-invocation";
 import { Button } from "@/components/variant-i";
 
 /**
@@ -24,18 +30,27 @@ import { Button } from "@/components/variant-i";
  * v2 drop menu adapter: genuine OS drop events validate into a drop
  * context (count, names, audio screening), drop-scope contributions
  * resolve through the production resolver with capability checks, and
- * invocation runs the single v2 execution path. Overlays use the I
- * treatment while the validation, filtering (including selection-empty
- * offers) and focus-restore behavior are unchanged.
+ * invocation runs the single v2 execution path.
+ *
+ * #283: the drop context is not just a count. On invoke the dropped names
+ * are resolved to Library IDs, the command's declared destination/staging
+ * grant is obtained through the picker-to-grant flow, and the command runs
+ * with the input its schema requires; a review plan is reviewed and applied
+ * with its original drop context preserved. Overlays use the I treatment
+ * while the validation, filtering (including selection-empty offers) and
+ * focus-restore behavior are unchanged.
  */
 export function V3LibraryDropZone({
   children,
   catalog,
   uiState,
+  resolveDropFiles = resolveDropFilesFromLibrary,
 }: {
   children: React.ReactNode;
   catalog: ExtensionV2Catalog | null;
   uiState: V2UiState;
+  /** Resolve dropped OS file names to Library IDs (default: the files API). */
+  resolveDropFiles?: ResolveDropFiles;
 }) {
   const items = useMemo(
     () => resolveV2UiPoint(catalog, "drop-menu", { fileIds: [] }, uiState),
@@ -45,15 +60,24 @@ export function V3LibraryDropZone({
   const [dragging, setDragging] = useState(false);
   const [offers, setOffers] = useState<V2DropOffer[] | null>(null);
   const [rejection, setRejection] = useState<string | null>(null);
+  const [dropNames, setDropNames] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const wasDragging = useRef(false);
   useV2FocusRestore(!dragging && offers === null);
+
+  const dropInvocation = useV2DropInvocation({ catalog, resolveDropFiles });
 
   useEffect(() => {
     if (!dragging && wasDragging.current) {
       wasDragging.current = false;
     }
   }, [dragging]);
+
+  const clearOffers = useCallback(() => {
+    setOffers(null);
+    setRejection(null);
+    setDropNames([]);
+  }, []);
 
   const evaluateNames = useCallback(
     (names: string[]): void => {
@@ -63,6 +87,7 @@ export function V3LibraryDropZone({
       if (!validation.ok) {
         setRejection(validation.reason);
         setOffers([]);
+        setDropNames([]);
         return;
       }
       const { audio, skipped } = screenV2DropAudio(names);
@@ -71,9 +96,11 @@ export function V3LibraryDropZone({
           `No audio files among ${names.length} dropped item(s); only sounds can be offered to extensions.`,
         );
         setOffers([]);
+        setDropNames([]);
         return;
       }
       setRejection(skipped > 0 ? `${skipped} non-audio item(s) ignored.` : null);
+      setDropNames(audio);
       setOffers(
         items
           .filter(
@@ -88,21 +115,33 @@ export function V3LibraryDropZone({
     [items],
   );
 
-  const handleInvoke = useCallback((offer: V2DropOffer) => {
-    void invokeV2Command({
-      extensionId: offer.item.extensionId,
-      commandId: offer.item.commandId,
-      dropFileCount: offer.audioCount,
-    }).then((result) => {
-      if (!result.ok) {
-        toast.error(result.message);
-        return;
-      }
-      const body = result.body as { ok?: boolean; error?: { message?: string } };
-      if (!body?.ok) toast.error(body?.error?.message ?? "Drop command failed.");
-      else toast.success(`${offer.item.title} started for ${offer.audioCount} file(s).`);
-    });
-  }, []);
+  const handleInvoke = useCallback(
+    (offer: V2DropOffer) => {
+      void dropInvocation
+        .invoke({
+          extensionId: offer.item.extensionId,
+          commandId: offer.item.commandId,
+          names: dropNames,
+        })
+        .then((result) => {
+          if (!result.ok) {
+            toast.error(result.error);
+            return;
+          }
+          if (result.kind === "applied") {
+            const value = result.value as { copied?: number } | undefined;
+            toast.success(
+              `${offer.item.title} applied${
+                typeof value?.copied === "number" ? `: ${value.copied} sound(s)` : ""
+              }.`,
+            );
+            return;
+          }
+          toast.success(`${offer.item.title} finished for ${offer.audioCount} file(s).`);
+        });
+    },
+    [dropInvocation, dropNames],
+  );
 
   if (items.length === 0) return <>{children}</>;
 
@@ -124,8 +163,7 @@ export function V3LibraryDropZone({
       onDragLeave={(event) => {
         if (containerRef.current?.contains(event.relatedTarget as Node | null)) return;
         setDragging(false);
-        setOffers(null);
-        setRejection(null);
+        clearOffers();
       }}
       onDrop={(event) => {
         event.preventDefault();
@@ -137,8 +175,7 @@ export function V3LibraryDropZone({
         if (event.key === "Escape" && (dragging || offers !== null)) {
           event.stopPropagation();
           setDragging(false);
-          setOffers(null);
-          setRejection(null);
+          clearOffers();
         }
       }}
     >
@@ -167,14 +204,7 @@ export function V3LibraryDropZone({
               <p className="text-xs text-zinc-400">
                 {rejection ?? "No extension drop actions are available right now."}
               </p>
-              <Button
-                tone="ghost"
-                size="sm"
-                onClick={() => {
-                  setOffers(null);
-                  setRejection(null);
-                }}
-              >
+              <Button tone="ghost" size="sm" onClick={clearOffers}>
                 Dismiss
               </Button>
             </div>
@@ -185,10 +215,10 @@ export function V3LibraryDropZone({
                   <Button
                     tone="secondary"
                     size="sm"
+                    disabled={dropInvocation.busy}
                     onClick={() => {
                       handleInvoke(offer);
-                      setOffers(null);
-                      setRejection(null);
+                      clearOffers();
                     }}
                     title={`${offer.item.title} · ${offer.audioCount} audio file(s)`}
                   >
@@ -201,14 +231,7 @@ export function V3LibraryDropZone({
                 </li>
               ))}
               <li>
-                <Button
-                  tone="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setOffers(null);
-                    setRejection(null);
-                  }}
-                >
+                <Button tone="ghost" size="sm" onClick={clearOffers}>
                   Dismiss
                 </Button>
               </li>

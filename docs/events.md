@@ -63,7 +63,8 @@ outside the owner subscribes to them.
 ## The five v2 contracts
 
 The v2 extension bus (`V2EventBus` in
-`packages/yard-core/src/extensions-v2/events.ts`, app singleton in
+`packages/yard-core/src/extensions-v2/events.ts`, held on the one
+process-wide v2 runtime and read through
 `src/lib/extensions-v2/events.ts`) carries exactly five typed
 contracts: `settings-changed`, `state-changed`, `approvals-changed`,
 `job-transition`, `contributions-changed`. Only the host and its
@@ -71,9 +72,12 @@ application adapters emit; handlers never receive the bus. Every
 payload names its owning extension (or `"*"` for the
 contributions refresh hint) and carries a sequence number for gap
 detection. Persist precedes notify on every write, so a subscriber
-that rereads on receipt sees the triggering change. Per-chunk job
-progress is high-frequency renderer state and never an event. These
-five are reported separately in the runtime snapshot (`eventsV2`).
+that rereads on receipt sees the triggering change. Because the bus
+belongs to the shared runtime rather than a module, a subscription
+created by one route bundle observes events emitted by another.
+Per-chunk job progress is high-frequency renderer state and never an
+event. These five are reported separately in the runtime snapshot
+(`eventsV2`).
 
 Subscribe with disposal; recovery is always a reread:
 

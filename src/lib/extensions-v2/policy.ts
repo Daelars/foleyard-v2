@@ -16,9 +16,9 @@ import { readV2SettingsRow, writeV2SettingsRow } from "./settings-state";
  * `v2:approvals` — no new migration, the same pattern the jobs snapshot
  * proved. Loaded once per process boot; every change persists first and
  * emits `approvals-changed` afterwards. Malformed stored entries are
- * ignored and counted, never thrown. Grant tokens still live only in
- * module-level memory and expire on restart; only the approval list
- * survives.
+ * ignored and counted, never thrown. Grant tokens live only in the
+ * runtime's in-memory grant stores and expire on restart; only the
+ * approval list survives.
  */
 
 const APPROVALS_KEY = "v2:approvals";

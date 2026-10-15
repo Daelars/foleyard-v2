@@ -59,4 +59,26 @@ describe("process-wide v2 runtime", () => {
     expect(isolated).not.toBe(getV2Runtime());
     expect(isolated.registry).not.toBe(getV2Runtime().registry);
   });
+
+  it("registers the bundled extensions idempotently across route bundles", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      const firstHost = await import("./host");
+      const firstIds = firstHost.getV2Registry().ids().sort();
+      vi.resetModules();
+      const secondHost = await import("./host");
+
+      // The second bundle re-runs bundled registration against the one
+      // registry: definitions already exist, so nothing is re-registered
+      // (no duplicate-extension failure) and the handlers survive.
+      expect(secondHost.getV2Registry().ids().sort()).toEqual(firstIds);
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(
+        secondHost.getAppV2Host().hasHandler("make-pack-v2", "make-pack-v2.from-selection"),
+      ).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

@@ -20,10 +20,10 @@ import { createV2ExtensionStatePorts, createV2SettingsPorts } from "./settings-s
 /**
  * Application v2 job wiring (Application context, R4).
  *
- * One `V2JobManager` per server process, shared by the singleton host
- * and every job route, so polling, reconnects, and renderer reloads
- * always read the same ownership. No v1 extension modules are
- * imported here.
+ * One `V2JobManager` per server process, owned by the one process-wide
+ * v2 runtime (`runtime.ts`) and shared by the host and every job route,
+ * so polling, reconnects, and renderer reloads always read the same
+ * ownership. No v1 extension modules are imported here.
  *
  * Persistence reuses database infrastructure without a migration: the
  * manager's serializable snapshot (ownership metadata and owned output
@@ -31,7 +31,7 @@ import { createV2ExtensionStatePorts, createV2SettingsPorts } from "./settings-s
  * `settings` table, retaining the newest 50 records (R7 retention;
  * older in-memory history to 100 ages out). Every transition persists; a boot load restores
  * history and marks abandoned live jobs interrupted. Destination
- * grants live in the module-level in-memory grant storage, so a
+ * grants live only in the runtime's in-memory grant storage, so a
  * restart expires usable access while reviewable history survives.
  */
 

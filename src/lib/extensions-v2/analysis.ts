@@ -7,8 +7,10 @@ import {
   setClapBackendFactory,
 } from "@/lib/audio-analysis/clap";
 import { createClapBackend } from "@/lib/audio-analysis/clap-backend";
-import { downloadModel, getModelsDir, modelDirFor, modelStatus } from "@/lib/audio-analysis/models";
+import { getModelsDir, modelDirFor, modelStatus } from "@/lib/audio-analysis/models";
 import type { V2AnalysisPorts, V2ModelStatus } from "@yard-core";
+
+import { getV2Runtime } from "./runtime";
 
 // `decode.ts` pulls `ffmpeg-static` into the static import graph, so it
 // stays a dynamic import: catalog, availability, and status reads must
@@ -18,16 +20,16 @@ import type { V2AnalysisPorts, V2ModelStatus } from "@yard-core";
 /**
  * Application analysis ports for v2 operations (#195). Only the CLAP
  * model is known: any other model id fails with a reason. Downloads
- * stream through the model store with progress and cancellation;
- * inference resolves the injected backend, which fails naming the
- * install step until one is provided.
+ * stream through the model store with progress, cancellation, and
+ * resumption, and are single-flight through the process-wide runtime so
+ * concurrent jobs cannot start competing transfers (#289). Inference
+ * resolves the injected backend, which fails naming the install step
+ * until one is provided.
  */
 
 export type V2AnalysisDeps = {
   analysis?: V2AnalysisPorts;
 };
-
-const downloading = new Set<string>();
 
 // Composition owns the concrete runtime. Importing it does not load weights;
 // the factory opens the local, consent-downloaded model on first inference.
@@ -44,6 +46,8 @@ function requireClap(modelId: string): void {
 /** Repository-backed analysis ports; pass deps only in tests. */
 export function createV2AnalysisPorts(deps: V2AnalysisDeps = {}): V2AnalysisPorts {
   const ports = deps.analysis;
+  // One owner per model across route bundles, not a per-bundle set.
+  const downloads = getV2Runtime().modelDownloads;
   return {
     modelStatus: (modelId): V2ModelStatus => {
       if (ports) return ports.modelStatus(modelId);
@@ -52,7 +56,11 @@ export function createV2AnalysisPorts(deps: V2AnalysisDeps = {}): V2AnalysisPort
       const status = modelStatus(manifest);
       return {
         modelId,
-        state: status.ready ? "ready" : downloading.has(modelId) ? "downloading" : "not-downloaded",
+        state: status.ready
+          ? "ready"
+          : downloads.isDownloading(manifest.id)
+            ? "downloading"
+            : "not-downloaded",
         downloadedBytes: status.downloadedBytes,
         totalBytes: status.totalBytes,
         backendAvailable: isClapBackendAvailable(),
@@ -61,15 +69,10 @@ export function createV2AnalysisPorts(deps: V2AnalysisDeps = {}): V2AnalysisPort
     downloadModel: async (modelId, callbacks) => {
       if (ports) return ports.downloadModel(modelId, callbacks);
       requireClap(modelId);
-      downloading.add(modelId);
-      try {
-        return await downloadModel(clapManifest(), {
-          onProgress: callbacks?.onProgress,
-          throwIfCancelled: callbacks?.throwIfCancelled,
-        });
-      } finally {
-        downloading.delete(modelId);
-      }
+      return downloads.download(clapManifest(), {
+        onProgress: callbacks?.onProgress,
+        throwIfCancelled: callbacks?.throwIfCancelled,
+      });
     },
     embedAudio: async (fileId) => {
       if (ports) return ports.embedAudio(fileId);

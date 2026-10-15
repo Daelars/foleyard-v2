@@ -1,17 +1,34 @@
+import { once } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Writable } from "node:stream";
 
 /**
- * Opt-in model file store (#195). Model weights live outside the
+ * Opt-in model file store (#195, #289). Model weights live outside the
  * database beside it: `%APPDATA%/Foleyard/models` on desktop,
  * `<cwd>/foleyard-models` in web/dev, overridable with
  * `FOLEYARD_MODELS_DIR` (tests point it at temp dirs).
  *
- * Downloads are explicit, counted, and cancellable: every file streams
- * to a `.part` sidecar that is renamed only on success, so an
- * interrupted or cancelled download never poisons the store and a
- * first run offline simply finds nothing downloaded.
+ * Downloads are explicit, counted, cancellable, and resumable:
+ *
+ * - Every file streams to a `.part` sidecar that is renamed only after
+ *   the last byte is flushed, so an interrupted or cancelled download
+ *   never promotes a half-written file and completed files are never
+ *   touched by a later failure.
+ * - A partial survives cancellation. A retry asks for the remainder with
+ *   a `Range` request and appends, so an interrupted transfer resumes
+ *   instead of restarting; a server that ignores ranges answers `200`
+ *   with the whole body and the file is started over, never doubled.
+ * - Progress reports the bytes already on disk first, then grows. A
+ *   resumed transfer never rewinds the count to zero.
+ * - Writes observe backpressure (`write` + `drain`), and the descriptor
+ *   is flushed and released on every exit — success, failure, or
+ *   cancellation.
+ *
+ * Single-flight ownership is *not* here: one process owns one download
+ * per model through the coordinator on the shared v2 runtime
+ * (`src/lib/extensions-v2/model-downloads.ts`).
  */
 
 export type ModelFile = {
@@ -33,8 +50,15 @@ export type ModelManifest = {
 
 export type ModelDownloadCallbacks = {
   onProgress?: (downloadedBytes: number, totalBytes: number) => void;
-  /** Polled per chunk; throw to cancel. */
+  /** Polled before each chunk; throw to cancel. */
   throwIfCancelled?: () => void;
+};
+
+export type ModelDownloadOptions = {
+  root?: string;
+  fetchImpl?: typeof fetch;
+  /** External cancellation, relayed to the transfer's abort signal. */
+  signal?: AbortSignal;
 };
 
 export function getModelsDir(): string {
@@ -69,66 +93,196 @@ export function modelStatus(
   return { ready, downloadedBytes, totalBytes: manifest.estimatedBytes };
 }
 
+function fileSize(candidate: string): number {
+  try {
+    return fs.statSync(candidate).size;
+  } catch {
+    return 0;
+  }
+}
+
+/** Total from a `Content-Range` header (`bytes n-m/total` or an unsatisfied `bytes x/total`). */
+function parseContentRangeTotal(header: string | null): number | null {
+  if (!header) return null;
+  const match = /\/\s*(\d+)\s*$/.exec(header);
+  return match ? Number(match[1]) : null;
+}
+
 /**
- * Fetch every manifest file with progress and cancellation. Returns
- * the bytes written. A failed or cancelled download removes its
- * sidecars; completed files are skipped, so retrying resumes at file
- * granularity.
+ * Write one chunk and, when the writable's buffer is full, wait for
+ * `drain` before the caller pulls the next chunk. This is the whole
+ * backpressure contract: a slow disk slows the network reader instead of
+ * buffering the model in memory.
+ */
+export async function writeChunkAwaitingDrain(out: Writable, chunk: Buffer): Promise<void> {
+  if (out.write(chunk)) return;
+  await once(out, "drain");
+}
+
+/** Flush and close a write stream, never masking the caller's error. */
+async function endWriter(out: fs.WriteStream): Promise<void> {
+  if (out.writableEnded || out.destroyed) return;
+  await new Promise<void>((resolve) => {
+    const finish = (): void => {
+      out.removeListener("error", finish);
+      out.removeListener("close", finish);
+      resolve();
+    };
+    out.once("error", finish);
+    out.once("close", finish);
+    out.end(finish);
+  });
+}
+
+type StreamHooks = {
+  onChunk: (length: number) => void;
+  throwIfCancelled?: () => void;
+};
+
+/**
+ * Stream a response body into `sidecar`. On every exit the writer is
+ * flushed and closed (Windows keeps an open descriptor locked, and the
+ * flushed bytes are what a retry resumes from) and the body reader is
+ * cancelled so the network work stops with the transfer.
+ */
+async function streamToFile(
+  response: Response,
+  sidecar: string,
+  append: boolean,
+  hooks: StreamHooks,
+): Promise<void> {
+  const out = fs.createWriteStream(sidecar, { flags: append ? "a" : "w" });
+  const reader = response.body?.getReader();
+  let failure: unknown = null;
+  try {
+    if (!reader) {
+      hooks.throwIfCancelled?.();
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length > 0) {
+        await writeChunkAwaitingDrain(out, buffer);
+        hooks.onChunk(buffer.length);
+      }
+    } else {
+      for (;;) {
+        hooks.throwIfCancelled?.();
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value && value.length > 0) {
+          await writeChunkAwaitingDrain(out, Buffer.from(value));
+          hooks.onChunk(value.length);
+        }
+      }
+    }
+  } catch (error) {
+    failure = error;
+  }
+  await endWriter(out);
+  if (reader) {
+    try {
+      await reader.cancel();
+    } catch {
+      // The stream already settled; there is nothing left to release.
+    }
+  }
+  if (failure) throw failure;
+}
+
+/**
+ * Fetch every manifest file with progress and cancellation. Returns the
+ * bytes fetched from the network this call (0 when everything was
+ * already present). Completed files are skipped; a partial is resumed
+ * with a range request, and its bytes are reported before any new byte
+ * is written.
  */
 export async function downloadModel(
   manifest: ModelManifest,
   callbacks: ModelDownloadCallbacks = {},
-  options: { root?: string; fetchImpl?: typeof fetch } = {},
+  options: ModelDownloadOptions = {},
 ): Promise<{ bytes: number }> {
   const dir = modelDirFor(manifest, options.root ?? getModelsDir());
   const fetchImpl = options.fetchImpl ?? fetch;
   fs.mkdirSync(dir, { recursive: true });
-  let written = 0;
+
+  // Bytes already on disk: completed files plus resumable partials. A
+  // resumed transfer reports this baseline first, so the count never
+  // restarts from zero.
+  let downloaded = 0;
+  const partialBytes = new Map<string, number>();
   for (const file of manifest.files) {
     const full = path.join(dir, file.path);
-    if (fs.existsSync(full)) continue;
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    const sidecar = `${full}.part`;
-    try {
-      const response = await fetchImpl(file.url);
+    if (fs.existsSync(full)) {
+      downloaded += fileSize(full);
+      continue;
+    }
+    const partial = fileSize(`${full}.part`);
+    if (partial > 0) {
+      partialBytes.set(file.path, partial);
+      downloaded += partial;
+    }
+  }
+  callbacks.onProgress?.(downloaded, manifest.estimatedBytes);
+
+  const controller = new AbortController();
+  const relayAbort = (): void => controller.abort();
+  options.signal?.addEventListener("abort", relayAbort, { once: true });
+  let fetched = 0;
+  try {
+    for (const file of manifest.files) {
+      const full = path.join(dir, file.path);
+      if (fs.existsSync(full)) continue;
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      const sidecar = `${full}.part`;
+      let offset = partialBytes.get(file.path) ?? 0;
+      const ranged = offset > 0 ? { headers: { Range: `bytes=${offset}-` } } : {};
+      let response = await fetchImpl(file.url, { ...ranged, signal: controller.signal });
+      if (response.status === 416 && offset > 0) {
+        // The partial already holds all the source has: promote it rather
+        // than failing forever. Otherwise the range was stale — restart.
+        const total = parseContentRangeTotal(response.headers.get("content-range"));
+        if (total !== null && offset >= total) {
+          fs.renameSync(sidecar, full);
+          continue;
+        }
+        downloaded -= offset;
+        offset = 0;
+        response = await fetchImpl(file.url, { signal: controller.signal });
+      }
       if (!response.ok) {
         throw new Error(
           `Model file ${file.path} failed to download: HTTP ${response.status}. Check the manifest against the source file list.`,
         );
       }
-      const out = fs.createWriteStream(sidecar);
-      try {
-        const reader = response.body?.getReader();
-        if (!reader) {
-          const buffer = Buffer.from(await response.arrayBuffer());
-          out.write(buffer);
-          written += buffer.length;
-        } else {
-          for (;;) {
-            callbacks.throwIfCancelled?.();
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (value) {
-              out.write(Buffer.from(value));
-              written += value.length;
-              callbacks.onProgress?.(written, manifest.estimatedBytes);
-            }
-          }
-        }
-      } finally {
-        await new Promise<void>((resolve, reject) => {
-          out.end((error?: Error | null) => (error ? reject(error) : resolve()));
-        });
+      // A server that ignores Range answers 200 with the whole body: start
+      // this file over rather than appending a second copy behind the partial.
+      if (offset > 0 && response.status !== 206) {
+        downloaded -= offset;
+        offset = 0;
+      }
+      callbacks.throwIfCancelled?.();
+      await streamToFile(response, sidecar, offset > 0, {
+        onChunk: (length) => {
+          fetched += length;
+          downloaded += length;
+          callbacks.onProgress?.(downloaded, manifest.estimatedBytes);
+        },
+        throwIfCancelled: callbacks.throwIfCancelled,
+      });
+      if (fs.existsSync(full)) {
+        // Another owner installed the completed file while this transfer
+        // ran. Keep theirs — never overwrite a completed target with a
+        // partial we happened to finish — and drop our sidecar.
+        fs.rmSync(sidecar, { force: true });
+        continue;
       }
       fs.renameSync(sidecar, full);
-    } catch (error) {
-      try {
-        if (fs.existsSync(sidecar)) fs.rmSync(sidecar);
-      } catch {
-        // Cleanup is best-effort; the original error is what matters.
-      }
-      throw error;
     }
+  } catch (error) {
+    // Abort the network work alongside the reader we already cancelled, so
+    // a cancelled transfer releases its socket instead of lingering.
+    controller.abort();
+    throw error;
+  } finally {
+    options.signal?.removeEventListener("abort", relayAbort);
   }
-  return { bytes: written };
+  return { bytes: fetched };
 }

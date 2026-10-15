@@ -53,7 +53,10 @@ import {
  *
  * Idempotency: a submit carrying an `idempotencyKey` returns the
  * existing record for the same extension, command, and key instead of
- * starting duplicate work. A genuinely new attempt uses a fresh key;
+ * starting duplicate work. The key is bound to a digest of the payload
+ * it first created (input + selection): reusing the key with a changed
+ * payload rejects with `V2JobIdempotencyConflictError` rather than
+ * silently running the earlier job. A genuinely new attempt uses a fresh key;
  * it re-authorizes grants through the operation services (expired
  * grants deny), never overwrites completed outputs (the services
  * refuse conflicting names), and never routes through v1 (this module
@@ -135,15 +138,21 @@ export type V2JobRecord = {
   /** Canonical paths the job created; safe-cleanup/review surface. */
   outputs: string[];
   destination?: V2JobDestination;
+  /**
+   * Digest of the submission payload (input + selection) captured when an
+   * idempotency key was first used. Memory and persisted, never exposed:
+   * a resubmission with the same key but a different digest rejects as
+   * `idempotency-conflict` instead of silently returning the earlier job.
+   */
+  requestFingerprint?: string;
   /** Full handler value is memory-only; snapshots keep counts/outputs. */
   value?: unknown;
   /**
    * Bounded, schema-shaped terminal summary exposed over the job API: a
    * projection of the declared result plus redacted diagnostics. Memory
    * only — it is never persisted, because the projection may carry the
-   * user's own output paths and durable result storage belongs to a later
-   * ticket (#314). Transport attaches the diagnostic; the value is
-   * projected once at completion.
+   * user's own output paths. Transport attaches the diagnostic; the value
+   * is projected once at completion.
    */
   result?: V2JobTerminalResult;
   error?: { code: V2FailureCode; message: string };
@@ -176,6 +185,12 @@ export type V2JobSubmit = {
   commandId: string;
   invocationId: string;
   idempotencyKey?: string;
+  /**
+   * Digest of the input/selection this key is first submitted with. A
+   * later submit reusing the key compares its digest and rejects with
+   * `idempotency-conflict` when the payload changed.
+   */
+  requestFingerprint?: string;
   destination?: V2JobDestination;
   /**
    * The command's declared result schema. When present, a succeeded job's
@@ -207,11 +222,74 @@ export function isV2JobCancellation(error: unknown): error is V2JobCancelledErro
 }
 
 /**
+ * Rejection thrown when an idempotency key is reused with a different
+ * payload than the job it first created. The caller must use a fresh key
+ * for changed inputs; silently returning the earlier job would run the
+ * wrong work.
+ */
+export class V2JobIdempotencyConflictError extends Error {
+  constructor(
+    readonly idempotencyKey: string,
+    readonly jobId: string,
+  ) {
+    super(
+      `Idempotency key "${idempotencyKey}" was already used for a different payload (job "${jobId}"); use a fresh key for changed inputs.`,
+    );
+    this.name = "V2JobIdempotencyConflictError";
+  }
+}
+
+export function isV2JobIdempotencyConflict(
+  error: unknown,
+): error is V2JobIdempotencyConflictError {
+  return error instanceof V2JobIdempotencyConflictError;
+}
+
+const FNV_OFFSET_BASIS = 0x811c9dc5;
+const FNV_SECOND_SEED = 0x9e3779b9;
+const FNV_PRIME = 0x01000193;
+
+function fnv1a32(text: string, seed: number): number {
+  let hash = seed >>> 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, FNV_PRIME) >>> 0;
+  }
+  return hash >>> 0;
+}
+
+/** Stable serialization: object keys are sorted, undefined members dropped. */
+function canonicalizeFingerprint(value: unknown): string {
+  if (value === undefined) return "undefined";
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalizeFingerprint).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record)
+    .filter((key) => record[key] !== undefined)
+    .sort();
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalizeFingerprint(record[key])}`).join(",")}}`;
+}
+
+/**
+ * Bounded digest of a job submission's payload (input + selection). It is
+ * deterministic, key-order independent, and short enough to persist with
+ * every record; identical payloads fingerprint identically so a lost
+ * response is recoverable, and any change is detected. This is a
+ * comparison aid, not a security hash.
+ */
+export function fingerprintV2JobRequest(input: unknown, selection: unknown): string {
+  const canonical = canonicalizeFingerprint({ input: input ?? null, selection: selection ?? null });
+  const primary = fnv1a32(canonical, FNV_OFFSET_BASIS);
+  const secondary = fnv1a32(canonical, FNV_SECOND_SEED);
+  return `fnv1a32:${primary.toString(16).padStart(8, "0")}${secondary.toString(16).padStart(8, "0")}`;
+}
+
+/**
  * Projection persisted in the settings-table snapshot. Keeps counts,
- * outputs, ownership metadata, and partial outcomes; drops the memory-only
- * handler value and the terminal result entirely (a projected value may
- * carry the user's own private paths, and durable result storage belongs
- * to #314); and redacts diagnostic messages so a failure's stack or host
+ * outputs, ownership metadata, partial outcomes, and the idempotency
+ * payload digest; drops the memory-only handler value and the terminal
+ * result entirely (a projected value may carry the user's own private
+ * paths); and redacts diagnostic messages so a failure's stack or host
  * path never reaches the database. A restored record therefore carries no
  * value, and `parseSnapshotRecord` refuses one even if a snapshot is
  * hand-edited to include it.
@@ -258,6 +336,9 @@ export function exposedV2JobRecord(record: V2JobRecord): V2JobRecord {
   if (result.value !== undefined || result.valueOmitted || result.diagnostic) {
     copy.result = result;
   }
+  // The payload digest is a server-side comparison aid, never part of the
+  // job API surface.
+  delete copy.requestFingerprint;
   return copy;
 }
 
@@ -366,6 +447,16 @@ export class V2JobManager implements V2JobStatusReader {
       const existingId = this.idempotency.get(key);
       const existing = existingId ? this.entries.get(existingId) : undefined;
       if (existing) {
+        if (
+          spec.requestFingerprint !== undefined &&
+          existing.record.requestFingerprint !== undefined &&
+          existing.record.requestFingerprint !== spec.requestFingerprint
+        ) {
+          throw new V2JobIdempotencyConflictError(
+            spec.idempotencyKey,
+            existing.record.jobId,
+          );
+        }
         return { record: { ...existing.record }, duplicate: true };
       }
     }
@@ -374,6 +465,9 @@ export class V2JobManager implements V2JobStatusReader {
       jobId: createJobId(),
       invocationId: spec.invocationId,
       ...(spec.idempotencyKey !== undefined ? { idempotencyKey: spec.idempotencyKey } : {}),
+      ...(spec.requestFingerprint !== undefined
+        ? { requestFingerprint: spec.requestFingerprint }
+        : {}),
       extensionId: spec.extensionId,
       commandId: spec.commandId,
       state: "queued",
@@ -757,6 +851,9 @@ function parseSnapshotRecord(raw: unknown): V2JobRecord | null {
     jobId: candidate.jobId,
     invocationId: candidate.invocationId,
     ...(typeof candidate.idempotencyKey === "string" ? { idempotencyKey: candidate.idempotencyKey } : {}),
+    ...(typeof candidate.requestFingerprint === "string"
+      ? { requestFingerprint: candidate.requestFingerprint }
+      : {}),
     extensionId: candidate.extensionId,
     commandId: candidate.commandId,
     state: candidate.state,

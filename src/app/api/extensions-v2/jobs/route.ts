@@ -2,20 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { handleV2HttpJobList, handleV2HttpJobSubmit } from "@yard-core";
 import { getAppV2Host } from "@/lib/extensions-v2/host";
-import { ensureV2JobsRestored, getV2JobManager } from "@/lib/extensions-v2/jobs";
+import {
+  ensureV2JobsRestored,
+  getV2JobManager,
+  getV2JobPersistenceStatus,
+  retryV2JobPersistence,
+} from "@/lib/extensions-v2/jobs";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/extensions-v2/jobs — start host-owned job work, 202 with
- * the job outcome. Duplicate idempotency keys return the existing job.
+ * the job outcome. Duplicate idempotency keys return the existing job;
+ * a reused key with a changed payload is rejected (409). The response
+ * carries the durable-history status so a failed snapshot write is
+ * surfaced rather than swallowed.
  *
  * GET /api/extensions-v2/jobs — poll bounded job history (newest
  * first). Stateless polling: reconnect or reload and pass the same job
- * ID again. v1 routes are untouched.
+ * ID again. Pending snapshot writes are retried before the read and
+ * reported alongside the page. v1 routes are untouched.
  */
 export async function POST(request: NextRequest) {
   ensureV2JobsRestored();
+  retryV2JobPersistence();
   let body: unknown;
   try {
     body = await request.json();
@@ -26,11 +36,17 @@ export async function POST(request: NextRequest) {
     );
   }
   const response = await handleV2HttpJobSubmit(getAppV2Host(), body);
-  return NextResponse.json(response.body, { status: response.status });
+  const accepted = response.status >= 200 && response.status < 300;
+  const responseBody = response.body as Record<string, unknown>;
+  return NextResponse.json(
+    accepted ? { ...responseBody, persistence: getV2JobPersistenceStatus() } : responseBody,
+    { status: response.status },
+  );
 }
 
 export function GET(request: NextRequest) {
   ensureV2JobsRestored();
+  retryV2JobPersistence();
   const params = request.nextUrl.searchParams;
   const cursor = params.get("cursor");
   const limitRaw = params.get("limit");
@@ -38,5 +54,8 @@ export function GET(request: NextRequest) {
     ...(cursor !== null ? { cursor } : {}),
     ...(limitRaw !== null ? { limit: Number(limitRaw) } : {}),
   });
-  return NextResponse.json(response.body, { status: response.status });
+  return NextResponse.json(
+    { ...(response.body as Record<string, unknown>), persistence: getV2JobPersistenceStatus() },
+    { status: response.status },
+  );
 }

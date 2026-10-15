@@ -107,7 +107,8 @@ input, unknown-capability denial, granted permissions), ownership-keyed
 handlers, engine-owned `runMode` (direct/apply/job), typed `{ ok, error }`
 envelopes. Limits: 256 KiB body, 64 KiB input, 500 selection IDs. Status:
 200 immediate/review, 202 job, 400 invalid, 403 disabled/denied, 404
-unknown/unresolvable, 413 over limits, 500 host faults. Background work
+unknown/unresolvable, 409 an idempotency key reused with a changed
+payload, 413 over limits, 500 host faults. Background work
 goes through `POST /api/extensions-v2/jobs` with `vjob_` IDs and polling;
 reviewed work goes through the plans routes. Full contracts and author
 examples live in `docs/extensions-v2.md`.
@@ -135,6 +136,7 @@ entries through the v2 bridge.
 | `input-invalid` / `selection-*` / `context-unsupported` | 400 | bad envelope, missing selection, unsupported context |
 | `payload-too-large` | 413 | over body/input/selection limits |
 | `job-unknown` / `plan-unknown` | 404 | missing job or plan id |
+| `idempotency-conflict` | 409 | an idempotency key reused with a changed payload |
 | `plan-expired` / `plan-altered` / `review-required` | 400 | reviewed-plan contract violations |
 
 Cancellation is cooperative: work stops between operations.

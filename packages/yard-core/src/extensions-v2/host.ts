@@ -35,6 +35,8 @@ import {
   type V2PlanReview,
 } from "./plans";
 import {
+  fingerprintV2JobRequest,
+  isV2JobIdempotencyConflict,
   sanitizeV2IdempotencyKey,
   V2JobManager,
   type V2JobCompletion,
@@ -605,12 +607,17 @@ export class ExtensionV2Host {
         ? null
         : `Extension "${checked.definition.name}" is disabled; enable it to run "${command.title}".`;
     let submitted: { record: V2JobRecord; duplicate: boolean };
+    const requestFingerprint = fingerprintV2JobRequest(
+      checked.invocation.input,
+      checked.invocation.selection,
+    );
     try {
       submitted = this.jobs.submit({
         extensionId,
         commandId: checked.invocation.commandId,
         invocationId,
         ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
+        requestFingerprint,
         ...(command.result !== undefined ? { resultSchema: command.result } : {}),
         gate,
         run: async (context) => {
@@ -652,6 +659,16 @@ export class ExtensionV2Host {
         },
       });
     } catch (error) {
+      if (isV2JobIdempotencyConflict(error)) {
+        return {
+          ok: false,
+          code: "idempotency-conflict",
+          message: error.message,
+          invocationId,
+          extensionId,
+          commandId: checked.invocation.commandId,
+        };
+      }
       return {
         ok: false,
         code: "extension-disabled",

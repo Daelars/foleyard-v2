@@ -1,5 +1,3 @@
-import { eq } from "drizzle-orm";
-
 import {
   createV2OperationServices,
   V2JobManager,
@@ -7,15 +5,18 @@ import {
   type V2JobSnapshot,
   type V2OperationServices,
 } from "@yard-core";
-import { db } from "@/lib/database/connection";
-import { settings } from "@/lib/schema";
 
 import { createV2ArchivePorts } from "./archive";
 import { createV2FileContentPorts, getV2GrantStore } from "./filesystem";
 import { getV2Events } from "./events";
 import { createV2LibraryPorts } from "./library-ports";
-import { getV2Runtime } from "./runtime";
-import { createV2ExtensionStatePorts, createV2SettingsPorts } from "./settings-state";
+import { getV2Runtime, type V2JobPersistenceStatus } from "./runtime";
+import {
+  createV2ExtensionStatePorts,
+  createV2SettingsPorts,
+  readV2SettingsRow,
+  writeV2SettingsRow,
+} from "./settings-state";
 
 /**
  * Application v2 job wiring (Application context, R4).
@@ -26,16 +27,25 @@ import { createV2ExtensionStatePorts, createV2SettingsPorts } from "./settings-s
  * ownership. No v1 extension modules are imported here.
  *
  * Persistence reuses database infrastructure without a migration: the
- * manager's serializable snapshot (ownership metadata and owned output
- * paths, never grant tokens) is stored as one row in the existing
- * `settings` table, retaining the newest 50 records (R7 retention;
- * older in-memory history to 100 ages out). Every transition persists; a boot load restores
+ * manager's serializable snapshot (ownership metadata, owned output
+ * paths, and idempotency payload digests; never grant tokens) is stored
+ * as one row in the existing `settings` table through the settings-state
+ * ports, retaining the newest 50 records (R7 retention; older in-memory
+ * history to 100 ages out). Every transition persists; a boot load restores
  * history and marks abandoned live jobs interrupted. Destination
  * grants live only in the runtime's in-memory grant storage, so a
  * restart expires usable access while reviewable history survives.
+ *
+ * Durability is surfaced, never swallowed (#314): a failed write is
+ * recorded on the runtime (`V2JobPersistenceStatus`), the job routes
+ * report it, and the write is retried on the next transition, request,
+ * or backoff timer. History is only lost if every retry fails.
  */
 
 const SNAPSHOT_KEY = "v2:jobs:snapshot";
+/** Retry backoff for a failed snapshot write: 1s, 2s, 4s … capped at 30s. */
+const PERSIST_RETRY_BASE_MS = 1_000;
+const PERSIST_RETRY_MAX_MS = 30_000;
 
 /**
  * The manager belongs to the process-wide runtime, not module state —
@@ -125,19 +135,61 @@ export function buildV2JobOperations(binding: {
   });
 }
 
-function persistV2JobSnapshot(): void {
+/** Current durable-history status; a copy so callers cannot mutate it. */
+export function getV2JobPersistenceStatus(): V2JobPersistenceStatus {
+  return { ...getV2Runtime().jobPersistence };
+}
+
+/**
+ * Commit the manager's snapshot to the settings table. State transitions
+ * and terminal records call this; progress ticks are coalesced by
+ * `createV2JobTransitionHandler`. A failure is recorded (never swallowed)
+ * and scheduled for retry, so job history is not silently lost.
+ */
+export function persistV2JobSnapshot(): V2JobPersistenceStatus {
+  const runtime = getV2Runtime();
+  const status = runtime.jobPersistence;
+  status.lastAttemptAt = new Date().toISOString();
   try {
-    const snapshot = getV2JobManager().snapshot();
-    const serialized = JSON.stringify(snapshot);
-    const updatedAt = new Date().toISOString();
-    db.insert(settings)
-      .values({ key: SNAPSHOT_KEY, value: serialized, updatedAt })
-      .onConflictDoUpdate({ target: settings.key, set: { value: serialized, updatedAt } })
-      .run();
-  } catch {
-    // Job history is diagnostic: a persistence failure must never fail
-    // the job transition itself. The next transition retries.
+    writeV2SettingsRow(SNAPSHOT_KEY, getV2JobManager().snapshot());
+    status.durable = true;
+    status.pending = false;
+    status.lastError = null;
+    status.lastPersistedAt = status.lastAttemptAt;
+    status.consecutiveFailures = 0;
+  } catch (error) {
+    status.durable = false;
+    status.pending = true;
+    status.consecutiveFailures += 1;
+    status.lastError = error instanceof Error ? error.message : String(error);
+    scheduleV2JobPersistenceRetry();
   }
+  return { ...status };
+}
+
+/**
+ * Retry a pending write now. Called before serving job requests and by
+ * the backoff timer, so a transient database failure heals on the next
+ * opportunity instead of stranding history.
+ */
+export function retryV2JobPersistence(): V2JobPersistenceStatus {
+  const runtime = getV2Runtime();
+  if (!runtime.jobPersistence.pending) return { ...runtime.jobPersistence };
+  return persistV2JobSnapshot();
+}
+
+function scheduleV2JobPersistenceRetry(): void {
+  const runtime = getV2Runtime();
+  if (runtime.jobPersistenceTimer !== null) return;
+  const failures = Math.max(1, runtime.jobPersistence.consecutiveFailures);
+  const delay = Math.min(PERSIST_RETRY_BASE_MS * 2 ** (failures - 1), PERSIST_RETRY_MAX_MS);
+  const timer = setTimeout(() => {
+    runtime.jobPersistenceTimer = null;
+    retryV2JobPersistence();
+  }, delay);
+  const unref = (timer as { unref?: () => void }).unref;
+  if (typeof unref === "function") unref.call(timer);
+  runtime.jobPersistenceTimer = timer;
 }
 
 /**
@@ -154,10 +206,9 @@ export function ensureV2JobsRestored(): { restored: number; interrupted: number 
   }
   runtime.jobsRestored = true;
   try {
-    const row = db.select().from(settings).where(eq(settings.key, SNAPSHOT_KEY)).get();
-    if (!row?.value) return { restored: 0, interrupted: 0 };
-    const snapshot = JSON.parse(row.value) as V2JobSnapshot;
-    const { restored, interrupted } = getV2JobManager().restoreSnapshot(snapshot);
+    const stored = readV2SettingsRow(SNAPSHOT_KEY);
+    if (stored === undefined || stored === null) return { restored: 0, interrupted: 0 };
+    const { restored, interrupted } = getV2JobManager().restoreSnapshot(stored as V2JobSnapshot);
     persistV2JobSnapshot();
     return { restored, interrupted };
   } catch {

@@ -15,6 +15,9 @@ jobs:
           node-version: 22
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
+      # Data-loss expected failures are release blockers (#304): refuse to
+      # package while any `data-loss` entry is pinned.
+      - run: node scripts/check-expected-failures.cjs --release
       # release:build runs `next build`, writes build provenance, stages and
       # checks docs, then packages — so the shipped manifest carries the build
       # id of the binary it ships with (#241).

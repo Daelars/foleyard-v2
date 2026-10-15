@@ -229,7 +229,7 @@ describe("scanner", () => {
     }
   });
 
-  it.fails("resolves parent/child root ownership deterministically regardless of order (I03)", async () => {
+  it.fails("[XF-I03-01] resolves parent/child root ownership deterministically regardless of order (I03)", async () => {
     const scratch = createScratchLibrary("foleyard-scan-roots-");
     try {
       const deep = scratch.writeFile("sub/deep.wav");

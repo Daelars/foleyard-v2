@@ -63,16 +63,20 @@ bun run release:cut -- 0.2.3
 
 `release:cut` runs `prepare-release.cjs --cut`, which:
 
-1. Refuses to run if the working tree is dirty.
-2. Bumps the version in `package.json` — the single version source. The
+1. Refuses to run while a `data-loss` expected failure is pinned in
+   `docs/expected-failures.md` (#304). Data-loss findings are release
+   blockers; fix the finding, flip its test to `it` and remove its ledger
+   entry before cutting.
+2. Refuses to run if the working tree is dirty.
+3. Bumps the version in `package.json` — the single version source. The
    About/settings UI, runtime snapshot, documentation manifest, and
    installer all derive from it during the release build.
-3. Commits `Release x.y.z`.
-4. Creates annotated tag `vx.y.z`.
-5. Pushes the current branch (`development`).
-6. Fast-forwards `main` to the released commit and pushes it; aborts
+4. Commits `Release x.y.z`.
+5. Creates annotated tag `vx.y.z`.
+6. Pushes the current branch (`development`).
+7. Fast-forwards `main` to the released commit and pushes it; aborts
    loudly if `main` has diverged.
-7. Pushes the tag last, triggering `.github/workflows/release.yml`.
+8. Pushes the tag last, triggering `.github/workflows/release.yml`.
 
 Afterwards `development` and `main` point at the same code. Keep
 committing to `development` and cut again when ready; the cycle repeats.
@@ -95,11 +99,15 @@ The release workflow (`.github/workflows/release.yml`) runs:
 
 ```bash
 bun install --frozen-lockfile
+node scripts/check-expected-failures.cjs --release
 bun run release:build
 ```
 
-then verifies `dist-electron/latest.yml` plus its installer and blockmap,
-and uploads `dist-electron/Foleyard-Setup-*.exe`,
+The `--release` check is the release gate for #304: it fails while any
+`data-loss` expected failure is pinned, so a known data-destroying defect
+cannot ship. The ordinary CI check reports those entries but passes. The
+workflow then verifies `dist-electron/latest.yml` plus its installer and
+blockmap, and uploads `dist-electron/Foleyard-Setup-*.exe`,
 `dist-electron/Foleyard-Setup-*.exe.blockmap`, and `dist-electron/latest.yml`
 as GitHub release assets.
 

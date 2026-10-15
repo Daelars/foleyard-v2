@@ -176,7 +176,7 @@ describe("database correctness", () => {
   });
 
   it.fails(
-    "agrees between getFiles and getFileCount across every filter (B03)",
+    "[XF-B03-01] agrees between getFiles and getFileCount across every filter (B03)",
     () => {
       const seeded = seed(["/lib/kick.wav", "/lib/snare.wav", "/lib/hat.wav"]);
       const collectionId = collections.createCollection("Session");
@@ -511,7 +511,7 @@ describe("database correctness", () => {
     expect(files.getFileByPath("/lib/up.wav")?.duration).toBe(9);
   });
 
-  it.fails("converts a smart collection atomically within the bind limit (B09)", () => {
+  it.fails("[XF-B09-01] converts a smart collection atomically within the bind limit (B09)", () => {
     const matching = Math.ceil(SQLITE_MAX_VARIABLES / 2) + 50;
     files.batchUpsertFiles(
       Array.from({ length: matching }, (_, index) =>

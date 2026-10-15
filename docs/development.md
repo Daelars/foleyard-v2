@@ -51,8 +51,10 @@ asserts the staged manifest carries the build id.
 
 Fixture isolation: `src/test/fixtures.ts` builds throwaway libraries and
 databases per test; integration tests live in `src/test/integration/`.
-`scripts/check-expected-failures.cjs` (CI) counts `it.fails(` in
-`src/test/integration/` and requires the count to equal the ledger below.
+`scripts/check-expected-failures.cjs` (CI) maps each pinned `it.fails(` to its
+structured entry in `docs/expected-failures.md` by ID, so a correct expected
+failure cannot be swapped for an unrelated one or hidden by a count; entries
+marked `data-loss` block a release.
 
 Authoring a v2 extension:
 
@@ -80,18 +82,13 @@ checkout never ships and is never read by production builds.
 
 ## Failure behavior and limitations
 
-Expected-failures ledger (`docs/expected-failures.md`, 8 entries — a PR
-that fixes a finding flips its test to `it` and removes the entry in the
-same change; deleting a test without fixing fails CI):
-
-1. B03 — database-correctness: collection-branch count disagreement (#137)
-2. B09 — database-correctness: unchunked, non-atomic smart conversion (#137)
-3. B02 — data-loss-prevention: distinct recordings inherit tags (#136)
-4. B10 — data-loss-prevention: removal undone by rescan (#136)
-5. I03 — scanner: order-dependent root ownership (#139)
-6. B04 — client-mutation-lifecycle: late tag failure erases newer edit (#140)
-7. B04 — client-mutation-lifecycle: stale deletion restores old root (#140)
-8. B11 — client-mutation-lifecycle: stale page unlocks duplicate request (#140)
+Expected-failures ledger (`docs/expected-failures.md`): a structured table
+where each entry carries a unique ID, severity, owner, introduced version and
+review date. A PR that fixes a finding flips its test to `it` and removes its
+row in the same change; deleting or swapping a test without the matching row
+fails CI. The 8 pinned regressions are B03, B09, B02, B10, I03, B04 (two) and
+B11; the data-loss entries (B02, B10, B04) block a release via
+`node scripts/check-expected-failures.cjs --release`.
 
 Previously fixed and removed from the ledger: B01 (gather overwrite),
 B05 (header-only first parse), B06 (silent 5,000-file scan cap), B08
@@ -110,7 +107,8 @@ thresholds and `bun run test:coverage` are the source of truth.
 - `vitest.config.ts` — suite + coverage thresholds
 - `src/test/fixtures.ts` — fixture isolation
 - `src/test/integration/` — integration suite incl. `it.fails` ledger tests
-- `scripts/check-expected-failures.cjs` — ledger count check (CI)
+- `scripts/check-expected-failures.cjs` — ledger mapping check (CI) + release gate
+- `scripts/lib/expected-failures.cjs` — ledger parsing and test matching
 - `scripts/dev-desktop.cjs`, `scripts/verify-workspace-root.cjs`,
   `scripts/rebuild-traced.cjs`, `scripts/clean-binary.cjs` — dev/build tooling
 
@@ -123,4 +121,4 @@ The runnable-in-repository examples (derived from `examples/`) are
 ## Related documentation
 
 - `RELEASE.md` — local desktop build, release prepare/publish, auto-update requirements
-- `docs/expected-failures.md` — the 8-entry ledger this guide summarizes
+- `docs/expected-failures.md` — the structured expected-failures ledger

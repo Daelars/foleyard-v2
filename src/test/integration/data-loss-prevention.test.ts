@@ -28,7 +28,7 @@ afterEach(() => library.dispose());
 
 describe("data-loss prevention", () => {
   it.fails(
-    "keeps two distinct same-size recordings from inheriting each other (B02)",
+    "[XF-B02-01] keeps two distinct same-size recordings from inheriting each other (B02)",
     () => {
       const sqlite: TestDatabase = createTestDatabase();
       try {
@@ -58,7 +58,7 @@ describe("data-loss prevention", () => {
     },
   );
 
-  it.fails("keeps a user exclusion through the next scan (B10)", () => {
+  it.fails("[XF-B10-01] keeps a user exclusion through the next scan (B10)", () => {
     const sqlite: TestDatabase = createTestDatabase();
     try {
       const repository = new SqliteAudioFileRepository(sqlite);

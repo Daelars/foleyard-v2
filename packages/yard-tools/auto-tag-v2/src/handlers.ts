@@ -2,10 +2,13 @@ import {
   extendedOperationsOf,
   immediateV2Result,
   isV2JobCancellation,
+  reviewV2Result,
   V2OperationError,
   type ExtensionV2Host,
   type IndexedAudioFile,
   type V2HandlerContext,
+  type V2PreviewNotice,
+  type V2PreviewTable,
   type V2TagAttachment,
 } from "yard-core";
 
@@ -1238,34 +1241,255 @@ export function runLatestArrivals(ctx: V2HandlerContext) {
   });
 }
 
-export function runRemoveByOrigin(ctx: V2HandlerContext) {
-  const input = inputRecord(ctx);
-  if (input.confirm !== true) {
-    throw new V2OperationError("input-invalid", "Confirm removal before changing automatic tag attachments.");
+/**
+ * Destructive auto-tag operations (#287) run through the host-recorded
+ * review plan: a client `confirm` flag is never authority. `direct`
+ * prepares a plan and mutates nothing; `apply` executes the exact
+ * reviewed plan after revalidating that the affected tags still exist
+ * and that the counts the user reviewed still hold. `job` is refused —
+ * a destructive change never runs unreviewed in the background.
+ */
+const MAX_PLAN_ROWS = 100;
+
+/** Apply runs the reviewed plan's stored options; direct runs fresh input; job is refused. */
+function destructiveInput(ctx: V2HandlerContext): Record<string, unknown> {
+  if (ctx.runMode === "apply") {
+    return ctx.plan && typeof ctx.plan.options === "object" && ctx.plan.options !== null
+      ? (ctx.plan.options as Record<string, unknown>)
+      : {};
   }
+  if (ctx.runMode === "job") {
+    throw new V2OperationError(
+      "context-unsupported",
+      "This command changes tags destructively, so it runs only through a reviewed plan; use the command surface instead of a background job.",
+    );
+  }
+  return inputRecord(ctx);
+}
+
+function planAltered(message: string): V2OperationError {
+  return new V2OperationError("plan-altered", message);
+}
+
+/** Every live attachment in the Library, so tag mutations revalidate against real state. */
+function liveAttachments(ctx: V2HandlerContext): V2TagAttachment[] {
+  const { tags } = extendedOperationsOf(ctx);
+  const collected: V2TagAttachment[] = [];
+  let cursor: string | null = null;
+  do {
+    const page = ctx.operations.library.listPage(cursor, 500);
+    const ids = page.files.filter((file) => file.removedAt === null).map((file) => file.id);
+    if (ids.length > 0) collected.push(...tags.attachmentsForFiles(ids));
+    cursor = page.nextCursor;
+  } while (cursor);
+  return collected;
+}
+
+function filenameFor(ctx: V2HandlerContext, fileId: string): string {
+  const file = ctx.operations.library.getFile(fileId);
+  return file ? file.filename || `${file.id}.bin` : fileId;
+}
+
+function affectedPreview(
+  ctx: V2HandlerContext,
+  title: string,
+  attachments: V2TagAttachment[],
+  notices: V2PreviewNotice[],
+): { tables: V2PreviewTable[]; notices: V2PreviewNotice[] } {
+  const all = [...notices];
+  if (attachments.length > MAX_PLAN_ROWS) {
+    all.push({
+      tone: "warning",
+      message: `Showing the first ${MAX_PLAN_ROWS} of ${attachments.length} affected attachments; the plan still covers all of them.`,
+    });
+  }
+  return {
+    tables: [
+      {
+        id: "attachments",
+        title,
+        columns: ["Sound", "Tag", "Origin"],
+        rows: attachments
+          .slice(0, MAX_PLAN_ROWS)
+          .map((attachment) => [filenameFor(ctx, attachment.fileId), attachment.tagName, attachment.origin]),
+      },
+    ],
+    notices: all,
+  };
+}
+
+export type AutoTagV2RemoveByOriginResult = {
+  origin: "deterministic" | "semantic_ai";
+  removed: number;
+};
+
+export function runRemoveByOrigin(ctx: V2HandlerContext) {
+  const input = destructiveInput(ctx);
   if (input.origin !== "deterministic" && input.origin !== "semantic_ai") {
     throw new V2OperationError("input-invalid", "Choose deterministic or semantic AI attachments.");
   }
-  const removed = extendedOperationsOf(ctx).tags.detachByOrigin(input.origin);
+  const origin = input.origin;
+  const affected = liveAttachments(ctx).filter((attachment) => attachment.origin === origin);
+  const reviewedCount = typeof input.affectedAttachments === "number" ? input.affectedAttachments : null;
+
+  if (ctx.runMode === "direct") {
+    const files = new Set(affected.map((attachment) => attachment.fileId)).size;
+    const summary = `Remove ${affected.length} ${origin === "deterministic" ? "deterministic" : "semantic AI"} tag attachment${affected.length === 1 ? "" : "s"} across ${files} sound${files === 1 ? "" : "s"}`;
+    const prepared = ctx.operations.plans.prepare({
+      targets: { fileIds: [] },
+      options: { origin, affectedAttachments: affected.length },
+      preview: {
+        summary,
+        ...affectedPreview(ctx, "Attachments to remove", affected, [
+          {
+            tone: "info",
+            message: "Manual attachments are never touched. Apply revalidates this exact count before removing anything.",
+          },
+        ]),
+        reversibility: "reversible-app-change",
+        reversibilityNote:
+          "Removed automatic attachments can be rebuilt by re-running Auto Tag; manual tags stay untouched.",
+      },
+    });
+    return reviewV2Result(prepared.planId, summary, prepared.expiresAt);
+  }
+
+  if (reviewedCount !== affected.length) {
+    throw planAltered(
+      `The reviewed plan removes ${reviewedCount ?? "an unknown number of"} ${origin} attachment(s), but ${affected.length} are present now; review a fresh plan.`,
+    );
+  }
+  const removed = extendedOperationsOf(ctx).tags.detachByOrigin(origin);
   recordCoverageAtBoundary(ctx);
-  return immediateV2Result({ origin: input.origin, removed });
+  return immediateV2Result({ origin, removed } satisfies AutoTagV2RemoveByOriginResult);
 }
+
+export type AutoTagV2RenameTagResult = { renamed: boolean };
 
 export function runRenameTag(ctx: V2HandlerContext) {
-  const input = inputRecord(ctx);
-  if (typeof input.tagId !== "string" || typeof input.name !== "string") {
+  const input = destructiveInput(ctx);
+  if (
+    typeof input.tagId !== "string" ||
+    !input.tagId ||
+    typeof input.name !== "string" ||
+    !input.name.trim()
+  ) {
     throw new V2OperationError("input-invalid", "Tag ID and name are required.");
   }
-  extendedOperationsOf(ctx).tags.renamePreservingAlias(input.tagId, input.name);
-  return immediateV2Result({ renamed: true });
+  const tagId = input.tagId;
+  const name = input.name.trim();
+  const { tags } = extendedOperationsOf(ctx);
+  const existing = tags.list().find((tag) => tag.id === tagId) ?? null;
+  if (!existing) {
+    throw ctx.runMode === "apply"
+      ? planAltered(`Tag ${JSON.stringify(tagId)} is no longer in the vocabulary; review a fresh plan.`)
+      : new V2OperationError(
+          "input-invalid",
+          `Tag ${JSON.stringify(tagId)} is not in the vocabulary; refresh and retry.`,
+        );
+  }
+  const affected = liveAttachments(ctx).filter((attachment) => attachment.tagId === tagId);
+  const reviewedCount = typeof input.affectedAttachments === "number" ? input.affectedAttachments : null;
+  const reviewedName = typeof input.previousName === "string" ? input.previousName : null;
+
+  if (ctx.runMode === "direct") {
+    const summary = `Rename tag "${existing.name}" to "${name}"`;
+    const prepared = ctx.operations.plans.prepare({
+      targets: { fileIds: [] },
+      options: { tagId, name, previousName: existing.name, affectedAttachments: affected.length },
+      preview: {
+        summary,
+        ...affectedPreview(ctx, "Attachments on the renamed tag", affected, [
+          {
+            tone: "info",
+            message: `The old name "${existing.name}" is preserved as an alias. Apply revalidates the tag name and count first.`,
+          },
+        ]),
+        reversibility: "reversible-app-change",
+        reversibilityNote:
+          "Renaming preserves the previous name as an alias, so the old label still resolves.",
+      },
+    });
+    return reviewV2Result(prepared.planId, summary, prepared.expiresAt);
+  }
+
+  if (reviewedName !== null && existing.name !== reviewedName) {
+    throw planAltered(
+      `Tag ${JSON.stringify(tagId)} is now named "${existing.name}", not "${reviewedName}"; review a fresh plan.`,
+    );
+  }
+  if (reviewedCount !== affected.length) {
+    throw planAltered(
+      `The reviewed plan renames a tag on ${reviewedCount ?? "an unknown number of"} attachment(s), but ${affected.length} are present now; review a fresh plan.`,
+    );
+  }
+  tags.renamePreservingAlias(tagId, name);
+  return immediateV2Result({ renamed: true } satisfies AutoTagV2RenameTagResult);
 }
 
+export type AutoTagV2MergeTagResult = { moved: number };
+
 export function runMergeTag(ctx: V2HandlerContext) {
-  const input = inputRecord(ctx);
-  if (input.confirm !== true || typeof input.sourceTagId !== "string" || typeof input.targetTagId !== "string") {
-    throw new V2OperationError("input-invalid", "Choose two tags and confirm the merge.");
+  const input = destructiveInput(ctx);
+  if (
+    typeof input.sourceTagId !== "string" ||
+    !input.sourceTagId ||
+    typeof input.targetTagId !== "string" ||
+    !input.targetTagId
+  ) {
+    throw new V2OperationError("input-invalid", "Choose a source tag and a target tag to merge.");
   }
-  return immediateV2Result(extendedOperationsOf(ctx).tags.merge(input.sourceTagId, input.targetTagId));
+  const sourceTagId = input.sourceTagId;
+  const targetTagId = input.targetTagId;
+  if (sourceTagId === targetTagId) {
+    throw new V2OperationError("input-invalid", "A tag cannot be merged into itself; choose two different tags.");
+  }
+  const { tags } = extendedOperationsOf(ctx);
+  const vocabulary = tags.list();
+  const source = vocabulary.find((tag) => tag.id === sourceTagId) ?? null;
+  const target = vocabulary.find((tag) => tag.id === targetTagId) ?? null;
+  if (!source || !target) {
+    throw ctx.runMode === "apply"
+      ? planAltered("One of the reviewed tags is no longer in the vocabulary; review a fresh plan.")
+      : new V2OperationError("input-invalid", "Both tags must exist in the vocabulary before merging.");
+  }
+  const affected = liveAttachments(ctx).filter((attachment) => attachment.tagId === sourceTagId);
+  const reviewedCount = typeof input.affectedAttachments === "number" ? input.affectedAttachments : null;
+
+  if (ctx.runMode === "direct") {
+    const summary = `Merge tag "${source.name}" into "${target.name}"`;
+    const prepared = ctx.operations.plans.prepare({
+      targets: { fileIds: [] },
+      options: {
+        sourceTagId,
+        targetTagId,
+        sourceName: source.name,
+        targetName: target.name,
+        affectedAttachments: affected.length,
+      },
+      preview: {
+        summary,
+        ...affectedPreview(ctx, "Attachments moving to the target tag", affected, [
+          {
+            tone: "info",
+            message: "Manual precedence and aliases are preserved. Apply revalidates both tags and the count first.",
+          },
+        ]),
+        reversibility: "reversible-app-change",
+        reversibilityNote:
+          "Merged attachments can be split again by hand; the source tag is folded into the target.",
+      },
+    });
+    return reviewV2Result(prepared.planId, summary, prepared.expiresAt);
+  }
+
+  if (reviewedCount !== affected.length) {
+    throw planAltered(
+      `The reviewed plan moves ${reviewedCount ?? "an unknown number of"} attachment(s), but ${affected.length} are on the source tag now; review a fresh plan.`,
+    );
+  }
+  const result = tags.merge(sourceTagId, targetTagId);
+  return immediateV2Result(result satisfies AutoTagV2MergeTagResult);
 }
 
 /** Register every auto-tag command on a v2 host. */

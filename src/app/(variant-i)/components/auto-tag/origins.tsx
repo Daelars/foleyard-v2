@@ -62,6 +62,52 @@ async function command(commandId: string, input: unknown = {}, fileIds: string[]
   return { ok: true, value: body.outcome.value ?? {} };
 }
 
+/**
+ * Destructive commands run through the host-recorded review plan (#287):
+ * execute only prepares the plan, so this reads the review back and
+ * applies it. A client `confirm` flag is never sent or trusted.
+ */
+async function reviewedCommand(commandId: string, input: unknown = {}): Promise<CommandResult> {
+  const response = await fetch("/api/extensions-v2/execute", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ extensionId: "auto-tag-v2", commandId, input, selection: { fileIds: [] } }),
+  });
+  const body = (await response.json().catch(() => null)) as {
+    outcome?: { kind?: string; planId?: string };
+    error?: { message?: string };
+  } | null;
+  if (!response.ok || body?.outcome?.kind !== "review-required" || !body.outcome.planId) {
+    return { ok: false, message: body?.error?.message ?? `Command failed (${response.status}).` };
+  }
+  const planId = body.outcome.planId;
+  const reviewResponse = await fetch(`/api/extensions-v2/plans/${encodeURIComponent(planId)}`);
+  const reviewBody = (await reviewResponse.json().catch(() => null)) as {
+    ok?: boolean;
+    review?: { targets?: unknown; options?: unknown };
+    error?: { message?: string };
+  } | null;
+  if (!reviewResponse.ok || !reviewBody?.ok || !reviewBody.review) {
+    return { ok: false, message: reviewBody?.error?.message ?? "Could not load the reviewed plan." };
+  }
+  const applyResponse = await fetch(`/api/extensions-v2/plans/${encodeURIComponent(planId)}/apply`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      targets: reviewBody.review.targets,
+      options: reviewBody.review.options,
+    }),
+  });
+  const applyBody = (await applyResponse.json().catch(() => null)) as {
+    outcome?: { kind?: string; value?: Record<string, unknown> };
+    error?: { message?: string };
+  } | null;
+  if (!applyResponse.ok || applyBody?.outcome?.kind !== "immediate") {
+    return { ok: false, message: applyBody?.error?.message ?? `Apply failed (${applyResponse.status}).` };
+  }
+  return { ok: true, value: applyBody.outcome.value ?? {} };
+}
+
 function parseJson<T>(value: unknown): T | null {
   if (typeof value !== "string") return null;
   try { return JSON.parse(value) as T; } catch { return null; }
@@ -171,7 +217,7 @@ export function V3TagOrigins() {
   }
 
   async function removeOrigin(origin: "deterministic" | "semantic_ai") {
-    const result = await command("auto-tag-v2.remove-by-origin", { origin, confirm: true });
+    const result = await reviewedCommand("auto-tag-v2.remove-by-origin", { origin });
     if (!result.ok) return toast.error(result.message);
     toast.success(`Removed ${Number(result.value.removed ?? 0)} ${origin === "semantic_ai" ? "semantic AI" : "deterministic"} attachments.`);
     await load();

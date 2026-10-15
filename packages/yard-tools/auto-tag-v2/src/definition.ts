@@ -426,9 +426,8 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
           kind: "object",
           properties: {
             origin: { kind: "enum", values: ["deterministic", "semantic_ai"] },
-            confirm: { kind: "boolean" },
           },
-          required: ["origin", "confirm"],
+          required: ["origin"],
         },
         result: {
           kind: "object",
@@ -442,6 +441,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Rename tag with alias",
         description: "Rename a canonical tag and preserve its old normalized name as an alias.",
         scope: "global",
+        destructive: true,
         input: {
           kind: "object",
           properties: { tagId: { kind: "string", minLength: 1 }, name: { kind: "string", minLength: 1 } },
@@ -461,9 +461,8 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
           properties: {
             sourceTagId: { kind: "string", minLength: 1 },
             targetTagId: { kind: "string", minLength: 1 },
-            confirm: { kind: "boolean" },
           },
-          required: ["sourceTagId", "targetTagId", "confirm"],
+          required: ["sourceTagId", "targetTagId"],
         },
         result: { kind: "object", properties: { moved: { kind: "number", integer: true, min: 0 } }, required: ["moved"] },
         docsId: "commands",

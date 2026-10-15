@@ -5,6 +5,9 @@ import {
   createV2OperationServices,
   ExtensionV2Host,
   ExtensionV2Registry,
+  handleV2HttpExecute,
+  handleV2HttpPlanApply,
+  handleV2HttpPlanGet,
   validateV2Value,
   type ExtensionV2Definition,
   type IndexedAudioFile,
@@ -27,10 +30,12 @@ import {
   AUTO_TAG_V2_LATEST_ARRIVALS,
   AUTO_TAG_V2_LIST_CANDIDATES,
   AUTO_TAG_V2_LIST_ORIGINS,
+  AUTO_TAG_V2_MERGE_TAG,
   AUTO_TAG_V2_PREVIEW,
   AUTO_TAG_V2_PROMOTE_CANDIDATE,
   AUTO_TAG_V2_RECORD_COVERAGE,
   AUTO_TAG_V2_REMOVE_BY_ORIGIN,
+  AUTO_TAG_V2_RENAME_TAG,
   AUTO_TAG_V2_TAG_FILES,
   AUTO_TAG_V2_TAG_SEMANTIC,
   createAutoTagV2Definition,
@@ -99,6 +104,8 @@ type World = {
   aggregateCalls: { coverage: number; memberPage: number };
   created: string[];
   tagsByName: Map<string, string>;
+  renames: Array<{ tagId: string; name: string }>;
+  merges: Array<{ sourceTagId: string; targetTagId: string }>;
   vectors: Map<string, { dim: number; vec: Uint8Array }>;
   progress: { calls: number };
   scanCalls: { pages: number };
@@ -139,6 +146,8 @@ function world(overrides?: {
   const attachBatches: Attachment[][] = [];
   const aggregateCalls = { coverage: 0, memberPage: 0 };
   const created: string[] = [];
+  const renames: Array<{ tagId: string; name: string }> = [];
+  const merges: Array<{ sourceTagId: string; targetTagId: string }> = [];
   const stateStore = new Map<string, unknown>();
   const vectors = new Map<string, { dim: number; vec: Uint8Array }>();
   const modelState = {
@@ -234,8 +243,27 @@ function world(overrides?: {
       return removed;
     },
     resolveAlias: () => null,
-    renamePreservingAlias: () => {},
-    merge: () => ({ moved: 0 }),
+    renamePreservingAlias: (tagId, name) => {
+      renames.push({ tagId, name });
+      const current = [...tagsByName.entries()].find(([, id]) => id === tagId);
+      if (current) {
+        tagsByName.delete(current[0]);
+        tagsByName.set(name, tagId);
+      }
+    },
+    merge: (sourceTagId, targetTagId) => {
+      merges.push({ sourceTagId, targetTagId });
+      let moved = 0;
+      for (const attachment of attachments) {
+        if (attachment.tagId === sourceTagId) {
+          attachment.tagId = targetTagId;
+          moved += 1;
+        }
+      }
+      const sourceName = [...tagsByName.entries()].find(([, id]) => id === sourceTagId)?.[0];
+      if (sourceName) tagsByName.delete(sourceName);
+      return { moved };
+    },
     ...(overrides?.aggregatePorts
       ? {
           coverage: () => {
@@ -344,6 +372,8 @@ function world(overrides?: {
     aggregateCalls,
     created,
     tagsByName,
+    renames,
+    merges,
     vectors,
     progress,
     scanCalls,
@@ -949,9 +979,21 @@ describe("auto-tag-v2 coverage history", () => {
       input: { origin: "all" }, selection: { fileIds: [] },
     }));
     expect(JSON.parse(origins.summary).origins).toEqual({ manual: 1, deterministic: 1, semantic_ai: 1 });
-    const removed = immediateValue<{ removed: number }>(await w.host.execute({
+    // Removal is destructive: direct execution only prepares a reviewed
+    // plan (#287); the attachments survive until the plan is applied.
+    const planned = await w.host.execute({
       extensionId: AUTO_TAG_V2_ID, commandId: AUTO_TAG_V2_REMOVE_BY_ORIGIN,
       input: { origin: "deterministic", confirm: true }, selection: { fileIds: [] },
+    });
+    if (!planned.ok || planned.outcome.kind !== "review-required") {
+      throw new Error("expected a review-required outcome");
+    }
+    expect(w.attachments).toHaveLength(3);
+    const reviewed = w.host.reviewPlan(planned.outcome.planId);
+    if (!reviewed.ok) throw new Error("expected a review payload");
+    const removed = immediateValue<{ removed: number }>(await w.host.applyPlan(planned.outcome.planId, {
+      targets: reviewed.review.targets,
+      options: reviewed.review.options,
     }));
     expect(removed.removed).toBe(1);
     expect(w.attachments).toContainEqual(expect.objectContaining({ fileId: "f1", origin: "manual" }));
@@ -1071,5 +1113,264 @@ describe("auto-tag-v2 SQL aggregates (#257)", () => {
     const summary = JSON.parse(value.summary) as { total: number; members: string[] };
     expect(summary.total).toBe(3);
     expect(summary.members).toEqual([]);
+  });
+});
+
+describe("auto-tag-v2 destructive review plans (#287)", () => {
+  function seed(w: World): void {
+    w.attachments.push(
+      { fileId: "f1", tagId: "t1", origin: "deterministic" },
+      { fileId: "f2", tagId: "t1", origin: "deterministic" },
+      { fileId: "f3", tagId: "t2", origin: "manual" },
+    );
+  }
+
+  it("prepares a plan for removal instead of mutating directly", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    seed(w);
+    const result = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_REMOVE_BY_ORIGIN,
+      input: { origin: "deterministic", confirm: true },
+      selection: { fileIds: [] },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.outcome.kind !== "review-required") {
+      throw new Error("expected a review-required outcome");
+    }
+    expect(w.attachments).toHaveLength(3);
+    const reviewed = w.host.reviewPlan(result.outcome.planId);
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) throw new Error("expected a review payload");
+    expect(reviewed.review.destructive).toBe(true);
+    expect(reviewed.review.options).toMatchObject({ origin: "deterministic", affectedAttachments: 2 });
+  });
+
+  it("requires the host review stamp before a removal applies", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    seed(w);
+    const planned = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_REMOVE_BY_ORIGIN,
+      input: { origin: "deterministic" },
+      selection: { fileIds: [] },
+    });
+    if (!planned.ok || planned.outcome.kind !== "review-required") {
+      throw new Error("expected a review-required outcome");
+    }
+    // The reviewed options are known, but without the host review stamp an
+    // exact echo is still refused.
+    const unreviewed = await w.host.applyPlan(planned.outcome.planId, {
+      targets: { fileIds: [] },
+      options: { origin: "deterministic", affectedAttachments: 2 },
+    });
+    expect(unreviewed.ok).toBe(false);
+    if (!unreviewed.ok) expect(unreviewed.code).toBe("review-required");
+    expect(w.attachments).toHaveLength(3);
+  });
+
+  it("applies removal only after review and rejects a replay", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    seed(w);
+    const planned = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_REMOVE_BY_ORIGIN,
+      input: { origin: "deterministic" },
+      selection: { fileIds: [] },
+    });
+    if (!planned.ok || planned.outcome.kind !== "review-required") {
+      throw new Error("expected a review-required outcome");
+    }
+    const reviewed = w.host.reviewPlan(planned.outcome.planId);
+    if (!reviewed.ok) throw new Error("expected a review payload");
+    const echo = { targets: reviewed.review.targets, options: reviewed.review.options };
+    const applied = await w.host.applyPlan(planned.outcome.planId, echo);
+    const value = immediateValue<{ origin: string; removed: number }>(applied);
+    expect(value).toEqual({ origin: "deterministic", removed: 2 });
+    expect(w.attachments).toEqual([expect.objectContaining({ fileId: "f3", tagId: "t2" })]);
+    const replay = await w.host.applyPlan(planned.outcome.planId, echo);
+    expect(replay.ok).toBe(false);
+    if (!replay.ok) expect(replay.code).toBe("plan-consumed");
+    expect(w.attachments).toHaveLength(1);
+  });
+
+  it("revalidates the affected count at apply", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    seed(w);
+    const planned = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_REMOVE_BY_ORIGIN,
+      input: { origin: "deterministic" },
+      selection: { fileIds: [] },
+    });
+    if (!planned.ok || planned.outcome.kind !== "review-required") {
+      throw new Error("expected a review-required outcome");
+    }
+    const reviewed = w.host.reviewPlan(planned.outcome.planId);
+    if (!reviewed.ok) throw new Error("expected a review payload");
+    // The live state changed after review: one more deterministic tag landed.
+    w.attachments.push({ fileId: "f3", tagId: "t2", origin: "deterministic" });
+    const stale = await w.host.applyPlan(planned.outcome.planId, {
+      targets: reviewed.review.targets,
+      options: reviewed.review.options,
+    });
+    expect(stale.ok).toBe(false);
+    if (!stale.ok) expect(stale.code).toBe("plan-altered");
+    // Nothing was removed by the stale apply.
+    expect(w.attachments).toHaveLength(4);
+  });
+
+  it("treats rename as destructive and applies only the reviewed plan", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    seed(w);
+    const planned = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_RENAME_TAG,
+      input: { tagId: "t1", name: "storm" },
+      selection: { fileIds: [] },
+    });
+    expect(planned.ok).toBe(true);
+    if (!planned.ok || planned.outcome.kind !== "review-required") {
+      throw new Error("expected a review-required outcome");
+    }
+    expect(w.renames).toEqual([]);
+    const reviewed = w.host.reviewPlan(planned.outcome.planId);
+    if (!reviewed.ok) throw new Error("expected a review payload");
+    expect(reviewed.review.destructive).toBe(true);
+    const applied = await w.host.applyPlan(planned.outcome.planId, {
+      targets: reviewed.review.targets,
+      options: reviewed.review.options,
+    });
+    const value = immediateValue<{ renamed: boolean }>(applied);
+    expect(value.renamed).toBe(true);
+    expect(w.renames).toEqual([{ tagId: "t1", name: "storm" }]);
+    expect(w.tagsByName.has("storm")).toBe(true);
+    expect(w.tagsByName.has("thunder")).toBe(false);
+  });
+
+  it("rejects a rename whose reviewed tag changed", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    seed(w);
+    const planned = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_RENAME_TAG,
+      input: { tagId: "t1", name: "storm" },
+      selection: { fileIds: [] },
+    });
+    if (!planned.ok || planned.outcome.kind !== "review-required") {
+      throw new Error("expected a review-required outcome");
+    }
+    const reviewed = w.host.reviewPlan(planned.outcome.planId);
+    if (!reviewed.ok) throw new Error("expected a review payload");
+    // The tag was renamed by another path after the review.
+    w.tagsByName.delete("thunder");
+    w.tagsByName.set("thunderclap", "t1");
+    const stale = await w.host.applyPlan(planned.outcome.planId, {
+      targets: reviewed.review.targets,
+      options: reviewed.review.options,
+    });
+    expect(stale.ok).toBe(false);
+    if (!stale.ok) expect(stale.code).toBe("plan-altered");
+    expect(w.renames).toEqual([]);
+  });
+
+  it("treats merge as destructive and moves the reviewed attachments", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    seed(w);
+    const planned = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_MERGE_TAG,
+      input: { sourceTagId: "t1", targetTagId: "t2", confirm: true },
+      selection: { fileIds: [] },
+    });
+    expect(planned.ok).toBe(true);
+    if (!planned.ok || planned.outcome.kind !== "review-required") {
+      throw new Error("expected a review-required outcome");
+    }
+    expect(w.merges).toEqual([]);
+    const reviewed = w.host.reviewPlan(planned.outcome.planId);
+    if (!reviewed.ok) throw new Error("expected a review payload");
+    expect(reviewed.review.destructive).toBe(true);
+    const applied = await w.host.applyPlan(planned.outcome.planId, {
+      targets: reviewed.review.targets,
+      options: reviewed.review.options,
+    });
+    const value = immediateValue<{ moved: number }>(applied);
+    expect(value.moved).toBe(2);
+    expect(w.merges).toEqual([{ sourceTagId: "t1", targetTagId: "t2" }]);
+  });
+
+  it("rejects a merge whose reviewed count changed", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    seed(w);
+    const planned = await w.host.execute({
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_MERGE_TAG,
+      input: { sourceTagId: "t1", targetTagId: "t2" },
+      selection: { fileIds: [] },
+    });
+    if (!planned.ok || planned.outcome.kind !== "review-required") {
+      throw new Error("expected a review-required outcome");
+    }
+    const reviewed = w.host.reviewPlan(planned.outcome.planId);
+    if (!reviewed.ok) throw new Error("expected a review payload");
+    w.attachments.push({ fileId: "f3", tagId: "t1", origin: "deterministic" });
+    const stale = await w.host.applyPlan(planned.outcome.planId, {
+      targets: reviewed.review.targets,
+      options: reviewed.review.options,
+    });
+    expect(stale.ok).toBe(false);
+    if (!stale.ok) expect(stale.code).toBe("plan-altered");
+    expect(w.merges).toEqual([]);
+  });
+
+  it("cannot be bypassed by an HTTP confirm flag, a forged echo, or a replay", async () => {
+    const w = world({ seedTags: ["thunder", "rain"] });
+    seed(w);
+    const executed = await handleV2HttpExecute(w.host, {
+      extensionId: AUTO_TAG_V2_ID,
+      commandId: AUTO_TAG_V2_REMOVE_BY_ORIGIN,
+      input: { origin: "deterministic", confirm: true },
+      selection: { fileIds: [] },
+    });
+    expect(executed.status).toBe(200);
+    const outcome = (executed.body as { outcome: { kind: string; planId: string } }).outcome;
+    expect(outcome.kind).toBe("review-required");
+    expect(w.attachments).toHaveLength(3);
+
+    // A client-forged apply (confirm carried in options, no review) is refused.
+    const forged = await handleV2HttpPlanApply(w.host, outcome.planId, {
+      targets: { fileIds: [] },
+      options: { origin: "deterministic", affectedAttachments: 2, confirm: true },
+    });
+    expect(forged.status).toBe(400);
+    expect((forged.body as { error: { code: string } }).error.code).toBe("plan-altered");
+    expect(w.attachments).toHaveLength(3);
+
+    const unreviewed = await handleV2HttpPlanApply(w.host, outcome.planId, {
+      targets: { fileIds: [] },
+      options: { origin: "deterministic", affectedAttachments: 2 },
+    });
+    expect(unreviewed.status).toBe(400);
+    expect((unreviewed.body as { error: { code: string } }).error.code).toBe("review-required");
+    expect(w.attachments).toHaveLength(3);
+
+    const reviewed = handleV2HttpPlanGet(w.host, outcome.planId);
+    expect(reviewed.status).toBe(200);
+    const review = (reviewed.body as { review: { targets: unknown; options: unknown } }).review;
+    const applied = await handleV2HttpPlanApply(w.host, outcome.planId, {
+      targets: review.targets,
+      options: review.options,
+    });
+    expect(applied.status).toBe(200);
+    expect(w.attachments).toHaveLength(1);
+
+    const replay = await handleV2HttpPlanApply(w.host, outcome.planId, {
+      targets: review.targets,
+      options: review.options,
+    });
+    expect(replay.status).toBe(400);
+    expect((replay.body as { error: { code: string } }).error.code).toBe("plan-consumed");
+    expect(w.attachments).toHaveLength(1);
   });
 });

@@ -91,7 +91,13 @@ export function V3SettingsLibraryTab({ settings, onSaveRoot, onRemoveRoot, scanS
         return;
       }
 
-      await onSaveRoot(validation.normalizedPath);
+      const saved = await onSaveRoot(validation.normalizedPath);
+      if (!saved) {
+        // Persistence failed: keep the entered path so the user can retry.
+        // The save hook already surfaced the reason.
+        return;
+      }
+
       setRootDraft("");
       setValidationResult(validation);
       toast.success("Library folder added");

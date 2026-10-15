@@ -30,7 +30,13 @@ the Sound Shelf — a bundled extension surface distinct from Collections.
 
 `POST/GET /api/collections` and `GET /api/tags` serve the organization
 surface (`src/app/api/collections/route.ts`, `src/app/api/tags/route.ts`).
-Persistence lives in `src/lib/database/collection-repository.ts` and
+A Collection or tag create is one durable request: `name` and the optional
+`color` travel together, so the pair lands whole or not at all. The client
+reports success only after that write returns, keeps the user's draft when
+it fails, and reconciles against the refreshed list before reporting
+failure — a lost response that actually persisted is treated as the
+success it was rather than duplicated. Persistence lives in
+`src/lib/database/collection-repository.ts` and
 `src/lib/database/tag-repository.ts`, implementing the `yard-core`
 `CollectionRepository` / `TagRepository` contracts
 (`packages/yard-core/src/repositories/*`, services in
@@ -62,6 +68,9 @@ its save-search replaces the retired v1 tool.
 - B02 (expected-to-fail, #136): distinct recordings can inherit tags.
 - Deleting a Collection removes membership rows, never audio files (file
   deletion is a separate destructive path — see `docs/filesystem.md`).
+- A failed Collection or tag create keeps the entered name and colour,
+  explains the recovery, and shows no success toast or phantom row; an
+  invalid colour is rejected before anything is written.
 
 ## Source map (real file paths)
 

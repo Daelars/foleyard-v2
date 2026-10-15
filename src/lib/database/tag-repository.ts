@@ -36,9 +36,10 @@ export class SqliteTagRepository implements TagRepository {
     return rows.map((row) => row.tag) as Tag[];
   }
 
-  createTag(name: string): string {
+  /** One INSERT carries the whole create, colour included (#293). */
+  createTag(name: string, color?: string | null): string {
     const id = uuid();
-    this.db.insert(schema.tags).values({ id, name }).run();
+    this.db.insert(schema.tags).values({ id, name, color: color ?? null }).run();
     return id;
   }
 
@@ -435,7 +436,7 @@ export const renameTagPreservingAlias = (tagId: string, name: string) =>
   getTagRepo().renameTagPreservingAlias(tagId, name);
 export const mergeTags = (sourceTagId: string, targetTagId: string) =>
   getTagRepo().mergeTags(sourceTagId, targetTagId);
-export const createTag = (name: string) => getTagRepo().createTag(name);
+export const createTag = (name: string, color?: string | null) => getTagRepo().createTag(name, color);
 export const renameTag = (tagId: string, name: string) => getTagRepo().renameTag(tagId, name);
 export const updateTagColor = (tagId: string, color: string | null) => getTagRepo().updateTagColor(tagId, color);
 export const attachTagToFile = (fileId: string, tagId: string) => getTagRepo().attachTagToFile(fileId, tagId);

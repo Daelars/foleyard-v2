@@ -156,9 +156,21 @@ export class SqliteCollectionRepository implements CollectionRepository {
     return countFilesMatchingQuery(this.sqlite, this.db, query);
   }
 
-  createCollection(name: string, isSmart?: boolean, filter?: string): string {
+  /**
+   * One INSERT carries the whole create, colour included, so a name and its
+   * colour are durable together (#293). A partial create cannot exist.
+   */
+  createCollection(
+    name: string,
+    isSmart?: boolean,
+    filter?: string,
+    color?: string | null,
+  ): string {
     const id = uuid();
-    this.db.insert(schema.collections).values({ id, name, isSmart: isSmart ? 1 : 0, filter }).run();
+    this.db
+      .insert(schema.collections)
+      .values({ id, name, isSmart: isSmart ? 1 : 0, filter, color: color ?? null })
+      .run();
     return id;
   }
 
@@ -254,7 +266,7 @@ export const collectionExists = (id: string) => getCollectionRepo().collectionEx
 export const collectionNameExists = (name: string, exceptId?: string) => getCollectionRepo().collectionNameExists(name, exceptId);
 export const getCollectionById = (id: string) => getCollectionRepo().getCollectionById(id);
 export const getSmartCollectionCount = (collectionId: string) => getCollectionRepo().getSmartCollectionCount(collectionId);
-export const createCollection = (name: string, isSmart?: boolean, filter?: string) => getCollectionRepo().createCollection(name, isSmart, filter);
+export const createCollection = (name: string, isSmart?: boolean, filter?: string, color?: string | null) => getCollectionRepo().createCollection(name, isSmart, filter, color);
 export const createSmartCollection = (name: string, filter: string) => getCollectionRepo().createSmartCollection(name, filter);
 export const renameCollection = (id: string, name: string) => getCollectionRepo().renameCollection(id, name);
 export const updateCollectionColor = (id: string, color: string | null) => getCollectionRepo().updateCollectionColor(id, color);

@@ -1,5 +1,6 @@
 import { errorResponse } from "@/lib/api/errors";
 import { readMutationBody } from "@/lib/api/body";
+import { parseOptionalColor } from "@/lib/api/color";
 import { mutationError } from "@/lib/api/errors";
 import { NextRequest, NextResponse } from 'next/server';
 import { attachTagToFile, createTag, deleteTag, detachTagFromFile, getAllTags, getTagsForFile, renameTag, updateTagColor } from '@/lib/db';
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await readMutationBody(request);
-    const { name, fileId, tagId } = body;
+    const { name, fileId, tagId, color } = body;
 
     if (fileId && tagId) {
       attachTagToFile(fileId, tagId);
@@ -29,7 +30,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (name) {
-      const id = createTag(name.trim());
+      const createColor = parseOptionalColor(color);
+      const id = createTag(name.trim(), createColor);
       return NextResponse.json({ success: true, id });
     }
 

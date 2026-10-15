@@ -3,7 +3,7 @@ import type { FileTagAttachment, Tag, TagOrigin } from "../domain/tag";
 export interface TagRepository {
   getAllTags(): Tag[];
   getTagsForFile(fileId: string): Tag[];
-  createTag(name: string): string;
+  createTag(name: string, color?: string | null): string;
   renameTag(tagId: string, name: string): void;
   updateTagColor(tagId: string, color: string | null): void;
   attachTagToFile(fileId: string, tagId: string): void;

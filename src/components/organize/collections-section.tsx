@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, Pencil, Plus, Trash2, X } from "lucide-react";
 
 import { ITEM_COLOR_PRESETS, onColorText, resolveItemColor } from "@/lib/item-colors";
+import { draftNamePersisted } from "@/app/library/creation-draft";
 
 import { NameColorComposer, isComposerNameValid } from "./name-color-composer";
 import { Swatches } from "./swatches";
@@ -49,23 +50,47 @@ export function CollectionsSection({
   const [showComposer, setShowComposer] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(ITEM_COLOR_PRESETS[0]);
+  const [pendingCollection, setPendingCollection] = useState<string | null>(null);
+  const [collectionsSnapshot, setCollectionsSnapshot] = useState(collections);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // A refresh after a failed submit resynchronizes the draft if the collection
+  // actually persisted, using React's adjust-state-during-render pattern.
+  if (collections !== collectionsSnapshot) {
+    setCollectionsSnapshot(collections);
+    if (
+      pendingCollection !== null &&
+      draftNamePersisted(
+        pendingCollection,
+        collections.map((collection) => collection.name),
+      )
+    ) {
+      setNewName("");
+      setNewColor(ITEM_COLOR_PRESETS[0]);
+      setShowComposer(false);
+      setPendingCollection(null);
+    }
+  }
 
   const createCollection = () => {
     const name = newName.trim();
     if (!isComposerNameValid(newName)) {
       return;
     }
-    onCreateCollection(name, newColor).then((id) => {
-      if (id) {
-        setExpanded(id);
+    void onCreateCollection(name, newColor).then((id) => {
+      if (!id) {
+        // Keep the name and colour so the user can retry.
+        setPendingCollection(name);
+        return;
       }
+      setExpanded(id);
+      setNewName("");
+      setNewColor(ITEM_COLOR_PRESETS[0]);
+      setShowComposer(false);
+      setPendingCollection(null);
     });
-    setNewName("");
-    setNewColor(ITEM_COLOR_PRESETS[0]);
-    setShowComposer(false);
   };
 
   const commitRename = () => {

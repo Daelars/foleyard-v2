@@ -72,11 +72,11 @@ export function useCollections(callbacks: CollectionsCallbacks) {
     callbacksRef.current = callbacks;
   });
 
-  const loadCollections = useCallback(async () => {
+  const loadCollections = useCallback(async (): Promise<CollectionRecord[] | null> => {
     try {
       const res = await fetch("/api/collections");
       if (!res.ok) {
-        return;
+        return null;
       }
       const data = await res.json();
       const cache = smartCountCacheRef.current;
@@ -97,8 +97,10 @@ export function useCollections(callbacks: CollectionsCallbacks) {
             })
           : next,
       );
+      return next;
     } catch {
       // Sidebar keeps its last data.
+      return null;
     }
   }, []);
 
@@ -147,31 +149,48 @@ export function useCollections(callbacks: CollectionsCallbacks) {
 
   const createCollection = useCallback(
     async (name: string, color?: string) => {
-      if (!name.trim()) {
+      const trimmed = name.trim();
+      if (!trimmed) {
         return null;
       }
+      let serverMessage: string | null = null;
       try {
+        // Name and colour travel in one durable request, so the create either
+        // lands whole or not at all (#293).
         const res = await fetch("/api/collections", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name.trim() }),
+          body: JSON.stringify(color ? { name: trimmed, color } : { name: trimmed }),
         });
+        const data = (await res.json().catch(() => null)) as
+          | { id?: string; error?: string }
+          | null;
         if (!res.ok) {
-          throw new Error();
+          serverMessage = data?.error ?? `Failed to create collection (${res.status})`;
+          throw new Error(serverMessage);
         }
-        const data = (await res.json()) as { id?: string };
-        if (color && data.id) {
-          await fetch("/api/collections", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "update-color", collectionId: data.id, color }),
-          });
-        }
-        void loadCollections();
+        await loadCollections();
         toast.success("Collection created");
-        return data.id ?? null;
+        return data?.id ?? null;
       } catch {
-        toast.error("Failed to create collection");
+        // Reconcile with the server: a response that was lost may still have
+        // persisted. If the refreshed list now carries the name, the create
+        // did land — report it as the success it was. Otherwise keep the
+        // caller's draft and explain the recovery.
+        const refreshed = await loadCollections();
+        if (serverMessage === null && refreshed) {
+          const existing = refreshed.find(
+            (collection) => collection.name.trim() === trimmed,
+          );
+          if (existing) {
+            toast.success("Collection created");
+            return existing.id;
+          }
+        }
+        toast.error(
+          serverMessage ??
+            "Couldn't create the collection. Your entry was kept — check the connection and try again.",
+        );
         return null;
       }
     },

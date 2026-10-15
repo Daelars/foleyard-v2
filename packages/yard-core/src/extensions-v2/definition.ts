@@ -284,6 +284,37 @@ export function validateV2Value(
   }
 }
 
+/**
+ * Surface a command needs before it can run (#294). Declared data, not a
+ * renderer branch: the palette, context menus, and selection actions read
+ * it so they never half-execute a command with incomplete context.
+ *
+ * - `direct`: the entry point already holds everything the command needs;
+ *   run it immediately (the current selection/context travels with it).
+ * - `form`: the command collects input; open its dedicated workflow with
+ *   the current selection and source context instead of invoking headless.
+ * - `review`: the command prepares a plan; render the host review and an
+ *   apply flow, never a fire-and-forget call.
+ * - `confirm`: the command mutates or leaves the app; show its
+ *   confirmation surface before running it.
+ */
+export type ExtensionV2UiIntent = "direct" | "form" | "review" | "confirm";
+
+/** Every UI intent the registry recognizes. */
+export const KNOWN_V2_UI_INTENTS: readonly ExtensionV2UiIntent[] = [
+  "direct",
+  "form",
+  "review",
+  "confirm",
+];
+
+/** Resolve a command's declared intent, defaulting to direct execution. */
+export function resolveV2UiIntent(command: {
+  ui?: ExtensionV2UiIntent;
+}): ExtensionV2UiIntent {
+  return command.ui ?? "direct";
+}
+
 export type ExtensionV2Command = {
   id: string;
   title: string;
@@ -291,6 +322,8 @@ export type ExtensionV2Command = {
   scope: ExtensionV2CommandScope;
   destructive?: boolean;
   requiresSelection?: boolean;
+  /** UI surface the command needs; absent means `direct`. */
+  ui?: ExtensionV2UiIntent;
   input?: ExtensionV2ValueSchema;
   result?: ExtensionV2ValueSchema;
   requiredCapabilities?: string[];

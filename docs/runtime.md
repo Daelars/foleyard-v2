@@ -47,7 +47,7 @@ are ever included.
 | `capabilities` | `describeCapabilities` with real service/desktop composition |
 | `events` | `listEvents()` |
 | `settingsSchemaRefs` | `["settings.md", "extensions.md#settings", "commands.md", "extensions-v2.md"]` |
-| `extensionsV2` | per-v2-extension id/name/version, `registered`, in-memory `enabled`, apiVersion, standing, declared vs effective permissions, `approvalsKnown`, full command metadata (scope, destructive, selection, requiredCapabilities, input/result schemas, docsId), contribution IDs, settings schema (defaults only), docs refs |
+| `extensionsV2` | per-v2-extension id/name/version, `registered`, in-memory `enabled`, apiVersion, standing, declared vs effective permissions, `approvalsKnown`, full command metadata (scope, destructive, selection, UI intent, requiredCapabilities, input/result schemas, docsId), contribution IDs, settings schema (defaults only), docs refs |
 | `commandsBuiltin` | built-in palette actions from `src/lib/commands.ts`: id, preview title, section, hint, action, docsId |
 | `eventsV2` | the five typed v2 contracts with host ownership |
 | `documentation` | manifest id, product version, `matchState` (`matched` \| `mismatched` \| `unversioned` \| `missing-manifest`), `mismatches` (field + expected + actual), the staged manifest identity (product version, build id, source revision/dirty, document count), index + document ids, runnable examples |

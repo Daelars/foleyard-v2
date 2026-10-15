@@ -136,6 +136,7 @@ export function createDropRulesV2Definition(): ExtensionV2Definition {
         title: "Preview Drop Rules",
         description: "Preview the file actions that Drop Rules would perform.",
         scope: "drop",
+        ui: "direct",
         input: dropInput,
         result: previewResultSchema(),
         docsId: "commands",
@@ -145,6 +146,7 @@ export function createDropRulesV2Definition(): ExtensionV2Definition {
         title: "Apply Drop Rules",
         description: "Copy and rename dropped sounds using the configured rules.",
         scope: "drop",
+        ui: "direct",
         input: dropInput,
         result: applyResultSchema(),
         docsId: "commands",
@@ -155,6 +157,7 @@ export function createDropRulesV2Definition(): ExtensionV2Definition {
         description: "Prepare one sound for drag-out using the configured rules.",
         scope: "drop",
         requiredCapabilities: ["desktop.native"],
+        ui: "direct",
         input: {
           kind: "object",
           properties: {
@@ -175,6 +178,7 @@ export function createDropRulesV2Definition(): ExtensionV2Definition {
         title: "Configure Drop Rules",
         description: "Open the Drop Rules settings.",
         scope: "global",
+        ui: "direct",
         result: openSettingsResultSchema(),
         docsId: "commands",
       },

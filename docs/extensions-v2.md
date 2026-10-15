@@ -49,7 +49,10 @@ record.
 
 A definition carries `id`, `name`, `version`, `apiVersion: 2`,
 `description`, `permissions`, `commands`, `settings`,
-`contributions`, and `docsRefs`. The registry validates duplicate
+`contributions`, and `docsRefs`. Each command may declare a `ui`
+surface (`direct`, `form`, `review`, or `confirm`; absent means
+`direct`) so generic entry points route it to the surface it needs.
+The registry validates duplicate
 IDs, namespace ownership, malformed defaults, unsupported API
 versions, unresolved command references, unknown permissions, and
 unsupported contribution/scope types, and rejects incompatible
@@ -201,7 +204,13 @@ dialogs (`make-pack-v2`, `folder-janitor-v2`, `library-gatherer-v2`,
 `auto-tag-v2`, `drop-rules-v2`, `smart-collections-v2`), and previews
 and results are rendered by those dialogs, not by generic components.
 A contribution only renders while its extension is enabled and
-approved; disabling removes its UI and listeners.
+approved; disabling removes its UI and listeners. A contributed
+command's `ui` intent decides how its entry dispatches: `direct`
+commands run with the current selection, while `form`, `review`, and
+`confirm` commands open their dedicated workspace (and a
+review-producing command's plan opens the review-and-apply flow) rather
+than running headless. A surface-bearing command with no workspace on an
+entry point is not offered there.
 
 ## Contracts
 

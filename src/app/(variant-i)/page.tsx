@@ -34,10 +34,7 @@ import {
   AUTO_TAG_V2_ID,
 } from "@foleyard/auto-tag-v2";
 import {
-  FOLDER_JANITOR_V2_DELETE_FOLDERS,
   FOLDER_JANITOR_V2_ID,
-  FOLDER_JANITOR_V2_SCAN_FOLDER,
-  FOLDER_JANITOR_V2_SCAN_LIBRARY,
 } from "@foleyard/folder-janitor-v2";
 import { LIBRARY_GATHERER_V2_ID } from "@foleyard/library-gatherer-v2";
 import { SMART_COLLECTIONS_V2_ID } from "@foleyard/smart-collections-v2";
@@ -48,11 +45,16 @@ import {
   useV2Catalog,
   type V2UiState,
 } from "@/lib/extensions-v2/contributions";
+import {
+  routeV2Command,
+  type V2Workflow,
+} from "@/lib/extensions-v2/command-surfaces";
 import type { V2ResolvedContribution } from "@yard-core";
 import { V3DesktopTitleBar } from "./components/title-bar";
 import { V3ExtensionGrid } from "./components/extensions/extension-grid";
 import { V3FolderJanitorDialog } from "./components/ext-flows/folder-janitor";
 import { V3LibraryGathererDialog } from "./components/ext-flows/library-gatherer";
+import { V3V2PlanReviewDialog } from "./components/ext-flows/plan-review";
 import { V3OnboardingDialog } from "./components/onboarding";
 import { V3FileTable } from "./components/file-table/file-table";
 import { V3OrganizeView } from "./components/organize";
@@ -367,6 +369,13 @@ function AppV3Content() {
     saveSearch: (name) => org.saveSearch(name, debouncedSearchQuery),
     renameCollection: (id, name) => org.renameCollection(id, name),
   });
+  // Stable member references so the routing callbacks keep their identity
+  // across renders (`extUi` itself is a fresh object each render).
+  const {
+    openJanitorLibrary: openV2JanitorWorkspace,
+    openGatherDialog: openV2GatherWorkspace,
+    setShowSaveSearch: openV2SaveSearch,
+  } = extUi;
 
   const [packV2, setPackV2] = useState<{
     source: MakePackV2Source;
@@ -377,6 +386,12 @@ function AppV3Content() {
     state: "unavailable" | "empty" | "ready";
     matches: Array<{ fileId: string; filename: string; score: number }>;
   }>(null);
+  // A review-required outcome from any generic entry point lands here so
+  // the plan is reviewed and applied instead of stranded (#294).
+  const [reviewPlan, setReviewPlan] = useState<{
+    planId: string;
+    title: string;
+  } | null>(null);
   // The renderer derives the same available-capability set the server passes
   // to execution preflight; desktop.native follows the desktop bridge (#244).
   const desktopAvailable = useDesktopApp();
@@ -397,13 +412,53 @@ function AppV3Content() {
     [v2Catalog.extensions, availableCapabilities],
   );
 
+  const openPackV2 = useCallback(
+    (source: MakePackV2Source, fileIds: string[]) => {
+      setPackV2({ source, fileIds });
+    },
+    [],
+  );
+  // One dispatcher for every dedicated workflow a contributed command
+  // opens (#294). Form/review/confirm commands route here instead of
+  // being invoked headless.
+  const openV2Workflow = useCallback(
+    (workflow: V2Workflow, fileIds: string[] = []) => {
+      switch (workflow.kind) {
+        case "make-pack":
+          openPackV2(workflow.source, fileIds);
+          return;
+        case "folder-janitor":
+          openV2JanitorWorkspace();
+          return;
+        case "library-gatherer":
+          openV2GatherWorkspace();
+          return;
+        case "save-search":
+          openV2SaveSearch(true);
+          return;
+        case "auto-tag":
+          setAutoTagPage(workflow.page);
+          showAutoTag();
+          return;
+      }
+    },
+    [
+      openPackV2,
+      openV2JanitorWorkspace,
+      openV2GatherWorkspace,
+      openV2SaveSearch,
+      setAutoTagPage,
+      showAutoTag,
+    ],
+  );
   const v2Palette = useV2PaletteBridge(
     selectedIds,
     v2Catalog.catalog,
     v2UiState,
     {
-      onOpenJanitor: extUi.openJanitorLibrary,
-      onOpenGather: extUi.openGatherDialog,
+      onOpenWorkflow: (workflow, fileIds) =>
+        openV2Workflow(workflow, fileIds),
+      onOpenReview: (planId, title) => setReviewPlan({ planId, title }),
     },
   );
   const makePackV2Enabled = useMemo(
@@ -420,19 +475,13 @@ function AppV3Content() {
       ),
     [v2Catalog.extensions],
   );
-  const openPackV2 = useCallback(
-    (source: MakePackV2Source, fileIds: string[]) => {
-      setPackV2({ source, fileIds });
-    },
-    [],
-  );
   // Tools-grid run dispatch: every card opens its dialog or view per the
   // package README. Drop Rules v2 has no run action (drop zone +
   // settings surface instead).
   const runV2Extension = useCallback(
     (extensionId: string) => {
       if (extensionId === MAKE_PACK_V2_ID) {
-        openPackV2("recent", []);
+        openV2Workflow({ kind: "make-pack", source: "recent" });
         return;
       }
       if (extensionId === SOUND_SHELF_V2_ID) {
@@ -440,15 +489,15 @@ function AppV3Content() {
         return;
       }
       if (extensionId === SMART_COLLECTIONS_V2_ID) {
-        extUi.setShowSaveSearch(true);
+        openV2SaveSearch(true);
         return;
       }
       if (extensionId === FOLDER_JANITOR_V2_ID) {
-        extUi.openJanitorLibrary();
+        openV2Workflow({ kind: "folder-janitor" });
         return;
       }
       if (extensionId === LIBRARY_GATHERER_V2_ID) {
-        extUi.openGatherDialog();
+        openV2Workflow({ kind: "library-gatherer" });
         return;
       }
       if (extensionId === AUTO_TAG_V2_ID) {
@@ -456,35 +505,28 @@ function AppV3Content() {
       }
     },
     [
-      openPackV2,
+      openV2Workflow,
       showShelf,
       showAutoTag,
-      extUi.setShowSaveSearch,
-      extUi.openJanitorLibrary,
-      extUi.openGatherDialog,
+      openV2SaveSearch,
     ],
   );
   const invokeV2RowCommand = useCallback(
     (item: V2ResolvedContribution, fileIds: string[]) => {
-      if (item.extensionId === MAKE_PACK_V2_ID) {
-        openPackV2("selection", fileIds);
+      const route = routeV2Command({
+        extensionId: item.extensionId,
+        commandId: item.commandId,
+        ui: item.ui,
+        title: item.title,
+      });
+      if (route.kind === "workflow") {
+        // Form/review/confirm commands open their workspace with the
+        // current selection and source context; they never run here.
+        openV2Workflow(route.workflow, fileIds);
         return;
       }
-      // Dialog-owned tools: scans and deletes need the janitor report UI
-      // and gather needs the grant-orchestrating dialog; invoking them
-      // headless strands review plans with nowhere to confirm. Index
-      // removals stay headless (immediate, toast-confirmed below).
-      if (
-        item.extensionId === FOLDER_JANITOR_V2_ID &&
-        (item.commandId === FOLDER_JANITOR_V2_SCAN_LIBRARY ||
-          item.commandId === FOLDER_JANITOR_V2_SCAN_FOLDER ||
-          item.commandId === FOLDER_JANITOR_V2_DELETE_FOLDERS)
-      ) {
-        extUi.openJanitorLibrary();
-        return;
-      }
-      if (item.extensionId === LIBRARY_GATHERER_V2_ID) {
-        extUi.openGatherDialog();
+      if (route.kind === "needs-surface") {
+        toast.error(route.reason);
         return;
       }
       void invokeV2Command({
@@ -499,20 +541,31 @@ function AppV3Content() {
         const body = result.body as {
           ok?: boolean;
           error?: { message?: string };
+          outcome?: {
+            kind?: string;
+            planId?: string;
+            value?: Record<string, unknown>;
+          };
         };
         if (!body?.ok) {
           toast.error(body?.error?.message ?? "Extension command failed.");
+          return;
+        }
+        // A review-required outcome is routed to the review surface: the
+        // plan is shown and applied, never left stranded.
+        if (body.outcome?.kind === "review-required") {
+          if (body.outcome.planId) {
+            setReviewPlan({ planId: body.outcome.planId, title: item.title });
+          } else {
+            toast.error("The command prepared a review without a plan ID.");
+          }
           return;
         }
         if (
           item.extensionId === AUTO_TAG_V2_ID &&
           item.commandId === AUTO_TAG_V2_FIND_SIMILAR
         ) {
-          const outcome = (
-            result.body as {
-              outcome?: { kind?: string; value?: Record<string, unknown> };
-            }
-          ).outcome;
+          const outcome = body.outcome;
           const value =
             outcome?.kind === "immediate" ? outcome.value : undefined;
           const matches = Array.isArray(value?.matches)
@@ -549,7 +602,7 @@ function AppV3Content() {
         toast.success("Extension command completed.");
       });
     },
-    [openPackV2, extUi.openJanitorLibrary, extUi.openGatherDialog],
+    [openV2Workflow],
   );
   // Stable row-command handler for the memoized table (#259): selection
   // membership is a Set lookup, and the identity only changes when the
@@ -1026,6 +1079,17 @@ function AppV3Content() {
                             onInvoke={(item) =>
                               invokeV2RowCommand(item, selectedIds)
                             }
+                            resolveBlockedReason={(item) => {
+                              const route = routeV2Command({
+                                extensionId: item.extensionId,
+                                commandId: item.commandId,
+                                ui: item.ui,
+                                title: item.title,
+                              });
+                              return route.kind === "needs-surface"
+                                ? route.reason
+                                : null;
+                            }}
                           />
                         ) : null}
                         {makePackV2Enabled ? (
@@ -1205,6 +1269,19 @@ function AppV3Content() {
         }}
         initialSource={packV2?.source ?? "selection"}
         initialFileIds={packV2?.fileIds ?? []}
+      />
+
+      <V3V2PlanReviewDialog
+        open={reviewPlan !== null}
+        onOpenChange={(open) => {
+          if (!open) setReviewPlan(null);
+        }}
+        planId={reviewPlan?.planId ?? null}
+        title={reviewPlan?.title ?? "Review changes"}
+        onApplied={() => {
+          toast.success("Change applied.");
+          void reloadAfterScan();
+        }}
       />
 
       <V3SimilarSoundsDialog

@@ -100,6 +100,28 @@ approval; settings namespaces exist only where the port declares settings
 Input and result schemas are machine-readable value schemas declared in each
 `definition.ts` and reported by the runtime snapshot.
 
+## Command UI intent
+
+Every command declares the surface it needs before it can run (`ui` in
+`definition.ts`, defaulting to `direct`). Generic entry points — the
+command palette, the file and folder context menus, the selection bulk
+bar, and the drop zone — read that declaration, so a command that needs
+a form, a plan review, or a confirmation is routed to its dedicated
+workspace instead of being half-executed with incomplete context.
+
+| Intent | Meaning | Bundled commands |
+| --- | --- | --- |
+| `direct` | The entry point already holds everything the command needs: run it immediately with the current selection or drop context. | Sound Shelf add/remove/clear/list; Folder Janitor remove-files; every Drop Rules command; Auto Tag tag-files, list-candidates, find-similar, clap-status, coverage and origin reads |
+| `form` | The command collects input: open its dedicated workflow with the current selection and source context. | Make Pack from-selection/from-shelf/from-recent; Folder Janitor scan-library/scan-folder; Library Gatherer preview-gather/gather; Smart Collections save-search; Auto Tag preview, promote-candidate, dismiss-candidate, tag-semantic, rename-tag |
+| `review` | The command prepares a plan: render the host review and an apply flow; never fire and forget. | Folder Janitor delete-folders |
+| `confirm` | The command mutates or leaves the app: show its confirmation before running it. | Auto Tag download-model, remove-by-origin, merge-tag |
+
+A surface-bearing command with no workspace on the invoking surface is
+absent from the palette and disabled with a reason in the selection bar;
+a review outcome that arrives through a generic entry point opens the
+review-and-apply dialog, so no prepared plan is stranded. An unknown
+`ui` value is rejected at registration (`unsupported-ui-intent`).
+
 ## Runtime behavior
 
 Execution model: shared availability preflight (enabled, scope, selection,

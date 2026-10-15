@@ -35,6 +35,12 @@ marketplace, or public authoring SDK.
   `src/app/(variant-i)/components/`, palette entries, context menus,
   dialogs, and panels. Contributions declare intent; the renderer
   resolves items per point through the shared availability evaluator.
+- `src/lib/extensions-v2/command-surfaces.ts` is the single routing
+  decision for generic entry points: a command's declared `ui` intent
+  (`direct`, `form`, `review`, `confirm`) maps onto direct execution,
+  the dedicated workspace that owns the command, or a review-and-apply
+  flow. `src/components/extensions-v2/use-v2-plan-review.ts` renders the
+  host review and echoes the reviewed plan on apply.
 
 ## Runtime behavior
 

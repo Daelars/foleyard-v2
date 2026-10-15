@@ -51,11 +51,17 @@ export async function fetchV2JobStatus(jobId: string): Promise<V2JobPollResult> 
 /**
  * Poll until the job reaches a terminal state. Survives transient
  * fetch failures by retrying with linear backoff; callers survive a
- * full reload by calling again with the same job ID.
+ * full reload by calling again with the same job ID. `onUpdate` fires
+ * with each successful poll so callers can show live progress.
  */
 export async function pollV2JobUntilSettled(
   jobId: string,
-  options?: { intervalMs?: number; maxAttempts?: number; signal?: AbortSignal },
+  options?: {
+    intervalMs?: number;
+    maxAttempts?: number;
+    signal?: AbortSignal;
+    onUpdate?: (job: V2JobRecord) => void;
+  },
 ): Promise<V2JobPollResult> {
   const intervalMs = Math.max(100, options?.intervalMs ?? 1000);
   const maxAttempts = Math.max(1, options?.maxAttempts ?? 300);
@@ -68,6 +74,7 @@ export async function pollV2JobUntilSettled(
     if (options?.signal?.aborted) return last;
     const current = await fetchV2JobStatus(jobId);
     last = current;
+    if (current.ok) options?.onUpdate?.(current.job);
     if (current.ok && TERMINAL.has(current.job.state)) return current;
     if (!current.ok && current.code === "job-unknown") return current;
     await delay(current.ok ? intervalMs : intervalMs * 2);

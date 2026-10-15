@@ -37,11 +37,33 @@ export const DEFAULT_ALLOWED_FORMATS = "wav,aif,aiff,mp3,flac,ogg,m4a,aac";
 /** Default tiny-file threshold in bytes (matches v1). */
 export const DEFAULT_TINY_THRESHOLD_BYTES = 1024;
 
-/** Largest number of Library records one scan reads (index page bound ×). */
+/**
+ * Largest number of Library records one scan reads. The bound is disclosed
+ * in the scan result: reaching it sets `truncated` and adds a
+ * `truncationReasons` entry, so a capped report is never presented as a
+ * complete one.
+ */
 export const MAX_SCAN_RECORDS = 50_000;
 
-/** Largest number of directory listings one folder walk performs. */
+/**
+ * Largest number of directory listings one folder walk performs. Reaching
+ * it sets `truncated` with a `truncationReasons` entry, exactly like the
+ * record cap.
+ */
 export const MAX_FOLDER_LISTINGS = 5_000;
+
+/** Largest number of truncation reasons attached to one scan report. */
+export const MAX_SCAN_TRUNCATION_REASONS = 8;
+
+/**
+ * Largest number of issue rows carried in a scan report's detail arrays.
+ *
+ * The detail arrays cross the job transport, whose terminal-result
+ * projection bounds every array (R4 #279). The full issue set still
+ * drives `issueTotal` and `issueSummary`, so the counts stay exact while
+ * the detail list stays a bounded sample.
+ */
+export const MAX_SCAN_ISSUE_DETAILS = 100;
 
 /** Parse a comma-separated allowed-formats string into a lowercased set. */
 export function parseAllowedFormats(raw: string | undefined): Set<string> {
@@ -150,4 +172,21 @@ export function toReportArrays(issues: readonly JanitorIssue[]): {
     issueMessages: issues.map((issue) => issue.message),
     issueFileIds: issues.map((issue) => issue.fileIds.join(",")),
   };
+}
+
+/**
+ * Per-kind issue counts as `"kind=count"` strings.
+ *
+ * The parallel issue arrays are bounded when they cross the job transport
+ * (R4 #279 terminal results), so a large report's detail list may be
+ * shorter than the issues actually found. These counts are computed from
+ * the full issue set and travel as small scalars, so the breakdown stays
+ * accurate even when the detail list is capped.
+ */
+export function summarizeIssueKinds(issues: readonly JanitorIssue[]): string[] {
+  const counts = new Map<JanitorIssueKind, number>();
+  for (const issue of issues) {
+    counts.set(issue.kind, (counts.get(issue.kind) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([kind, count]) => `${kind}=${count}`);
 }

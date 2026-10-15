@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { v2PlanRoute, type V2PlanReview } from "@yard-core";
+import { v2PlanRoute, type V2JobRecord, type V2PlanReview } from "@yard-core";
 import {
   FOLDER_JANITOR_V2_DELETE_FOLDERS,
   FOLDER_JANITOR_V2_ID,
@@ -13,6 +13,10 @@ import {
 } from "@foleyard/folder-janitor-v2";
 import { getDesktopBridge } from "@/lib/desktop";
 import { invokeV2Command } from "@/lib/extensions-v2/contributions";
+import {
+  pollV2JobUntilSettled,
+  requestV2JobCancel,
+} from "@/lib/extensions-v2/job-client";
 
 export type JanitorIssueKind =
   | "duplicate"
@@ -33,6 +37,14 @@ export interface JanitorScanResult {
   scannedFiles: number;
   scannedRoots: string[];
   issues: JanitorIssue[];
+  /** True when a scan bound cut the review short. */
+  truncated: boolean;
+  /** Why the review is incomplete; empty when `truncated` is false. */
+  truncationReasons: string[];
+  /** Total issues found, even when the detail list is transport-bounded. */
+  issueTotal: number;
+  /** Accurate per-kind counts as `"kind=count"` entries. */
+  issueSummary: string[];
 }
 
 export type JanitorTarget = "library" | "folder";
@@ -44,12 +56,24 @@ type ScanValue = {
   issuePaths?: string[];
   issueMessages?: string[];
   issueFileIds?: string[];
+  issueTotal?: number;
+  issueSummary?: string[];
+  truncated?: boolean;
+  truncationReasons?: string[];
+};
+
+type DeleteValue = {
+  reviewed?: number;
+  deleted?: number;
+  deletedPaths?: string[];
+  failedPaths?: string[];
+  failedReasons?: string[];
 };
 
 type OutcomeBody = {
   ok?: boolean;
   error?: { message?: string };
-  outcome?: { kind?: string; value?: unknown; planId?: string };
+  outcome?: { kind?: string; value?: unknown; planId?: string; jobId?: string };
 };
 
 function outcomeError(body: unknown, fallback: string): string {
@@ -58,6 +82,18 @@ function outcomeError(body: unknown, fallback: string): string {
     return parsed?.error?.message ?? fallback;
   }
   return fallback;
+}
+
+/**
+ * A succeeded job exposes its declared result through `result.value`
+ * (bounded, schema-shaped per #279); `value` is the in-process spelling
+ * that never crosses the transport. Prefer the projected value.
+ */
+function readJobValue<T>(job: V2JobRecord): T | null {
+  const projected = job.result?.value;
+  if (projected !== undefined && projected !== null) return projected as T;
+  if (job.value !== undefined && job.value !== null) return job.value as T;
+  return null;
 }
 
 function toIssues(value: ScanValue): JanitorIssue[] {
@@ -82,6 +118,19 @@ function toIssues(value: ScanValue): JanitorIssue[] {
   return issues;
 }
 
+/** Parse `"kind=count"` summary entries into a per-kind count map. */
+export function parseIssueSummary(summary: readonly string[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const entry of summary) {
+    const separator = entry.lastIndexOf("=");
+    if (separator <= 0) continue;
+    const kind = entry.slice(0, separator);
+    const value = Number.parseInt(entry.slice(separator + 1), 10);
+    if (Number.isFinite(value)) counts[kind] = value;
+  }
+  return counts;
+}
+
 /** Tally of scanned issues, one count per issue kind. */
 export function countIssuesByKind(
   issues: JanitorIssue[],
@@ -95,7 +144,9 @@ export function countIssuesByKind(
   );
 }
 
-async function applyDeletePlan(review: V2PlanReview): Promise<{ deleted: number }> {
+async function applyDeletePlan(
+  review: V2PlanReview,
+): Promise<{ reviewed: number; deleted: number; failed: number }> {
   const response = await fetch(
     `/api/extensions-v2/plans/${encodeURIComponent(review.planId)}/apply`,
     {
@@ -108,8 +159,12 @@ async function applyDeletePlan(review: V2PlanReview): Promise<{ deleted: number 
   if (!response.ok || !body?.ok) {
     throw new Error(outcomeError(body, "Failed to delete folders"));
   }
-  const value = (body.outcome as { value?: { deleted?: number } } | undefined)?.value;
-  return { deleted: typeof value?.deleted === "number" ? value.deleted : 0 };
+  const value = (body.outcome as { value?: DeleteValue } | undefined)?.value;
+  return {
+    reviewed: typeof value?.reviewed === "number" ? value.reviewed : 0,
+    deleted: typeof value?.deleted === "number" ? value.deleted : 0,
+    failed: Array.isArray(value?.failedPaths) ? value.failedPaths.length : 0,
+  };
 }
 
 export function useFolderJanitorV2({
@@ -123,10 +178,13 @@ export function useFolderJanitorV2({
 }) {
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const [isScanning, setIsScanning] = useState(false);
+  const [scanJobId, setScanJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JanitorScanResult | null>(null);
   const [allowCleanup, setAllowCleanup] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [confirmingCleanup, setConfirmingCleanup] = useState(false);
+  /** The reviewed, not-yet-applied delete plan; deletion waits for a separate apply. */
+  const [pendingDelete, setPendingDelete] = useState<V2PlanReview | null>(null);
 
   // Reset extension-local workflow state each time this modal opens.
   useEffect(() => {
@@ -135,8 +193,10 @@ export function useFolderJanitorV2({
       setResult(null);
       setAllowCleanup(false);
       setIsScanning(false);
+      setScanJobId(null);
       setIsRemoving(false);
       setConfirmingCleanup(false);
+      setPendingDelete(null);
     }
   }, [open ]);
 
@@ -150,40 +210,98 @@ export function useFolderJanitorV2({
     setIsScanning(true);
     setProgress({ completed: 0, total: 0 });
     setResult(null);
+    setScanJobId(null);
 
     try {
-      const invoked = await invokeV2Command({
-        extensionId: FOLDER_JANITOR_V2_ID,
-        commandId: isFolderScan
-          ? FOLDER_JANITOR_V2_SCAN_FOLDER
-          : FOLDER_JANITOR_V2_SCAN_LIBRARY,
-        ...(isFolderScan && initialFolderPath
-          ? { folderPath: initialFolderPath }
-          : {}),
+      // Scans are host-owned jobs: live progress and cooperative
+      // cancellation, so a large review never blocks the dialog.
+      const response = await fetch("/api/extensions-v2/jobs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          extensionId: FOLDER_JANITOR_V2_ID,
+          commandId: isFolderScan
+            ? FOLDER_JANITOR_V2_SCAN_FOLDER
+            : FOLDER_JANITOR_V2_SCAN_LIBRARY,
+          selection: {
+            fileIds: [],
+            ...(isFolderScan && initialFolderPath
+              ? { folderPath: initialFolderPath }
+              : {}),
+          },
+          input: {},
+        }),
       });
-      if (!invoked.ok) {
-        throw new Error(invoked.message);
-      }
-      const body = invoked.body as OutcomeBody;
-      if (!body?.ok) {
+      const body = (await response.json().catch(() => null)) as OutcomeBody;
+      if (!response.ok || !body?.ok) {
         throw new Error(outcomeError(body, "Scan failed"));
       }
-      const value = (body.outcome as { value?: ScanValue } | undefined)?.value;
+      if (body.outcome?.kind !== "job" || !body.outcome.jobId) {
+        throw new Error("Scan did not start as a background job.");
+      }
+      const jobId = body.outcome.jobId;
+      setScanJobId(jobId);
+      const settled = await pollV2JobUntilSettled(jobId, {
+        intervalMs: 400,
+        onUpdate: (job) =>
+          setProgress({
+            completed: job.progress.completed,
+            total: job.progress.total ?? job.progress.completed,
+          }),
+      });
+      if (!settled.ok) throw new Error(settled.message);
+      const job = settled.job;
+      if (job.state === "cancelled") {
+        toast.message("Scan cancelled. Nothing was changed.");
+        return;
+      }
+      if (job.state !== "succeeded") {
+        throw new Error(
+          job.error?.message ?? job.result?.diagnostic?.message ?? `Scan ${job.state}.`,
+        );
+      }
+      const value = readJobValue<ScanValue>(job);
       if (!value) {
+        if (job.result?.valueOmitted) {
+          throw new Error(
+            "The scan found more issues than one report can carry; scan a folder or narrow the scope and try again.",
+          );
+        }
         throw new Error("Scan did not return a report.");
       }
+      const issues = toIssues(value);
+      const issueSummary = value.issueSummary ?? [];
       setResult({
         scannedFiles: value.scannedFiles ?? 0,
         scannedRoots: value.scannedRoots ?? [],
-        issues: toIssues(value),
+        issues,
+        truncated: value.truncated === true,
+        truncationReasons: value.truncationReasons ?? [],
+        issueTotal:
+          typeof value.issueTotal === "number"
+            ? value.issueTotal
+            : Object.values(parseIssueSummary(issueSummary)).reduce(
+                (sum, count) => sum + count,
+                issues.length,
+              ),
+        issueSummary,
       });
-      setProgress({ completed: 1, total: 1 });
+      setProgress((current) => ({
+        completed: job.progress.completed || current.completed,
+        total: job.progress.total ?? current.total,
+      }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Scan failed");
     } finally {
       setIsScanning(false);
+      setScanJobId(null);
     }
   }, [initialFolderPath, isFolderScan]);
+
+  const handleCancelScan = useCallback(async () => {
+    if (!scanJobId) return;
+    await requestV2JobCancel(scanJobId);
+  }, [scanJobId]);
 
   const handleReveal = useCallback(async (fileId?: string, path?: string) => {
     const bridge = getDesktopBridge();
@@ -212,10 +330,14 @@ export function useFolderJanitorV2({
         if (!body?.ok) {
           throw new Error(outcomeError(body, "Failed to remove files"));
         }
-        const value = (body.outcome as { value?: { removed?: number } } | undefined)?.value;
+        const value = (body.outcome as { value?: { removed?: number; unknownIds?: string[] } } | undefined)
+          ?.value;
         const removed = typeof value?.removed === "number" ? value.removed : fileIds.length;
+        const unknown = value?.unknownIds?.length ?? 0;
         toast.success(
-          `Removed ${removed} file${removed !== 1 ? "s" : ""}`,
+          unknown > 0
+            ? `Removed ${removed} file${removed !== 1 ? "s" : ""}; ${unknown} were already gone.`
+            : `Removed ${removed} file${removed !== 1 ? "s" : ""}`,
         );
         await handleScan();
       } catch (error) {
@@ -229,49 +351,75 @@ export function useFolderJanitorV2({
     [handleScan],
   );
 
-  const handleDeleteFolders = useCallback(
-    async (paths: string[]) => {
-      setIsRemoving(true);
-      try {
-        const invoked = await invokeV2Command({
-          extensionId: FOLDER_JANITOR_V2_ID,
-          commandId: FOLDER_JANITOR_V2_DELETE_FOLDERS,
-          commandInput: { folders: paths },
-        });
-        if (!invoked.ok) {
-          throw new Error(invoked.message);
-        }
-        const body = invoked.body as OutcomeBody;
-        if (!body?.ok) {
-          throw new Error(outcomeError(body, "Failed to delete folders"));
-        }
-        if (body.outcome?.kind !== "review-required" || !body.outcome.planId) {
-          throw new Error("Delete did not return a review plan.");
-        }
-        const reviewResponse = await fetch(v2PlanRoute(body.outcome.planId));
-        const reviewBody = (await reviewResponse.json().catch(() => null)) as {
-          ok?: boolean;
-          review?: V2PlanReview;
-          error?: { message?: string };
-        } | null;
-        if (!reviewResponse.ok || !reviewBody?.ok || !reviewBody.review) {
-          throw new Error(reviewBody?.error?.message ?? "Could not load the delete preview.");
-        }
-        const applied = await applyDeletePlan(reviewBody.review);
+  /**
+   * Prepare and review a deletion, then stop. Nothing is removed until
+   * the separate apply action; the reviewed plan is the exact scope.
+   */
+  const handleDeleteFolders = useCallback(async (paths: string[]) => {
+    setIsRemoving(true);
+    try {
+      const invoked = await invokeV2Command({
+        extensionId: FOLDER_JANITOR_V2_ID,
+        commandId: FOLDER_JANITOR_V2_DELETE_FOLDERS,
+        commandInput: { folders: paths },
+      });
+      if (!invoked.ok) {
+        throw new Error(invoked.message);
+      }
+      const body = invoked.body as OutcomeBody;
+      if (!body?.ok) {
+        throw new Error(outcomeError(body, "Failed to prepare the delete review"));
+      }
+      if (body.outcome?.kind !== "review-required" || !body.outcome.planId) {
+        throw new Error("Delete did not return a review plan.");
+      }
+      const reviewResponse = await fetch(v2PlanRoute(body.outcome.planId));
+      const reviewBody = (await reviewResponse.json().catch(() => null)) as {
+        ok?: boolean;
+        review?: V2PlanReview;
+        error?: { message?: string };
+      } | null;
+      if (!reviewResponse.ok || !reviewBody?.ok || !reviewBody.review) {
+        throw new Error(reviewBody?.error?.message ?? "Could not load the delete preview.");
+      }
+      setPendingDelete(reviewBody.review);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to prepare the delete review",
+      );
+    } finally {
+      setIsRemoving(false);
+    }
+  }, []);
+
+  const handleCancelDelete = useCallback(() => {
+    setPendingDelete(null);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!pendingDelete) return;
+    setIsRemoving(true);
+    try {
+      const applied = await applyDeletePlan(pendingDelete);
+      setPendingDelete(null);
+      if (applied.failed > 0) {
+        toast.warning(
+          `Deleted ${applied.deleted} of ${applied.reviewed} reviewed folder${applied.reviewed !== 1 ? "s" : ""}; ${applied.failed} could not be deleted and were left in place.`,
+        );
+      } else {
         toast.success(
           `Deleted ${applied.deleted} empty folder${applied.deleted !== 1 ? "s" : ""}`,
         );
-        await handleScan();
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to delete folders",
-        );
-      } finally {
-        setIsRemoving(false);
       }
-    },
-    [handleScan],
-  );
+      await handleScan();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete folders",
+      );
+    } finally {
+      setIsRemoving(false);
+    }
+  }, [pendingDelete, handleScan]);
 
   const handleAllowCleanupChange = useCallback((checked: boolean) => {
     if (checked) {
@@ -286,26 +434,35 @@ export function useFolderJanitorV2({
     setConfirmingCleanup(false);
   }, []);
 
+  // Prefer the accurate per-kind summary; fall back to counting the
+  // bounded detail list only when the summary is absent.
   const issueCounts: Record<string, number> = result
-    ? countIssuesByKind(result.issues)
+    ? result.issueSummary.length > 0
+      ? parseIssueSummary(result.issueSummary)
+      : countIssuesByKind(result.issues)
     : {};
 
   return {
     progress,
     isScanning,
+    scanJobId,
     result,
     issueCounts,
     allowCleanup,
     isRemoving,
     confirmingCleanup,
     setConfirmingCleanup,
+    pendingDelete,
     isFolderScan,
     scanLabel,
     scanDescription,
     handleScan,
+    handleCancelScan,
     handleReveal,
     handleRemove,
     handleDeleteFolders,
+    handleConfirmDelete,
+    handleCancelDelete,
     handleAllowCleanupChange,
     handleConfirmCleanup,
   };

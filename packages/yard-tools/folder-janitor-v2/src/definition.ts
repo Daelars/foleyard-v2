@@ -4,7 +4,11 @@ import {
   type ExtensionV2ValueSchema,
 } from "yard-core";
 
-import { DEFAULT_ALLOWED_FORMATS, DEFAULT_TINY_THRESHOLD_BYTES } from "./policy";
+import {
+  DEFAULT_ALLOWED_FORMATS,
+  DEFAULT_TINY_THRESHOLD_BYTES,
+  MAX_SCAN_ISSUE_DETAILS,
+} from "./policy";
 
 /**
  * Folder Janitor v2 reference definition (Yard Tools context, J4 #179).
@@ -46,11 +50,14 @@ function scanResultSchema(): ExtensionV2ValueSchema {
     properties: {
       scannedFiles: { kind: "number", integer: true, min: 0 },
       scannedRoots: { kind: "string-array" },
-      issueKinds: { kind: "string-array" },
-      issuePaths: { kind: "string-array" },
-      issueMessages: { kind: "string-array" },
-      issueFileIds: { kind: "string-array" },
+      issueKinds: { kind: "string-array", maxItems: MAX_SCAN_ISSUE_DETAILS },
+      issuePaths: { kind: "string-array", maxItems: MAX_SCAN_ISSUE_DETAILS },
+      issueMessages: { kind: "string-array", maxItems: MAX_SCAN_ISSUE_DETAILS },
+      issueFileIds: { kind: "string-array", maxItems: MAX_SCAN_ISSUE_DETAILS },
+      issueTotal: { kind: "number", integer: true, min: 0 },
+      issueSummary: { kind: "string-array" },
       truncated: { kind: "boolean" },
+      truncationReasons: { kind: "string-array" },
     },
     required: [
       "scannedFiles",
@@ -59,7 +66,10 @@ function scanResultSchema(): ExtensionV2ValueSchema {
       "issuePaths",
       "issueMessages",
       "issueFileIds",
+      "issueTotal",
+      "issueSummary",
       "truncated",
+      "truncationReasons",
     ],
   };
 }
@@ -88,12 +98,13 @@ function deleteFoldersResultSchema(): ExtensionV2ValueSchema {
   return {
     kind: "object",
     properties: {
+      reviewed: { kind: "number", integer: true, min: 0 },
       deleted: { kind: "number", integer: true, min: 0 },
       deletedPaths: { kind: "string-array" },
       failedPaths: { kind: "string-array" },
       failedReasons: { kind: "string-array" },
     },
-    required: ["deleted", "deletedPaths", "failedPaths", "failedReasons"],
+    required: ["reviewed", "deleted", "deletedPaths", "failedPaths", "failedReasons"],
   };
 }
 

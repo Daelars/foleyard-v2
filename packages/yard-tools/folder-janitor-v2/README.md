@@ -29,13 +29,18 @@ unusual formats, and missing files, then clean up.
 
 - **scan-library / scan-folder** — run as jobs: they page the Library
   index and walk folders through the bounded listing op, reporting
-  progress and honoring cancellation. They also run in `direct`
-  execute (progress/cancel become no-ops). Read-only: no plan needed.
+  progress and honoring cancellation. The dialog submits them through
+  the host job route, shows live progress, and offers cancel; direct
+  execute still works (progress/cancel become no-ops). Read-only: no
+  plan needed.
 - **remove-files** — immediate. Marks the selected index IDs removed
-  (`library:write`); reversible at the index level.
-- **delete-folders** — destructive: `direct` previews a review plan;
-  `apply` deletes each empty folder only after the host records the
-  review stamp. A client `confirmed` flag is never sufficient.
+  (`library:write`); reversible at the index level (see #275 durable
+  exclusions). The selection is capped at 500 IDs by the host.
+- **delete-folders** — destructive and two-step: `direct` prepares a
+  review plan that lists the **exact** folders to delete and removes
+  nothing; `apply` runs only after the host records the review stamp and
+  deletes exactly the reviewed scope. A client `confirmed` flag is never
+  sufficient.
 
 ## Policies
 
@@ -48,21 +53,33 @@ unusual formats, and missing files, then clean up.
   folder with no files and only empty subfolders is itself empty
   (matching v1). An indexed file not seen while its tree was **fully**
   walked is reported missing — never on an aborted or budget-capped
-  walk, so a partial scan cannot invent false "missing" reports
-  (`truncated: true` flags that case).
+  walk, so a partial scan cannot invent false "missing" reports.
+- **Honest review scope (#285).** A scan reports `scannedRoots` and
+  `scannedFiles` (what it reviewed), `issueTotal` and `issueSummary`
+  (accurate per-kind counts), and `truncated` + `truncationReasons`
+  (why the review is incomplete). A partial report is never presented
+  as complete or clean: the dialog shows the reasons and refuses the
+  "library is clean" message while truncated.
 - **Bounds.** Up to `MAX_SCAN_RECORDS` (50,000) index records and
   `MAX_FOLDER_LISTINGS` (5,000) directory listings per scan; exceeding
-  either sets `truncated`.
-- **Destructive deletes are contained.** `delete-folders` runs through
-  the authorized delete op: the folder must sit strictly inside a
-  Library root (never a root itself) and must still be empty at delete
+  either — or failing to list a folder — sets `truncated` and adds the
+  matching `truncationReasons` entry (bounded to
+  `MAX_SCAN_TRUNCATION_REASONS`). The detail arrays carry at most
+  `MAX_SCAN_ISSUE_DETAILS` (100) issue rows, while `issueTotal` and
+  `issueSummary` stay accurate for the full set, so a capped list is
+  disclosed rather than presented as complete.
+- **Destructive deletes are contained and exact.** `delete-folders` runs
+  through the authorized delete op: the folder must sit strictly inside
+  a Library root (never a root itself) and must still be empty at delete
   time (rechecked). Source grants never authorize deletion. A
-  non-empty or vanished folder fails with a reason; other folders in
-  the batch still process.
+  non-empty or vanished folder fails with a reason; the result accounts
+  for every reviewed folder (`reviewed` == `deleted` +
+  `failedPaths.length`), so nothing is silently dropped.
 - **Honest settling.** Cancelling a scan settles it cancelled with no
   partial writes. Cancelling `delete-folders` stops further deletions;
   folders already removed stay removed (a completed `rmdir` has no
-  partial state to roll back).
+  partial state to roll back), and the next run re-checks each folder so
+  the remaining work is recoverable.
 
 ## Before/after parity
 

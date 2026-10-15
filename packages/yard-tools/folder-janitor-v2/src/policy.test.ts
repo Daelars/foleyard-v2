@@ -6,7 +6,9 @@ import {
   formatOf,
   normalizePath,
   parseAllowedFormats,
+  summarizeIssueKinds,
   toReportArrays,
+  type JanitorIssue,
   type JanitorRecord,
 } from "./policy";
 
@@ -105,5 +107,20 @@ describe("toReportArrays", () => {
       issueMessages: ["dupe"],
       issueFileIds: ["a,b"],
     });
+  });
+});
+
+describe("summarizeIssueKinds", () => {
+  it("counts each kind from the full issue set", () => {
+    const issues: JanitorIssue[] = [
+      { kind: "duplicate", path: "/lib/a.wav", fileIds: ["a", "b"], message: "dupe" },
+      { kind: "duplicate", path: "/lib/c.wav", fileIds: ["c", "d"], message: "dupe" },
+      { kind: "missing-file", path: "/lib/e.wav", fileIds: ["e"], message: "missing" },
+    ];
+    expect(summarizeIssueKinds(issues)).toEqual(["duplicate=2", "missing-file=1"]);
+  });
+
+  it("returns nothing for a clean report", () => {
+    expect(summarizeIssueKinds([])).toEqual([]);
   });
 });

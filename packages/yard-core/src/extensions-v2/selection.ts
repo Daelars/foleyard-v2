@@ -1,4 +1,4 @@
-import type { IndexedAudioFile } from "../domain/audio-file";
+import { isOwnedAudioFile, type IndexedAudioFile } from "../domain/audio-file";
 
 import type {
   ExtensionV2Command,
@@ -136,7 +136,7 @@ function resolveByIds(
   const byId = new Map(found.map((file) => [file.id, file]));
   const missing = snapshot.fileIds.filter((id) => {
     const file = byId.get(id);
-    return !file || file.removedAt !== null;
+    return !file || !isOwnedAudioFile(file);
   });
   if (missing.length > 0) {
     return {
@@ -155,7 +155,7 @@ function resolveByIds(
   }
   const files = snapshot.fileIds
     .map((id) => byId.get(id)!)
-    .filter((file) => file.removedAt === null);
+    .filter((file) => isOwnedAudioFile(file));
   if (!opts.allowEmpty && files.length === 0) {
     return {
       ok: false,

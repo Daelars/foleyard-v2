@@ -3,6 +3,7 @@ import type { AudioFile, IndexedAudioFile, FileSearchQuery, TagOrigin } from "@y
 import { normalizeDirectoryPath } from "@yard-core";
 import { decodeFileCursor, fileKeysetFilter } from "../file-cursor";
 import { filenameSearch } from "../filename-search";
+import { notDetachedFilter, ownedFileFilter } from "../file-ownership";
 import { chunkArray, SQLITE_MAX_VARIABLES } from "../sql-parameters";
 import * as schema from "@/lib/schema";
 import type { FileRepositoryContext } from "./context";
@@ -36,7 +37,10 @@ function buildCollectionFilters(context: FileRepositoryContext, options: FileSea
   }
 
   if (!showRemoved) {
-    collectionFilters.push(isNull(schema.files.removedAt));
+    collectionFilters.push(ownedFileFilter());
+  } else {
+    // A deliberate removed-row view still never shows detached rows.
+    collectionFilters.push(notDetachedFilter());
   }
 
   if (cursor) {
@@ -67,7 +71,10 @@ function buildFileFilters(context: FileRepositoryContext, options: FileSearchQue
   }
 
   if (!showRemoved) {
-    filters.push(isNull(schema.files.removedAt));
+    filters.push(ownedFileFilter());
+  } else {
+    // A deliberate removed-row view still never shows detached rows.
+    filters.push(notDetachedFilter());
   }
 
   if (favorites) {
@@ -273,6 +280,7 @@ export function getAllFilesIncludingRemoved(context: FileRepositoryContext): Ind
         fileSize: schema.files.fileSize,
         isFavorite: schema.files.isFavorite,
         removedAt: schema.files.removedAt,
+        detachedAt: schema.files.detachedAt,
         lastScannedAt: schema.files.lastScannedAt,
         mtimeMs: schema.files.mtimeMs,
       })
@@ -301,6 +309,43 @@ export function getFileById(context: FileRepositoryContext, id: string): Indexed
 }
 
 /**
+ * Point read behind the ownership contract (#271). Returns null for a file
+ * that is soft-removed or whose root is detached, so playback, waveform and
+ * desktop reads share one predicate with browse and search.
+ */
+export function getOwnedFileById(context: FileRepositoryContext, id: string): IndexedAudioFile | null {
+  return (
+    context.db
+      .select()
+      .from(schema.files)
+      .where(and(eq(schema.files.id, id), ownedFileFilter()))
+      .get() ?? null
+  ) as IndexedAudioFile | null;
+}
+
+/** Batched form of {@link getOwnedFileById}; preserves no particular order. */
+export function getOwnedFilesByIds(context: FileRepositoryContext, ids: string[]): IndexedAudioFile[] {
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const results: IndexedAudioFile[] = [];
+  const chunkSize = Math.max(1, SQLITE_MAX_VARIABLES - 1);
+
+  for (const chunk of chunkArray(ids, chunkSize)) {
+    const rows = context.db
+      .select()
+      .from(schema.files)
+      .where(and(inArray(schema.files.id, chunk), ownedFileFilter()))
+      .all() as IndexedAudioFile[];
+
+    results.push(...rows);
+  }
+
+  return results;
+}
+
+/**
  * Live files touched by the scan that started at `sinceIso`: the
  * post-scan auto-tag trigger's arrival list. Removed files never qualify.
  */
@@ -308,7 +353,7 @@ export function getFileIdsScannedSince(context: FileRepositoryContext, sinceIso:
   return context.db
     .select({ id: schema.files.id })
     .from(schema.files)
-    .where(and(gte(schema.files.lastScannedAt, sinceIso), isNull(schema.files.removedAt)))
+    .where(and(gte(schema.files.lastScannedAt, sinceIso), isNull(schema.files.removedAt), isNull(schema.files.detachedAt)))
     .orderBy(asc(schema.files.id))
     .all()
     .map((row) => row.id);

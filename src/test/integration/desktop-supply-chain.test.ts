@@ -119,6 +119,10 @@ const dbMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/db", () => ({
   getFileById: (id: string) => dbMocks.files.get(id),
+  getOwnedFileById: (id: string) => {
+    const file = dbMocks.files.get(id);
+    return file && file.removedAt === null ? file : undefined;
+  },
   getLibraryRoots: () => dbMocks.roots,
 }));
 

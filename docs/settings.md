@@ -68,8 +68,11 @@ Renderer preferences:
 | Zoom | `src/hooks/use-zoom.ts` | `foleyard-zoom` | 50–200, desktop applies `setZoomFactor` |
 
 Library settings are read and written through `GET`/`POST /api/settings`
-actions (`validate`, `save`, `remove`, `onboarding_complete`); the scanner
-validates a root before it is stored.
+actions (`validate`, `save`, `remove`, `forget`, `onboarding_complete`); the
+scanner validates a root before it is stored. `remove` detaches the root's
+files (soft, recoverable; `save` re-attaches them) and `forget` removes the
+root and deletes its files and organization data — see
+`docs/adr/library-root-detachment.md`.
 
 Workflow state is one versioned envelope per extension with transactional
 migrations; a failed migration preserves prior data or disables the

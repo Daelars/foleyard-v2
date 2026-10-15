@@ -7,6 +7,19 @@ export const settings = sqliteTable('settings', {
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+/**
+ * Durable intent for a Library root removal (#271). A row is written and
+ * committed before the settings/index change, then cleared once both agree.
+ * A crash in between is reconciled from here on the next scan: a root the
+ * settings no longer own finishes detaching (or forgetting); a root still
+ * owned drops the intent.
+ */
+export const pendingRootChanges = sqliteTable('pending_root_changes', {
+  root: text('root').primaryKey(),
+  mode: text('mode').notNull(),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const files = sqliteTable('files', {
   id: text('id').primaryKey(),
   path: text('path').notNull().unique(),
@@ -23,6 +36,7 @@ export const files = sqliteTable('files', {
   mtimeMs: integer('mtime_ms'),
   isFavorite: integer('is_favorite', { mode: 'boolean' }).default(false),
   removedAt: text('removed_at'),
+  detachedAt: text('detached_at'),
   lastScannedAt: text('last_scanned_at'),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),

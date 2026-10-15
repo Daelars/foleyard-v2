@@ -1,10 +1,11 @@
-import { count, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, count, eq, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
 import type { SettingsRepository } from "@yard-core";
 import type { LibraryStats } from "@yard-core";
 
 import { sqlite as defaultSqlite } from "./connection";
+import { notDetachedFilter, ownedFileFilter } from "./file-ownership";
 import * as schema from "@/lib/schema";
 
 import type Database from "better-sqlite3";
@@ -131,15 +132,17 @@ export class SqliteSettingsRepository implements SettingsRepository {
   }
 
   getLibraryStats(): LibraryStats {
+    // Detached files belong to no owned root: they are neither active nor
+    // "removed" — the Library simply does not see them (#271).
     const activeRow = this.db
       .select({ count: count() })
       .from(schema.files)
-      .where(isNull(schema.files.removedAt))
+      .where(ownedFileFilter())
       .get();
     const removedRow = this.db
       .select({ count: count() })
       .from(schema.files)
-      .where(isNotNull(schema.files.removedAt))
+      .where(and(isNotNull(schema.files.removedAt), notDetachedFilter()))
       .get();
 
     return {

@@ -22,6 +22,8 @@ export function upsertFile(context: FileRepositoryContext, record: ScanFileRecor
         fileSize: record.fileSize,
         mtimeMs: record.mtimeMs,
         removedAt: record.removedAt,
+        // A scanned file belongs to an owned root: it is not detached (#271).
+        detachedAt: null,
         lastScannedAt: record.lastScannedAt,
         updatedAt: new Date().toISOString(),
       })
@@ -40,6 +42,7 @@ export function upsertFile(context: FileRepositoryContext, record: ScanFileRecor
           fileSize: record.fileSize,
           mtimeMs: record.mtimeMs,
           removedAt: record.removedAt,
+          detachedAt: null,
           lastScannedAt: record.lastScannedAt,
           updatedAt: new Date().toISOString(),
         },

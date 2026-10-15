@@ -1,4 +1,4 @@
-import type { IndexedAudioFile } from "../domain/audio-file";
+import { isOwnedAudioFile, type IndexedAudioFile } from "../domain/audio-file";
 
 import {
   availabilityFailureCode,
@@ -789,7 +789,7 @@ export class ExtensionV2Host {
     const byId = new Map(resolved.map((file) => [file.id, file]));
     const changed = record.targets.fileIds.filter((id) => {
       const file = byId.get(id);
-      return !file || file.removedAt !== null;
+      return !file || !isOwnedAudioFile(file);
     });
     if (changed.length > 0) {
       return fail(

@@ -1,8 +1,9 @@
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { normalizeDirectoryPath } from "@yard-core";
 
 import { sqlite as defaultSqlite } from "./connection";
+import { ownedFileFilter } from "./file-ownership";
 import * as schema from "@/lib/schema";
 
 import type Database from "better-sqlite3";
@@ -34,7 +35,7 @@ export class SqliteBrowseRepository {
     const rows = this.db
       .selectDistinct({ directory: schema.files.directory })
       .from(schema.files)
-      .where(and(isNotNull(schema.files.directory), isNull(schema.files.removedAt)))
+      .where(and(isNotNull(schema.files.directory), ownedFileFilter()))
       .all();
 
     const dirs = rows.map((r) => r.directory).filter(Boolean) as string[];
@@ -49,7 +50,7 @@ export class SqliteBrowseRepository {
         and(
           eq(schema.files.libraryRoot, libraryRoot),
           isNotNull(schema.files.directory),
-          isNull(schema.files.removedAt),
+          ownedFileFilter(),
         ),
       )
       .all();

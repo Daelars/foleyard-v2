@@ -28,7 +28,9 @@ peak waveform generated locally with FFmpeg.
 `use-waveform-peaks.ts` (peak fetching via `src/lib/client-waveform.ts`),
 `use-volume-preferences.ts`, `volume-control.tsx`, `favorite-button.tsx`,
 and `collection-menu.tsx`.
-`GET /api/audio?id=…` resolves the record via `getFileById`, confines the
+`GET /api/audio?id=…` resolves the record via `getOwnedFileById`
+(the shared ownership predicate, so a detached root's files 404, #271),
+confines the
 path with `resolveExistingPathWithinRoots(file.path, getLibraryRoots())`,
 serves `Range` bytes (`parseByteRange`, suffix ranges supported, 206
 partial / 200 full) with the per-extension MIME map, and — as a side
@@ -67,7 +69,8 @@ must not be read as a playback guarantee for every browser.
 
 ## Failure behavior and limitations
 
-- Missing record, `removedAt` set, or path outside roots: 404.
+- Missing record, `removedAt` set, root detached (`detachedAt` set, #271),
+  or path outside roots: 404.
 - Malformed Range on an empty/unknown size: served as full 200 or 400/416
   per `parseByteRange` outcome; unsatisfiable starts return null.
 - Waveform failure logs server-side and returns 500

@@ -40,6 +40,31 @@ same way, calls `getWaveformPeaks` (`src/lib/waveform-cache.ts`), decodes
 via `src/lib/waveform-decoder.ts`, generates with FFmpeg
 (`src/lib/waveform-generator.ts`, `resizeWaveform` for the requested count).
 
+## Queue and session policy (#291, decided)
+
+The playback queue is **snapshotted at play time** and is global, not
+view-scoped:
+
+- Pressing play (or selecting a row, moving with the keyboard, or playing
+  from the palette) seeds the queue from the view/selection current at that
+  moment. The queue copies its records and records a source label; from then
+  on it is an independent object.
+- Navigating to another view **neither stops nor re-scopes** the queue. The
+  player keeps playing the list it started in and never silently starts a
+  different list. The UI shows the source, e.g. `Playing from Library`.
+- Advancing (Next/Previous or track end) resolves from the queue snapshot,
+  preferring a freshly loaded copy of the same id, so it still selects and
+  plays the queued file after a view change. When it cannot move (empty queue,
+  single track, removed file) it states why instead of stalling silently.
+- Mute, volume and playback errors are **session-level** state, shared across
+  views. Unmuting always restores an audible level, so the unmute control can
+  never remain silent at zero volume.
+- Media failures (unsupported codec, missing file, decode error, network
+  drop) surface as readable, recoverable states with Retry and Next actions
+  (`playback-error.ts`), never as a silent stall. Any state that changes is
+  visible in the player.
+
+
 Format matrix (`SUPPORTED_AUDIO_EXTENSIONS` in
 `packages/yard-core/src/services/library/scan-types.ts`:
 `.mp3 .wav .ogg .flac .aiff .m4a .aac`):
@@ -72,6 +97,9 @@ must not be read as a playback guarantee for every browser.
   per `parseByteRange` outcome; unsatisfiable starts return null.
 - Waveform failure logs server-side and returns 500
   (`Failed to generate waveform`); the player still streams audio.
+- Player media failures (unsupported codec, missing file, decode/network
+  error) show a readable, recoverable state with Retry and Next; an empty or
+  single-track queue reports why it cannot advance instead of stalling.
 - `/api/audio` unconditionally records a recent Make Pack entry on
   success — clients cannot opt out per request.
 
@@ -81,6 +109,10 @@ must not be read as a playback guarantee for every browser.
   `use-audio-playback.ts`, `use-transport-queue.ts`, `transport-queue.ts`,
   `use-waveform-peaks.ts`, `use-volume-preferences.ts`, `volume-control.tsx`,
   `favorite-button.tsx`, `collection-menu.tsx`, `types.ts`
+- `src/components/AudioPlayer/playback-error.ts` — `MediaError` code to
+  readable playback-failure message
+- `src/app/library/use-transport.ts` — queue snapshot wiring, next-title and
+  advance/step resolution shared with the route
 - `src/app/api/audio/route.ts` — Range streaming + recent-recording side effect
 - `src/app/api/waveform/route.ts` — waveform endpoint
 - `src/lib/waveform-cache.ts`, `src/lib/waveform-generator.ts`,

@@ -74,6 +74,7 @@ export const V3AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
   function V3AudioPlayer(
     {
       selectedFile,
+      preferences,
       onClose,
       onPlaybackChange,
       onEnded,
@@ -82,6 +83,10 @@ export const V3AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       autoplay,
       onToggleAutoplay,
       nextTitle,
+      playingFrom,
+      canStepQueue,
+      notice,
+      onDismissNotice,
       onToggleFavorite,
       collections,
       onAddToCollection,
@@ -98,6 +103,7 @@ export const V3AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         ref={ref}
         key={selectedFile.id}
         selectedFile={selectedFile}
+        preferences={preferences}
         onClose={onClose}
         onPlaybackChange={onPlaybackChange}
         onEnded={onEnded}
@@ -106,6 +112,10 @@ export const V3AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         autoplay={autoplay}
         onToggleAutoplay={onToggleAutoplay}
         nextTitle={nextTitle}
+        playingFrom={playingFrom}
+        canStepQueue={canStepQueue}
+        notice={notice}
+        onDismissNotice={onDismissNotice}
         onToggleFavorite={onToggleFavorite}
         collections={collections}
         onAddToCollection={onAddToCollection}
@@ -123,6 +133,7 @@ const V3AudioPlayerContent = forwardRef<
 >(function V3AudioPlayerContent(
   {
     selectedFile,
+    preferences,
     onClose,
     onPlaybackChange,
     onEnded,
@@ -131,6 +142,10 @@ const V3AudioPlayerContent = forwardRef<
     autoplay,
     onToggleAutoplay,
     nextTitle,
+    playingFrom,
+    canStepQueue,
+    notice,
+    onDismissNotice,
     onToggleFavorite,
     collections,
     onAddToCollection,
@@ -138,7 +153,12 @@ const V3AudioPlayerContent = forwardRef<
   },
   ref,
 ) {
-  const playback = useAudioPlayback(selectedFile, onPlaybackChange, onEnded);
+  const playback = useAudioPlayback(
+    selectedFile,
+    preferences,
+    onPlaybackChange,
+    onEnded,
+  );
 
   useImperativeHandle(ref, () => ({
     togglePlayback: playback.togglePlayback,
@@ -205,6 +225,49 @@ const V3AudioPlayerContent = forwardRef<
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex justify-center px-4">
       <div className="pointer-events-auto w-full max-w-3xl">
         <TransportPanel>
+          {playback.error ? (
+            <div
+              role="alert"
+              className="mb-2.5 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100"
+            >
+              <span className="min-w-0 flex-1">{playback.error.message}</span>
+              <Button
+                tone="secondary"
+                size="sm"
+                aria-label="Retry playback"
+                onClick={playback.retry}
+              >
+                Retry
+              </Button>
+              {canStepQueue ? (
+                <Button
+                  tone="ghost"
+                  size="sm"
+                  aria-label="Play next sound"
+                  onClick={onNext}
+                >
+                  Next
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {notice && !playback.error ? (
+            <div
+              role="status"
+              className="mb-2.5 flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[12px] text-zinc-300"
+            >
+              <span className="min-w-0 flex-1">{notice}</span>
+              <Button
+                tone="ghost"
+                size="icon"
+                className="size-6 rounded-full"
+                aria-label="Dismiss message"
+                onClick={onDismissNotice}
+              >
+                <X className="size-3.5" />
+              </Button>
+            </div>
+          ) : null}
           <div className="flex items-center gap-3">
             <div className="flex shrink-0 items-center gap-1">
               <Button
@@ -241,6 +304,11 @@ const V3AudioPlayerContent = forwardRef<
                   </span>
                 ) : null}
               </p>
+              {playingFrom ? (
+                <p className="truncate font-mono text-[10px] uppercase tracking-[0.12em] text-zinc-500">
+                  {`Playing from ${playingFrom}`}
+                </p>
+              ) : null}
               <Scrubber
                 peaks={peaks}
                 progress={Math.max(0, Math.min(1, playback.currentTime / Math.max(playback.effectiveDuration, 1)))}
@@ -292,7 +360,7 @@ const V3AudioPlayerContent = forwardRef<
                 size="icon"
                 className="size-8 rounded-full"
                 aria-label={playback.isMuted || playback.volume === 0 ? "Unmute audio" : "Mute audio"}
-                onClick={() => playback.setIsMuted((current) => !current)}
+                onClick={playback.toggleMute}
               >
                 {playback.isMuted || playback.volume === 0 ? <VolumeX /> : <Volume2 />}
               </Button>

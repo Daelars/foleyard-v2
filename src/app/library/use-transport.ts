@@ -3,10 +3,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useTransportQueue } from "@/components/AudioPlayer/use-transport-queue";
-import type { FileRecord } from "./types";
+import {
+  currentQueueTrack,
+  resolveQueueTrack,
+} from "@/components/AudioPlayer/transport-queue";
+import type { AudioPlayerFileRecord } from "@/components/AudioPlayer/types";
 
-export interface TransportSelection {
-  focusFile: (file: FileRecord) => void;
+export interface TransportFocus {
+  /** Current view records, used only to prefer a fresher copy of a queued id. */
+  files: AudioPlayerFileRecord[];
+  focusFile: (file: AudioPlayerFileRecord) => void;
+}
+
+export interface TransportAdvanceResult {
+  ok: boolean;
+  track: AudioPlayerFileRecord | null;
+  /** Human explanation when the move could not happen; null when expected. */
+  reason: string | null;
 }
 
 export interface TransportCloseSelection {
@@ -14,47 +27,33 @@ export interface TransportCloseSelection {
   setPlaying: (playing: boolean) => void;
 }
 
-export interface TransportFiles {
-  orderedFiles: FileRecord[];
-  files: FileRecord[];
-}
-
 /**
- * Next-up title from the queue cursor, skipping the currently selected file.
- * Pure so the queue-to-label contract is unit-testable without a DOM.
+ * Next-up title from the queue snapshot, skipping the currently selected
+ * track. Pure so the queue-to-label contract is unit-testable without a DOM.
  */
 export function resolveNextTitle(args: {
-  files: FileRecord[];
-  queue: string[];
+  queue: AudioPlayerFileRecord[];
   cursor: number;
   selectedFileId: string | null | undefined;
 }): string | null {
-  const { files, queue, cursor, selectedFileId } = args;
+  const { queue, cursor, selectedFileId } = args;
   if (queue.length <= 1) {
     return null;
   }
-  const nextIndex = (cursor + 1) % queue.length;
-  const nextId = queue[nextIndex];
-  const titleOf = (id: string | undefined) => {
-    if (!id) {
-      return null;
-    }
-    const match = files.find((file) => file.id === id);
-    return (
-      match?.filename.replace(/\.[^.]+$/, "") ?? match?.filename ?? null
-    );
-  };
-  if (!nextId || nextId === selectedFileId) {
-    const following = queue.find((id) => id !== selectedFileId);
-    return titleOf(following);
+  const titleOf = (track: AudioPlayerFileRecord | undefined) =>
+    track ? track.filename.replace(/\.[^.]+$/, "") : null;
+  const next = queue[(cursor + 1) % queue.length];
+  if (!next || next.id === selectedFileId) {
+    return titleOf(queue.find((track) => track.id !== selectedFileId));
   }
-  return titleOf(nextId);
+  return titleOf(next);
 }
 
 /**
- * Transport wiring: the playback queue plus every queue side effect with
- * explicit selection arguments. The route passes the selection slice at call
- * time; this hook never owns selection state.
+ * Transport wiring (#291): playback starts a queue snapshot and every later
+ * move resolves from that snapshot, never from the current view. The route
+ * passes the selection slice at call time; this hook owns only queue state,
+ * the playing flag and the source label.
  */
 export function useTransport() {
   const queue = useTransportQueue();
@@ -66,9 +65,8 @@ export function useTransport() {
   });
 
   const nextTitleFor = useCallback(
-    (files: FileRecord[], selectedFileId: string | null | undefined) =>
+    (selectedFileId: string | null | undefined) =>
       resolveNextTitle({
-        files,
         queue: queue.queueState.queue,
         cursor: queue.queueState.cursor,
         selectedFileId,
@@ -77,25 +75,32 @@ export function useTransport() {
   );
 
   const playFile = useCallback(
-    (orderedFiles: FileRecord[], file: FileRecord) => {
-      queueRef.current.playIds(
-        orderedFiles.map((listed) => listed.id),
-        file.id,
-      );
+    (
+      files: AudioPlayerFileRecord[],
+      startFile: AudioPlayerFileRecord,
+      source: string | null,
+    ) => {
+      queueRef.current.playTracks(files, startFile, source);
     },
     [],
   );
 
   const trackEnded = useCallback(
-    (args: TransportFiles & { focusFile: (file: FileRecord) => void }) => {
-      const nextId = queueRef.current.advanceIfEnabled();
-      if (!nextId) {
-        return;
+    (args: TransportFocus): TransportAdvanceResult => {
+      const next = queueRef.current.advanceIfEnabled();
+      if (!next || next.queue.length <= 1) {
+        return { ok: false, track: null, reason: null };
       }
-      const match = args.orderedFiles.find((file) => file.id === nextId);
-      if (match) {
-        args.focusFile(match);
+      const track = resolveQueueTrack(currentQueueTrack(next), args.files);
+      if (!track) {
+        return {
+          ok: false,
+          track: null,
+          reason: "The next track is no longer available.",
+        };
       }
+      args.focusFile(track);
+      return { ok: true, track, reason: null };
     },
     [],
   );
@@ -103,19 +108,29 @@ export function useTransport() {
   const stepTo = useCallback(
     (
       direction: "next" | "prev",
-      args: TransportFiles & { focusFile: (file: FileRecord) => void },
-    ) => {
-      const nextId =
+      args: TransportFocus,
+    ): TransportAdvanceResult => {
+      const current = queueRef.current.getState();
+      if (current.queue.length === 0) {
+        return { ok: false, track: null, reason: "The queue is empty." };
+      }
+      if (current.queue.length <= 1) {
+        return { ok: false, track: null, reason: "Nothing else is queued." };
+      }
+      const next =
         direction === "next"
-          ? queueRef.current.stepNext()
-          : queueRef.current.stepPrev();
-      if (!nextId) {
-        return;
+          ? queueRef.current.advance()
+          : queueRef.current.retreat();
+      const track = resolveQueueTrack(currentQueueTrack(next), args.files);
+      if (!track) {
+        return {
+          ok: false,
+          track: null,
+          reason: "That track is no longer available.",
+        };
       }
-      const match = args.orderedFiles.find((file) => file.id === nextId);
-      if (match) {
-        args.focusFile(match);
-      }
+      args.focusFile(track);
+      return { ok: true, track, reason: null };
     },
     [],
   );
@@ -130,6 +145,7 @@ export function useTransport() {
     ...queue,
     isPlayerPlaying,
     setIsPlayerPlaying,
+    playingFrom: queue.queueState.source,
     nextTitleFor,
     playFile,
     trackEnded,

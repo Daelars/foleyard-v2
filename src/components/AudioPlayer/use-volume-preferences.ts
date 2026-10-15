@@ -1,29 +1,52 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import type { AudioPlayerPreferences } from "./types";
 
 const VOLUME_STORAGE_KEY = "foleyard-volume";
 const LEGACY_VOLUME_STORAGE_KEYS = ["soundslop-volume"];
+const DEFAULT_VOLUME = 0.72;
 
 function clampVolume(value: number) {
   return Math.max(0, Math.min(1, value));
 }
 
-export function useVolumePreferences() {
-  const [volume, setVolume] = useState(() => {
-    if (typeof window === "undefined") {
-      return 0.72;
-    }
+function readInitialVolume(): number {
+  if (typeof window === "undefined") {
+    return DEFAULT_VOLUME;
+  }
 
-    const savedVolume =
-      window.localStorage.getItem(VOLUME_STORAGE_KEY) ??
-      LEGACY_VOLUME_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(
-        (value) => value !== null,
-      );
-    const parsedVolume = savedVolume ? Number(savedVolume) : 0.72;
-    return Number.isFinite(parsedVolume) ? clampVolume(parsedVolume) : 0.72;
-  });
-  const [isMuted, setIsMuted] = useState(false);
+  const savedVolume =
+    window.localStorage.getItem(VOLUME_STORAGE_KEY) ??
+    LEGACY_VOLUME_STORAGE_KEYS.map((key) =>
+      window.localStorage.getItem(key),
+    ).find((value) => value !== null);
+  const parsedVolume = savedVolume ? Number(savedVolume) : DEFAULT_VOLUME;
+  return Number.isFinite(parsedVolume) ? clampVolume(parsedVolume) : DEFAULT_VOLUME;
+}
+
+/**
+ * Session volume and mute (#291). Mute and volume live for the whole session,
+ * not per view. Muting never destroys the audible level: unmuting restores it,
+ * so the unmute control can never remain silent at zero volume.
+ */
+export function useVolumePreferences(): AudioPlayerPreferences {
+  const [volume, setVolume] = useState(readInitialVolume);
+  const [isMuted, setIsMuted] = useState(() => readInitialVolume() === 0);
+  const lastAudibleVolumeRef = useRef(
+    volume > 0 ? volume : DEFAULT_VOLUME,
+  );
+  const volumeRef = useRef(volume);
+  const isMutedRef = useRef(isMuted);
+
+  useEffect(() => {
+    volumeRef.current = volume;
+    isMutedRef.current = isMuted;
+    if (volume > 0) {
+      lastAudibleVolumeRef.current = volume;
+    }
+  }, [volume, isMuted]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -31,17 +54,26 @@ export function useVolumePreferences() {
     }
   }, [volume]);
 
-  const handleVolumeChange = (value: number | readonly number[]) => {
+  const handleVolumeChange = useCallback((value: number | readonly number[]) => {
     const nextVolume = clampVolume(Array.isArray(value) ? value[0] : value);
 
     setVolume(nextVolume);
-    if (nextVolume > 0 && isMuted) {
-      setIsMuted(false);
-    }
-    if (nextVolume === 0) {
-      setIsMuted(true);
-    }
-  };
+    setIsMuted(nextVolume === 0);
+  }, []);
 
-  return { volume, isMuted, setIsMuted, handleVolumeChange };
+  const toggleMute = useCallback(() => {
+    if (isMutedRef.current || volumeRef.current === 0) {
+      const restored =
+        volumeRef.current > 0
+          ? volumeRef.current
+          : lastAudibleVolumeRef.current;
+      setVolume(restored);
+      setIsMuted(false);
+      return;
+    }
+
+    setIsMuted(true);
+  }, []);
+
+  return { volume, isMuted, handleVolumeChange, toggleMute };
 }

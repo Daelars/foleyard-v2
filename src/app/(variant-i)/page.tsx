@@ -7,6 +7,7 @@
 "use client";
 
 import type { FileRecord } from "../library/types";
+import type { AudioPlayerFileRecord } from "@/components/AudioPlayer/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PackagePlus, PanelLeft, Save, X } from "lucide-react";
 import { toast } from "sonner";
@@ -73,6 +74,7 @@ import { useBulkActions } from "../library/use-bulk-actions";
 import { useSettingsScan } from "../library/use-settings-scan";
 import { useExtensionUi } from "../library/use-extension-ui";
 import { useTransport } from "../library/use-transport";
+import { useVolumePreferences } from "@/components/AudioPlayer/use-volume-preferences";
 import { usePalette } from "../library/use-palette";
 import { useShelfV2 as useShelf } from "../library/use-shelf-v2";
 import {
@@ -125,7 +127,9 @@ function AppV3Content() {
   const selectedCollectionMirrorRef = useRef<string | null>(null);
 
   const transport = useTransport();
-  const { playIds, enqueue } = transport;
+  const playbackPreferences = useVolumePreferences();
+  const [transportNotice, setTransportNotice] = useState<string | null>(null);
+  const viewLabelRef = useRef("Library");
 
   const v2Catalog = useV2Catalog();
   const soundShelfEnabled = useMemo(
@@ -223,9 +227,25 @@ function AppV3Content() {
     toggleFileTag: handleToggleFileTag,
   } = filesApi;
 
+  // Playback starts from the records visible at click time; the transport
+  // snapshots them so later view changes never re-scope the queue (#291).
+  const transportPlayFile = transport.playFile;
+  const selectionPlayIds = useCallback(
+    (ordered: FileRecord[], startId: string) => {
+      const start = ordered.find((file) => file.id === startId);
+      if (!start) {
+        return;
+      }
+      // Starting a new queue clears any stale explanation from the last one.
+      setTransportNotice(null);
+      transportPlayFile(ordered, start, viewLabelRef.current);
+    },
+    [transportPlayFile],
+  );
+
   const selection = useSelection({
     orderedFiles,
-    playIds,
+    playIds: selectionPlayIds,
     togglePlayback: () => audioPlayerRef.current?.togglePlayback(),
   });
   const {
@@ -289,9 +309,9 @@ function AppV3Content() {
   );
 
   const handleShowExtensions = useCallback(() => {
+    // Navigating must not stop or re-scope playback (#291).
     view.showExtensions();
-    selection.setSelectedFile(null);
-  }, [view, selection]);
+  }, [view]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -341,7 +361,7 @@ function AppV3Content() {
     bulkTag: (ids, tagId) => filesApi.bulkTag(ids, tagId),
     bulkRemove: (ids, choice) => filesApi.bulkRemove(ids, choice),
     addToShelf: (ids) => shelf.addToShelf(ids),
-    enqueue,
+    enqueue: (ids) => transport.enqueueTracks(orderedFiles, ids),
     removeFile: (id, filename) => filesApi.removeFile(id, filename),
     reloadShelfCount: () => {
       void loadSoundShelfCount();
@@ -587,6 +607,36 @@ function AppV3Content() {
     [v2Catalog.catalog, selectedIds, v2UiState],
   );
 
+  const transportStepTo = transport.stepTo;
+  // Queue entries are seeded from full FileRecords, so the narrower player
+  // record a resolved track carries is always a FileRecord at runtime.
+  const selectionFocusFile = selection.focusFile;
+  const focusSelectedFile = useCallback(
+    (file: AudioPlayerFileRecord) => selectionFocusFile(file as FileRecord),
+    [selectionFocusFile],
+  );
+  const handleTransportStep = useCallback(
+    (direction: "next" | "prev") => {
+      const result = transportStepTo(direction, {
+        files,
+        focusFile: focusSelectedFile,
+      });
+      setTransportNotice(result.ok ? null : result.reason);
+    },
+    [transportStepTo, files, focusSelectedFile],
+  );
+
+  const transportTrackEnded = transport.trackEnded;
+  const handleTrackEnded = useCallback(() => {
+    const result = transportTrackEnded({
+      files,
+      focusFile: focusSelectedFile,
+    });
+    if (!result.ok && result.reason) {
+      setTransportNotice(result.reason);
+    }
+  }, [transportTrackEnded, files, focusSelectedFile]);
+
   const palette = usePalette({
     orderedFiles,
     v2ToolCommands: v2Palette.v2ToolCommands,
@@ -607,18 +657,8 @@ function AppV3Content() {
     showAutoTag,
     openSettings: settingsScan.openSettings,
     togglePlayback: () => audioPlayerRef.current?.togglePlayback(),
-    stepNext: () =>
-      transport.stepTo("next", {
-        orderedFiles,
-        files,
-        focusFile: selection.focusFile,
-      }),
-    stepPrev: () =>
-      transport.stepTo("prev", {
-        orderedFiles,
-        files,
-        focusFile: selection.focusFile,
-      }),
+    stepNext: () => handleTransportStep("next"),
+    stepPrev: () => handleTransportStep("prev"),
     toggleAutoplay: () => transport.setAutoplay(!transport.autoplay),
     toggleFavoriteCurrent: () => {
       const current = selectionApiRef.current.get();
@@ -632,7 +672,8 @@ function AppV3Content() {
     playSound: (fileId) => {
       const match = orderedFiles.find((file) => file.id === fileId);
       if (match) {
-        transport.playFile(orderedFiles, match);
+        setTransportNotice(null);
+        transportPlayFile(orderedFiles, match, viewLabelRef.current);
         selection.focusFile(match);
       }
     },
@@ -688,6 +729,11 @@ function AppV3Content() {
                   ? (selectedDirectory?.label ?? "Library")
                   : "Library";
 
+  // Remember where a queue was started so the player can show its source.
+  useEffect(() => {
+    viewLabelRef.current = viewHeading;
+  }, [viewHeading]);
+
   const {
     folderJanitorEnabled,
     smartCollectionsEnabled,
@@ -717,7 +763,7 @@ function AppV3Content() {
   const hideHeaderActions =
     showExtensionsView || showShelfView || showOrganizeView || showAutoTagView;
 
-  const nextTitle = transport.nextTitleFor(files, selectedFile?.id);
+  const nextTitle = transport.nextTitleFor(selectedFile?.id);
 
   return (
     <VariantIProvider className="relative flex h-full flex-col overflow-hidden bg-canvas font-sans">
@@ -1097,37 +1143,25 @@ function AppV3Content() {
       <V3AudioPlayer
         ref={audioPlayerRef}
         selectedFile={selectedFile}
-        onClose={() =>
+        preferences={playbackPreferences}
+        onClose={() => {
+          setTransportNotice(null);
           transport.closePlayer({
             clearSelectedFile: () => selection.setSelectedFile(null),
             setPlaying: transport.setIsPlayerPlaying,
-          })
-        }
+          });
+        }}
         onPlaybackChange={transport.setIsPlayerPlaying}
-        onEnded={() =>
-          transport.trackEnded({
-            orderedFiles,
-            files,
-            focusFile: selection.focusFile,
-          })
-        }
-        onNext={() =>
-          transport.stepTo("next", {
-            orderedFiles,
-            files,
-            focusFile: selection.focusFile,
-          })
-        }
-        onPrev={() =>
-          transport.stepTo("prev", {
-            orderedFiles,
-            files,
-            focusFile: selection.focusFile,
-          })
-        }
+        onEnded={handleTrackEnded}
+        onNext={() => handleTransportStep("next")}
+        onPrev={() => handleTransportStep("prev")}
         autoplay={transport.autoplay}
         onToggleAutoplay={transport.setAutoplay}
         nextTitle={nextTitle}
+        playingFrom={transport.playingFrom}
+        canStepQueue={transport.queueState.queue.length > 1}
+        notice={transportNotice}
+        onDismissNotice={() => setTransportNotice(null)}
         onToggleFavorite={handleToggleFavorite}
         collections={org.collections}
         onAddToCollection={extUi.handleAddToCollection}

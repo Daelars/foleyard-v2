@@ -6,14 +6,19 @@ import {
   EMPTY_QUEUE,
   advanceQueue,
   clearQueue,
-  currentQueueId,
   enqueueIds,
   removeQueueId,
   retreatQueue,
   seedQueue,
   type TransportQueueState,
 } from "./transport-queue";
+import type { AudioPlayerFileRecord } from "./types";
 
+/**
+ * Owns the playback queue snapshot (#291). Views never reach into it: playback
+ * seeds it once from explicit records, and every later move reads only the
+ * snapshot, so navigating views cannot re-scope the queue.
+ */
 export function useTransportQueue() {
   const [queueState, setQueueState] = useState<TransportQueueState>(() => ({
     ...EMPTY_QUEUE,
@@ -27,13 +32,23 @@ export function useTransportQueue() {
     autoplayRef.current = autoplay;
   });
 
-  const playIds = useCallback((visibleIds: string[], startId: string) => {
-    setQueueState(seedQueue(visibleIds, startId));
-  }, []);
+  const playTracks = useCallback(
+    (
+      files: AudioPlayerFileRecord[],
+      startFile: AudioPlayerFileRecord,
+      source: string | null,
+    ) => {
+      setQueueState(seedQueue(files, startFile, source));
+    },
+    [],
+  );
 
-  const enqueue = useCallback((ids: string[]) => {
-    setQueueState((state) => enqueueIds(state, ids));
-  }, []);
+  const enqueueTracks = useCallback(
+    (files: AudioPlayerFileRecord[], ids: string[]) => {
+      setQueueState((state) => enqueueIds(state, files, ids));
+    },
+    [],
+  );
 
   const remove = useCallback((ids: Iterable<string>) => {
     setQueueState((state) => {
@@ -47,38 +62,41 @@ export function useTransportQueue() {
     setQueueState(clearQueue());
   }, []);
 
-  const stepNext = useCallback(() => {
+  const advance = useCallback((): TransportQueueState => {
     const next = advanceQueue(stateRef.current);
     setQueueState(next);
-    return currentQueueId(next);
+    return next;
   }, []);
 
-  const stepPrev = useCallback(() => {
+  const retreat = useCallback((): TransportQueueState => {
     const next = retreatQueue(stateRef.current);
     setQueueState(next);
-    return currentQueueId(next);
+    return next;
   }, []);
 
-  const advanceIfEnabled = useCallback(() => {
+  const advanceIfEnabled = useCallback((): TransportQueueState | null => {
     if (!autoplayRef.current) {
       return null;
     }
 
     const next = advanceQueue(stateRef.current);
     setQueueState(next);
-    return currentQueueId(next);
+    return next;
   }, []);
 
+  const getState = useCallback((): TransportQueueState => stateRef.current, []);
+
   return {
+    advance,
     advanceIfEnabled,
     autoplay,
     clear,
-    enqueue,
-    playIds,
+    enqueueTracks,
+    getState,
+    playTracks,
     queueState,
     remove,
+    retreat,
     setAutoplay,
-    stepNext,
-    stepPrev,
   };
 }

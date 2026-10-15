@@ -41,12 +41,17 @@ Installed handlers (per `main/ipc.cjs`): all invoke handlers above plus the
 `desktop:simulate-update` is declared and exposed in preload but registered
 only when `!app.isPackaged` — excluded from packaged availability.
 
-Startup: development runs Next on `:3001` via `scripts/dev-desktop.cjs`
-(`FOLEYARD_DESKTOP=1`, fresh grant secret, `ELECTRON_START_URL`) with Electron
-against the dev server. Packaged startup serves the bundled Next build
+Startup: `main/start-url.cjs` resolves the window start URL. Packaged
+startup ignores `ELECTRON_START_URL` and always serves the bundled Next build
 through `main/next-server.cjs` + `next-server-adapter.cjs` (Next major
 version pinned — currently 16 — with a loud error on mismatch), then loads
-the window from the local server URL.
+the window from that loopback URL. Development runs Next on `:3001` via
+`scripts/dev-desktop.cjs` (`FOLEYARD_DESKTOP=1`, fresh grant secret,
+`ELECTRON_START_URL`) and accepts the override only for a loopback origin;
+anything else falls back to `http://localhost:3000`. `main/server-url.cjs`
+holds the trusted-server policy: only a loopback origin can become the
+desktop server, so the grant secret is sent only to the server the main
+process started or verified (#261).
 
 Updater (`electron-updater`): `autoDownload` + `autoInstallOnAppQuit`, 4-hour
 interval, active only when packaged; pushes `update-available` / `ready` /
@@ -84,6 +89,10 @@ under `resources/` outside the archive, readable without extracting app code.
 - Desktop grants: `pick-folder` returns an opaque grant via
   `/api/desktop/grants` (`x-foleyard-grant-secret`); transport adapters scope
   writes to it.
+- Trusted desktop server: `main/server-url.cjs` accepts only loopback
+  origins (`localhost`, `127.0.0.1`, `[::1]`) and `setDesktopServerUrl`
+  refuses anything else, so the grant secret is only ever sent to the server
+  the main process started or verified (#261).
 
 ## Failure behavior and limitations
 
@@ -98,7 +107,7 @@ under `resources/` outside the archive, readable without extracting app code.
 
 ## Source map (real file paths)
 
-- `electron/main.cjs`, `electron/main/{window,ipc,ipc-channels,desktop-service,auto-updater,runtime-info,errors,database,next-server,next-server-adapter,server-url,constants}.cjs`
+- `electron/main.cjs`, `electron/main/{window,ipc,ipc-channels,desktop-service,auto-updater,runtime-info,errors,database,next-server,next-server-adapter,server-url,start-url,constants}.cjs`
 - `electron/preload.cjs` — bridge surface
 - `src/lib/desktop.ts` — renderer wrapper + late-injection trap
 - `src/lib/desktop-channels.ts` — renderer-side channel constants

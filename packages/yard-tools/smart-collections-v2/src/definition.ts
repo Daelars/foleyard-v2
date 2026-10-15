@@ -63,6 +63,7 @@ export function createSmartCollectionsV2Definition(): ExtensionV2Definition {
         title: "Save Search as Smart Collection",
         description: "Save the current search query as a smart collection.",
         scope: "global",
+        ui: "form",
         input: saveSearchInputSchema(),
         result: saveSearchResultSchema(),
         docsId: "commands",

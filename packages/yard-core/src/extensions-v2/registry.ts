@@ -3,6 +3,7 @@ import {
   KNOWN_V2_CONTRIBUTION_TYPES,
   KNOWN_V2_PERMISSIONS,
   KNOWN_V2_SETTING_TYPES,
+  KNOWN_V2_UI_INTENTS,
   checkV2SchemaShape,
   isKnownV2Permission,
   type ExtensionV2Command,
@@ -165,6 +166,17 @@ function validateCommand(
         id,
       );
     }
+  }
+  if (
+    command.ui !== undefined &&
+    !(KNOWN_V2_UI_INTENTS as readonly string[]).includes(command.ui)
+  ) {
+    collector.add(
+      "unsupported-ui-intent",
+      `Command "${id}" declares UI intent ${JSON.stringify(command.ui)}; use one of: ${KNOWN_V2_UI_INTENTS.join(", ")}. The renderer routes on this value, so an unknown intent would fall back to direct and could half-execute the command.`,
+      extensionId,
+      id,
+    );
   }
   if (command.input !== undefined) {
     const shapeError = checkV2SchemaShape(

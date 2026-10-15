@@ -21,6 +21,7 @@ export type ExtensionV2DiagnosticCode =
   | "unresolved-command-ref"
   | "unknown-permission"
   | "unsupported-command-scope"
+  | "unsupported-ui-intent"
   | "unsupported-contribution-type"
   | "no-commands";
 

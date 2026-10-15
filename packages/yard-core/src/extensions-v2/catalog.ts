@@ -7,8 +7,10 @@ import type {
   ExtensionV2DocsRef,
   ExtensionV2Permission,
   ExtensionV2Setting,
+  ExtensionV2UiIntent,
   ExtensionV2ValueSchema,
 } from "./definition";
+import { resolveV2UiIntent } from "./definition";
 import { SUPPORTED_V2_API_VERSIONS } from "./version";
 
 /**
@@ -25,6 +27,8 @@ export type ExtensionV2CatalogCommand = {
   scope: ExtensionV2Command["scope"];
   destructive: boolean;
   requiresSelection: boolean;
+  /** Surface the command needs; always present, defaulting to `direct`. */
+  ui: ExtensionV2UiIntent;
   input?: ExtensionV2ValueSchema;
   result?: ExtensionV2ValueSchema;
   requiredCapabilities: string[];
@@ -132,6 +136,7 @@ export function toCatalogEntry(
       scope: command.scope,
       destructive: command.destructive ?? false,
       requiresSelection: command.requiresSelection ?? false,
+      ui: resolveV2UiIntent(command),
       ...(command.input !== undefined ? { input: command.input } : {}),
       ...(command.result !== undefined ? { result: command.result } : {}),
       requiredCapabilities: command.requiredCapabilities

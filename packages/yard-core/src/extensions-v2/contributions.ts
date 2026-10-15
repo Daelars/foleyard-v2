@@ -13,6 +13,7 @@ import type {
   ExtensionV2Contribution,
   ExtensionV2ContributionType,
   ExtensionV2Definition,
+  ExtensionV2UiIntent,
   ExtensionV2ValueSchema,
 } from "./definition";
 
@@ -119,6 +120,8 @@ export type V2ResolvedContribution = {
   commandId: string;
   /** Contribution title override, else the command title. */
   title: string;
+  /** Surface the command needs; renderers route on it without a branch. */
+  ui: ExtensionV2UiIntent;
   order: number;
   /** Attached by resolution; renderers show `reason` when unavailable. */
   availability: V2Availability;
@@ -140,6 +143,7 @@ function toCommand(catalogCommand: ExtensionV2CatalogCommand): ExtensionV2Comman
     ...(catalogCommand.requiresSelection
       ? { requiresSelection: true as const }
       : {}),
+    ui: catalogCommand.ui,
     ...(catalogCommand.input !== undefined ? { input: catalogCommand.input } : {}),
     ...(catalogCommand.result !== undefined
       ? { result: catalogCommand.result }
@@ -217,6 +221,7 @@ export function resolveV2PointContributions(
         point,
         commandId: command.id,
         title: contribution.title ?? command.title,
+        ui: command.ui ?? "direct",
         order: contribution.order ?? DEFAULT_V2_CONTRIBUTION_ORDER,
         availability,
       });

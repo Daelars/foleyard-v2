@@ -224,6 +224,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Auto-tag files",
         description: "Tag the given sounds with the filename rules.",
         scope: "global",
+        ui: "direct",
         input: arrivalFileIdsInput(),
         result: tagFilesResultSchema(),
         docsId: "commands",
@@ -233,6 +234,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Preview auto-tag",
         description: "Show what the filename rules would tag, without writing anything.",
         scope: "global",
+        ui: "form",
         input: fileIdsInput(),
         result: previewResultSchema(),
         docsId: "commands",
@@ -242,6 +244,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "List tag candidates",
         description: "List uncovered words across the library with example files. Nothing is created.",
         scope: "global",
+        ui: "direct",
         input: {
           kind: "object",
           properties: {
@@ -256,6 +259,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Promote tag candidate",
         description: "Turn an uncovered word into a real tag and attach it to the matching sounds.",
         scope: "global",
+        ui: "form",
         input: {
           kind: "object",
           properties: {
@@ -274,6 +278,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Dismiss tag candidate",
         description: "Remove an uncovered word from the candidate queue.",
         scope: "global",
+        ui: "form",
         input: {
           kind: "object",
           properties: {
@@ -290,6 +295,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         description: "List the sounds closest to one sound by stored embeddings.",
         scope: "selection",
         requiresSelection: true,
+        ui: "direct",
         input: {
           kind: "object",
           properties: {
@@ -305,6 +311,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "CLAP model status",
         description: "Show whether the tagging model is downloaded and ready.",
         scope: "global",
+        ui: "direct",
         input: { kind: "object", properties: {} },
         result: clapStatusResultSchema(),
         docsId: "commands",
@@ -314,6 +321,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Download CLAP model",
         description: "Download the tagging model with progress. Requires explicit confirmation.",
         scope: "global",
+        ui: "confirm",
         input: {
           kind: "object",
           properties: {
@@ -329,6 +337,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Tag with CLAP",
         description: "Tag sounds with model suggestions over the approved vocabulary.",
         scope: "global",
+        ui: "form",
         input: arrivalFileIdsInput(),
         result: tagSemanticResultSchema(),
         docsId: "commands",
@@ -338,6 +347,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Coverage history",
         description: "Read recorded coverage snapshots, oldest first.",
         scope: "global",
+        ui: "direct",
         input: { kind: "object", properties: {} },
         result: coverageHistoryResultSchema(),
         docsId: "commands",
@@ -347,6 +357,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Record coverage",
         description: "Append a coverage snapshot for trend charts.",
         scope: "global",
+        ui: "direct",
         input: {
           kind: "object",
           properties: {
@@ -364,6 +375,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Coverage summary",
         description: "Aggregate full-Library tag coverage and return a bounded selected-tag page.",
         scope: "global",
+        ui: "direct",
         input: {
           kind: "object",
           properties: {
@@ -384,6 +396,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "List tag origins",
         description: "List a bounded page of files with attachment origins and full-Library origin counts.",
         scope: "global",
+        ui: "direct",
         input: {
           kind: "object",
           properties: {
@@ -408,6 +421,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Latest Auto Tag arrivals",
         description: "Read the most recently completed Auto Tag arrival job and its recorded rules.",
         scope: "global",
+        ui: "direct",
         input: { kind: "object", properties: {} },
         result: {
           kind: "object",
@@ -422,6 +436,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         description: "Remove deterministic or semantic AI attachments without touching manual tags.",
         scope: "global",
         destructive: true,
+        ui: "confirm",
         input: {
           kind: "object",
           properties: {
@@ -442,6 +457,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         title: "Rename tag with alias",
         description: "Rename a canonical tag and preserve its old normalized name as an alias.",
         scope: "global",
+        ui: "form",
         input: {
           kind: "object",
           properties: { tagId: { kind: "string", minLength: 1 }, name: { kind: "string", minLength: 1 } },
@@ -456,6 +472,7 @@ export function createAutoTagV2Definition(): ExtensionV2Definition {
         description: "Move attachments into one canonical tag while preserving manual precedence and aliases.",
         scope: "global",
         destructive: true,
+        ui: "confirm",
         input: {
           kind: "object",
           properties: {

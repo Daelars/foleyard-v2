@@ -11,6 +11,7 @@ import {
   resolveV2UiPoint,
   type V2UiState,
 } from "@/lib/extensions-v2/contributions";
+import { routeV2Command } from "@/lib/extensions-v2/command-surfaces";
 import {
   screenV2DropAudio,
   type V2DropOffer,
@@ -89,6 +90,23 @@ export function V3LibraryDropZone({
   );
 
   const handleInvoke = useCallback((offer: V2DropOffer) => {
+    // Drop-scope commands declare `direct` because the drop context is
+    // complete; a surface-bearing command is refused rather than run with
+    // half its context (#294).
+    const route = routeV2Command({
+      extensionId: offer.item.extensionId,
+      commandId: offer.item.commandId,
+      ui: offer.item.ui,
+      title: offer.item.title,
+    });
+    if (route.kind !== "direct") {
+      toast.error(
+        route.kind === "needs-surface"
+          ? route.reason
+          : "This drop action needs its own workspace; open it from the extension.",
+      );
+      return;
+    }
     void invokeV2Command({
       extensionId: offer.item.extensionId,
       commandId: offer.item.commandId,

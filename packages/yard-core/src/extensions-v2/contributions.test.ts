@@ -37,6 +37,7 @@ function entryWithContributions(
         scope: "selection",
         destructive: false,
         requiresSelection: true,
+        ui: "direct",
         requiredCapabilities: [],
         docsId: "",
       },

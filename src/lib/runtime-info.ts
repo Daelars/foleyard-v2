@@ -71,6 +71,8 @@ export type RuntimeSnapshot = {
       scope: string;
       destructive: boolean;
       requiresSelection: boolean;
+      /** Declared UI surface (#294): direct, form, review, or confirm. */
+      ui: string;
       requiredCapabilities: string[];
       /** Serializable input/result value schemas; null when the command takes/produces none. */
       input: unknown | null;
@@ -235,6 +237,7 @@ export function getServerRuntimeSnapshot(): RuntimeSnapshot {
         scope: command.scope,
         destructive: command.destructive ?? false,
         requiresSelection: command.requiresSelection ?? false,
+        ui: command.ui ?? "direct",
         requiredCapabilities: [...(command.requiredCapabilities ?? [])],
         input: command.input ?? null,
         result: command.result ?? null,

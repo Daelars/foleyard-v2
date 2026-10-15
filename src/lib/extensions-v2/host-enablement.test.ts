@@ -7,10 +7,8 @@ import {
   setV2ExtensionEnabled,
 } from "./host";
 
-const ENABLED_KEY = "__foleyardV2Enabled";
-
-// The enabled set is process-wide shared state (one realm), never per
-// route bundle: enabling through one module instance must read back
+// Enablement and jobs are process-wide shared state (one realm), never
+// per route bundle: enabling through one module instance must read back
 // through another, or the execute route gates work the settings UI just
 // approved. Persistence and v1 adoption live in enablement.ts and are
 // mocked here; their own tests cover them.
@@ -34,20 +32,26 @@ describe("v2 host enablement", () => {
     expect(isV2ExtensionEnabled(AUTO_TAG_V2_ID)).toBe(true);
   });
 
-  it("shares enablement and one job manager across fresh module instances in one process", async () => {
-    delete (globalThis as Record<string, unknown>)[ENABLED_KEY];
-    delete (globalThis as Record<string, unknown>).__foleyardV2JobManager;
+  it("shares enablement, one host, and one job manager across separate module instances", async () => {
+    // Separate imports simulate separate route bundles. Nothing here
+    // reaches into a global key by name: the public accessors are the
+    // contract, and the runtime guard is structural.
     vi.resetModules();
     const firstHost = await import("./host");
-    const secondHost = await import("./host");
     const firstJobs = await import("./jobs");
+    vi.resetModules();
+    const secondHost = await import("./host");
     const secondJobs = await import("./jobs");
+
     try {
-      firstHost.setV2ExtensionEnabled(AUTO_TAG_V2_ID, true);
-      expect(secondHost.isV2ExtensionEnabled(AUTO_TAG_V2_ID)).toBe(true);
+      expect(secondHost.getV2Registry()).toBe(firstHost.getV2Registry());
+      expect(secondHost.getAppV2Host()).toBe(firstHost.getAppV2Host());
       expect(secondJobs.getV2JobManager()).toBe(firstJobs.getV2JobManager());
+
+      await firstHost.setV2ExtensionEnabled(AUTO_TAG_V2_ID, true);
+      expect(secondHost.isV2ExtensionEnabled(AUTO_TAG_V2_ID)).toBe(true);
     } finally {
-      secondHost.setV2ExtensionEnabled(AUTO_TAG_V2_ID, false);
+      await secondHost.setV2ExtensionEnabled(AUTO_TAG_V2_ID, false);
       vi.resetModules();
     }
   });

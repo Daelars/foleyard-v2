@@ -14,6 +14,7 @@ import { createV2ArchivePorts } from "./archive";
 import { createV2FileContentPorts, getV2GrantStore } from "./filesystem";
 import { getV2Events } from "./events";
 import { createV2LibraryPorts } from "./library-ports";
+import { getV2Runtime } from "./runtime";
 import { createV2ExtensionStatePorts, createV2SettingsPorts } from "./settings-state";
 
 /**
@@ -37,28 +38,16 @@ import { createV2ExtensionStatePorts, createV2SettingsPorts } from "./settings-s
 const SNAPSHOT_KEY = "v2:jobs:snapshot";
 
 /**
- * The manager lives on `globalThis`, not module state — same split
- * as enablement before it. Next compiles each route into its own
- * bundle, so a plain module-level manager forks per route subtree:
- * submit runs the job in one copy while polling reads another, which
- * restores the snapshot and reports the live job `interrupted`.
- * One realm means one manager; every bundle submits and polls the
- * same ownership. Restarts still behave as before: memory goes away,
- * history restores from the snapshot, abandoned live jobs interrupt.
+ * The manager belongs to the process-wide runtime, not module state —
+ * same split as before, one key instead of two. Next compiles each
+ * route into its own bundle, so a plain module-level manager forks per
+ * route subtree: submit runs the job in one copy while polling reads
+ * another, which restores the snapshot and reports the live job
+ * `interrupted`. One realm means one manager; every bundle submits and
+ * polls the same ownership. Restarts still behave as before: memory
+ * goes away, history restores from the snapshot, abandoned live jobs
+ * interrupt.
  */
-const MANAGER_KEY = "__foleyardV2JobManager" as const;
-const RESTORED_KEY = "__foleyardV2JobsRestored" as const;
-
-function isJobManager(value: unknown): value is V2JobManager {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { listJobs?: unknown }).listJobs === "function"
-  );
-}
-
-/** Last emitted state per job: progress reports stay memory-only, transitions emit. */
-const lastEmittedState = new Map<string, string>();
 
 /**
  * Progress persistence is coalesced (#258): state transitions and terminal
@@ -98,9 +87,9 @@ export function createV2JobTransitionHandler(deps: {
 }
 
 export function getV2JobManager(): V2JobManager {
-  const scope = globalThis as Record<string, unknown>;
-  const existing = scope[MANAGER_KEY];
-  if (isJobManager(existing)) return existing;
+  const runtime = getV2Runtime();
+  if (runtime.jobs) return runtime.jobs;
+  const lastEmittedState = runtime.lastEmittedJobState;
   const onTransition = createV2JobTransitionHandler({
     persist: persistV2JobSnapshot,
     emitTransition: (record) => {
@@ -112,9 +101,8 @@ export function getV2JobManager(): V2JobManager {
       });
     },
   });
-  const created = new V2JobManager({ onTransition });
-  scope[MANAGER_KEY] = created;
-  return created;
+  runtime.jobs = new V2JobManager({ onTransition });
+  return runtime.jobs;
 }
 
 /** Narrow operation services for one job, bound to its reporter and grants. */
@@ -159,12 +147,12 @@ function persistV2JobSnapshot(): void {
  * the restart are already gone with the previous process's memory.
  */
 export function ensureV2JobsRestored(): { restored: number; interrupted: number } {
-  const scope = globalThis as Record<string, unknown>;
-  if (scope[RESTORED_KEY] === true) {
+  const runtime = getV2Runtime();
+  if (runtime.jobsRestored) {
     const current = getV2JobManager().listJobs(null, 1);
     return { restored: current.jobs.length, interrupted: 0 };
   }
-  scope[RESTORED_KEY] = true;
+  runtime.jobsRestored = true;
   try {
     const row = db.select().from(settings).where(eq(settings.key, SNAPSHOT_KEY)).get();
     if (!row?.value) return { restored: 0, interrupted: 0 };

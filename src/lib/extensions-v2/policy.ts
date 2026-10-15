@@ -1,9 +1,7 @@
-import {
-  V2PermissionApprovals,
-  type ExtensionV2Permission,
-} from "@yard-core";
+import type { ExtensionV2Permission } from "@yard-core";
 
 import { getV2Events } from "./events";
+import { getV2Runtime } from "./runtime";
 import { readV2SettingsRow, writeV2SettingsRow } from "./settings-state";
 
 /**
@@ -25,36 +23,22 @@ import { readV2SettingsRow, writeV2SettingsRow } from "./settings-state";
 
 const APPROVALS_KEY = "v2:approvals";
 
-// State lives on globalThis, not module state: Next compiles each route
-// into its own bundle, so plain module-level state can split per route
-// subtree in development (approving in one bundle would still read
-// denied in another). The process is the sharing boundary, exactly as
-// the v2 host's enablement set does it.
-const V2_APPROVALS_KEY = "__foleyardV2Approvals" as const;
-
-type ApprovalStore = {
-  approvals: V2PermissionApprovals;
-  bootLoaded: boolean;
-};
-
-function getStore(): ApprovalStore {
-  const scope = globalThis as Record<string, unknown>;
-  const existing = scope[V2_APPROVALS_KEY] as ApprovalStore | undefined;
-  if (existing) return existing;
-  const created: ApprovalStore = { approvals: new V2PermissionApprovals(), bootLoaded: false };
-  scope[V2_APPROVALS_KEY] = created;
-  return created;
-}
-
-const store = getStore();
+/**
+ * Approvals live on the process-wide runtime, not module state: Next
+ * compiles each route into its own bundle, so plain module-level state
+ * splits per route subtree in development (approving in one bundle
+ * would still read denied in another). The runtime is the sharing
+ * boundary, exactly like its enablement set and job manager.
+ */
 
 function ensureLoaded(): void {
-  if (store.bootLoaded) return;
-  store.bootLoaded = true;
+  const runtime = getV2Runtime();
+  if (runtime.approvalsLoaded) return;
+  runtime.approvalsLoaded = true;
   try {
     const stored = readV2SettingsRow(APPROVALS_KEY);
     if (stored !== undefined) {
-      store.approvals.restore({ approvals: (stored as { approvals?: unknown }).approvals ?? stored });
+      runtime.approvals.restore({ approvals: (stored as { approvals?: unknown }).approvals ?? stored });
     }
   } catch {
     // Corrupt approvals deny by default; an explicit re-approval recovers.
@@ -63,7 +47,7 @@ function ensureLoaded(): void {
 
 function persist(): void {
   try {
-    writeV2SettingsRow(APPROVALS_KEY, { approvals: store.approvals.snapshot() });
+    writeV2SettingsRow(APPROVALS_KEY, { approvals: getV2Runtime().approvals.snapshot() });
   } catch {
     // Approval persistence is diagnostic transport: a write failure must
     // never fail the approval change itself. The next change retries.
@@ -73,7 +57,7 @@ function persist(): void {
 /** Approved (unexpired) permissions for an extension; empty by default. */
 export function getV2GrantedPermissions(extensionId: string): ExtensionV2Permission[] {
   ensureLoaded();
-  return store.approvals.grantedPermissions(extensionId);
+  return getV2Runtime().approvals.grantedPermissions(extensionId);
 }
 
 /** Record an explicit approval. Never called implicitly by the host. Persists, then notifies. */
@@ -83,14 +67,15 @@ export function setV2Approval(
   options?: { expiresAt?: string },
 ): void {
   ensureLoaded();
-  store.approvals.setApproval(extensionId, permissions, options);
+  const runtime = getV2Runtime();
+  runtime.approvals.setApproval(extensionId, permissions, options);
   persist();
   getV2Events().emit("approvals-changed", extensionId, { keys: [...permissions] });
 }
 
 export function revokeV2Approval(extensionId: string): void {
   ensureLoaded();
-  store.approvals.revoke(extensionId);
+  getV2Runtime().approvals.revoke(extensionId);
   persist();
   getV2Events().emit("approvals-changed", extensionId);
 }

@@ -22,6 +22,7 @@ import { createV2CollectionPorts, createV2TagPorts } from "./organization";
 import { createV2EmbeddingPorts } from "./embeddings";
 import { createV2AnalysisPorts } from "./analysis";
 import { createV2ShelfPorts } from "./shelf";
+import { getV2Runtime } from "./runtime";
 import { getV2SourceGrantStore } from "./source-grants";
 import { ensureMakePackV2Registered } from "./make-pack-v2";
 import { ensureSoundShelfV2Registered } from "./sound-shelf-v2";
@@ -46,28 +47,19 @@ import { createRecentSelectionSource, createShelfSelectionSource } from "./sourc
  * route wrappers forward to the transport codec with this host. v1
  * endpoints, adapters, and packages are untouched and never routed
  * through here. Make Pack v2 registers in `make-pack-v2.ts` (#171).
+ *
+ * Registration, execution, plans, jobs, enablement, approvals, grants,
+ * and events all live on the one process-wide runtime (`runtime.ts`),
+ * not on module state: Next compiles each route into its own bundle, so
+ * module state forks per route subtree while the process is one realm.
+ * Every route observes the same registry, the same host, the same plan
+ * manager, and the same enablement/approval/grant state.
  */
-
-const registry = new ExtensionV2Registry();
-
-/**
- * Enablement lives on `globalThis`, not module state. Next compiles
- * each route into its own bundle, so plain module-level state can
- * split per route subtree in development: enabling in one bundle
- * would still read disabled in another. The process is the sharing
- * boundary (one realm), which is exactly what the process-wide host
- * needs. The set hydrates once per boot from persisted
- * `v2:enablement:*` rows (see enablement.ts), so enablement survives
- * reloads; a missing database falls back to memory-only, disabled by
- * default, exactly like the pre-persistence behavior.
- */
-const V2_ENABLED_KEY = "__foleyardV2Enabled" as const;
-
-let bootLoaded = false;
 
 function ensureEnablementLoaded(): void {
-  if (bootLoaded) return;
-  bootLoaded = true;
+  const runtime = getV2Runtime();
+  if (runtime.enablementLoaded) return;
+  runtime.enablementLoaded = true;
   try {
     // Retirement adoption first: retired v1 tools hand their
     // enablement and approvals to their v2 port exactly once.
@@ -75,7 +67,7 @@ function ensureEnablementLoaded(): void {
       (v2ExtensionId) => getV2Registry().get(v2ExtensionId)?.permissions ?? [],
     );
     for (const extensionId of listPersistedEnabled()) {
-      enabled.add(extensionId);
+      runtime.enabled.add(extensionId);
     }
   } catch {
     // Missing or broken settings storage: memory-only enablement,
@@ -83,19 +75,8 @@ function ensureEnablementLoaded(): void {
   }
 }
 
-function getEnabledSet(): Set<string> {
-  const scope = globalThis as Record<string, unknown>;
-  const existing = scope[V2_ENABLED_KEY];
-  if (existing instanceof Set) return existing as Set<string>;
-  const created = new Set<string>();
-  scope[V2_ENABLED_KEY] = created;
-  return created;
-}
-
-const enabled: Set<string> = getEnabledSet();
-
 export function getV2Registry(): ExtensionV2Registry {
-  return registry;
+  return getV2Runtime().registry;
 }
 
 /**
@@ -106,7 +87,7 @@ export function getV2Registry(): ExtensionV2Registry {
 export function registerV2Extension(
   definition: Parameters<ExtensionV2Registry["register"]>[0],
 ): void {
-  registry.register(definition);
+  getV2Registry().register(definition);
   getV2Events().emit("contributions-changed", "*");
 }
 
@@ -123,8 +104,8 @@ export function unregisterV2Extension(extensionId: string): void {
     extensionId,
     `Extension "${extensionId}" was unregistered; register it again to run its commands.`,
   );
-  registry.unregister(extensionId);
-  enabled.delete(extensionId);
+  getV2Registry().unregister(extensionId);
+  getV2Runtime().enabled.delete(extensionId);
   try {
     writePersistedEnabled(extensionId, false);
   } catch {
@@ -135,7 +116,7 @@ export function unregisterV2Extension(extensionId: string): void {
 
 export function isV2ExtensionEnabled(extensionId: string): boolean {
   ensureEnablementLoaded();
-  return enabled.has(extensionId);
+  return getV2Runtime().enabled.has(extensionId);
 }
 
 /**
@@ -148,7 +129,7 @@ async function runV2LifecycleHook(
   extensionId: string,
   hook: "onEnabled" | "onDisabled",
 ): Promise<void> {
-  const commandId = registry.get(extensionId)?.lifecycle?.[hook]?.commandId;
+  const commandId = getV2Registry().get(extensionId)?.lifecycle?.[hook]?.commandId;
   if (!commandId) return;
   try {
     const result = await getAppV2Host().execute({
@@ -176,11 +157,12 @@ export async function setV2ExtensionEnabled(
   value: boolean,
 ): Promise<void> {
   ensureEnablementLoaded();
-  const before = enabled.has(extensionId);
+  const runtime = getV2Runtime();
+  const before = runtime.enabled.has(extensionId);
   if (value) {
-    enabled.add(extensionId);
+    runtime.enabled.add(extensionId);
   } else {
-    enabled.delete(extensionId);
+    runtime.enabled.delete(extensionId);
     // Disabling rejects new work (the enabled gate) and requests
     // cancellation of the extension's live jobs; runners observe the
     // signal cooperatively and dispose owned work after settling.
@@ -207,7 +189,7 @@ function createOperations(binding: {
   effectivePermissions: string[];
   reporter?: V2JobReporter;
 }): V2OperationServices {
-  const declarations = registry.get(binding.extensionId)?.settings;
+  const declarations = getV2Registry().get(binding.extensionId)?.settings;
   const library = createV2LibraryPorts();
   const base = createV2OperationServices({
     ...binding,
@@ -255,16 +237,18 @@ function authorizeV2Grant(grantId: string, extensionId: string): { ok: true } | 
 }
 
 /**
- * Process-wide v2 host: shares the registry, enablement, and the one
- * job manager every job route polls, so a request ending or a reload
- * never strands job ownership on a per-request instance.
+ * Process-wide v2 host: shares the registry, enablement, plans, grants,
+ * and the one job manager every route polls, so a request ending or a
+ * reload never strands job ownership on a per-request instance, and a
+ * plan prepared by execution is the same plan the plan routes read.
+ * The host lives on the runtime so separate route bundles compose it
+ * exactly once.
  */
-let appHost: ExtensionV2Host | null = null;
-
 export function getAppV2Host(): ExtensionV2Host {
-  if (!appHost) {
-    appHost = new ExtensionV2Host({
-      registry,
+  const runtime = getV2Runtime();
+  if (!runtime.host) {
+    runtime.host = new ExtensionV2Host({
+      registry: runtime.registry,
       isEnabled: isV2ExtensionEnabled,
       capabilities: getAvailableCapabilityIds({
         hasServerServices: true,
@@ -275,14 +259,15 @@ export function getAppV2Host(): ExtensionV2Host {
       createOperations,
       authorizeGrant: authorizeV2Grant,
       jobManager: getV2JobManager(),
+      planManager: runtime.plans,
     });
   }
-  return appHost;
+  return runtime.host;
 }
 
 /** Effective-permission catalog: renderers enforce exactly what execution denies. */
 export function buildAppV2Catalog() {
-  return buildEffectiveV2Catalog(registry, (extensionId) =>
+  return buildEffectiveV2Catalog(getV2Registry(), (extensionId) =>
     getV2GrantedPermissions(extensionId),
   );
 }

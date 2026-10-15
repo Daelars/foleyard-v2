@@ -41,23 +41,92 @@ const originalLoad = ModuleWithLoad._load;
 type MockFn = ReturnType<typeof vi.fn>;
 type IpcHandler = (...args: Array<unknown>) => unknown;
 
+type FakeWebContents = {
+  listeners: Record<string, Array<(...args: unknown[]) => void>>;
+  windowOpenHandler: ((details: { url: string }) => unknown) | null;
+  permissionRequestHandler: ((...args: unknown[]) => void) | null;
+  permissionCheckHandler: ((...args: unknown[]) => unknown) | null;
+  ownerWindow: unknown;
+  on: MockFn;
+  once: MockFn;
+  send: MockFn;
+  startDrag: MockFn;
+  toggleDevTools: MockFn;
+  openDevTools: MockFn;
+  setWindowOpenHandler: MockFn;
+  getOwnerBrowserWindow: () => unknown;
+  session: {
+    setPermissionRequestHandler: MockFn;
+    setPermissionCheckHandler: MockFn;
+  };
+};
+
+type FakeBrowserWindow = {
+  options: Record<string, unknown>;
+  webContents: FakeWebContents;
+  loadURL: MockFn;
+  on: MockFn;
+  once: MockFn;
+  isMaximized: () => boolean;
+  isDestroyed: () => boolean;
+  setMenuBarVisibility: MockFn;
+};
+
 interface FakeElectron {
   app: { isPackaged: boolean; getPath: (name: string) => string; getAppPath: () => string; exit: MockFn };
   dialog: { showErrorBox: MockFn };
   ipcMain: {
     onChannels: string[];
     handleChannels: string[];
+    onHandlers: Record<string, IpcHandler>;
     handlers: Record<string, IpcHandler>;
     on: MockFn;
     handle: MockFn;
   };
   clipboard: { writeText: MockFn };
   nativeImage: { createFromBuffer: MockFn };
-  shell: { showItemInFolder: MockFn; openPath: MockFn };
+  shell: { showItemInFolder: MockFn; openPath: MockFn; openExternal: MockFn };
+  BrowserWindow: new (options: Record<string, unknown>) => FakeBrowserWindow;
 }
 
 let electronFake: FakeElectron;
 let loadStubs: Record<string, unknown>;
+let createdWindows: FakeBrowserWindow[] = [];
+let loadUrlFailure: Error | null = null;
+
+function buildFakeWebContents(): FakeWebContents {
+  const listeners: Record<string, Array<(...args: unknown[]) => void>> = {};
+  const webContents: FakeWebContents = {
+    listeners,
+    windowOpenHandler: null,
+    permissionRequestHandler: null,
+    permissionCheckHandler: null,
+    ownerWindow: null,
+    on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      (listeners[event] ??= []).push(listener);
+    }),
+    once: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      (listeners[event] ??= []).push(listener);
+    }),
+    send: vi.fn(),
+    startDrag: vi.fn(),
+    toggleDevTools: vi.fn(),
+    openDevTools: vi.fn(),
+    setWindowOpenHandler: vi.fn((handler: (details: { url: string }) => unknown) => {
+      webContents.windowOpenHandler = handler;
+    }),
+    getOwnerBrowserWindow: () => webContents.ownerWindow,
+    session: {
+      setPermissionRequestHandler: vi.fn((handler: (...args: unknown[]) => void) => {
+        webContents.permissionRequestHandler = handler;
+      }),
+      setPermissionCheckHandler: vi.fn((handler: (...args: unknown[]) => unknown) => {
+        webContents.permissionCheckHandler = handler;
+      }),
+    },
+  };
+  return webContents;
+}
 
 function installLoadInterception() {
   ModuleWithLoad._load = function (request: string, ...rest: unknown[]) {
@@ -87,8 +156,29 @@ function requireElectronMain<T>(relativePath: string): T {
 
 function buildElectronFake(userDataDir: string): FakeElectron {
   const handlers: Record<string, IpcHandler> = {};
+  const onHandlers: Record<string, IpcHandler> = {};
   const onChannels: string[] = [];
   const handleChannels: string[] = [];
+  const browserWindowCtor = function (this: unknown, options: Record<string, unknown>) {
+    const webContents = buildFakeWebContents();
+    const window: FakeBrowserWindow = {
+      options,
+      webContents,
+      loadURL: vi.fn(async () => {
+        if (loadUrlFailure) {
+          throw loadUrlFailure;
+        }
+      }),
+      on: vi.fn(),
+      once: vi.fn(),
+      isMaximized: () => false,
+      isDestroyed: () => false,
+      setMenuBarVisibility: vi.fn(),
+    };
+    webContents.ownerWindow = window;
+    createdWindows.push(window);
+    return window;
+  } as unknown as FakeElectron["BrowserWindow"];
   return {
     app: {
       isPackaged: false,
@@ -100,9 +190,11 @@ function buildElectronFake(userDataDir: string): FakeElectron {
     ipcMain: {
       onChannels,
       handleChannels,
+      onHandlers,
       handlers,
-      on: vi.fn((channel: string) => {
+      on: vi.fn((channel: string, listener: IpcHandler) => {
         onChannels.push(channel);
+        onHandlers[channel] = listener;
       }),
       handle: vi.fn((channel: string, listener: IpcHandler) => {
         handleChannels.push(channel);
@@ -111,7 +203,8 @@ function buildElectronFake(userDataDir: string): FakeElectron {
     },
     clipboard: { writeText: vi.fn() },
     nativeImage: { createFromBuffer: vi.fn(() => ({})) },
-    shell: { showItemInFolder: vi.fn(), openPath: vi.fn() },
+    shell: { showItemInFolder: vi.fn(), openPath: vi.fn(), openExternal: vi.fn() },
+    BrowserWindow: browserWindowCtor,
   };
 }
 
@@ -151,6 +244,36 @@ const PACKAGED_HANDLERS = [
   "desktop:install-update",
 ];
 
+const TRUSTED_DESKTOP_ORIGIN = "http://127.0.0.1:49222";
+
+/**
+ * A trusted sender for the tests that drive registered IPC handlers: the
+ * desktop origin's main frame, owned by the window the window policy tracks.
+ * Everything a handler needs to pass sender validation, and nothing more.
+ */
+function buildTrustedIpcContext() {
+  const { setDesktopServerUrl } = requireElectronMain<{ setDesktopServerUrl: (url: string) => void }>(
+    "server-url.cjs",
+  );
+  setDesktopServerUrl(TRUSTED_DESKTOP_ORIGIN);
+  const { setDesktopWindow } = requireElectronMain<{ setDesktopWindow: (window: unknown) => void }>(
+    "window-policy.cjs",
+  );
+  const window = { id: "desktop-window", close: vi.fn() };
+  setDesktopWindow(window);
+  const sender = buildFakeWebContents();
+  sender.ownerWindow = window;
+  return {
+    window,
+    sender,
+    frame: { url: `${TRUSTED_DESKTOP_ORIGIN}/library`, parent: null },
+    event: {
+      senderFrame: { url: `${TRUSTED_DESKTOP_ORIGIN}/library`, parent: null },
+      sender,
+    },
+  };
+}
+
 function Probe() {
   const desktop = useDesktopApp();
   return createElement("div", {
@@ -172,6 +295,8 @@ beforeEach(() => {
     },
   };
   electronFake = buildElectronFake(fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-dt-")));
+  createdWindows = [];
+  loadUrlFailure = null;
   installLoadInterception();
   dropElectronModulesFromCache();
 });
@@ -195,6 +320,7 @@ describe("desktop and supply chain", () => {
         delete electronFake.ipcMain.handlers[key];
       }
       dropElectronModulesFromCache();
+      const trusted = buildTrustedIpcContext();
       const ipc = requireElectronMain<{ registerIpcHandlers: () => void }>("ipc.cjs");
       ipc.registerIpcHandlers();
 
@@ -223,7 +349,7 @@ describe("desktop and supply chain", () => {
         } else {
           const simulate = electronFake.ipcMain.handlers["desktop:simulate-update"];
           expect(simulate).toBeDefined();
-          await simulate();
+          await simulate(trusted.event);
           expect(sends[0]?.[0]).toBe("desktop:update-available");
         }
       } finally {
@@ -498,6 +624,201 @@ describe("desktop and supply chain", () => {
     expect(url).toBe(`${trusted}/api/desktop/grants`);
     expect(init.headers["x-foleyard-grant-secret"]).toBe(process.env.FOLEYARD_GRANT_SECRET);
     expect(init.headers["x-foleyard-grant-secret"]).toEqual(expect.any(String));
+  });
+
+  it("keeps navigation, child windows and permissions inside the trusted document (#262)", () => {
+    const { setDesktopServerUrl } = requireElectronMain<{ setDesktopServerUrl: (url: string) => void }>(
+      "server-url.cjs",
+    );
+    setDesktopServerUrl(TRUSTED_DESKTOP_ORIGIN);
+
+    const { installNavigationPolicy, installPermissionPolicy, isTrustedNavigation, REQUIRED_PERMISSIONS } =
+      requireElectronMain<{
+        installNavigationPolicy: (webContents: unknown, options?: Record<string, unknown>) => void;
+        installPermissionPolicy: (session: unknown, options?: Record<string, unknown>) => void;
+        isTrustedNavigation: (target: string, origin?: string) => boolean;
+        REQUIRED_PERMISSIONS: string[];
+      }>("window-policy.cjs");
+
+    const webContents = buildFakeWebContents();
+    installNavigationPolicy(webContents);
+    installPermissionPolicy(webContents.session);
+    expect(webContents.windowOpenHandler).toBeTypeOf("function");
+    expect(webContents.permissionRequestHandler).toBeTypeOf("function");
+    expect(webContents.permissionCheckHandler).toBeTypeOf("function");
+
+    // Main-frame navigation stays on the desktop server origin. A remote host,
+    // a loopback lookalike, a neighbouring port, a privileged scheme, script
+    // URLs and unparseable values are all refused before they load.
+    const navigate = (eventName: string, target: string, prevented: string[]) => {
+      const event = { preventDefault: () => prevented.push(target) };
+      for (const listener of webContents.listeners[eventName] ?? []) listener(event, target);
+    };
+    const hostileNavigations = [
+      "https://evil.example.com/steal",
+      "http://localhost.evil.com:49222/",
+      "http://127.0.0.1:49223/",
+      "file:///C:/Windows/System32/calc.exe",
+      "javascript:alert(document.cookie)",
+      "not a url",
+    ];
+    const prevented: string[] = [];
+    for (const target of hostileNavigations) navigate("will-navigate", target, prevented);
+    expect(prevented).toEqual(hostileNavigations);
+
+    // A redirect to an untrusted origin is stopped the same way.
+    navigate("will-redirect", "https://evil.example.com/redirect", prevented);
+    expect(prevented).toEqual([...hostileNavigations, "https://evil.example.com/redirect"]);
+
+    // The application's own document still navigates freely.
+    navigate("will-navigate", `${TRUSTED_DESKTOP_ORIGIN}/library?view=all`, prevented);
+    navigate("will-navigate", `${TRUSTED_DESKTOP_ORIGIN}/#player`, prevented);
+    expect(prevented).toHaveLength(hostileNavigations.length + 1);
+    expect(isTrustedNavigation(`${TRUSTED_DESKTOP_ORIGIN}/library`)).toBe(true);
+    expect(isTrustedNavigation("http://127.0.0.1:49223/library")).toBe(false);
+    expect(isTrustedNavigation("http://localhost:3000/library")).toBe(false);
+
+    // `window.open` never produces a privileged child window. A validated
+    // external link leaves through the OS handler instead...
+    const decideWindowOpen = webContents.windowOpenHandler;
+    expect(decideWindowOpen).toBeTypeOf("function");
+    expect(decideWindowOpen!({ url: `${TRUSTED_DESKTOP_ORIGIN}/library` })).toEqual({ action: "deny" });
+    expect(electronFake.shell.openExternal).not.toHaveBeenCalled();
+    expect(decideWindowOpen!({ url: "https://example.com/docs" })).toEqual({ action: "deny" });
+    expect(electronFake.shell.openExternal).toHaveBeenCalledWith("https://example.com/docs");
+    expect(decideWindowOpen!({ url: "mailto:hello@example.com" })).toEqual({ action: "deny" });
+    expect(electronFake.shell.openExternal).toHaveBeenCalledWith("mailto:hello@example.com");
+
+    // ...and a dangerous or unrecognised scheme never reaches the OS.
+    for (const target of [
+      "javascript:alert(1)",
+      "file:///C:/Windows/System32/calc.exe",
+      "data:text/html,<script>1</script>",
+      "ms-msdt:/id",
+      "not a url",
+    ]) {
+      expect(decideWindowOpen!({ url: target })).toEqual({ action: "deny" });
+    }
+    expect(electronFake.shell.openExternal).toHaveBeenCalledTimes(2);
+
+    // Permission requests are denied by default. No renderer capability needs a
+    // browser permission today, so the explicit allowlist stays empty.
+    expect(REQUIRED_PERMISSIONS).toEqual([]);
+    const requestedPermissions = [
+      "media",
+      "geolocation",
+      "notifications",
+      "clipboard-read",
+      "display-capture",
+      "midi",
+      "usb",
+      "openExternal",
+      "unknown",
+    ];
+    const decisions: Array<{ permission: string; allowed: unknown }> = [];
+    for (const permission of requestedPermissions) {
+      webContents.permissionRequestHandler!(
+        webContents,
+        permission,
+        (allowed: unknown) => decisions.push({ permission, allowed }),
+        { requestingUrl: TRUSTED_DESKTOP_ORIGIN },
+      );
+    }
+    expect(decisions).toEqual(
+      requestedPermissions.map((permission) => ({ permission, allowed: false })),
+    );
+    for (const permission of ["media", "geolocation", "notifications"]) {
+      expect(webContents.permissionCheckHandler!(webContents, permission, TRUSTED_DESKTOP_ORIGIN)).toBe(
+        false,
+      );
+    }
+  });
+
+  it("rejects IPC whose sender is not the trusted desktop frame (#262)", async () => {
+    electronFake.app.isPackaged = true;
+    dropElectronModulesFromCache();
+    const trusted = buildTrustedIpcContext();
+    const ipc = requireElectronMain<{ registerIpcHandlers: () => void }>("ipc.cjs");
+    ipc.registerIpcHandlers();
+
+    const senderFor = (owner: unknown) => {
+      const sender = buildFakeWebContents();
+      sender.ownerWindow = owner;
+      return sender;
+    };
+    const eventFor = (frame: unknown, sender: FakeWebContents) => ({ senderFrame: frame, sender });
+    const runtimeInfo = electronFake.ipcMain.handlers["desktop:get-runtime-info"];
+
+    // The trusted main frame of the desktop window is served normally.
+    await expect(runtimeInfo(trusted.event)).resolves.toMatchObject({ owner: expect.any(String) });
+
+    // A remote document, a subframe, a foreign or ownerless window, and a
+    // missing or url-less frame are all refused.
+    const rejections = [
+      eventFor({ url: "https://evil.example.com/", parent: null }, senderFor(trusted.window)),
+      eventFor({ url: `${TRUSTED_DESKTOP_ORIGIN}/library`, parent: {} }, senderFor(trusted.window)),
+      eventFor({ url: `${TRUSTED_DESKTOP_ORIGIN}/library`, parent: null }, senderFor({ other: true })),
+      eventFor({ url: `${TRUSTED_DESKTOP_ORIGIN}/library`, parent: null }, senderFor(null)),
+      eventFor(null, senderFor(trusted.window)),
+      eventFor({ parent: null }, senderFor(trusted.window)),
+    ];
+    for (const rejection of rejections) {
+      await expect(runtimeInfo(rejection)).resolves.toMatchObject({ ok: false });
+    }
+
+    // A refused request never performs the native action it asked for.
+    await expect(
+      electronFake.ipcMain.handlers["desktop:window-close"](
+        eventFor({ url: "https://evil.example.com/", parent: null }, senderFor(trusted.window)),
+      ),
+    ).resolves.toMatchObject({ ok: false });
+    expect(trusted.window.close).not.toHaveBeenCalled();
+
+    // The fire-and-forget drag channel is guarded too: an untrusted sender
+    // starts no drag and receives no error.
+    const untrustedDragSender = senderFor({ other: true });
+    await electronFake.ipcMain.onHandlers["desktop:start-drag-file"](
+      eventFor({ url: "https://evil.example.com/", parent: null }, untrustedDragSender),
+      { fileIds: ["a"] },
+    );
+    expect(untrustedDragSender.startDrag).not.toHaveBeenCalled();
+    expect(untrustedDragSender.send).not.toHaveBeenCalled();
+
+    // The trusted sender reaches the handler: an empty request reports the
+    // missing ids rather than being silently dropped.
+    await electronFake.ipcMain.onHandlers["desktop:start-drag-file"](trusted.event, { fileIds: [] });
+    expect(trusted.sender.send).toHaveBeenCalledWith("desktop:action-error", "Missing file ids");
+  });
+
+  it("treats a startup load failure as fatal instead of lingering blank (#262)", async () => {
+    const { createMainWindow } = requireElectronMain<{
+      createMainWindow: (startUrl: string, onClosed: () => void) => FakeBrowserWindow;
+    }>("window.cjs");
+
+    // A rejected initial load terminates the process instead of leaving the
+    // user on a blank privileged window.
+    loadUrlFailure = new Error("ERR_CONNECTION_REFUSED");
+    createMainWindow(`${TRUSTED_DESKTOP_ORIGIN}/`, () => {});
+    await vi.waitFor(() => expect(electronFake.app.exit).toHaveBeenCalledWith(1));
+    expect(electronFake.dialog.showErrorBox).toHaveBeenCalledTimes(1);
+    const logPath = path.join(electronFake.app.getPath("userData"), "desktop-errors.log");
+    expect(fs.readFileSync(logPath, "utf8")).toContain("ERR_CONNECTION_REFUSED");
+
+    // A main-frame `did-fail-load` is fatal the same way.
+    electronFake.app.exit.mockClear();
+    loadUrlFailure = null;
+    const window = createMainWindow(`${TRUSTED_DESKTOP_ORIGIN}/`, () => {});
+    const failed = window.webContents.listeners["did-fail-load"];
+    expect(failed).toHaveLength(1);
+    failed[0]({}, -105, "ERR_NAME_NOT_RESOLVED", `${TRUSTED_DESKTOP_ORIGIN}/`, true);
+    expect(electronFake.app.exit).toHaveBeenCalledWith(1);
+
+    // A subframe failure and a cancelled (ERR_ABORTED) load are not startup
+    // failures: they must not kill a working window.
+    electronFake.app.exit.mockClear();
+    failed[0]({}, -105, "ERR_NAME_NOT_RESOLVED", "https://cdn.example.com/frame", false);
+    failed[0]({}, -3, "ERR_ABORTED", `${TRUSTED_DESKTOP_ORIGIN}/`, true);
+    expect(electronFake.app.exit).not.toHaveBeenCalled();
   });
 
   it("reports one build id and revision to the server and the desktop (#241)", async () => {

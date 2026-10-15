@@ -4,7 +4,12 @@ const { app, BrowserWindow } = require("electron");
 
 const { DEV_SERVER_URL } = require("./constants.cjs");
 const { CHANNELS } = require("./ipc-channels.cjs");
-const { appendDesktopLog } = require("./errors.cjs");
+const { appendDesktopLog, reportMainProcessError } = require("./errors.cjs");
+const {
+  installNavigationPolicy,
+  installPermissionPolicy,
+  setDesktopWindow,
+} = require("./window-policy.cjs");
 
 function readPackageMetadata() {
   try {
@@ -19,6 +24,18 @@ function shouldOpenDevTools() {
   return (
     process.env.FOLEYARD_OPEN_DEVTOOLS === "1" ||
     metadata.foleyardOpenDevTools === true
+  );
+}
+
+/**
+ * The trusted document never loaded, so the window would linger blank while
+ * still holding the desktop preload. Reported once, loudly, then the process
+ * terminates (docs/architecture/desktop.md "Failure behavior").
+ */
+function reportLoadFailure(target, detail) {
+  reportMainProcessError(
+    new Error(`Foleyard desktop window failed to load ${target}: ${detail}`),
+    { fatal: true },
   );
 }
 
@@ -43,10 +60,17 @@ function createMainWindow(startUrl, onClosed) {
     },
   });
 
-  void mainWindow.loadURL(startUrl ?? DEV_SERVER_URL).catch((error) => {
-    appendDesktopLog(
-      `Window load failed for ${startUrl ?? DEV_SERVER_URL}\n${error.stack ?? error.message}`,
-    );
+  const loadTarget = startUrl ?? DEV_SERVER_URL;
+
+  // The window owns the privileged preload, so it is the only trusted
+  // document: navigation, child windows, permission requests and IPC senders
+  // are pinned to it before anything loads (#262).
+  setDesktopWindow(mainWindow);
+  installNavigationPolicy(mainWindow.webContents);
+  installPermissionPolicy(mainWindow.webContents.session);
+
+  void mainWindow.loadURL(loadTarget).catch((error) => {
+    reportLoadFailure(loadTarget, error instanceof Error ? error.message : String(error));
   });
 
   mainWindow.setMenuBarVisibility(false);
@@ -74,10 +98,22 @@ function createMainWindow(startUrl, onClosed) {
   mainWindow.webContents.on("did-finish-load", emitWindowState);
   mainWindow.webContents.on(
     "did-fail-load",
-    (_event, errorCode, errorDescription, validatedURL) => {
-      appendDesktopLog(
-        `Window did-fail-load ${errorCode} ${errorDescription}: ${validatedURL}`,
-      );
+    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (isMainFrame === false) {
+        appendDesktopLog(
+          `Window did-fail-load ${errorCode} ${errorDescription}: ${validatedURL}`,
+        );
+        return;
+      }
+
+      // ERR_ABORTED: a superseded or cancelled load, normal during reload and
+      // dev iteration. Everything else means the trusted document never loaded.
+      if (errorCode === -3) {
+        appendDesktopLog(`Window load aborted (${errorDescription}): ${validatedURL}`);
+        return;
+      }
+
+      reportLoadFailure(validatedURL, `${errorDescription} (${errorCode})`);
     },
   );
   mainWindow.webContents.once("did-finish-load", () => {
@@ -85,7 +121,10 @@ function createMainWindow(startUrl, onClosed) {
       mainWindow.webContents.openDevTools({ mode: "detach" });
     }
   });
-  mainWindow.on("closed", onClosed);
+  mainWindow.on("closed", () => {
+    setDesktopWindow(null);
+    onClosed();
+  });
 
   return mainWindow;
 }

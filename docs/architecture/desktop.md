@@ -18,7 +18,8 @@ invoke-anything channel and no public desktop SDK.
 ## Responsibilities and boundaries
 
 - `electron/main.cjs` owns startup sequencing; `main/window.cjs` owns window
-  creation; `main/desktop-service.cjs` owns native file actions;
+  creation; `main/window-policy.cjs` owns the trusted-document boundary;
+  `main/desktop-service.cjs` owns native file actions;
   `main/auto-updater.cjs` owns update checks; `main/runtime-info.cjs` owns
   desktop identity; `main/ipc.cjs` owns handler registration; `main/errors.cjs`
   owns fatal reporting; `main/database.cjs` owns packaged DB ensure/reset.
@@ -40,6 +41,23 @@ Installed handlers (per `main/ipc.cjs`): all invoke handlers above plus the
 `desktop:start-drag-file` send handler and the `get-runtime-info` handler.
 `desktop:simulate-update` is declared and exposed in preload but registered
 only when `!app.isPackaged` — excluded from packaged availability.
+
+Trusted document: `main/window-policy.cjs` holds every boundary that could
+move native authority off the document the main process loaded (#262).
+`will-navigate` and `will-redirect` cancel a main-frame navigation whose
+origin is not the resolved desktop server origin. `setWindowOpenHandler`
+always answers `{ action: "deny" }`, so no `window.open` target ever inherits
+the desktop preload; a validated `http`/`https`/`mailto` link is handed to
+`shell.openExternal` instead, while `javascript:`, `data:`, `file:`,
+unparseable and unknown-scheme values are refused outright. The
+`setPermissionRequestHandler` and `setPermissionCheckHandler` deny every
+Electron permission request: no renderer capability needs one (clipboard,
+drag-out, reveal and window state are Desktop actions on the bridge), and a
+capability that does is added explicitly to `REQUIRED_PERMISSIONS`. Every IPC
+handler runs through `guardIpcHandler`, which requires the sender frame to be
+the main frame of the tracked desktop window on the trusted origin; a rejected
+invoke answers `{ ok: false, error }` and a rejected `desktop:start-drag-file`
+send is dropped without a reply.
 
 Startup: `main/start-url.cjs` resolves the window start URL. Packaged
 startup ignores `ELECTRON_START_URL` and always serves the bundled Next build
@@ -94,11 +112,18 @@ under `resources/` outside the archive, readable without extracting app code.
   origins (`localhost`, `127.0.0.1`, `[::1]`) and `setDesktopServerUrl`
   refuses anything else, so the grant secret is only ever sent to the server
   the main process started or verified (#261).
+- Trusted document (#262): only the desktop server origin may be the main
+  frame; no child window is created; only the tracked window's main frame may
+  drive a Desktop channel; permission requests are denied unless listed in
+  `REQUIRED_PERMISSIONS`.
 
 ## Failure behavior and limitations
 
-- Window load failure: logged, fatal dialog, app terminates rather than
-  lingering blank. Uncaught exceptions/rejections report fatal.
+- Window load failure: a rejected initial `loadURL` or a main-frame
+  `did-fail-load` is logged, shown once in a fatal dialog, and terminates the
+  app rather than lingering blank. `ERR_ABORTED` (`-3`) and subframe failures
+  only log — a superseded load or a refused third-party frame must not kill a
+  working window. Uncaught exceptions/rejections report fatal.
 - Update checks outside the desktop app toast an error; simulator calls in
   packaged builds have no handler.
 - Drag-out with no valid files sends `action-error`; reveal/open of
@@ -108,7 +133,9 @@ under `resources/` outside the archive, readable without extracting app code.
 
 ## Source map (real file paths)
 
-- `electron/main.cjs`, `electron/main/{window,ipc,ipc-channels,desktop-service,auto-updater,runtime-info,errors,database,next-server,next-server-adapter,server-url,start-url,constants}.cjs`
+- `electron/main.cjs`, `electron/main/{window,window-policy,ipc,ipc-channels,desktop-service,auto-updater,runtime-info,errors,database,next-server,next-server-adapter,server-url,start-url,constants}.cjs`
+  (`window.cjs` creates the trusted window; `window-policy.cjs` pins
+  navigation, child windows, permissions and IPC senders to it)
 - `electron/preload.cjs` — bridge surface
 - `src/lib/desktop.ts` — renderer wrapper + late-injection trap
 - `src/lib/desktop-channels.ts` — renderer-side channel constants

@@ -32,8 +32,10 @@ checks readability, and samples audio files before a root is saved.
 Browsing reads through `src/lib/database/files/reads.ts` (Drizzle),
 filtered by query, favorites, Collection, tag, directory, and library
 root, with pagination. Removal is soft by default (`removedAt` set);
-permanent delete unlinks the file (see `docs/filesystem.md`) and marks it
-removed. The `use-library-files.ts` hook loads and coordinates the file
+permanent delete records a durable intent, unlinks the file only while it
+still matches the indexed identity, and marks it removed (see
+`docs/filesystem.md`); an interrupted permanent delete is reconciled on the
+next scan. The `use-library-files.ts` hook loads and coordinates the file
 list on the client.
 
 ## Contracts

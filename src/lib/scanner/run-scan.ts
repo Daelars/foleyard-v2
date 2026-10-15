@@ -21,6 +21,7 @@ import {
   upsertFile,
 } from "@/lib/db";
 import { extractMetadata } from "@/lib/metadata";
+import { recoverPendingDeletions } from "@/lib/files/delete-files";
 import { triggerAutoTagAfterScan } from "@/lib/extensions-v2/auto-tag-trigger";
 
 import { RealFileSystemSeam } from "./filesystem";
@@ -59,6 +60,9 @@ function getRunner(): ScanRunner {
       metadataExtractor: {
         extract: extractMetadata,
       },
+      // Interrupted permanent deletions are reconciled before the scan reads
+      // the index, so the removal phase sees rows that agree with disk (#269).
+      recoverDeletions: recoverPendingDeletions,
       // Post-scan auto-tag (#194, #234): fire and forget with the files
       // the scan actually added or updated. The runner fires onComplete
       // even for failed runs because arrivals that landed are real; a

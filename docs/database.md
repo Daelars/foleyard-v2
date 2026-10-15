@@ -11,7 +11,7 @@ A single SQLite file (better-sqlite3 + Drizzle) stores the library index,
 organization data, and settings. Schema is created and evolved by hand-rolled
 SQL in `src/lib/database/migrations.ts`; there is no drizzle-kit workflow
 (the config would point at a nonexistent `./foleyard.db`, so it stays
-unwired by design). `CURRENT_SCHEMA_VERSION = 2` with a `schema_migrations`
+unwired by design). `CURRENT_SCHEMA_VERSION = 3` with a `schema_migrations`
 ledger records what was applied.
 
 There is no remote database, no public data SDK, and no external provider.
@@ -39,13 +39,17 @@ Tables in `src/lib/schema.ts` (mirrored by DDL in `migrations.ts`):
 | `file_embeddings` | per-file model vectors (`file_id`, `model`, `dim`, `vec` blob) for similarity search |
 | `collections` / `file_collections` | regular + smart Collections and membership |
 | `files_fts` | FTS5 trigram index over `files.filename` (#251), external content kept in sync by triggers |
+| `pending_deletions` | durable intent for permanent deletion (#269): path, recorded identity, and the file row it belongs to |
 
 Connections set `busy_timeout = 5000`, `journal_mode = WAL`,
 `foreign_keys = ON`, `synchronous = NORMAL`, `temp_store = MEMORY`, a
 16 MiB page cache (`cache_size = -16384`) and a 256 MiB mmap window.
 Durability tradeoff: with WAL, `synchronous = NORMAL` commits without an
 fsync; a power loss can lose the most recent transactions but cannot
-corrupt the database, and an application crash loses nothing. The pragmas
+corrupt the database, and an application crash loses nothing. That is what
+makes `pending_deletions` a durable intent: the journal commit survives a
+process crash, so an interrupted permanent delete is recoverable even though
+the unlink is not. The pragmas
 and the bounded statement cache live in `src/lib/database/connection.ts`
 and `src/lib/database/prepared-statements.ts` (#254).
 
@@ -81,7 +85,7 @@ Database paths (`src/lib/database-path.ts`):
 
 ## Contracts
 
-- Internal: `CURRENT_SCHEMA_VERSION = 2`; `schema_migrations(version,
+- Internal: `CURRENT_SCHEMA_VERSION = 3`; `schema_migrations(version,
   applied_at)` ledger; `DatabaseVersionInfo { state, migration,
   appliedVersion? }`.
 - `getDatabaseVersionInfo(sqlite?)` is a read-only probe: with no handle it
@@ -112,6 +116,7 @@ Database paths (`src/lib/database-path.ts`):
 - `src/lib/database/filename-search.ts` — FTS5-vs-LIKE filename predicate
 - `src/lib/database/migrations.ts` — DDL, `CURRENT_SCHEMA_VERSION`,
   `getDatabaseVersionInfo`, `initializeDatabaseSchema`
+- `src/lib/database/deletion-journal.ts` — `pending_deletions` storage
 - `src/lib/database-path.ts` — web/desktop/legacy path resolution
 - `electron/main/database.cjs` — packaged desktop DB ensure/reset
 - `src/lib/runtime-info.ts` — surfaces the version probe in snapshots

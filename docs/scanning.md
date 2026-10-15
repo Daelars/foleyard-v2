@@ -24,7 +24,9 @@ metadata in a bounded queue, and report progress until complete.
 ## Runtime behavior
 
 Lifecycle: `POST /api/scan` → `src/lib/scanner/run-scan.ts` → `ScanRunner`
-phases:
+phases. Before discovery it reconciles permanent deletions that were
+interrupted before the index caught up, from the `pending_deletions`
+journal (#269); that step never unlinks and never fails the scan.
 
 1. **Validating/discovery** — `validation.ts` checks each root;
    `discovery.ts` walks roots matching `SUPPORTED_AUDIO_EXTENSIONS`

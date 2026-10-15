@@ -8,4 +8,4 @@ Drop Rules stages drag copies in owned directories under its configured staging 
 
 The app retains its unauthenticated loopback-server trust model. The folder-grant endpoint additionally authenticates the desktop process. Filesystem checks do not provide atomic protection against another local process replacing directories between validation and use.
 
-Permanent file deletion unlinks files without using the recycle bin. It requires an indexed file inside a Library root. Janitor folder deletion rechecks containment and emptiness immediately before removing the folder.
+Permanent file deletion unlinks files without using the recycle bin. It requires an indexed file inside a Library root whose on-disk identity (size and mtime) still matches the row, journals the intent before the unlink, and reconciles an interrupted delete on the next scan. A path replaced since it was indexed is refused rather than unlinked. Janitor folder deletion rechecks containment and emptiness immediately before removing the folder.

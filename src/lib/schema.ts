@@ -28,6 +28,19 @@ export const files = sqliteTable('files', {
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });
 
+/**
+ * Durable intent for permanent deletion (#269). Rows are written and
+ * committed before the unlink and removed once the Library index agrees with
+ * the filesystem; a crash between the two is reconciled from here.
+ */
+export const pendingDeletions = sqliteTable('pending_deletions', {
+  path: text('path').primaryKey(),
+  fileId: text('file_id').notNull(),
+  fileSize: integer('file_size'),
+  mtimeMs: integer('mtime_ms'),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const tags = sqliteTable('tags', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),

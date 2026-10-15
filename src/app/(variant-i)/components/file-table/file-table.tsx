@@ -7,7 +7,10 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { memo, useCallback, useEffect, useMemo, useRef, type KeyboardEvent } from "react";
 
 import { useFileTableDesktopActions } from "@/components/FileTable/desktop-actions";
-import { fileTableGridClass } from "@/components/FileTable/layout";
+import {
+  fileTableColumnCount,
+  fileTableGridClass,
+} from "@/components/FileTable/layout";
 import { resolveSelectionScrollIndex } from "@/components/FileTable/selection-scroll";
 import { useShelfToggle } from "@/components/FileTable/use-shelf-toggle";
 import { navigateToParent } from "@/lib/directory-navigation";
@@ -61,6 +64,14 @@ export const V3FileTable = memo(function V3FileTable({
   onFlipSort,
 }: FileTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  // Virtualization mounts and unmounts rows underneath the keyboard, so focus
+  // cannot be set once and forgotten: a move may target a row that is not in
+  // the DOM yet, and a scroll may take the focused row away.
+  const pendingFocusIdRef = useRef<string | null>(null);
+  // The mounted row holding focus, kept as the element so the effect can tell
+  // whether virtualization has unmounted it since.
+  const focusedRowRef = useRef<HTMLElement | null>(null);
   const desktopActions = useFileTableDesktopActions(onSelect, selectedIds);
   const items = useMemo(
     () => [
@@ -121,16 +132,38 @@ export const V3FileTable = memo(function V3FileTable({
     onNavigate(null);
   };
 
-  const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const row = (event.target as HTMLElement).closest<HTMLElement>(
-      "[data-file-id]",
+  // Focus a row if virtualization has mounted it. When it has not, remember it:
+  // the effect below retries after the virtualizer's next render, instead of a
+  // single animation frame that a range change can outrun.
+  const focusFileRow = (fileId: string) => {
+    const row = parentRef.current?.querySelector<HTMLElement>(
+      `[data-file-id="${CSS.escape(fileId)}"]`,
     );
 
-    if (!row?.dataset.fileId || files.length === 0) {
+    if (!row) {
+      pendingFocusIdRef.current = fileId;
       return;
     }
 
-    const index = files.findIndex((file) => file.id === row.dataset.fileId);
+    pendingFocusIdRef.current = null;
+    focusedRowRef.current = row;
+    row.focus({ preventScroll: true });
+  };
+
+  const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (files.length === 0) {
+      return;
+    }
+
+    const row = (event.target as HTMLElement | null)?.closest?.<HTMLElement>(
+      "[data-file-id]",
+    );
+
+    // Focus normally sits on a row. When sorting, load-more or scrolling has
+    // unmounted it, focus moves to the grid instead, so fall back to the
+    // selected file and keep the same keys moving the same selection.
+    const currentId = row?.dataset.fileId ?? selectedFileId;
+    const index = files.findIndex((file) => file.id === currentId);
 
     if (index === -1) {
       return;
@@ -151,13 +184,44 @@ export const V3FileTable = memo(function V3FileTable({
     const neighbor = files[nextIndex];
     virtualizer.scrollToIndex(directories.length + nextIndex, { align: "auto" });
     onSelect(neighbor, nextIndex);
-    requestAnimationFrame(() => {
-      const neighborRow = parentRef.current?.querySelector<HTMLElement>(
-        `[data-file-id="${neighbor.id}"]`,
-      );
-      neighborRow?.focus();
-    });
+    focusFileRow(neighbor.id);
   };
+
+  // Runs after every render because the virtualizer re-renders the table when
+  // its range changes: focus the row a keyboard move is waiting on as soon as
+  // it mounts, and when the focused row has unmounted, keep focus on the grid
+  // rather than letting it fall to <body>, outside the grid's keyboard
+  // contract.
+  useEffect(() => {
+    const pendingId = pendingFocusIdRef.current;
+    if (pendingId) {
+      const pendingRow = parentRef.current?.querySelector<HTMLElement>(
+        `[data-file-id="${CSS.escape(pendingId)}"]`,
+      );
+      if (pendingRow) {
+        pendingFocusIdRef.current = null;
+        focusedRowRef.current = pendingRow;
+        pendingRow.focus({ preventScroll: true });
+        return;
+      }
+    }
+
+    const focusedRow = focusedRowRef.current;
+    const gridElement = gridRef.current;
+    if (!focusedRow || !gridElement || focusedRow.isConnected) {
+      return;
+    }
+
+    // The focused row is gone but focus is still somewhere else (an open menu,
+    // a dialog); leave the anchor in place so a later loss of focus can be
+    // recovered. Re-anchor only when focus actually fell away.
+    if (document.activeElement !== document.body) {
+      return;
+    }
+
+    focusedRowRef.current = null;
+    gridElement.focus({ preventScroll: true });
+  });
 
   const filesRef = useRef(files);
   useEffect(() => {
@@ -207,6 +271,15 @@ export const V3FileTable = memo(function V3FileTable({
     );
   }
 
+  // The header renders alongside any rows, so it is always row 1 and the data
+  // rows start at 2. Both counts describe the whole list, not the mounted
+  // slice, which is what keeps them true under virtualization.
+  const hasHeader = items.length > 0;
+  const rowCount = items.length + (hasHeader ? 1 : 0);
+  const columnCount = fileTableColumnCount(desktopActions.desktop);
+  const ariaSort = (key: FileTableProps["sortKey"]) =>
+    sortKey === key ? (sortDir === 1 ? "ascending" : "descending") : undefined;
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col px-4 pb-4 md:px-5">
       {(currentDirectory || currentCollectionName) && !searchQuery && (
@@ -219,106 +292,157 @@ export const V3FileTable = memo(function V3FileTable({
         />
       )}
 
-      {items.length > 0 && (
-        <div
-          className={cn(
-            "mt-4 mb-4 grid items-center gap-3 border-b border-[var(--vi-edge)] px-3 pb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500",
-            fileTableGridClass(desktopActions.desktop),
-          )}
-        >
-          <span />
-          <button
-            type="button"
-            onClick={() => onFlipSort("filename")}
-            className="text-left outline-none transition-colors hover:text-accent-text focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--vi-focus)]"
-          >
-            Name{" "}
-            {sortKey === "filename" ? (sortDir === 1 ? "↑ " : "↓ ") : ""}
-          </button>
-          <span className="hidden sm:block">Wave</span>
-          <button
-            type="button"
-            onClick={() => onFlipSort("duration")}
-            className="text-right outline-none transition-colors hover:text-accent-text focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--vi-focus)]"
-          >
-            Time{" "}
-            {sortKey === "duration" ? (sortDir === 1 ? "↑ " : "↓ ") : ""}
-          </button>
-          <span />
-          {desktopActions.desktop ? <span /> : null}
-        </div>
-      )}
-
+      {/* One grid owns the header and the virtualized rows, so the rows'
+          `role="row"` and `aria-selected` finally have the relationship they
+          advertise. `tabIndex={-1}` is the re-anchor for focus when the
+          virtualizer unmounts the focused row. */}
       <div
-        ref={parentRef}
-        className="foleyard-library-scroll min-h-0 flex-1 overflow-y-auto"
+        ref={gridRef}
+        role="grid"
+        aria-label="Library contents"
+        aria-rowcount={rowCount}
+        aria-colcount={columnCount}
+        tabIndex={-1}
         onKeyDown={handleRowKeyDown}
-        onScroll={() => {
-          const viewport = parentRef.current;
-          if (
-            hasMore &&
-            viewport &&
-            viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 640
-          ) {
-            onLoadMore?.();
-          }
+        onFocusCapture={(event) => {
+          const row = (event.target as HTMLElement).closest<HTMLElement>(
+            "[role='row']",
+          );
+          // Only rows inside the virtualizer can unmount; the header row sits
+          // outside it.
+          focusedRowRef.current =
+            row && parentRef.current?.contains(row) ? row : null;
         }}
+        className="flex min-h-0 flex-1 flex-col"
       >
+        {hasHeader && (
+          <div
+            role="row"
+            aria-rowindex={1}
+            className={cn(
+              "mt-4 mb-4 grid items-center gap-3 border-b border-[var(--vi-edge)] px-3 pb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500",
+              fileTableGridClass(desktopActions.desktop),
+            )}
+          >
+            <span role="columnheader" aria-colindex={1} />
+            <span
+              role="columnheader"
+              aria-colindex={2}
+              aria-sort={ariaSort("filename")}
+              className="min-w-0"
+            >
+              <button
+                type="button"
+                onClick={() => onFlipSort("filename")}
+                className="w-full text-left outline-none transition-colors hover:text-accent-text focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--vi-focus)]"
+              >
+                Name{" "}
+                {sortKey === "filename" ? (sortDir === 1 ? "↑ " : "↓ ") : ""}
+              </button>
+            </span>
+            <span
+              role="columnheader"
+              aria-colindex={3}
+              className="hidden sm:block"
+            >
+              Wave
+            </span>
+            <span
+              role="columnheader"
+              aria-colindex={4}
+              aria-sort={ariaSort("duration")}
+              className="text-right"
+            >
+              <button
+                type="button"
+                onClick={() => onFlipSort("duration")}
+                className="w-full text-right outline-none transition-colors hover:text-accent-text focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--vi-focus)]"
+              >
+                Time{" "}
+                {sortKey === "duration" ? (sortDir === 1 ? "↑ " : "↓ ") : ""}
+              </button>
+            </span>
+            <span role="columnheader" aria-colindex={5} />
+            {desktopActions.desktop ? (
+              <span role="columnheader" aria-colindex={6} />
+            ) : null}
+          </div>
+        )}
+
         <div
-          className={cn(
-            "overflow-hidden rounded-lg border border-[var(--vi-edge)]",
-            !showContainerBorder && "border-transparent",
-          )}
-          style={{
-            height: `${virtualizer.getTotalSize()}px`,
-            width: "100%",
-            position: "relative",
+          ref={parentRef}
+          role="rowgroup"
+          className="foleyard-library-scroll min-h-0 flex-1 overflow-y-auto"
+          onScroll={() => {
+            const viewport = parentRef.current;
+            if (
+              hasMore &&
+              viewport &&
+              viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 640
+            ) {
+              onLoadMore?.();
+            }
           }}
         >
-          {virtualizer.getVirtualItems().map((virtualRow) => {
-            const item = items[virtualRow.index];
+          <div
+            role="presentation"
+            className={cn(
+              "overflow-hidden rounded-lg border border-[var(--vi-edge)]",
+              !showContainerBorder && "border-transparent",
+            )}
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const item = items[virtualRow.index];
 
-            if (item.type === "directory") {
+              if (item.type === "directory") {
+                return (
+                  <V3DirectoryRow
+                    key={`dir-${item.data.key}`}
+                    dir={item.data}
+                    start={virtualRow.start}
+                    virtualIndex={virtualRow.index}
+                    onNavigate={onNavigate}
+                    folderJanitorEnabled={folderJanitorEnabled}
+                    onScanFolder={onScanFolder}
+                    desktop={desktopActions.desktop}
+                    onContextMenu={handleDirectoryContextMenu}
+                  />
+                );
+              }
+
+              const file = item.data;
+              const isSelected = selectedFileId === file.id;
+              const isDragging = desktopActions.draggingFile === file.id;
+              const showDesktopActions =
+                desktopActions.desktop && (isSelected || isDragging);
+
               return (
-                <V3DirectoryRow
-                  key={`dir-${item.data.key}`}
-                  dir={item.data}
-                  start={virtualRow.start}
-                  onNavigate={onNavigate}
-                  folderJanitorEnabled={folderJanitorEnabled}
-                  onScanFolder={onScanFolder}
+                <V3FileRow
+                  key={`file-${file.id}`}
                   desktop={desktopActions.desktop}
-                  onContextMenu={handleDirectoryContextMenu}
+                  file={file}
+                  handleDragEnd={desktopActions.handleDragEnd}
+                  handleNativeDragStart={desktopActions.handleNativeDragStart}
+                  isDragging={isDragging}
+                  isSelected={isSelected}
+                  isMultiSelected={selectedIdSet.has(file.id)}
+                  isSelectedFilePlaying={isSelectedFilePlaying}
+                  onSelect={onSelect}
+                  onToggleFavorite={onToggleFavorite}
+                  searchQuery={searchQuery}
+                  showDesktopActions={showDesktopActions}
+                  start={virtualRow.start}
+                  virtualIndex={virtualRow.index}
+                  onContextMenu={handleFileContextMenu}
                 />
               );
-            }
-
-            const file = item.data;
-            const isSelected = selectedFileId === file.id;
-            const isDragging = desktopActions.draggingFile === file.id;
-            const showDesktopActions = desktopActions.desktop && (isSelected || isDragging);
-
-            return (
-              <V3FileRow
-                key={`file-${file.id}`}
-                desktop={desktopActions.desktop}
-                file={file}
-                handleDragEnd={desktopActions.handleDragEnd}
-                handleNativeDragStart={desktopActions.handleNativeDragStart}
-                isDragging={isDragging}
-                isSelected={isSelected}
-                isMultiSelected={selectedIdSet.has(file.id)}
-                isSelectedFilePlaying={isSelectedFilePlaying}
-                onSelect={onSelect}
-                onToggleFavorite={onToggleFavorite}
-                searchQuery={searchQuery}
-                showDesktopActions={showDesktopActions}
-                start={virtualRow.start}
-                virtualIndex={virtualRow.index}
-                onContextMenu={handleFileContextMenu}
-              />
-            );
-          })}
+            })}
+          </div>
         </div>
       </div>
 

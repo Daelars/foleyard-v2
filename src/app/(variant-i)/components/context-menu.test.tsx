@@ -306,22 +306,25 @@ describe("row context-menu keyboard invocation", () => {
 
   it("opens a directory row's menu from the keyboard, anchored to the row", () => {
     const onContextMenu = vi.fn();
-    const { container } = render(
+    render(
       <V3DirectoryRow
         dir={DIRECTORY}
         start={0}
+        virtualIndex={0}
         onNavigate={() => {}}
         onContextMenu={onContextMenu}
       />,
     );
-    const row = container.querySelector<HTMLElement>('[role="button"]');
-    expect(row).toBeTruthy();
+    // A folder opens through the button that carries the row's action; it now
+    // sits inside the row's label cell rather than being the row itself.
+    const openFolder = screen.getByRole("button", { name: "Open folder Rain" });
+    expect(openFolder.closest("[role='row']")).toBeTruthy();
 
-    fireEvent.keyDown(row!, { key: "ContextMenu" });
+    fireEvent.keyDown(openFolder, { key: "ContextMenu" });
 
     expect(onContextMenu).toHaveBeenCalledTimes(1);
     const [target] = onContextMenu.mock.calls[0]!;
     expect(target.keyboard).toBe(true);
-    expect(target.anchor).toBe(row);
+    expect(target.anchor).toBe(openFolder);
   });
 });

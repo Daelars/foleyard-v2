@@ -17,6 +17,7 @@ import { isContextMenuKey, rowMenuTargetFromEvent, type RowMenuTarget } from "..
 export const V3DirectoryRow = memo(function V3DirectoryRow({
   dir,
   start,
+  virtualIndex,
   onNavigate,
   folderJanitorEnabled,
   onScanFolder,
@@ -25,6 +26,7 @@ export const V3DirectoryRow = memo(function V3DirectoryRow({
 }: {
   dir: FileTableDirectory;
   start: number;
+  virtualIndex: number;
   onNavigate: (dir: FileTableDirectory) => void;
   folderJanitorEnabled?: boolean;
   onScanFolder?: (folderPath: string) => void;
@@ -43,43 +45,54 @@ export const V3DirectoryRow = memo(function V3DirectoryRow({
       }}
       onClick={() => onNavigate(dir)}
       onContextMenu={(event) => onContextMenu(rowMenuTargetFromEvent(event), dir)}
-      onKeyDown={(event) => {
-        if (isContextMenuKey(event)) {
-          event.preventDefault();
-          onContextMenu(
-            { x: 0, y: 0, anchor: event.currentTarget, keyboard: true },
-            dir,
-          );
-          return;
-        }
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onNavigate(dir);
-        }
-      }}
-      role="button"
-      tabIndex={0}
-      aria-label={`Open folder ${dir.label}`}
+      role="row"
+      // The table's header row is row 1, so the first virtual item is row 2.
+      aria-rowindex={virtualIndex + 2}
     >
-      <span className="flex justify-center text-zinc-500">
+      <span
+        role="gridcell"
+        aria-colindex={1}
+        className="flex justify-center text-zinc-500"
+      >
         <Folder className="size-4" />
       </span>
-      <span className="min-w-0">
-        <span className="block truncate text-[15px] font-medium text-zinc-100">
-          {dir.label}
-        </span>
-        <span className="mt-0.5 block truncate font-mono text-[11px] text-zinc-400">
-          {getDirectorySubtitle(dir)}
-        </span>
+      <span role="gridcell" aria-colindex={2} className="min-w-0">
+        {/* Folders are still opened with a button, just inside the grid rather
+            than as a row that claims a role a grid row cannot have. */}
+        <button
+          type="button"
+          aria-label={`Open folder ${dir.label}`}
+          className="block w-full cursor-pointer text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--vi-focus)]"
+          onClick={(event) => {
+            event.stopPropagation();
+            onNavigate(dir);
+          }}
+          onKeyDown={(event) => {
+            if (!isContextMenuKey(event)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            onContextMenu(
+              { x: 0, y: 0, anchor: event.currentTarget, keyboard: true },
+              dir,
+            );
+          }}
+        >
+          <span className="block truncate text-[15px] font-medium text-zinc-100">
+            {dir.label}
+          </span>
+          <span className="mt-0.5 block truncate font-mono text-[11px] text-zinc-400">
+            {getDirectorySubtitle(dir)}
+          </span>
+        </button>
       </span>
-      <span className="hidden min-w-0 sm:block" />
-      <span />
-      <span className="flex justify-center">
+      <span role="gridcell" aria-colindex={3} className="hidden min-w-0 sm:block" />
+      <span role="gridcell" aria-colindex={4} />
+      <span role="gridcell" aria-colindex={5} className="flex justify-center">
         <ChevronRight className="size-4 text-zinc-600 transition-transform group-hover:translate-x-0.5 group-hover:text-zinc-400" />
       </span>
-      {desktop ? <span /> : null}
+      {desktop ? <span role="gridcell" aria-colindex={6} /> : null}
       {folderJanitorEnabled && onScanFolder ? (
-        <span className="sr-only">
+        <span role="presentation" className="sr-only">
           <Scan aria-hidden className="size-4" />
         </span>
       ) : null}

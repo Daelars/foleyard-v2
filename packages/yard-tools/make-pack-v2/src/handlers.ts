@@ -127,7 +127,13 @@ export async function runMakePackCommand(
     failInvalid(error instanceof Error ? error.message : String(error));
   }
 
-  const requestedIds = await resolveSourceIds(source, ctx);
+  // Plan-bound runs (immediate apply or a reviewed background job)
+  // execute exactly the reviewed target IDs and order — never a source
+  // re-resolved after review. Direct runs preview, so they resolve the
+  // mutable source now and prepare the plan against it.
+  const requestedIds = ctx.plan
+    ? dedupeIds(ctx.plan.targets.fileIds)
+    : await resolveSourceIds(source, ctx);
   if (requestedIds.length > MAX_PACK_FILES) {
     failInvalid(
       `This pack holds ${requestedIds.length} sounds; the limit is ${MAX_PACK_FILES}. Narrow the selection and retry.`,

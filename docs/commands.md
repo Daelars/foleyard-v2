@@ -109,8 +109,10 @@ envelopes. Limits: 256 KiB body, 64 KiB input, 500 selection IDs. Status:
 200 immediate/review, 202 job, 400 invalid, 403 disabled/denied, 404
 unknown/unresolvable, 413 over limits, 500 host faults. Background work
 goes through `POST /api/extensions-v2/jobs` with `vjob_` IDs and polling;
-reviewed work goes through the plans routes. Full contracts and author
-examples live in `docs/extensions-v2.md`.
+reviewed work goes through the plans routes, and a reviewed plan can run
+as a background job through `POST /api/extensions-v2/plans/:planId/job`
+so the job executes the exact reviewed targets and options. Full
+contracts and author examples live in `docs/extensions-v2.md`.
 
 The palette projects v2 commands as `v2tool:<extensionId>:<commandId>`
 entries through the v2 bridge.

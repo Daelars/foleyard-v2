@@ -59,7 +59,7 @@ desktop helpers grouped):
 | `GET /api/extensions-v2` | v2 serializable catalog |
 | `GET /api/extensions-v2/availability` | v2 availability with reasons |
 | `POST /api/extensions-v2/execute` | v2 immediate/reviewed execution |
-| `GET /POST /api/extensions-v2/plans/*` | v2 plan review/apply |
+| `GET /POST /api/extensions-v2/plans/*` | v2 plan review/apply/job |
 | `GET/POST /api/extensions-v2/jobs*` | v2 job submit/poll/cancel |
 | `GET/PATCH /api/extensions-v2/extensions*` | v2 enablement + approvals |
 | `POST /api/extensions-v2/grants` | v2 destination grant from a picker proof |

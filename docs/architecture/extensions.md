@@ -56,8 +56,13 @@ commandId, selection, input }`:
    schema, availability, effective permissions, grant re-auth) for
    direct execution, job submit, and plan apply alike, then runs the
    handler with an engine-owned `runMode` and narrow operation
-   services. Operation errors map to typed failure codes; a v2
-   failure is final and never falls through to another system.
+   services. A plan can also run as a background job
+   (`POST /api/extensions-v2/plans/:planId/job`), which reuses the same
+   plan revalidation and hands the handler the stored targets and
+   options, so the job executes the reviewed plan rather than a source
+   re-resolved after review. Operation errors map to typed failure
+   codes; a v2 failure is final and never falls through to another
+   system.
 4. **Services.** Handlers use paged Library reads, named selection
    sources (shelf reads `v2shelf:sound-shelf-v2`, recent reads the
    recent record), authorized file/archive output, namespaced
@@ -117,7 +122,9 @@ tool packages import `yard-core` and relatives only.
   transport status table (400/403/404/413/500).
 - Null envelopes and unknown ids fail closed; nothing is fetched or loaded.
 - Jobs are host-owned and cooperative; plans require host-stamped review
-  and expire. No generic undo.
+  and expire, and a plan-bound job reuses that review binding so it runs
+  the reviewed targets/options rather than a re-resolved source. No
+  generic undo.
 
 ## Source map (real file paths)
 

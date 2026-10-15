@@ -12,4 +12,9 @@ Read permissions are enforced alongside mutations. The authorized operation is t
 
 - Filesystem ADR protections (canonical path, traversal, junction/symlink, existing-ancestor, root containment) apply to v2 operation services. Validation-to-use races are documented honestly, not claimed away.
 - Output creation and cleanup touch only resources the current job owns.
+- A reviewed plan binds the validated targets/options and the grant IDs
+  it depends on; executing it — immediately or as a background job —
+  re-authorizes those grants and runs the stored targets, never a source
+  re-resolved after review, so a changed source or destination
+  invalidates the review.
 - Build rules plus guarded services cover trusted bundled code only. Future isolation of untrusted code needs its own ADR and tests.

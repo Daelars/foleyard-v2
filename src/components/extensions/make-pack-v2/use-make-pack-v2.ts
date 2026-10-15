@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { v2PlanRoute, type V2PlanReview } from "@yard-core";
+import { v2PlanJobRoute, v2PlanRoute, type V2PlanReview } from "@yard-core";
 import { getDesktopBridge, isDesktopApp } from "@/lib/desktop";
 import { invokeV2Command } from "@/lib/extensions-v2/contributions";
 import {
@@ -47,6 +47,20 @@ type OutcomeBody = {
   outcome?: { kind?: string; jobId?: string; planId?: string };
 };
 
+/** Every field the review plan binds; changing any one invalidates it. */
+type PlanBindingKey = {
+  source: MakePackV2Source;
+  fileIds: string[];
+  packName: string;
+  outputFormat: MakePackV2Format;
+  includeManifest: boolean;
+  grantId: string;
+};
+
+function bindingKey(binding: PlanBindingKey): string {
+  return JSON.stringify(binding);
+}
+
 function outcomeError(body: unknown, fallback: string): string {
   const parsed = body as OutcomeBody | null;
   if (parsed?.ok === false || parsed?.error) {
@@ -73,6 +87,7 @@ export function useMakePackV2({
   const [grantId, setGrantId] = useState("");
   const [phase, setPhase] = useState<MakePackV2Phase>("form");
   const [preview, setPreview] = useState<V2PlanReview | null>(null);
+  const [reviewedKey, setReviewedKey] = useState<string | null>(null);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<MakePackV2Result | null>(null);
@@ -88,6 +103,7 @@ export function useMakePackV2({
       setGrantId("");
       setPhase("form");
       setPreview(null);
+      setReviewedKey(null);
       setProgress({ completed: 0, total: 0 });
       setJobId(null);
       setResult(null);
@@ -100,6 +116,33 @@ export function useMakePackV2({
     () => (source === "selection" ? [...initialFileIds] : []),
     [source, initialFileIds],
   );
+
+  // The binding the current form would review. Any change after review
+  // makes it differ from the reviewed key, which invalidates the preview.
+  const currentKey = useMemo(
+    () =>
+      bindingKey({
+        source,
+        fileIds,
+        packName: packName.trim() || defaultPackV2Name(source),
+        outputFormat,
+        includeManifest,
+        grantId,
+      }),
+    [source, fileIds, packName, outputFormat, includeManifest, grantId],
+  );
+
+  useEffect(() => {
+    if (phase !== "preview" || reviewedKey === null || currentKey === reviewedKey) return;
+    // Editing any reviewed field invalidates the host-stamped review; the
+    // user must preview again before the job can run.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPreview(null);
+    setReviewedKey(null);
+    setJobId(null);
+    setError(null);
+    setPhase("form");
+  }, [phase, reviewedKey, currentKey]);
 
   const handlePickDest = useCallback(async () => {
     if (!isDesktopApp()) {
@@ -124,15 +167,17 @@ export function useMakePackV2({
   const handlePreview = useCallback(async () => {
     setBusy(true);
     setError(null);
+    const effectiveName = packName.trim() || defaultPackV2Name(source);
     try {
       const invoked = await invokeV2Command({
         extensionId: MAKE_PACK_V2_ID,
         commandId: makePackV2CommandId(source),
         fileIds,
         commandInput: {
-          packName: packName.trim() || defaultPackV2Name(source),
+          packName: effectiveName,
           outputFormat,
           includeManifest,
+          ...(grantId ? { grantId } : {}),
         },
       });
       if (!invoked.ok) {
@@ -159,35 +204,51 @@ export function useMakePackV2({
         return;
       }
       setPreview(reviewBody.review);
+      setReviewedKey(
+        bindingKey({
+          source,
+          fileIds,
+          packName: effectiveName,
+          outputFormat,
+          includeManifest,
+          grantId,
+        }),
+      );
       setPhase("preview");
     } finally {
       setBusy(false);
     }
-  }, [source, fileIds, packName, outputFormat, includeManifest]);
+  }, [source, fileIds, packName, outputFormat, includeManifest, grantId]);
 
   const handleStartJob = useCallback(async () => {
+    if (!preview || reviewedKey === null) {
+      setError("Preview the pack before starting the job.");
+      return;
+    }
+    if (currentKey !== reviewedKey) {
+      // Defensive: the effect above normally resets first. Either way, a
+      // plan whose binding changed is never submitted.
+      setPreview(null);
+      setReviewedKey(null);
+      setError("The pack changed after preview; review it again.");
+      setPhase("form");
+      return;
+    }
     if (!grantId) {
-      setError("Choose a destination folder first.");
+      setError("Choose a destination folder and preview the pack again.");
       return;
     }
     setBusy(true);
     setError(null);
     setPhase("working");
     try {
-      const response = await fetch("/api/extensions-v2/jobs", {
+      // The job runs the exact reviewed plan: the reviewed targets and
+      // options echo byte-identically, so a stale plan is rejected rather
+      // than executed.
+      const response = await fetch(v2PlanJobRoute(preview.planId), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          extensionId: MAKE_PACK_V2_ID,
-          commandId: makePackV2CommandId(source),
-          selection: { fileIds },
-          input: {
-            packName: packName.trim() || defaultPackV2Name(source),
-            outputFormat,
-            includeManifest,
-            grantId,
-          },
-        }),
+        body: JSON.stringify({ targets: preview.targets, options: preview.options }),
       });
       const body = (await response.json().catch(() => null)) as OutcomeBody;
       if (!response.ok || !body?.ok) {
@@ -218,19 +279,26 @@ export function useMakePackV2({
         setPhase("preview");
         return;
       }
-      if (job.state !== "succeeded" || job.value === undefined) {
-        setError(job.error?.message ?? `Pack ${job.state}.`);
+      if (job.state !== "succeeded") {
+        setError(job.error?.message ?? job.result?.diagnostic?.message ?? `Pack ${job.state}.`);
         setPhase("preview");
         return;
       }
-      setResult(job.value as MakePackV2Result);
+      // The raw handler value is memory-only; the bounded terminal
+      // projection is the contract the renderer reads.
+      const value = job.result?.value as MakePackV2Result | undefined;
+      if (!value) {
+        setError("The pack finished without a bounded result to display.");
+        setPhase("preview");
+        return;
+      }
+      setResult(value);
       setPhase("done");
-      const value = job.value as MakePackV2Result;
       toast.success(`Packed ${value.copied} sound${value.copied === 1 ? "" : "s"}`);
     } finally {
       setBusy(false);
     }
-  }, [source, fileIds, packName, outputFormat, includeManifest, grantId]);
+  }, [preview, reviewedKey, currentKey, grantId]);
 
   const handleCancelJob = useCallback(async () => {
     if (!jobId) return;

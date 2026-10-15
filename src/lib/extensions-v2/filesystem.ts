@@ -71,9 +71,10 @@ export function getV2GrantStore(): V2GrantStore {
 }
 
 /**
- * Bridge a desktop picker destination into a core grant. The opaque
- * picker token maps to the grant ID in memory; handlers only ever see
- * the grant ID.
+ * Bridge a picker-authorized canonical folder into a core destination
+ * grant. `canonicalPath` must come from a spent picker proof (see
+ * `picker-proofs.ts`); the opaque filesystem-boundary token maps to the
+ * grant ID in memory and handlers only ever see the grant ID.
  */
 export async function issueV2DestinationGrant(
   extensionId: string,

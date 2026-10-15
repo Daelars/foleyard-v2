@@ -18,6 +18,9 @@ describe("process-wide v2 runtime", () => {
     const second = await import("./runtime");
 
     expect(second.getV2Runtime()).toBe(first.getV2Runtime());
+    // The picker-proof store rides the same runtime, so the desktop-grants
+    // bundle that mints a proof and the grant bundle that spends it agree.
+    expect(second.getV2Runtime().pickerProofs).toBe(first.getV2Runtime().pickerProofs);
   });
 
   it("shares one registry and one host across module instances", async () => {

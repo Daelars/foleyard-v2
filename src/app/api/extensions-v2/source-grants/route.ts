@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getV2Registry } from "@/lib/extensions-v2/host";
-import { issueV2SourceGrant } from "@/lib/extensions-v2/source-grants";
+import { issueV2GrantFromPickerProof } from "@/lib/extensions-v2/picker-proofs";
 
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/extensions-v2/source-grants — bridge a user-picked source
- * folder into a core readable grant for one extension.
- * Body: `{ "extensionId": string, "directoryPath": string }`.
- * The picker itself runs in the renderer (desktop folder picker);
- * this route canonicalizes the picked directory and issues the
- * grant ID handlers consume. Grant tokens never leave the server.
+ * POST /api/extensions-v2/source-grants — spend a desktop-picker proof for
+ * a readable source grant owed to one extension.
+ * Body: `{ "extensionId": string, "proof": string }`.
+ * The native picker minted the single-use proof after the user chose a
+ * folder; this route exchanges it for the grant ID handlers consume. A
+ * caller-supplied directory path is not accepted: a path only becomes
+ * access through a proof the picker actually issued.
  */
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -24,16 +25,16 @@ export async function POST(request: NextRequest) {
     );
   }
   const extensionId = (body as { extensionId?: unknown })?.extensionId;
-  const directoryPath = (body as { directoryPath?: unknown })?.directoryPath;
+  const proof = (body as { proof?: unknown })?.proof;
   if (typeof extensionId !== "string" || !extensionId.trim()) {
     return NextResponse.json(
-      { ok: false, error: { code: "input-invalid", message: "Body needs { extensionId: string, directoryPath: string }." } },
+      { ok: false, error: { code: "input-invalid", message: "Body needs { extensionId: string, proof: string }." } },
       { status: 400 },
     );
   }
-  if (typeof directoryPath !== "string" || !directoryPath.trim()) {
+  if (typeof proof !== "string" || !proof.trim()) {
     return NextResponse.json(
-      { ok: false, error: { code: "input-invalid", message: "Body needs { extensionId: string, directoryPath: string }." } },
+      { ok: false, error: { code: "input-invalid", message: "Body needs { extensionId: string, proof: string }." } },
       { status: 400 },
     );
   }
@@ -43,19 +44,12 @@ export async function POST(request: NextRequest) {
       { status: 404 },
     );
   }
-  try {
-    const issued = await issueV2SourceGrant(extensionId, directoryPath);
-    return NextResponse.json({ ok: true, grantId: issued.grantId, path: issued.path });
-  } catch (error) {
+  const issued = await issueV2GrantFromPickerProof(extensionId, "source", proof);
+  if (!issued.ok) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: {
-          code: "input-invalid",
-          message: error instanceof Error ? error.message : String(error),
-        },
-      },
-      { status: 400 },
+      { ok: false, error: { code: issued.code, message: issued.message } },
+      { status: issued.status },
     );
   }
+  return NextResponse.json({ ok: true, grantId: issued.grantId, path: issued.path });
 }

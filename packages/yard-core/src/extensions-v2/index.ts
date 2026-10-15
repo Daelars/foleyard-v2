@@ -140,6 +140,13 @@ export {
   type V2SourceGrantAuthorization,
 } from "./source-grants";
 export {
+  V2_PICKER_PROOF_TTL_MS,
+  V2PickerProofStore,
+  type V2PickerGrantKind,
+  type V2PickerProof,
+  type V2PickerProofUse,
+} from "./picker-proofs";
+export {
   V2_LIBRARY_MUTATION_LIMIT,
   createV2LibraryMutationOperations,
   denyV2LibraryMutationOperations,

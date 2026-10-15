@@ -111,7 +111,8 @@ Check installed desktop handlers from the app:
 
 ```ts
 const info = await getDesktopBridge()?.getRuntimeInfo();
-// { platform, packaged, version, buildId, installedChannels, docsRoot, ... }
+// { platform, packaged, version, buildId, installedChannels, resourcesPresent, ... }
+// Absolute resources/user-data paths are never emitted; presence flags stand in.
 ```
 
 Simulate an update (development only):

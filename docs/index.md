@@ -46,7 +46,11 @@ references are allowlisted with a reason.
 manifest's product version/build/revision with a real `matchState` and
 per-field `mismatches`, the index ID (`index`), document IDs, and the two
 runnable-in-repo examples (`core/query-library`,
-`extensions-v2/minimal`).
+`extensions-v2/minimal`). Matching fails closed: the running build id and
+source revision come from the one reader shared with the runtime snapshot
+(`src/lib/build-identity.ts`), and a missing build id or revision on
+either side is a mismatch, never "unknown, allow". The location never
+carries a private local path.
 `readDocumentation(id)` allowlists the ID against the registry, resolves
 the absolute path under the docs root, and reads it as UTF-8.
 
@@ -68,6 +72,7 @@ the absolute path under the docs root, and reads it as UTF-8.
 ## Source map (real file paths)
 
 - `src/lib/documentation.ts` — registry, location resolution, allowlisted reader
+- `src/lib/build-identity.ts` — the one running build-identity reader shared with runtime
 - `src/app/api/docs/route.ts` — location/list endpoint
 - `src/app/api/docs/[...id]/route.ts` — single-document endpoint
 - `scripts/docs-registry.cjs` — shared registry validation (status, audience, paths, duplicates, required current docs)

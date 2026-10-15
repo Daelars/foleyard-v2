@@ -26,8 +26,12 @@ are ever included.
 - `electron/main/runtime-info.cjs` (`getDesktopIdentity`) owns desktop
   identity: platform, packaged state, app version, the Next BUILD_ID and
   source revision/dirty from `.next/build-provenance.json` (the same file the
-  server identity reads through `FOLEYARD_APP_PATH`), resources/docs paths,
-  installed channels.
+  server identity reads), resources/docs presence flags (absolute paths are
+  never emitted), installed channels.
+- The running server identity comes from one reader,
+  `src/lib/build-identity.ts`, that the runtime snapshot and the docs match
+  verdict both call: build id and source revision cannot disagree between
+  the two.
 - `src/app/(variant-i)/components/settings/about-tab.tsx` (`handleExportRuntimeInfo`) owns
   the user-invoked export: fetches `/api/runtime`, appends desktop info, and
   downloads `foleyard-runtime-info.json`.
@@ -41,7 +45,7 @@ are ever included.
 | Section | Content |
 | --- | --- |
 | `schemaVersion` / `observedAt` | `1` + ISO timestamp |
-| `identity` | product, `version` (root `package.json`), `coreVersion` (yard-core), `buildId` (`.next/BUILD_ID`), `sourceRevision`/`sourceDirty` (env), `environment`, `mode` (web/desktop), `platform` |
+| `identity` | product, `version` (root `package.json`), `coreVersion` (yard-core), `buildId` (`.next/build-provenance.json`, falling back to `.next/BUILD_ID`), `sourceRevision`/`sourceDirty` (env override or provenance), `environment`, `mode` (web/desktop), `platform` |
 | `providers` | server `present`; renderer `absent`; desktop `present` iff `FOLEYARD_DESKTOP=1` |
 | `database` | `getDatabaseVersionInfo()` probe — no handle, so `not-initialized` when unopened |
 | `capabilities` | `describeCapabilities` with real service/desktop composition |
@@ -50,7 +54,7 @@ are ever included.
 | `extensionsV2` | per-v2-extension id/name/version, `registered`, in-memory `enabled`, apiVersion, standing, declared vs effective permissions, `approvalsKnown`, full command metadata (scope, destructive, selection, requiredCapabilities, input/result schemas, docsId), contribution IDs, settings schema (defaults only), docs refs |
 | `commandsBuiltin` | built-in palette actions from `src/lib/commands.ts`: id, preview title, section, hint, action, docsId |
 | `eventsV2` | the five typed v2 contracts with host ownership |
-| `documentation` | manifest id, product version, `matchState` (`matched` \| `mismatched` \| `unversioned` \| `missing-manifest`), `mismatches` (field + expected + actual), the staged manifest identity (product version, build id, source revision/dirty, document count), index + document ids, runnable examples |
+| `documentation` | manifest id, product version, `matchState` (`matched` \| `mismatched` \| `unversioned` \| `missing-manifest`), `mismatches` (field + expected + actual, fail-closed: a missing expected build id/revision is a mismatch), the staged manifest identity (product version, build id, source revision/dirty, document count), index + document ids, runnable examples; never a private local path |
 | `limitations` | trusted-code note, no external loading, renderer unknown, v2 bundled-only and cooperative-cancellation notes |
 
 v2 reading rules: definitions come from the production registry only.
@@ -73,11 +77,15 @@ in `src/lib/runtime-info.ts` owns the read-only path.
 
 Docs matching (`src/lib/documentation.ts`): a packaged build compares the
 staged manifest's product version, build id and source revision with the
-running identity and reports `matchState: "matched"` only when nothing
-disagrees; every mismatch names the field and both values. A development
-checkout reports `"unversioned"` and a staged root without a manifest
-reports `"missing-manifest"` — the verdict is never a constant. The About
-tab export includes this section unchanged.
+running identity read by the one shared reader (`src/lib/build-identity.ts`)
+and reports `matchState: "matched"` only when every field is present and
+equal. A missing expected build id or revision is a mismatch, not
+"unknown, allow": the verdict fails closed. Every mismatch names the field
+and both values (an absent value reads `absent`), so a diagnostic carries
+enough detail without secrets or private paths. A development checkout
+reports `"unversioned"` and a staged root without a manifest reports
+`"missing-manifest"` — the verdict is never a constant. The About tab
+export includes this section unchanged.
 
 Agent workflow (supported, read-only): fetch the exported snapshot →
 check `documentation.matchState` and `mismatches` before trusting the
@@ -108,6 +116,7 @@ only the exported snapshot (plus desktop identity) describes the running app.
 ## Source map (real file paths)
 
 - `src/lib/runtime-info.ts` — snapshot builder + read-only flag reader
+- `src/lib/build-identity.ts` — the one running build-identity reader
 - `src/lib/extensions-v2/host.ts` — v2 registry and enablement source
 - `src/app/api/runtime/route.ts` — `GET /api/runtime`
 - `electron/main/runtime-info.cjs` — desktop identity

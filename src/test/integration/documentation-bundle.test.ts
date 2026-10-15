@@ -205,6 +205,18 @@ describe("docs match verdict", () => {
     return dir;
   }
 
+  /** A packaged app root carrying real `.next/build-provenance.json` (#307). */
+  function appRoot(provenance: Record<string, unknown>): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-docs-app-"));
+    stagedRoots.push(dir);
+    fs.mkdirSync(path.join(dir, ".next"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, ".next", "build-provenance.json"),
+      JSON.stringify(provenance),
+    );
+    return dir;
+  }
+
   function productVersion(): string {
     return JSON.parse(
       fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"),
@@ -217,15 +229,19 @@ describe("docs match verdict", () => {
     stagedRoots.length = 0;
   });
 
-  it("matches when the staged manifest agrees with the running version", () => {
+  it("matches when the staged manifest agrees with packaged provenance", () => {
     const dir = stagedRoot({
       manifestId: "foleyard-docs",
       productVersion: productVersion(),
-      buildId: null,
-      sourceRevision: null,
+      buildId: "build-abc",
+      sourceRevision: "rev-abc",
       documents: [{ id: "index", path: "docs/index.md" }],
     });
     vi.stubEnv("FOLEYARD_DOCS_ROOT", dir);
+    vi.stubEnv(
+      "FOLEYARD_APP_PATH",
+      appRoot({ buildId: "build-abc", sourceRevision: "rev-abc", sourceDirty: false }),
+    );
 
     const location = getDocumentationLocation();
     expect(location.matched).toBe(true);
@@ -244,7 +260,10 @@ describe("docs match verdict", () => {
       documents: [{ id: "index", path: "docs/index.md" }],
     });
     vi.stubEnv("FOLEYARD_DOCS_ROOT", dir);
-    vi.stubEnv("FOLEYARD_SOURCE_REVISION", "rev-new");
+    vi.stubEnv(
+      "FOLEYARD_APP_PATH",
+      appRoot({ buildId: "build-new", sourceRevision: "rev-new", sourceDirty: false }),
+    );
 
     const location = getDocumentationLocation();
     expect(location.matched).toBe(false);
@@ -253,6 +272,13 @@ describe("docs match verdict", () => {
       expect.arrayContaining([
         { field: "productVersion", expected: productVersion(), actual: "0.0.0-old" },
         { field: "sourceRevision", expected: "rev-new", actual: "rev-old" },
+      ]),
+    );
+    // A staged manifest without a build id is unverifiable, so it fails closed
+    // rather than being read as "unknown, allow" (#307).
+    expect(location.mismatches).toEqual(
+      expect.arrayContaining([
+        { field: "buildId", expected: "build-new", actual: "absent" },
       ]),
     );
   });

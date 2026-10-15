@@ -48,8 +48,10 @@ export interface DesktopBridge {
     packaged: boolean;
     version: string | null;
     buildId: string | null;
-    resourcesPath: string | null;
-    docsRoot: string | null;
+    sourceRevision: string | null;
+    sourceDirty: boolean | null;
+    resourcesPresent: boolean;
+    docsRootPresent: boolean;
     installedChannels: string[];
   }>;
   onActionError: (listener: (message: string) => void) => () => void;

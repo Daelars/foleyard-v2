@@ -18,6 +18,7 @@ import { V3BreadcrumbBar } from "./breadcrumb-bar";
 import { V3DirectoryRow, DirectoryScanAction } from "./directory-row";
 import { V3EmptyState } from "./empty-state";
 import { V3FileRow } from "./file-row";
+import { V3LoadFailure } from "./load-failure";
 import { V3RowMenuItems } from "./row-menu";
 import { RowContextMenu, useRowContextMenu } from "../context-menu";
 import { MenuSeparator } from "@/components/variant-i";
@@ -42,6 +43,8 @@ export const V3FileTable = memo(function V3FileTable({
   onToggleFavorite,
   searchQuery,
   isLoading,
+  error = null,
+  onRetry,
   hasMore = false,
   onLoadMore,
   showContainerBorder = true,
@@ -191,6 +194,9 @@ export const V3FileTable = memo(function V3FileTable({
         : "";
 
   if (items.length === 0 && !isLoading) {
+    if (error) {
+      return <V3LoadFailure message={error} onRetry={onRetry} />;
+    }
     return (
       <V3EmptyState
         currentDirectory={currentDirectory}
@@ -212,6 +218,12 @@ export const V3FileTable = memo(function V3FileTable({
           onNavigateLibrary={handleNavigateLibrary}
         />
       )}
+
+      {/* A reload of the current view can fail while its rows are still
+          valid; surface the retry without discarding them (#276). */}
+      {error ? (
+        <V3LoadFailure variant="inline" message={error} onRetry={onRetry} />
+      ) : null}
 
       {items.length > 0 && (
         <div

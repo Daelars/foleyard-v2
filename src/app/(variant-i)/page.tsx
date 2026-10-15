@@ -125,7 +125,7 @@ function AppV3Content() {
   const selectedCollectionMirrorRef = useRef<string | null>(null);
 
   const transport = useTransport();
-  const { playIds, enqueue } = transport;
+  const { playIds, enqueue, setIsPlayerPlaying } = transport;
 
   const v2Catalog = useV2Catalog();
   const soundShelfEnabled = useMemo(
@@ -209,6 +209,8 @@ function AppV3Content() {
   const {
     files,
     orderedFiles,
+    filesStale,
+    filesError,
     sortKey,
     sortDir,
     flipSort,
@@ -217,6 +219,7 @@ function AppV3Content() {
     hasMoreFiles,
     favoritesCount,
     loadFiles,
+    retryLoadFiles,
     loadMoreFiles,
     loadDirectories,
     toggleFavorite: handleToggleFavorite,
@@ -246,6 +249,19 @@ function AppV3Content() {
     };
     navigateRef.current = selection.handleClearSelection;
   }, [selection]);
+
+  // When a view/query transition is in flight or has failed, the previous
+  // rows are stale: drop the selection and stop transport so nothing acts on
+  // a row that no longer belongs to the current view (#276). The data layer
+  // already withholds those rows from the table and selection.
+  useEffect(() => {
+    if (!filesStale) {
+      return;
+    }
+    selectionApiRef.current.clear();
+    selectionApiRef.current.sync(() => null);
+    setIsPlayerPlaying(false);
+  }, [filesStale, setIsPlayerPlaying]);
 
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const handleLoadMoreFiles = useCallback(
@@ -1065,6 +1081,8 @@ function AppV3Content() {
                       onToggleFavorite={handleToggleFavorite}
                       searchQuery={debouncedSearchQuery}
                       isLoading={isLoadingFiles}
+                      error={filesError}
+                      onRetry={() => void retryLoadFiles()}
                       hasMore={hasMoreFiles}
                       onLoadMore={handleLoadMoreFiles}
                       showContainerBorder={currentView !== "favorites"}

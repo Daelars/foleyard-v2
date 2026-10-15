@@ -27,6 +27,25 @@ A separate, explicit `forget` action removes the root **and** deletes its files
 and organization data. Detachment is the default; forgetting is the deliberate
 destructive alternative and never happens implicitly.
 
+## Which root owns a file (#309)
+
+Configured roots may overlap: one root may sit inside another. Ownership is
+resolved by one rule shared with the scanner — `resolveOwningRoot` in
+`src/lib/database/file-ownership.ts` — the most specific (deepest, longest
+normalized path) configured root that contains the file owns it. If two
+distinct roots normalize to the same depth and both contain the file (only
+possible when they differ by case or separators), the lexicographically
+smallest normalized path is the documented tie-break. The answer depends only
+on the set of configured roots, never on the order they were added or scanned.
+
+The scanner stores the resolved owner and the file's directory relative to
+that owner, so browse, directory navigation and root filters read the same
+fact. Removing a root re-resolves ownership against the roots that remain:
+files a shallower root still covers move to it instead of detaching — and are
+not deleted by `forget` — while re-adding a nested root hands its files back
+to it immediately. Every path uses the one predicate, so no read has a second
+ownership rule.
+
 Consequences:
 
 - `files.detached_at` records detachment per row; reads share the ownership
@@ -34,6 +53,8 @@ Consequences:
 - Re-adding a root is idempotent and restores organization data because the
   rows were never deleted.
 - The `forget` action deletes `files`, `file_tags`, `file_collections` and
-  `file_embeddings` rows for the root in one transaction.
-- Overlapping roots remain a separate defect (#309): a detached root nested
-  inside an owned root is rediscovered by that owned root's scan.
+  `file_embeddings` rows for the root in one transaction — except files a
+  remaining configured root still owns, which are reassigned first.
+- A detached root nested inside an owned root is rediscovered by that owned
+  root's scan as its files, and a removed nested root's files move to the
+  covering root immediately (#309).

@@ -55,6 +55,19 @@ scan. An explicit `forget` action (`POST /api/settings { action: "forget" }`)
 removes the root **and** deletes its files and organization data. The full
 decision is `docs/adr/library-root-detachment.md`.
 
+### Overlapping roots (#309)
+
+Configured roots may overlap. `resolveOwningRoot`
+(`src/lib/database/file-ownership.ts`) makes the answer deterministic: the most
+specific (deepest) configured root that contains a file owns it, with the
+lexicographically smallest normalized path as the documented tie-break when two
+roots have equal depth. The scanner stores that owner and the file's directory
+relative to it, so browse, directory navigation and root filters agree and the
+result does not depend on the order roots were added or scanned. Removing a
+root re-resolves ownership against the roots that remain: a file a shallower
+root still covers moves to it instead of detaching, and re-adding a nested root
+hands its files back immediately.
+
 ## Contracts
 
 - `AudioFileRepository` / `SettingsRepository` interfaces in
@@ -75,11 +88,10 @@ decision is `docs/adr/library-root-detachment.md`.
 - Removed-then-rescanned files can reappear (finding B10,
   expected-to-fail): removal is undone by rescan.
 - Collection-branch counts disagree with the main list (finding B03,
-  expected-to-fail); root ownership is order-dependent across multiple
-  roots (finding I03, expected-to-fail).
-- Detached records stay invisible until their root is re-added; a detached
-  root nested inside an owned root is rediscovered by that owned root's scan
-  (#309, overlapping roots).
+  expected-to-fail).
+- Overlapping roots resolve to one owner: the deepest configured root that
+  contains the file (#309). A detached or removed nested root's files stay
+  owned by whichever configured root still covers them.
 
 ## Source map (real file paths)
 

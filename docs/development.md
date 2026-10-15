@@ -80,7 +80,7 @@ checkout never ships and is never read by production builds.
 
 ## Failure behavior and limitations
 
-Expected-failures ledger (`docs/expected-failures.md`, 8 entries — a PR
+Expected-failures ledger (`docs/expected-failures.md`, 7 entries — a PR
 that fixes a finding flips its test to `it` and removes the entry in the
 same change; deleting a test without fixing fails CI):
 
@@ -88,17 +88,17 @@ same change; deleting a test without fixing fails CI):
 2. B09 — database-correctness: unchunked, non-atomic smart conversion (#137)
 3. B02 — data-loss-prevention: distinct recordings inherit tags (#136)
 4. B10 — data-loss-prevention: removal undone by rescan (#136)
-5. I03 — scanner: order-dependent root ownership (#139)
-6. B04 — client-mutation-lifecycle: late tag failure erases newer edit (#140)
-7. B04 — client-mutation-lifecycle: stale deletion restores old root (#140)
-8. B11 — client-mutation-lifecycle: stale page unlocks duplicate request (#140)
+5. B04 — client-mutation-lifecycle: late tag failure erases newer edit (#140)
+6. B04 — client-mutation-lifecycle: stale deletion restores old root (#140)
+7. B11 — client-mutation-lifecycle: stale page unlocks duplicate request (#140)
 
 Previously fixed and removed from the ledger: B01 (gather overwrite),
 B05 (header-only first parse), B06 (silent 5,000-file scan cap), B08
 (null/malformed envelopes now 400 via `validateTransportEnvelope`), B12
 (export deletes a manifest sidecar), E01 and E01-transport (host-enforced
 service permissions via `guardHostServices`), E04 (drop-rules write with
-no writable path).
+no writable path), I03 (overlapping roots resolved to the deepest
+configured owner, #309).
 
 The September 2026 coverage snapshot and target-shape plan moved to the
 `Daelars/foleyard-archive` checkout. The live suite, `vitest.config.ts`
@@ -123,4 +123,4 @@ The runnable-in-repository examples (derived from `examples/`) are
 ## Related documentation
 
 - `RELEASE.md` — local desktop build, release prepare/publish, auto-update requirements
-- `docs/expected-failures.md` — the 8-entry ledger this guide summarizes
+- `docs/expected-failures.md` — the 7-entry ledger this guide summarizes

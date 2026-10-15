@@ -1,7 +1,13 @@
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
 import { sqlite as defaultSqlite } from "./connection";
+import {
+  directoryWithinRoot,
+  isPathWithinRoot,
+  normalizeLibraryRoot,
+  resolveOwningRoot,
+} from "./file-ownership";
 import { SqliteSettingsRepository } from "./settings-repository";
 import * as schema from "@/lib/schema";
 
@@ -81,6 +87,86 @@ export class SqliteLibraryRootService {
     return this.settings.getLibraryRoots().filter((entry) => entry !== root);
   }
 
+  /**
+   * Hand the files a root currently owns to whichever remaining configured
+   * root contains them (#309). When roots overlap, removing a nested root must
+   * not detach (or delete) files a shallower root still owns: they move to the
+   * most specific remaining owner, with their directory recomputed against it.
+   */
+  private reassignCoveredFiles(root: string, remainingRoots: string[]): void {
+    if (remainingRoots.length === 0) {
+      return;
+    }
+    const rows = this.sqlite
+      .prepare("SELECT id, path FROM files WHERE library_root = ?")
+      .all(root) as Array<{ id: string; path: string }>;
+    if (rows.length === 0) {
+      return;
+    }
+    const update = this.sqlite.prepare(
+      "UPDATE files SET library_root = ?, directory = ?, detached_at = NULL, updated_at = ? WHERE id = ?",
+    );
+    const now = new Date().toISOString();
+    for (const row of rows) {
+      const owner = resolveOwningRoot(row.path, remainingRoots);
+      if (owner === null) {
+        continue;
+      }
+      update.run(owner, directoryWithinRoot(owner, row.path), now, row.id);
+    }
+  }
+
+  /**
+   * Re-resolve ownership for every file under a root that was just (re-)added,
+   * so a nested root takes its files back immediately and a re-added ancestor
+   * never steals files a deeper configured root owns (#309). Only canonical
+   * changes are written, so a plain re-add writes nothing.
+   */
+  private reconcileOwnershipUnder(root: string, roots: string[]): number {
+    const normalizedRoot = normalizeLibraryRoot(root);
+    const rows = this.sqlite
+      .prepare(
+        "SELECT id, path, library_root AS libraryRoot, detached_at AS detachedAt FROM files",
+      )
+      .all() as Array<{ id: string; path: string; libraryRoot: string | null; detachedAt: string | null }>;
+    const update = this.sqlite.prepare(
+      "UPDATE files SET library_root = ?, directory = ?, detached_at = NULL, updated_at = ? WHERE id = ?",
+    );
+    const now = new Date().toISOString();
+    let changed = 0;
+
+    for (const row of rows) {
+      if (!isPathWithinRoot(normalizedRoot, row.path)) {
+        continue;
+      }
+      const owner = resolveOwningRoot(row.path, roots);
+      if (owner === null) {
+        continue;
+      }
+      const alreadyOwned =
+        row.libraryRoot !== null && normalizeLibraryRoot(row.libraryRoot) === owner;
+      if (alreadyOwned && row.detachedAt === null) {
+        continue;
+      }
+      update.run(owner, directoryWithinRoot(owner, row.path), now, row.id);
+      changed += 1;
+    }
+
+    return changed;
+  }
+
+  /** Re-resolve then detach whatever no remaining root covers (#309). */
+  private applyDetach(root: string, remainingRoots: string[]): number {
+    this.reassignCoveredFiles(root, remainingRoots);
+    return this.markDetached(root);
+  }
+
+  /** Re-resolve then delete whatever no remaining root covers (#309). */
+  private applyForget(root: string, remainingRoots: string[]): number {
+    this.reassignCoveredFiles(root, remainingRoots);
+    return this.deleteRootRows(root);
+  }
+
   /** Marks the root's files detached. Idempotent; detached rows are skipped. */
   private markDetached(root: string): number {
     const result = this.db
@@ -112,10 +198,11 @@ export class SqliteLibraryRootService {
   /** Soft-remove a root: detach its files, keep their rows and organization data. */
   detachRoot(root: string): RootChangeResult {
     this.recordPending("detach", root);
+    const remaining = this.withoutRoot(root);
     let files = 0;
     this.sqlite.transaction(() => {
-      this.settings.setLibraryRoots(this.withoutRoot(root));
-      files = this.markDetached(root);
+      this.settings.setLibraryRoots(remaining);
+      files = this.applyDetach(root, remaining);
     })();
     this.clearPending(root);
     return { files };
@@ -124,10 +211,11 @@ export class SqliteLibraryRootService {
   /** Remove a root and permanently delete its files and organization data. */
   forgetRoot(root: string): RootChangeResult {
     this.recordPending("forget", root);
+    const remaining = this.withoutRoot(root);
     let files = 0;
     this.sqlite.transaction(() => {
-      this.settings.setLibraryRoots(this.withoutRoot(root));
-      files = this.deleteRootRows(root);
+      this.settings.setLibraryRoots(remaining);
+      files = this.applyForget(root, remaining);
     })();
     this.clearPending(root);
     return { files };
@@ -136,7 +224,9 @@ export class SqliteLibraryRootService {
   /**
    * Re-add a root: register it and reattach every detached record it owns, by
    * path and identity, with its organization data. This is the only path that
-   * brings detached records back; nothing resurrects them on its own.
+   * brings detached records back; nothing resurrects them on its own. A nested
+   * root takes over the files it now contains, and a re-added ancestor leaves
+   * files owned by a deeper configured root where they are (#309).
    */
   reattachRoot(root: string): RootChangeResult {
     let files = 0;
@@ -145,12 +235,7 @@ export class SqliteLibraryRootService {
       if (!roots.includes(root)) {
         this.settings.setLibraryRoots([...roots, root]);
       }
-      const result = this.db
-        .update(schema.files)
-        .set({ detachedAt: null, updatedAt: new Date().toISOString() })
-        .where(and(eq(schema.files.libraryRoot, root), isNotNull(schema.files.detachedAt)))
-        .run();
-      files = Number(result.changes ?? 0);
+      files = this.reconcileOwnershipUnder(root, this.settings.getLibraryRoots());
     })();
     return { files };
   }
@@ -172,11 +257,12 @@ export class SqliteLibraryRootService {
         dropped += 1;
         continue;
       }
+      const remaining = this.settings.getLibraryRoots();
       this.sqlite.transaction(() => {
         if (entry.mode === "forget") {
-          this.deleteRootRows(entry.root);
+          this.applyForget(entry.root, remaining);
         } else {
-          this.markDetached(entry.root);
+          this.applyDetach(entry.root, remaining);
         }
       })();
       this.clearPending(entry.root);

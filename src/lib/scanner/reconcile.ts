@@ -1,19 +1,15 @@
 import { mapConcurrent } from "@yard-core";
 import path from "node:path";
 import type { ScanFileRecord } from "@yard-core";
+import { directoryWithinRoot, resolveOwningRoot } from "@/lib/database/file-ownership";
 import type { ScanCleanupRow, ScanPhaseContext } from "./types";
 import type { createMetadataQueue } from "./metadata-queue";
-
-function normalizeDirectory(rootPath: string, filePath: string) {
-  const relativeDirectory = path.relative(rootPath, path.dirname(filePath));
-  return relativeDirectory === "." ? null : relativeDirectory || null;
-}
 
 function normalizeStoredDirectory(directory: string | null | undefined) {
   return directory == null ? null : directory.replace(/\\/g, "/");
 }
 
-export async function processDiscoveredBatch(context: ScanPhaseContext, filePaths: string[], normalizedRoot: string, lastScannedAt: string, seenPaths: Set<string>, metadataQueue: ReturnType<typeof createMetadataQueue>, arrivals: string[]) {
+export async function processDiscoveredBatch(context: ScanPhaseContext, filePaths: string[], normalizedRoot: string, owningRoots: readonly string[], lastScannedAt: string, seenPaths: Set<string>, metadataQueue: ReturnType<typeof createMetadataQueue>, arrivals: string[]) {
     const existingByPath = new Map(
       context.fileRepo.getFilesByPaths(filePaths).map((file) => [file.path, file]),
     );
@@ -42,7 +38,12 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
       const filename = path.basename(filePath);
       const format = path.extname(filePath).toLowerCase().slice(1) || null;
       const mtimeMs = Math.trunc(stats.mtimeMs);
-      const directory = normalizeDirectory(normalizedRoot, filePath);
+      // Ownership is resolved from every configured root, not from the root
+      // whose walk happened to find the file (#309): overlapping roots always
+      // agree, and the directory is stored relative to the resolved owner so
+      // directory navigation and atLibraryRoot reads match that owner too.
+      const owner = resolveOwningRoot(filePath, owningRoots) ?? normalizedRoot;
+      const directory = directoryWithinRoot(owner, filePath);
       const changed =
         !existing ||
         existing.duration === null ||
@@ -51,7 +52,7 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
         existing.removedAt !== null ||
         (existing.detachedAt ?? null) !== null ||
         normalizeStoredDirectory(existing.directory) !== normalizeStoredDirectory(directory);
-      const ownershipChanged = existing?.libraryRoot !== normalizedRoot;
+      const ownershipChanged = existing?.libraryRoot !== owner;
 
       seenPaths.add(filePath);
       context.status.indexed += 1;
@@ -69,7 +70,7 @@ export async function processDiscoveredBatch(context: ScanPhaseContext, filePath
       upsertRecords.push({
         path: filePath,
         filename,
-        libraryRoot: normalizedRoot,
+        libraryRoot: owner,
         directory,
         format,
         codec: null,

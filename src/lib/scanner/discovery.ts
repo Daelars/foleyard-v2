@@ -1,11 +1,15 @@
 import type { ScanPhaseContext } from "./types";
 import type { createMetadataQueue } from "./metadata-queue";
+import { normalizeLibraryRoot } from "@/lib/database/file-ownership";
 import { validateLibraryRoot } from "./validation";
 import { processDiscoveredBatch } from "./reconcile";
 
 const DISCOVERY_BATCH_SIZE = 500;
 
 export async function discoverRoots(context: ScanPhaseContext, libraryRoots: string[], lastScannedAt: string, seenPaths: Set<string>, metadataQueue: ReturnType<typeof createMetadataQueue>, arrivals: string[]) {
+  // Ownership is a property of the configured root set, never of scan order
+  // (#309): resolve each file against every configured root, normalized once.
+  const owningRoots = Array.from(new Set(libraryRoots.map(normalizeLibraryRoot)));
   const healthyRoots = new Set<string>();
       for (const libraryRoot of libraryRoots) {
         context.status.phase = "validating";
@@ -34,6 +38,7 @@ export async function discoverRoots(context: ScanPhaseContext, libraryRoots: str
           await processDiscoveredBatch(context, 
             batch,
             normalizedRoot,
+            owningRoots,
             lastScannedAt,
             seenPaths,
             metadataQueue,

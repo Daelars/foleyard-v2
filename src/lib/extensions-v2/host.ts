@@ -191,12 +191,13 @@ function createOperations(binding: {
 }): V2OperationServices {
   const declarations = getV2Registry().get(binding.extensionId)?.settings;
   const library = createV2LibraryPorts();
+  const files = createV2FileContentPorts();
   const base = createV2OperationServices({
     ...binding,
     grants: getV2GrantStore(),
     sources: getV2SourceGrantStore(),
     library,
-    files: createV2FileContentPorts(),
+    files,
     archive: createV2ArchivePorts(),
     settings: createV2SettingsPorts(),
     extensionState: createV2ExtensionStatePorts(),
@@ -219,6 +220,9 @@ function createOperations(binding: {
       tags: createV2TagPorts(),
       embeddings: createV2EmbeddingPorts(),
       analysis: createV2AnalysisPorts(),
+      // Analysis inference reads file content; share the same readable
+      // roots + path primitives the base file operations use (#268).
+      analysisReads: files,
       shelf: createV2ShelfPorts(),
       folders: createV2FolderScanPorts(),
       sources: getV2SourceGrantStore(),

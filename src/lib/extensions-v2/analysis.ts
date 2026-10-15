@@ -1,4 +1,3 @@
-import { getFileById } from "@/lib/db";
 import {
   CLAP_MODEL_ID,
   clapManifest,
@@ -21,6 +20,10 @@ import type { V2AnalysisPorts, V2ModelStatus } from "@yard-core";
  * stream through the model store with progress and cancellation;
  * inference resolves the injected backend, which fails naming the
  * install step until one is provided.
+ *
+ * Audio inference is a guarded file read (#268): core authorizes the
+ * sound and passes the canonical, Library-contained path, so this
+ * adapter never resolves the index or decodes a raw indexed path.
  */
 
 export type V2AnalysisDeps = {
@@ -71,15 +74,14 @@ export function createV2AnalysisPorts(deps: V2AnalysisDeps = {}): V2AnalysisPort
         downloading.delete(modelId);
       }
     },
-    embedAudio: async (fileId) => {
-      if (ports) return ports.embedAudio(fileId);
+    // The backend never resolves the index or reads a raw path itself:
+    // core authorizes the sound and hands over the canonical path the
+    // read guard approved (#268).
+    embedAudio: async (source) => {
+      if (ports) return ports.embedAudio(source);
       const backend = await loadClapBackend(modelDirFor(clapManifest(), getModelsDir()));
-      const record = getFileById(fileId);
-      if (!record) {
-        throw new Error(`Sound ${JSON.stringify(fileId)} is not in the Library index.`);
-      }
       const { decodeToMono48k } = await import("@/lib/audio-analysis/decode");
-      const samples = await decodeToMono48k(record.path);
+      const samples = await decodeToMono48k(source.canonicalPath);
       const vec = await backend.embedAudio(samples, 48000);
       return { dim: vec.length, vec: [...vec] };
     },

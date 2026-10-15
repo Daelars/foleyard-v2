@@ -109,7 +109,7 @@ function world(overrides?: {
   granted?: string[];
   backendAvailable?: boolean;
   seedTags?: string[];
-  embedAudio?: (fileId: string) => Promise<{ dim: number; vec: number[] }>;
+  embedAudio?: (source: { fileId: string; canonicalPath: string }) => Promise<{ dim: number; vec: number[] }>;
   files?: IndexedAudioFile[];
   aggregatePorts?: boolean;
 }): World {
@@ -271,10 +271,25 @@ function world(overrides?: {
         }
       : {}),
   };
+  // The read guard the analysis group shares with files.readFile (#268):
+  // the Library root is /lib and every fixture record lives under it.
+  const analysisReads = {
+    libraryRoots: () => ["/lib"],
+    pathIo: () => ({
+      realpath: async (candidate: string) => {
+        if (candidate === "/lib" || candidate.startsWith("/lib/")) return candidate;
+        throw Object.assign(new Error(`ENOENT: ${candidate}`), { code: "ENOENT" });
+      },
+      lstat: async (candidate: string) => ({
+        exists: candidate === "/lib" || candidate.startsWith("/lib/"),
+        isLink: false,
+      }),
+    }),
+  };
   const analysisPorts: V2AnalysisPorts = {
     modelStatus: () => ({ ...modelState }),
     downloadModel: async () => ({ bytes: modelState.totalBytes }),
-    embedAudio: overrides?.embedAudio ?? (async (fileId) => {
+    embedAudio: overrides?.embedAudio ?? (async ({ fileId }) => {
       const vec = audioVecs[fileId] ?? [0, 0];
       return { dim: vec.length, vec };
     }),
@@ -332,6 +347,7 @@ function world(overrides?: {
         tags: tagPorts,
         embeddings: embeddingPorts,
         analysis: analysisPorts,
+        analysisReads,
       }),
     }),
   };
@@ -828,7 +844,7 @@ describe("auto-tag-v2 clap", () => {
     const second = new Promise<void>((resolve) => { releaseSecond = resolve; });
     const w = world({
       seedTags: ["thunder", "rain"],
-      embedAudio: async (fileId) => {
+      embedAudio: async ({ fileId }) => {
         calls += 1;
         if (calls === 1) firstAnalyzed();
         if (calls === 2) await second;

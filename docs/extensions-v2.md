@@ -144,6 +144,12 @@ canonical-path containment, traversal and link-escape denial, and
 existing-ancestor resolution; job-owned cleanup removes only resources
 the current job owns.
 
+Audio analysis is a read path, not a route around one (#268): CLAP
+inference needs `embeddings:read` *and* `files:read`, the target must
+be a live index record, and the backend decodes only the canonical,
+Library-contained path the read guard approved — the raw indexed path
+is never handed to it.
+
 These services are built for trusted bundled code. They are not a
 sandbox against hostile JavaScript. Do not claim untrusted extension
 isolation.

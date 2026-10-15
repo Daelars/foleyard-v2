@@ -71,6 +71,57 @@ function denied(permission: string, extensionId: string): V2OperationError {
   );
 }
 
+/**
+ * Readable-root surface shared by every guarded file-content read: the
+ * base `files.readFile`/`copyToOutput`/`createZip` operations and the
+ * analysis inference read. A host that supplies analysis supplies this
+ * too, so analysis resolves paths through exactly the same
+ * authorization as any other file-content read.
+ */
+export type V2ReadableRootsPorts = {
+  /** Configured readable Library roots. */
+  libraryRoots(): readonly string[] | Promise<readonly string[]>;
+  pathIo(): V2PathIo;
+};
+
+/**
+ * Resolve one live Library record by ID. A removed sound is not in the
+ * index as far as callers are concerned: it fails with `input-invalid`
+ * rather than being read or decoded.
+ */
+export function liveV2Record(library: V2LibraryReadPorts, fileId: string): IndexedAudioFile {
+  const record = library.getFileById(fileId);
+  if (!record || record.removedAt !== null) {
+    throw new V2OperationError(
+      "input-invalid",
+      `Sound ${JSON.stringify(fileId)} is not in the Library index; refresh the selection and retry.`,
+    );
+  }
+  return record;
+}
+
+/**
+ * Authorize reading one live record's path against the current Library
+ * roots and return the canonical path. The same containment screen
+ * (`authorizeV2ReadablePath`) guards every file-content read, so a path
+ * that escaped a root — or a link that resolves outside one — is
+ * rejected before any bytes are read.
+ */
+export async function authorizeV2ReadableRecord(
+  record: IndexedAudioFile,
+  reads: V2ReadableRootsPorts,
+): Promise<string> {
+  const roots = await reads.libraryRoots();
+  const authorized = await authorizeV2ReadablePath(record.path, roots, reads.pathIo());
+  if (!authorized.ok) {
+    throw new V2OperationError(
+      "permission-denied",
+      `Sound ${JSON.stringify(record.id)} is not readable: ${authorized.message}`,
+    );
+  }
+  return authorized.canonicalPath;
+}
+
 export const V2_OPERATIONS_PAGE_LIMIT = 500;
 export const V2_OPERATIONS_MAX_ARCHIVE_ENTRIES = 500;
 export const V2_OPERATIONS_MAX_OUTPUT_TEXT_BYTES = 1_048_576;
@@ -351,25 +402,12 @@ export function createV2OperationServices(args: V2OperationFactoryArgs): V2Opera
     return found;
   };
 
-  const liveRecord = (fileId: string): IndexedAudioFile => {
-    const record = library.getFileById(fileId);
-    if (!record || record.removedAt !== null) {
-      throw new V2OperationError(
-        "input-invalid",
-        `Sound ${JSON.stringify(fileId)} is not in the Library index; refresh the selection and retry.`,
-      );
-    }
-    return record;
-  };
-
-  const readableSource = async (record: IndexedAudioFile): Promise<string> => {
-    const roots = await files.libraryRoots();
-    const authorized = await authorizeV2ReadablePath(record.path, roots, files.pathIo());
-    if (!authorized.ok) {
-      throw new V2OperationError("permission-denied", `Sound ${JSON.stringify(record.id)} is not readable: ${authorized.message}`);
-    }
-    return authorized.canonicalPath;
-  };
+  // Liveness and Library-root containment come from the shared read
+  // guard (#268), so analysis inference authorizes paths through exactly
+  // the same code as files.readFile/copyToOutput/createZip.
+  const liveRecord = (fileId: string): IndexedAudioFile => liveV2Record(library, fileId);
+  const readableSource = (record: IndexedAudioFile): Promise<string> =>
+    authorizeV2ReadableRecord(record, files);
 
   /**
    * Authorize an output name under the destination grant and return the

@@ -53,7 +53,7 @@ it("decodes real quiet-to-loud peaks in parallel without touching /api/waveform"
   expect(player).toEqual(row);
   // One shared fetch/decode for both callers; the server ffmpeg route is untouched.
   expect(fetchSpy).toHaveBeenCalledTimes(1);
-  expect(firstFetchUrl(fetchSpy)).toBe("/api/audio?id=file-1");
+  expect(firstFetchUrl(fetchSpy)).toBe("/api/audio?id=file-1&recordRecent=0");
   const average = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length;
   expect(average(row.slice(0, 200))).toBeLessThan(0.15);
   // Opposite stereo phases survive: a mono downmix would cancel to near zero.
@@ -188,4 +188,210 @@ it("survives a remount: an aborted first waiter does not fail the shared decode"
   expect(peaks).toHaveLength(PEAKS);
   expect(Math.max(...peaks)).toBeCloseTo(1, 3);
   expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("marks waveform byte reads so a row never records a Recent preview (#292)", async () => {
+  vi.stubGlobal(
+    "OfflineAudioContext",
+    class {
+      async decodeAudioData() {
+        return stereoBuffer();
+      }
+    },
+  );
+  const fetchSpy = vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }));
+  vi.stubGlobal("fetch", fetchSpy);
+  const { computeAndCachePeaks } = await freshModule();
+
+  await computeAndCachePeaks("file-marker", "v1");
+  expect(firstFetchUrl(fetchSpy)).toBe("/api/audio?id=file-marker&recordRecent=0");
+});
+
+it("cancels the shared decode once its last subscriber leaves (#292)", async () => {
+  vi.stubGlobal(
+    "OfflineAudioContext",
+    class {
+      async decodeAudioData() {
+        return stereoBuffer();
+      }
+    },
+  );
+  const signals: AbortSignal[] = [];
+  // Never resolves on its own; rejects only when its signal aborts.
+  const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => {
+    const signal = init?.signal;
+    if (signal) signals.push(signal);
+    return await new Promise<never>((_resolve, reject) => {
+      const onAbort = () => reject(new Error("aborted"));
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  const { computeAndCachePeaks } = await freshModule();
+
+  const first = new AbortController();
+  const second = new AbortController();
+  const firstRead = computeAndCachePeaks("file-shared", "v1", first.signal);
+  const secondRead = computeAndCachePeaks("file-shared", "v1", second.signal);
+  await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+  const sharedSignal = signals[0]!;
+  expect(sharedSignal.aborted).toBe(false);
+
+  // One row unmounting leaves a subscriber behind: the shared work continues.
+  first.abort();
+  await expect(firstRead).rejects.toThrow();
+  expect(sharedSignal.aborted).toBe(false);
+
+  // The last subscriber leaving cancels the abandoned decode.
+  second.abort();
+  await expect(secondRead).rejects.toThrow();
+  expect(sharedSignal.aborted).toBe(true);
+});
+
+it("releases abandoned work so a later read starts fresh (#292)", async () => {
+  vi.stubGlobal(
+    "OfflineAudioContext",
+    class {
+      async decodeAudioData() {
+        return stereoBuffer();
+      }
+    },
+  );
+  let calls = 0;
+  const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => {
+    calls += 1;
+    if (calls === 1) {
+      return await new Promise<never>((_resolve, reject) => {
+        const signal = init?.signal;
+        const onAbort = () => reject(new Error("aborted"));
+        if (signal?.aborted) return onAbort();
+        signal?.addEventListener("abort", onAbort, { once: true });
+      });
+    }
+    return { ok: true, arrayBuffer: async () => new ArrayBuffer(8) };
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  const { computeAndCachePeaks } = await freshModule();
+
+  const controller = new AbortController();
+  const abandoned = computeAndCachePeaks("file-released", "v1", controller.signal);
+  await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+  controller.abort();
+  await expect(abandoned).rejects.toThrow();
+
+  // The abandoned read left nothing behind: this read decodes again.
+  const peaks = await computeAndCachePeaks("file-released", "v1");
+  expect(peaks).toHaveLength(PEAKS);
+  expect(fetchSpy).toHaveBeenCalledTimes(2);
+});
+
+it("bounds in-memory peak storage to the most recent rows (#292)", async () => {
+  vi.stubGlobal(
+    "OfflineAudioContext",
+    class {
+      async decodeAudioData() {
+        return stereoBuffer();
+      }
+    },
+  );
+  const fetchSpy = vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }));
+  vi.stubGlobal("fetch", fetchSpy);
+  const { computeAndCachePeaks, MAX_MEMORY_ENTRIES } = await freshModule();
+
+  const total = MAX_MEMORY_ENTRIES + 2;
+  for (let index = 0; index < total; index++) {
+    await computeAndCachePeaks(`memory-${index}`, "v1");
+  }
+  expect(fetchSpy).toHaveBeenCalledTimes(total);
+
+  // The oldest entries fell out of the bound...
+  await computeAndCachePeaks("memory-0", "v1");
+  expect(fetchSpy).toHaveBeenCalledTimes(total + 1);
+
+  // ...while the most recent entry is still served from memory.
+  await computeAndCachePeaks(`memory-${total - 1}`, "v1");
+  expect(fetchSpy).toHaveBeenCalledTimes(total + 1);
+});
+
+it("bounds the decode slot queue instead of growing it without limit (#292)", async () => {
+  vi.stubGlobal(
+    "OfflineAudioContext",
+    class {
+      async decodeAudioData() {
+        // Hold every acquired slot open so the queue must fill up.
+        return await new Promise<AudioBuffer>(() => {});
+      }
+    },
+  );
+  const fetchSpy = vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }));
+  vi.stubGlobal("fetch", fetchSpy);
+  const { computeAndCachePeaks, MAX_PEAK_JOB_WAITERS } = await freshModule();
+
+  const outcomes: string[] = [];
+  const total = MAX_PEAK_JOB_WAITERS + 5;
+  for (let index = 0; index < total; index++) {
+    computeAndCachePeaks(`queue-${index}`, "v1").then(
+      () => outcomes.push("ok"),
+      (error: Error) => outcomes.push(`error:${error.message}`),
+    );
+  }
+
+  await vi.waitFor(() => {
+    expect(outcomes.some((outcome) => outcome.startsWith("error:"))).toBe(true);
+  });
+  const failures = outcomes.filter((outcome) => outcome.startsWith("error:"));
+  expect(failures).toEqual(["error:Too many waveform reads queued"]);
+});
+
+it("cancels abandoned rows during fast scrolling without leaving work running (#292)", async () => {
+  vi.stubGlobal(
+    "OfflineAudioContext",
+    class {
+      async decodeAudioData() {
+        return stereoBuffer();
+      }
+    },
+  );
+  let passthrough = false;
+  const signals: AbortSignal[] = [];
+  const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => {
+    const signal = init?.signal;
+    if (signal) signals.push(signal);
+    if (passthrough) return { ok: true, arrayBuffer: async () => new ArrayBuffer(8) };
+    return await new Promise<never>((_resolve, reject) => {
+      const onAbort = () => reject(new Error("aborted"));
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  const { computeAndCachePeaks, MAX_PEAK_JOB_WAITERS: WAITERS } = await freshModule();
+
+  // A viewport scrolls through more rows than can be decoded at once, then
+  // every row unmounts before its decode completed.
+  const controllers = Array.from(
+    { length: WAITERS + 1 },
+    () => new AbortController(),
+  );
+  const rows = controllers.map((controller, index) => {
+    const row = computeAndCachePeaks(`scroll-${index}`, "v1", controller.signal);
+    // Observe abandonment here so the rejection is never "unhandled"; the
+    // assertions below still read the original promise's outcome.
+    row.catch(() => {});
+    return row;
+  });
+  await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(4));
+  controllers.forEach((controller) => controller.abort());
+
+  const outcomes = await Promise.allSettled(rows);
+  expect(outcomes.every((outcome) => outcome.status === "rejected")).toBe(true);
+  // Every decode that had started was cancelled, not left running.
+  expect(signals).toHaveLength(4);
+  expect(signals.every((signal) => signal.aborted)).toBe(true);
+
+  // Nothing abandoned was retained: a returning row decodes freshly.
+  passthrough = true;
+  const peaks = await computeAndCachePeaks("scroll-0", "v1");
+  expect(peaks).toHaveLength(PEAKS);
 });

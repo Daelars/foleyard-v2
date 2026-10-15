@@ -13,7 +13,9 @@ export function useWaveformPeaks(selectedFile: AudioPlayerFileRecord) {
     const controller = new AbortController();
 
     const sourceVersion = `${selectedFile.mtimeMs ?? "unknown"}:${selectedFile.fileSize ?? "unknown"}`;
-    computeAndCachePeaks(selectedFile.id, sourceVersion, controller.signal)
+    computeAndCachePeaks(selectedFile.id, sourceVersion, controller.signal, {
+      sizeBytes: selectedFile.fileSize,
+    })
       .then((peaks) => {
         if (!controller.signal.aborted) {
           setWaveform({ fileId: selectedFile.id, data: peaks });

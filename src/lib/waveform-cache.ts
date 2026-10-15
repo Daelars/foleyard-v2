@@ -6,11 +6,22 @@ import { getDatabasePath } from "./database-path";
 import { generateWaveform, WAVEFORM_PEAK_COUNT, type WaveformPeaks } from "./waveform-generator";
 
 const pending = new Map<string, Promise<WaveformPeaks>>();
+const MAX_CONCURRENT_GENERATIONS = 2;
+/**
+ * Bound the queue of callers waiting for a generation slot. Generation is the
+ * server's expensive waveform work (FFmpeg/decoding), so an unbounded queue
+ * lets a burst of fallback requests pile up without limit. Beyond the bound
+ * the request fails instead of waiting (#292). Exported for the suite.
+ */
+export const MAX_GENERATION_WAITERS = 32;
 let running = 0;
 const waiting: Array<() => void> = [];
 /** Semaphore-bounded slot (max 2 concurrent generations). Exported for unit testing. */
 export async function withGenerationSlot<T>(work: () => Promise<T>): Promise<T> {
-  if (running >= 2) {
+  if (running >= MAX_CONCURRENT_GENERATIONS) {
+    if (waiting.length >= MAX_GENERATION_WAITERS) {
+      throw new Error("Too many waveform generations waiting");
+    }
     await new Promise<void>((resolve) => waiting.push(resolve));
     running++;
   } else {

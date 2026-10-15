@@ -104,10 +104,15 @@ function streamResponse(
 }
 
 export async function GET(request: NextRequest) {
-  const id = new URL(request.url).searchParams.get("id");
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
   if (!id) {
     return errorResponse("No file identified", 400);
   }
+  // Playback records a Recent preview. Derivative reads (waveform generation)
+  // fetch the same bytes but must be observationally separate from playback,
+  // so they opt out with `recordRecent=0` (#292).
+  const recordsRecent = searchParams.get("recordRecent") !== "0";
 
   const indexedFile = getFileById(id);
   if (!indexedFile || indexedFile.removedAt) {
@@ -130,7 +135,7 @@ export async function GET(request: NextRequest) {
 
     const contentType = MIME_TYPES[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
     const rangeHeader = request.headers.get("range");
-    recordRecentMakePackFile(indexedFile.id);
+    if (recordsRecent) recordRecentMakePackFile(indexedFile.id);
 
     if (rangeHeader) {
       const range = parseByteRange(rangeHeader, stat.size);

@@ -40,8 +40,8 @@ describe("tag origin storage", () => {
       expect.arrayContaining(["tag_aliases", "file_embeddings"]),
     );
 
-    expect(CURRENT_SCHEMA_VERSION).toBe(3);
-    expect(getDatabaseVersionInfo(sqlite).appliedVersion).toBe(3);
+    expect(CURRENT_SCHEMA_VERSION).toBe(4);
+    expect(getDatabaseVersionInfo(sqlite).appliedVersion).toBe(4);
   });
 
   it("upgrades a version-1 database without losing attachments", () => {
@@ -85,7 +85,7 @@ describe("tag origin storage", () => {
       expect(attachments).toEqual([
         { fileId: "f1", tagId: "t1", origin: "manual", confidence: null },
       ]);
-      expect(getDatabaseVersionInfo(legacy).appliedVersion).toBe(3);
+      expect(getDatabaseVersionInfo(legacy).appliedVersion).toBe(4);
     } finally {
       legacy.close();
     }

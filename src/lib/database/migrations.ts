@@ -68,7 +68,7 @@ function backfillLibraryRoots(sqlite: Database.Database) {
   apply();
 }
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 export type DatabaseVersionInfo = {
   state: "ready" | "not-initialized" | "unavailable";
@@ -200,6 +200,21 @@ export function initializeDatabaseSchema(sqlite: Database.Database) {
       file_id TEXT NOT NULL,
       file_size INTEGER,
       mtime_ms INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Move reconciliation that could not be decided (#274): the removed row,
+    -- its size+mtime identity, and the active candidates it matched. Kept so
+    -- an explicit confirmation can resolve it; scanning never hashes to
+    -- break the tie.
+    CREATE TABLE IF NOT EXISTS ambiguous_moves (
+      removed_file_id TEXT PRIMARY KEY,
+      path TEXT NOT NULL,
+      library_root TEXT,
+      file_size INTEGER,
+      mtime_ms INTEGER,
+      candidate_file_ids TEXT NOT NULL DEFAULT '[]',
+      candidate_count INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);

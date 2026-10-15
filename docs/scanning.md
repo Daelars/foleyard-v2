@@ -34,16 +34,20 @@ journal (#269); that step never unlinks and never fails the scan.
    extension wins).
 2. **Reconcile** — `reconcile.ts` (`markRemovedFiles`) diffs discovered
    paths against the index: unchanged files skipped, missing files marked
-   removed, new/changed files queued.
+   removed, new/changed files queued. Removed paths that reappear elsewhere
+   under the same root are then reconciled as moves by size+mtime identity
+   (`docs/library.md`): a single candidate inherits the removed recording's
+   organization data, while an ambiguous match is recorded in
+   `ambiguous_moves` and counted in `ambiguousMoves` instead of guessed.
 3. **Metadata-queue** — `metadata-queue.ts` extracts metadata with
    concurrency 16 and write batches of 250 (`METADATA_CONCURRENCY`,
    `METADATA_WRITE_BATCH_SIZE` in `scan-runner.ts`).
 4. **Progress** — `progress.ts` (`createScanStatus`/`finishScanStatus`)
    maintains `ScanStatus { running, phase, discovered, indexed,
-   skippedUnchanged, metadataProcessed, added, updated, removed, failed,
-   errors, … }`; the client polls via `src/hooks/use-scan-polling.ts`
-   (`GET /api/scan` every 2 s; transient poll errors ignored; settle
-   callback fires when `running` flips false).
+   skippedUnchanged, metadataProcessed, added, updated, removed,
+   ambiguousMoves, failed, errors, … }`; the client polls via
+   `src/hooks/use-scan-polling.ts` (`GET /api/scan` every 2 s; transient
+   poll errors ignored; settle callback fires when `running` flips false).
 
 ## Contracts
 
@@ -57,6 +61,12 @@ journal (#269); that step never unlinks and never fails the scan.
 
 - Partial failure is normal: per-file metadata errors increment
   `failed`/`errors` without aborting the run; the summary records them.
+- Move reconciliation is deliberately conservative: a missing-then-reappearing
+  path is relinked only on an exact size+mtime match and only when the
+  candidate is unique. More than one candidate is ambiguous, stays as a
+  removal plus a new add, and is recorded in `ambiguous_moves` and reported as
+  `ambiguousMoves` (see `docs/library.md`). The scan never hashes content to
+  break the tie.
 - B03 (expected-to-fail): collection-branch counts disagree with the
   file list (#137).
 - I03 (expected-to-fail): order-dependent root ownership — overlapping
@@ -73,6 +83,10 @@ journal (#269); that step never unlinks and never fails the scan.
   `src/lib/scanner/metadata-queue.ts`, `src/lib/scanner/progress.ts`,
   `src/lib/scanner/validation.ts`, `src/lib/scanner/filesystem.ts`,
   `src/lib/scanner/types.ts` — phase modules and seams
+- `src/lib/files/identity.ts` — the size+mtime identity signal
+- `src/lib/database/files/batch.ts` — move reconciliation and organization
+  data transfer
+- `src/lib/database/move-journal.ts` — `ambiguous_moves` storage
 - `src/lib/scanner.ts` — legacy/coordinating scanner surface
 - `src/hooks/use-scan-polling.ts` — client polling
 - `src/app/library/use-settings-scan.ts` — settings scan controls

@@ -10,6 +10,7 @@ export function createScanStatus(): ScanStatus { return {
     added: 0,
     updated: 0,
     removed: 0,
+    ambiguousMoves: 0,
     failed: 0,
     errors: 0,
     total: 0,
@@ -31,6 +32,7 @@ export function resetScanStatus(status: ScanStatus, libraryRoot: string) {
       added: 0,
       updated: 0,
       removed: 0,
+      ambiguousMoves: 0,
       failed: 0,
       errors: 0,
       total: 0,
@@ -51,6 +53,6 @@ export function finishScanStatus(status: ScanStatus, error?: unknown) {
     status.failed = Math.max(1, status.failed);
     status.errors = Math.max(1, status.errors);
   }
-  const { discovered, indexed, skippedUnchanged, metadataProcessed, added, updated, removed, failed, errors, finishedAt } = status;
-  status.lastScanSummary = { discovered, indexed, skippedUnchanged, metadataProcessed, added, updated, removed, failed, errors, finishedAt };
+  const { discovered, indexed, skippedUnchanged, metadataProcessed, added, updated, removed, ambiguousMoves, failed, errors, finishedAt } = status;
+  status.lastScanSummary = { discovered, indexed, skippedUnchanged, metadataProcessed, added, updated, removed, ambiguousMoves, failed, errors, finishedAt };
 }

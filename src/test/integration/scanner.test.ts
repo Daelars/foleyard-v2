@@ -1,4 +1,4 @@
-import { rmSync, utimesSync } from "node:fs";
+import { renameSync, rmSync, utimesSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,7 @@ import { SqliteAudioFileRepository } from "@/lib/database/file-repository";
 import { SqliteTagRepository } from "@/lib/database/tag-repository";
 import { SqliteCollectionRepository } from "@/lib/database/collection-repository";
 import { SqliteDeletionJournal } from "@/lib/database/deletion-journal";
+import { SqliteMoveJournal } from "@/lib/database/move-journal";
 import { SqliteSettingsRepository } from "@/lib/database/settings-repository";
 import { startScan, getScanStatus } from "@/lib/scanner/run-scan";
 
@@ -70,7 +71,7 @@ vi.mock("@/lib/db", () => ({
     state.files!.batchUpdateFileMetadata(records, now),
   batchMarkRemoved: (paths: string[], removedAt: string, now: string) =>
     state.files!.batchMarkRemoved(paths, removedAt, now),
-  reconcileMovedFiles: () => state.files!.reconcileMovedFiles(),
+  reconcileMovedFiles: (activeFileIds?: string[]) => state.files!.reconcileMovedFiles(activeFileIds),
   listPendingDeletions: () => state.journal!.list(),
   clearPendingDeletions: (paths: string[]) => state.journal!.clear(paths),
   analyzeStatistics: () => state.files!.analyzeStatistics(),
@@ -231,6 +232,71 @@ describe("scanner", () => {
       expect(files.getFileByPath(kick)?.removedAt).not.toBeNull();
       expect(files.getFileCount()).toBe(1);
       expect(files.getFileCount({ showRemoved: true })).toBe(2);
+    } finally {
+      scratch.dispose();
+    }
+  });
+
+  it("keeps organization data on a recording that moves across a rescan (#274)", async () => {
+    const scratch = createScratchLibrary("foleyard-scan-move-");
+    try {
+      const original = scratch.writeFile("a/hit.wav", "same-audio-bytes");
+      settings.setLibraryRoots([scratch.root]);
+
+      const first = await runScanToIdle();
+      expect(first.added).toBe(1);
+      const oldFile = files.getFileByPath(original)!;
+      const movedPath = path.join(scratch.root, "c", "hit.wav");
+      const tagId = state.tags!.createTag("kick");
+      state.tags!.attachTagToFile(oldFile.id, tagId);
+
+      // A rename preserves size and mtime, so the new path is the same
+      // recording; the tags must follow it.
+      scratch.directory("c");
+      renameSync(original, movedPath);
+      const second = await runScanToIdle();
+
+      expect(second.ambiguousMoves).toBe(0);
+      const moved = files.getFileByPath(movedPath)!;
+      expect(moved.id).not.toBe(oldFile.id);
+      expect(state.tags!.getTagsForFile(moved.id).map((tag) => tag.name)).toEqual(["kick"]);
+      expect(files.getFileById(oldFile.id), "the old row is retired").toBeNull();
+    } finally {
+      scratch.dispose();
+    }
+  });
+
+  it("records an ambiguous move instead of guessing across a rescan (#274)", async () => {
+    const scratch = createScratchLibrary("foleyard-scan-ambiguous-");
+    try {
+      const stamp = new Date(1_700_000_000_000);
+      const original = scratch.writeFile("a/hit.wav", "same-audio-bytes");
+      utimesSync(original, stamp, stamp);
+      settings.setLibraryRoots([scratch.root]);
+      await runScanToIdle();
+      const gone = files.getFileByPath(original)!;
+      const tagId = state.tags!.createTag("kick");
+      state.tags!.attachTagToFile(gone.id, tagId);
+
+      // Two new files appear with the same identity as the disappearing one:
+      // the match cannot be decided and must not be guessed.
+      const secondPath = scratch.writeFile("b/hit.wav", "same-audio-bytes");
+      const thirdPath = scratch.writeFile("c/hit.wav", "same-audio-bytes");
+      utimesSync(secondPath, stamp, stamp);
+      utimesSync(thirdPath, stamp, stamp);
+      rmSync(original);
+      const status = await runScanToIdle();
+
+      expect(status.ambiguousMoves).toBe(1);
+      const recorded = new SqliteMoveJournal(sqlite).list();
+      expect(recorded).toHaveLength(1);
+      expect(recorded[0].removedFileId).toBe(gone.id);
+      expect(recorded[0].candidateCount).toBe(2);
+      // The removed recording keeps its tag; neither survivor inherits it.
+      expect(state.tags!.getTagsForFile(gone.id).map((tag) => tag.name)).toEqual(["kick"]);
+      for (const survivor of [secondPath, thirdPath]) {
+        expect(state.tags!.getTagsForFile(files.getFileByPath(survivor)!.id)).toEqual([]);
+      }
     } finally {
       scratch.dispose();
     }

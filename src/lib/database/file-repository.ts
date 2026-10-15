@@ -1,7 +1,7 @@
 import type { AudioFile, IndexedAudioFile } from "@yard-core";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
-import type { AudioFileRepository, AudioFileTouchEntry, FileSearchQuery, ScanFileRecord } from "@yard-core";
+import type { AudioFileRepository, AudioFileTouchEntry, FileSearchQuery, MovedFileReconciliation, ScanFileRecord } from "@yard-core";
 
 
 import { sqlite as defaultSqlite } from "./connection";
@@ -45,7 +45,7 @@ batchUpdateFileMetadata(
   ): void { return batch.batchUpdateFileMetadata({ sqlite: this.sqlite, db: this.db }, records, now); }
 markFileRemoved(pathValue: string, removedAt: string) { return writes.markFileRemoved({ sqlite: this.sqlite, db: this.db }, pathValue, removedAt); }
 batchMarkRemoved(paths: string[], removedAt: string, now: string): void { return batch.batchMarkRemoved({ sqlite: this.sqlite, db: this.db }, paths, removedAt, now); }
-reconcileMovedFiles(): number { return batch.reconcileMovedFiles({ sqlite: this.sqlite, db: this.db }); }
+reconcileMovedFiles(activeFileIds?: string[]): MovedFileReconciliation { return batch.reconcileMovedFiles({ sqlite: this.sqlite, db: this.db }, activeFileIds); }
 analyzeStatistics(): void { this.sqlite.exec("ANALYZE"); }
 toggleFavorite(id: string): boolean { return writes.toggleFavorite({ sqlite: this.sqlite, db: this.db }, id); }
 setFavorites(ids: string[], isFavorite: boolean): void { return writes.setFavorites({ sqlite: this.sqlite, db: this.db }, ids, isFavorite); }
@@ -78,7 +78,7 @@ export const batchUpsertFiles = (records: ScanFileRecord[], now: string) => getF
 export const batchUpdateFileMetadata = (...args: Parameters<SqliteAudioFileRepository["batchUpdateFileMetadata"]>) => getFileRepo().batchUpdateFileMetadata(...args);
 export const markFileRemoved = (path: string, removed: string) => getFileRepo().markFileRemoved(path, removed);
 export const batchMarkRemoved = (paths: string[], removed: string, now: string) => getFileRepo().batchMarkRemoved(paths, removed, now);
-export const reconcileMovedFiles = () => getFileRepo().reconcileMovedFiles();
+export const reconcileMovedFiles = (activeFileIds?: string[]) => getFileRepo().reconcileMovedFiles(activeFileIds);
 export const analyzeStatistics = () => getFileRepo().analyzeStatistics();
 export const toggleFavorite = (id: string) => getFileRepo().toggleFavorite(id);
 export const setFavorites = (ids: string[], isFavorite: boolean) => getFileRepo().setFavorites(ids, isFavorite);

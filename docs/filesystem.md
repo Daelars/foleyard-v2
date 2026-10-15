@@ -41,7 +41,8 @@ than 24 h (user directories and directory links excluded). Desktop reveal
 uses server grants. Permanent deletion (`deleteFiles` with
 `permanent: true`) unlinks without the recycle bin and requires an indexed
 file inside a Library root whose on-disk identity still matches the row
-(size and mtime); the durable intent is journalled (`pending_deletions`)
+(size and mtime — the same identity move reconciliation uses, see
+`docs/library.md`); the durable intent is journalled (`pending_deletions`)
 before the unlink and cleared once the index agrees. A path that was
 replaced since it was indexed is refused, so the delete never lands on a
 different file. Janitor folder deletion rechecks containment
@@ -127,4 +128,4 @@ the desktop picker and the routes above in a development checkout.
 - `docs/adr/filesystem-access.md` — ADR this guide implements
 - `docs/library.md` — roots and removal semantics
 - `docs/scanning.md` — root validation and discovery
-- `docs/development.md` — expected-failures ledger (8 live entries)
+- `docs/development.md` — expected-failures ledger (7 live entries)

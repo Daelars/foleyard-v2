@@ -11,7 +11,7 @@ A single SQLite file (better-sqlite3 + Drizzle) stores the library index,
 organization data, and settings. Schema is created and evolved by hand-rolled
 SQL in `src/lib/database/migrations.ts`; there is no drizzle-kit workflow
 (the config would point at a nonexistent `./foleyard.db`, so it stays
-unwired by design). `CURRENT_SCHEMA_VERSION = 3` with a `schema_migrations`
+unwired by design). `CURRENT_SCHEMA_VERSION = 4` with a `schema_migrations`
 ledger records what was applied.
 
 There is no remote database, no public data SDK, and no external provider.
@@ -40,6 +40,7 @@ Tables in `src/lib/schema.ts` (mirrored by DDL in `migrations.ts`):
 | `collections` / `file_collections` | regular + smart Collections and membership |
 | `files_fts` | FTS5 trigram index over `files.filename` (#251), external content kept in sync by triggers |
 | `pending_deletions` | durable intent for permanent deletion (#269): path, recorded identity, and the file row it belongs to |
+| `ambiguous_moves` | scan reconciliation that could not decide a move (#274): the removed row, its size+mtime identity, and the active candidates it matched — kept for explicit confirmation instead of a guess |
 
 Connections set `busy_timeout = 5000`, `journal_mode = WAL`,
 `foreign_keys = ON`, `synchronous = NORMAL`, `temp_store = MEMORY`, a
@@ -61,7 +62,7 @@ have not run before. Migration applies `CREATE TABLE IF NOT EXISTS`
 plus `ensureColumn` backfills (`mtime_ms`, `removed_at`, `last_scanned_at`,
 `directory`, `library_root`, `codec`, `is_smart`, `filter`, `color`), creates
 indexes, backfills `library_root` ownership from configured roots, then
-records version 1 in `schema_migrations`.
+records `CURRENT_SCHEMA_VERSION` in `schema_migrations`.
 
 Baseline behavior: pre-ledger databases are upgraded in place and baselined
 to `CURRENT_SCHEMA_VERSION` without data loss; version recording is wrapped
@@ -85,7 +86,7 @@ Database paths (`src/lib/database-path.ts`):
 
 ## Contracts
 
-- Internal: `CURRENT_SCHEMA_VERSION = 3`; `schema_migrations(version,
+- Internal: `CURRENT_SCHEMA_VERSION = 4`; `schema_migrations(version,
   applied_at)` ledger; `DatabaseVersionInfo { state, migration,
   appliedVersion? }`.
 - `getDatabaseVersionInfo(sqlite?)` is a read-only probe: with no handle it
@@ -117,6 +118,7 @@ Database paths (`src/lib/database-path.ts`):
 - `src/lib/database/migrations.ts` — DDL, `CURRENT_SCHEMA_VERSION`,
   `getDatabaseVersionInfo`, `initializeDatabaseSchema`
 - `src/lib/database/deletion-journal.ts` — `pending_deletions` storage
+- `src/lib/database/move-journal.ts` — `ambiguous_moves` storage
 - `src/lib/database-path.ts` — web/desktop/legacy path resolution
 - `electron/main/database.cjs` — packaged desktop DB ensure/reset
 - `src/lib/runtime-info.ts` — surfaces the version probe in snapshots
@@ -128,7 +130,7 @@ Probe without side effects:
 ```ts
 import { getDatabaseVersionInfo } from "@/lib/database/migrations";
 getDatabaseVersionInfo(); // { state: "not-initialized", migration: "unversioned" }
-getDatabaseVersionInfo(sqlite); // { state: "ready", migration: "versioned", appliedVersion: 1 }
+getDatabaseVersionInfo(sqlite); // { state: "ready", migration: "versioned", appliedVersion: 4 }
 ```
 
 Check the ledger directly:

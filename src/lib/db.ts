@@ -92,6 +92,11 @@ export {
   recordPendingDeletion,
 } from "@/lib/database/deletion-journal";
 
+export {
+  clearAmbiguousMoves,
+  listAmbiguousMoves,
+} from "@/lib/database/move-journal";
+
 import { sqlite } from "@/lib/database/connection";
 import { SqliteAudioFileRepository } from "@/lib/database/file-repository";
 import { SqliteTagRepository } from "@/lib/database/tag-repository";

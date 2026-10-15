@@ -325,8 +325,10 @@ rechecks the effective set, and unapproved calls fail with
 `permission-denied`. The operations suite
 (`packages/yard-core/src/extensions-v2/operations.test.ts`) holds the
 conformance cases, including bounded 5,200-record paging and
-owned-only cleanup. Expected: undeclared access fails closed; no
-overwrites outside job-owned output. Provenance: API v2 operation
+version-checked owned-only cleanup. Expected: undeclared access fails
+closed; outputs are created exclusively, so nothing outside job-owned
+output is truncated or overwritten, and cleanup never deletes a
+replacement at a previously owned path. Provenance: API v2 operation
 services.
 
 ### 7. Run a job with progress and cancellation

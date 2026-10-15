@@ -4,6 +4,11 @@ import { getLibraryRoots } from "@/lib/db";
 import { registerGrant } from "@/lib/filesystem-boundary";
 import type { V2FileContentPorts, V2GrantStore, V2PathIo } from "@yard-core";
 
+import {
+  copyV2FileExclusive,
+  removeV2FileIfVersion,
+  writeV2FileBytesExclusive,
+} from "./output-files";
 import { getV2Runtime } from "./runtime";
 
 /**
@@ -13,10 +18,14 @@ import { getV2Runtime } from "./runtime";
  * The core operation services authorize every path through the
  * filesystem ADR guards; this module supplies the node primitives
  * underneath and bridges desktop picker tokens to core grant IDs.
- * Grants and tokens live on the process-wide runtime, so a grant issued
- * by one route bundle authorizes execution through another. Tokens
- * never enter definitions, logs, exports, or persisted state, and a
- * restart clears them so previously issued access stops working.
+ * Output creation is exclusive and cleanup is version-checked, both
+ * through `output-files.ts` (#267): a pre-existing file is never
+ * truncated and a replacement at a previously owned path is never
+ * deleted. Grants and tokens live on the process-wide runtime, so a
+ * grant issued by one route bundle authorizes execution through
+ * another. Tokens never enter definitions, logs, exports, or persisted
+ * state, and a restart clears them so previously issued access stops
+ * working.
  */
 
 const nodePathIo: V2PathIo = {
@@ -39,19 +48,15 @@ export function createV2FileContentPorts(): V2FileContentPorts {
   return {
     readFileBytes: async (canonicalPath) =>
       new Uint8Array(await fs.promises.readFile(canonicalPath)),
-    copyFile: async (sourceCanonical, destCanonical) =>
-      fs.promises.copyFile(sourceCanonical, destCanonical),
-    writeFileBytes: async (destCanonical, bytes) =>
-      fs.promises.writeFile(destCanonical, bytes),
-    deleteFile: async (canonicalPath) => fs.promises.rm(canonicalPath, { force: true }),
-    exists: async (canonicalPath) => {
-      try {
-        await fs.promises.lstat(canonicalPath);
-        return true;
-      } catch {
-        return false;
-      }
-    },
+    // Exclusive creation and version-checked removal live in
+    // `output-files.ts`, shared with the ZIP writer: the create is the
+    // claim, so a pre-existing or concurrently claimed destination is
+    // never truncated or overwritten.
+    copyFile: copyV2FileExclusive,
+    writeFileBytes: writeV2FileBytesExclusive,
+    deleteFileIfVersion: async (canonicalPath, version) => ({
+      removed: await removeV2FileIfVersion(canonicalPath, version),
+    }),
     libraryRoots: () => getLibraryRoots(),
     pathIo: () => nodePathIo,
   };

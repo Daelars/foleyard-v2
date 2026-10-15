@@ -295,17 +295,16 @@ function world(overrides?: {
         library,
         files: {
           readFileBytes: async () => new Uint8Array(),
-          copyFile: async () => {},
-          writeFileBytes: async () => {},
-          deleteFile: async () => {},
-          exists: async () => false,
+          copyFile: async () => ({ device: "memory", fileId: "unused" }),
+          writeFileBytes: async () => ({ device: "memory", fileId: "unused" }),
+          deleteFileIfVersion: async () => ({ removed: false }),
           libraryRoots: () => ["/lib"],
           pathIo: () => ({
             realpath: async (p: string) => p,
             lstat: async () => ({ exists: true, isLink: false }),
           }),
         },
-        archive: { createZipArchive: async () => ({ bytesWritten: 0 }) },
+        archive: { createZipArchive: async () => ({ bytesWritten: 0, version: { device: "memory", fileId: "unused" } }) },
         settings: { readRaw: () => undefined, writeRaw: () => {} },
         extensionState: {
           readAll: () => Object.fromEntries(stateStore),

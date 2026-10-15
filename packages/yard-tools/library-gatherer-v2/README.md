@@ -33,10 +33,11 @@ into one main Foleyard library.
   names. No side effects, no destination needed.
 - **gather** — job (also runs in `direct` execute with progress/cancel
   as no-ops). Copies each planned file into the destination grant
-  through the source-copy op (never overwrites: an existing name is
-  skipped or fails with a reason, per `skip-duplicates`) and inserts
+  through the source-copy op (never overwrites: the destination is
+  created exclusively, so an existing name is skipped or fails with a
+  reason, per `skip-duplicates`) and inserts
   index records via the library-mutation op. Cancellation disposes
-  job-owned copies and settles honestly.
+  job-owned copies by version identity and settles honestly.
 
 ## Policies
 
@@ -51,7 +52,9 @@ into one main Foleyard library.
   subfolder.
 - **Conflicts fail with reasons, never overwrite.** Planned names
   dedupe case-insensitively within the run; destination collisions
-  skip (when `skip-duplicates`) or fail with a reason.
+  skip (when `skip-duplicates`) or fail with a reason. The copy op
+  creates each destination exclusively, so a pre-existing or
+  concurrently claimed name is refused rather than truncated.
 
 ## Before/after parity
 

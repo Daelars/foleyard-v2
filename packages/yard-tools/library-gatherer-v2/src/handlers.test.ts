@@ -7,12 +7,14 @@ import {
   ExtensionV2Registry,
   V2GrantStore,
   V2JobCancelledError,
+  V2OutputConflictError,
   V2SourceGrantStore,
   validateV2Value,
   type ExtensionV2Definition,
   type IndexedAudioFile,
   type V2DirectoryEntry,
   type V2FileContentPorts,
+  type V2FileVersion,
   type V2FolderScanPorts,
   type V2HostServices,
   type V2JobReporter,
@@ -116,23 +118,39 @@ function world(overrides?: {
     listPage: () => ({ files, nextCursor: null }),
   };
 
+  const versions = new Map<string, V2FileVersion>();
+  let versionSeq = 0;
+  const claim = (path: string): V2FileVersion => {
+    if (bytes.has(path)) throw new V2OutputConflictError(path);
+    versionSeq += 1;
+    const version: V2FileVersion = { device: "memory", fileId: `${path}#${versionSeq}` };
+    versions.set(path, version);
+    return version;
+  };
   const filePorts: V2FileContentPorts = {
     readFileBytes: async (path) => bytes.get(path) ?? new Uint8Array(),
     copyFile: async (source, dest) => {
       const data = bytes.get(source);
       if (!data) throw new Error(`ENOENT: copy source missing: ${source}`);
+      const version = claim(dest);
       bytes.set(dest, data);
       existing.add(dest);
+      return version;
     },
     writeFileBytes: async (dest, data) => {
+      const version = claim(dest);
       bytes.set(dest, data);
       existing.add(dest);
+      return version;
     },
-    deleteFile: async (path) => {
+    deleteFileIfVersion: async (path, version) => {
+      const current = versions.get(path);
+      if (!current || current.fileId !== version.fileId) return { removed: false };
+      versions.delete(path);
       bytes.delete(path);
       existing.delete(path);
+      return { removed: true };
     },
-    exists: async (path) => bytes.has(path),
     libraryRoots: () => ["/lib"],
     pathIo: () => fakePathIo(existing),
   };
@@ -194,7 +212,7 @@ function world(overrides?: {
           sources,
           library,
           files: filePorts,
-          archive: { createZipArchive: async () => ({ bytesWritten: 0 }) },
+          archive: { createZipArchive: async () => ({ bytesWritten: 0, version: { device: "memory", fileId: "unused" } }) },
           settings: { readRaw: () => undefined, writeRaw: () => {} },
           extensionState: { readAll: () => ({}), writeAll: () => {} },
           settingsDeclarations: definition.settings,

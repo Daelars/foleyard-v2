@@ -62,7 +62,10 @@ commandId, selection, input }`:
    sources (shelf reads `v2shelf:sound-shelf-v2`, recent reads the
    recent record), authorized file/archive output, namespaced
    settings/state, and job reporting — never raw DB, routes, React,
-   or Electron.
+   or Electron. Every output is created exclusively (the create is the
+   claim, so a pre-existing file is never truncated and concurrent jobs
+   cannot both claim a destination) and tracked with the created file's
+   version, so cancellation cleanup removes only entries that job made.
 5. **UI.** Values, review plans, and job outcomes return typed; the
    route-local adapters render dialogs, progress and results (there is
    no generic form/preview/result renderer). Per-item availability comes
@@ -82,6 +85,12 @@ tool packages import `yard-core` and relatives only.
   catalog and outcome envelopes.
 - Destination and source access travel through grant stores; raw paths
   never reach handlers.
+- Output creation is exclusive: `V2FileContentPorts.copyFile` /
+  `writeFileBytes` and `V2ArchivePorts.createZipArchive` reject an
+  existing destination with `V2OutputConflictError` (a stable `code`,
+  not a class identity, because route bundles re-evaluate core) and
+  report the created entry's `V2FileVersion`;
+  `deleteFileIfVersion` removes only that version.
 - No provider contracts (waveform/metadata/search) exist; extension
   points mark them `unavailable`.
 
@@ -97,6 +106,9 @@ tool packages import `yard-core` and relatives only.
 
 - `packages/yard-tools/*-v2/src/{definition,handlers}.ts`
 - `packages/yard-core/src/extensions-v2/{registry,catalog,availability,permissions,grants,host,jobs,plans,transport,operations}.ts`
+- `packages/yard-core/src/extensions-v2/output-ownership.ts` — created-file
+  versions and the output-conflict error; `src/lib/extensions-v2/output-files.ts`
+  — exclusive creation and version-checked removal
 - `src/lib/extensions-v2/runtime.ts` — the one process-wide v2 runtime
 - `src/lib/extensions-v2/host.ts` — production registry + enablement
 - `src/app/api/extensions-v2/**/route.ts` — HTTP surface

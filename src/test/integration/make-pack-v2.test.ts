@@ -26,9 +26,9 @@ import {
   type V2FileContentPorts,
   type V2HostServices,
   type V2LibraryReadPorts,
-  type V2PathIo,
 } from "@yard-core";
 import { createV2ArchivePorts } from "@/lib/extensions-v2/archive";
+import { createV2FileContentPorts } from "@/lib/extensions-v2/filesystem";
 import {
   getV2Registry,
   isV2ExtensionEnabled,
@@ -188,35 +188,10 @@ function realWorld(input: {
     progressCalls: 0,
   };
 
-  const nodeIo: V2PathIo = {
-    realpath: (candidate) => fs.promises.realpath(candidate),
-    lstat: async (candidate) => {
-      try {
-        const entry = await fs.promises.lstat(candidate);
-        return { exists: true, isLink: entry.isSymbolicLink() };
-      } catch (error) {
-        if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-          return { exists: false, isLink: false };
-        }
-        throw error;
-      }
-    },
-  };
+  // The shipped ports: exclusive creation and version-checked removal.
   const filePorts: V2FileContentPorts = {
-    readFileBytes: async (candidate) => new Uint8Array(await fs.promises.readFile(candidate)),
-    copyFile: (source, dest) => fs.promises.copyFile(source, dest),
-    writeFileBytes: (dest, bytes) => fs.promises.writeFile(dest, bytes),
-    deleteFile: (candidate) => fs.promises.rm(candidate, { force: true }),
-    exists: async (candidate) => {
-      try {
-        await fs.promises.lstat(candidate);
-        return true;
-      } catch {
-        return false;
-      }
-    },
+    ...createV2FileContentPorts(),
     libraryRoots: () => [libDir],
-    pathIo: () => nodeIo,
   };
   const library: V2LibraryReadPorts = {
     getFileById: (id) => byId.get(id) ?? null,

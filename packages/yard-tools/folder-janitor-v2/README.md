@@ -52,7 +52,11 @@ unusual formats, and missing files, then clean up.
   (`truncated: true` flags that case).
 - **Bounds.** Up to `MAX_SCAN_RECORDS` (50,000) index records and
   `MAX_FOLDER_LISTINGS` (5,000) directory listings per scan; exceeding
-  either sets `truncated`.
+  either sets `truncated`. Each listing returns at most
+  `V2_FOLDER_LIST_LIMIT` (500) entries and stops before reading or
+  statting the rest of the folder (#315): a folder past the bound comes
+  back `truncated`, so a partially seen tree is never reported missing
+  or empty instead of silently listed in part.
 - **Destructive deletes are contained.** `delete-folders` runs through
   the authorized delete op: the folder must sit strictly inside a
   Library root (never a root itself) and must still be empty at delete

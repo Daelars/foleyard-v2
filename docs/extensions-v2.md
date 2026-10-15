@@ -212,6 +212,11 @@ approved; disabling removes its UI and listeners.
 
 - Unknown capabilities deny; invalid contexts fail predictably.
 - Missing, expired, or foreign grants deny.
+- Folder listing is bounded to `V2_FOLDER_LIST_LIMIT` (500) entries
+  before any directory work: an oversized folder is read and statted
+  only up to one entry past the returned page and comes back
+  `truncated`, never as a silent partial list. Callers that need
+  complete coverage must narrow the folder.
 - Altered, expired, or replayed plans reject per the documented retry rules.
 - No generic undo. Reversible application changes, job-owned
   temporary cleanup, and irreversible file effects stay distinct.

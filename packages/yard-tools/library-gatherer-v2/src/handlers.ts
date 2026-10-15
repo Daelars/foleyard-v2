@@ -116,36 +116,35 @@ async function collectSourceFiles(
   let rootName = "";
   let complete = true;
   while (queue.length > 0) {
+    if (budget.remaining <= 0) {
+      complete = false;
+      break;
+    }
     const dir = queue.shift();
-    let cursor: number | undefined = 0;
-    do {
-      if (budget.remaining <= 0) {
-        complete = false;
-        break;
-      }
-      budget.remaining -= 1;
-      ctx.operations.jobs.throwIfCancelled();
-      let page;
-      try {
-        page = await folders.listFolder(
-          dir === undefined ? { grantId, cursor } : { grantId, path: dir, cursor },
-        );
-      } catch {
-        complete = false;
-        break;
-      }
-      if (dir === undefined && !rootName) rootName = baseName(page.root);
-      for (const entry of page.entries) {
-        if (entry.kind === "file") {
-          if (isAudioFile(entry.name, allowed)) {
-            files.push({ sourcePath: entry.path, filename: entry.name, size: entry.size ?? 0 });
-          }
-        } else {
-          queue.push(entry.path);
+    budget.remaining -= 1;
+    ctx.operations.jobs.throwIfCancelled();
+    let page;
+    try {
+      page = await folders.listFolder(
+        dir === undefined ? { grantId } : { grantId, path: dir },
+      );
+    } catch {
+      complete = false;
+      continue;
+    }
+    if (dir === undefined && !rootName) rootName = baseName(page.root);
+    for (const entry of page.entries) {
+      if (entry.kind === "file") {
+        if (isAudioFile(entry.name, allowed)) {
+          files.push({ sourcePath: entry.path, filename: entry.name, size: entry.size ?? 0 });
         }
+      } else {
+        queue.push(entry.path);
       }
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor !== undefined);
+    }
+    // A truncated page means the folder was not seen in full: the walk
+    // settles incomplete, so the preview/gather reports `truncated`.
+    if (page.truncated) complete = false;
   }
   return { files, rootName, complete };
 }

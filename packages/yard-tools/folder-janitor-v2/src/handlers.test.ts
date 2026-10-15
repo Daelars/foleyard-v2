@@ -6,6 +6,7 @@ import {
   ExtensionV2Host,
   ExtensionV2Registry,
   V2GrantStore,
+  V2_FOLDER_LIST_LIMIT,
   validateV2Value,
   type ExtensionV2Definition,
   type IndexedAudioFile,
@@ -100,7 +101,10 @@ type World = {
   definition: ExtensionV2Definition;
 };
 
-function world(overrides?: { granted?: string[] }): World {
+function world(overrides?: {
+  granted?: string[];
+  listDirectory?: V2FolderScanPorts["listDirectory"];
+}): World {
   const definition = createFolderJanitorV2Definition();
   const registry = new ExtensionV2Registry();
   registry.register(definition);
@@ -142,11 +146,11 @@ function world(overrides?: { granted?: string[] }): World {
   const folderPorts: V2FolderScanPorts = {
     libraryRoots: () => ["/lib"],
     pathIo: () => fakePathIo(knownPaths),
-    listDirectory: async (canonical) => {
+    listDirectory: overrides?.listDirectory ?? (async (canonical) => {
       const entries = tree.get(canonical);
       if (!entries) throw Object.assign(new Error(`ENOENT: ${canonical}`), { code: "ENOENT" });
       return entries.map((entry) => ({ ...entry }));
-    },
+    }),
     removeEmptyDirectory: async (canonical) => {
       removed.push(canonical);
       tree.delete(canonical);
@@ -244,6 +248,25 @@ describe("folder-janitor-v2 scan-library", () => {
       selection: {},
     });
     expect(result.ok).toBe(false);
+  });
+
+  it("reports an oversized folder as truncated instead of a silent partial walk", async () => {
+    // A folder past the listing bound: the walk sees a bounded page and
+    // settles incomplete, so no indexed file under it is reported
+    // missing and the scan says it was truncated.
+    const big = Array.from({ length: V2_FOLDER_LIST_LIMIT + 100 }, (_, index) =>
+      dirEntry(`f-${index}.wav`, `/lib/f-${index}.wav`, "file"),
+    );
+    const w = world({ listDirectory: async (canonical) => (canonical === "/lib" ? big : []) });
+    const result = await w.host.execute({
+      extensionId: FOLDER_JANITOR_V2_ID,
+      commandId: FOLDER_JANITOR_V2_SCAN_LIBRARY,
+      input: {},
+      selection: {},
+    });
+    const value = immediateValue<FolderJanitorV2ScanResult>(result);
+    expect(value.truncated).toBe(true);
+    expect(value.issueKinds).not.toContain("missing-file");
   });
 });
 

@@ -44,7 +44,10 @@ into one main Foleyard library.
   grants (E1 #176); expired or foreign grants deny with a reason.
 - **Bounds.** Up to `MAX_SOURCE_LISTINGS` (5,000) directory listings per
   preview/gather walk and `MAX_GATHER_FILES` (500) files copied per
-  gather; exceeding either sets `truncated` with a reason.
+  gather; exceeding either sets `truncated` with a reason. Each listing
+  returns at most `V2_FOLDER_LIST_LIMIT` (500) entries and stops before
+  reading or statting the rest of the folder (#315), so an oversized
+  source folder comes back `truncated` rather than silently in part.
 - **Flat destination.** The copy op forbids path separators, so v2
   gathers into one flat folder — grouping shows up in the name
   (`<folder> - <file>`) when `preserve-folder-names` is on, not as a

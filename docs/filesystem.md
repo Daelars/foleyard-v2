@@ -34,8 +34,9 @@ gates `/api/audio`, `/api/waveform`, and permanent-delete prechecks
 against `getLibraryRoots()`. Writable: `resolveWritablePath(candidate,
 grantToken)` rejects unknown tokens, then resolves every existing
 ancestor before accepting new output segments. `POST /api/desktop/grants`
-issues grants via the desktop picker; Gatherer and Make Pack destinations
-must present the token. Drop Rules stages drag copies in owned directories
+registers the folder the desktop picker chose; Gatherer and Make Pack
+destinations spend the single-use proof it returns at the v2 grant routes
+(see below). Drop Rules stages drag copies in owned directories
 under its configured staging directory and removes owned stages older
 than 24 h (user directories and directory links excluded). Desktop reveal
 uses server grants. Permanent deletion (`deleteFiles` with
@@ -47,9 +48,11 @@ and emptiness immediately before removing the folder.
 
 v2 reuses the same grant shape through its own storage
 (`src/lib/extensions-v2/filesystem.ts`, `V2GrantStore` in core):
-`POST /api/extensions-v2/grants` bridges a renderer-picked folder
-into a per-extension grant ID; handlers consume the ID, never the
-token. Readable Library roots and writable destination grants stay
+`POST /api/extensions-v2/grants` (and `/source-grants`) spends a
+single-use picker proof the native picker minted into a per-extension
+grant ID; handlers consume the ID, never the proof. A caller-supplied
+directory path is never accepted as consent — no proof, no grant.
+Readable Library roots and writable destination grants stay
 distinct; missing, expired, or foreign grants deny. Operation
 services authorize the actual call, including derived output and
 temporary paths. Output creation is exclusive
@@ -79,6 +82,11 @@ entry.
   so a pre-existing or concurrently claimed destination is never
   truncated and a replacement at a previously owned path is never
   deleted.
+- Picker proofs (`V2PickerProofStore` in core, minted at
+  `POST /api/desktop/grants`, spent at the extension grant routes) are
+  single-use, extension- and kind-scoped, expire in five minutes, and die
+  on restart. `src/lib/extensions-v2/picker-grant-client.ts` is the one
+  renderer flow that asks for a proof and spends it.
 
 ## Failure behavior and limitations
 

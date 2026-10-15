@@ -25,7 +25,7 @@ function registerIpcHandlers() {
   ipcMain.handle(CHANNELS["desktop:copy-file-path"], async (_event, fileId) =>
     copyFilePath(fileId),
   );
-  ipcMain.handle(CHANNELS["desktop:pick-folder"], async () => {
+  ipcMain.handle(CHANNELS["desktop:pick-folder"], async (_event, purpose) => {
     const { dialog } = require("electron");
     const result = await dialog.showOpenDialog({
       properties: ["openDirectory"],
@@ -33,7 +33,7 @@ function registerIpcHandlers() {
     if (result.canceled || !result.filePaths.length) {
       return { ok: false, error: "No folder selected" };
     }
-    return await grantDirectoryPath(result.filePaths[0]);
+    return await grantDirectoryPath(result.filePaths[0], purpose);
   });
   ipcMain.handle(CHANNELS["desktop:reveal-in-explorer"], async (_event, fileId) =>
     revealInExplorer(fileId),

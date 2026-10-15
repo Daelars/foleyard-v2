@@ -98,8 +98,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   copyFilePath(fileId) {
     return ipcRenderer.invoke(CHANNELS["desktop:copy-file-path"], fileId);
   },
-  pickFolder() {
-    return ipcRenderer.invoke(CHANNELS["desktop:pick-folder"]);
+  pickFolder(purpose) {
+    return ipcRenderer.invoke(CHANNELS["desktop:pick-folder"], purpose);
   },
   minimizeWindow() {
     return ipcRenderer.invoke(CHANNELS["desktop:window-minimize"]);

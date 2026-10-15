@@ -486,22 +486,26 @@ describe("desktop and supply chain", () => {
       const traversal = await desktopPathPOST(pathRequest(path.join(root, "..", "private.wav")));
       expect(traversal.status).toBe(404);
 
-      // Grants need the desktop secret and issue opaque tokens.
+      // Grants need the desktop secret and mint an opaque single-use proof.
       vi.stubEnv("FOLEYARD_GRANT_SECRET", "test-desktop-secret");
       const grantRequest = (secret?: string) =>
         new NextRequest("http://localhost/api/desktop/grants", {
           method: "POST",
           headers: secret ? { "x-foleyard-grant-secret": secret } : {},
-          body: JSON.stringify({ path: granted }),
+          body: JSON.stringify({
+            path: granted,
+            extensionId: "make-pack-v2",
+            grantKind: "destination",
+          }),
         });
       expect((await desktopGrantsPOST(grantRequest())).status).toBe(403);
       expect((await desktopGrantsPOST(grantRequest("wrong"))).status).toBe(403);
       const grantResponse = await desktopGrantsPOST(grantRequest("test-desktop-secret"));
       expect(grantResponse.status).toBe(200);
-      const grant = (await grantResponse.json()) as { path: string; grantToken: string };
+      const grant = (await grantResponse.json()) as { path: string; proof: string };
       expect(grant.path).toBe(await fsp.realpath(granted));
-      expect(grant.grantToken).toEqual(expect.any(String));
-      expect(grant.grantToken).not.toContain(granted);
+      expect(grant.proof).toEqual(expect.any(String));
+      expect(grant.proof).not.toContain(granted);
     } finally {
       await fsp.rm(temp, { recursive: true, force: true });
     }

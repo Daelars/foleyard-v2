@@ -131,11 +131,16 @@ export async function callRoute<T = unknown>(
     body?: unknown;
     /** Sent raw, bypassing JSON.stringify, to exercise malformed input. */
     rawBody?: string;
+    headers?: Record<string, string>;
   } = {},
 ): Promise<RouteResponse<T>> {
   const method = options.method ?? "POST";
   const url = options.url ?? "http://localhost/api/test";
   const init: ConstructorParameters<typeof NextRequest>[1] = { method };
+
+  if (options.headers) {
+    init.headers = options.headers;
+  }
 
   if (options.rawBody !== undefined) {
     init.body = options.rawBody;

@@ -22,8 +22,8 @@ marketplace, or public authoring SDK.
   registry validation, catalog serialization, availability, permissions
   and grants, host execution, jobs, plans, and the HTTP transport codec.
 - `src/lib/extensions-v2/runtime.ts` owns the one process-wide v2
-  runtime: registration, host execution, plans, grants, jobs,
-  enablement, approvals, and events. Next compiles each route into its
+  runtime: registration, host execution, plans, grants, picker proofs,
+  jobs, enablement, approvals, and events. Next compiles each route into its
   own bundle, so module state forks per route subtree even though the
   process is one realm; every module reads its slice through
   `getV2Runtime()` instead of keeping a per-bundle copy, and the
@@ -91,7 +91,9 @@ tool packages import `yard-core` and relatives only.
   scopes, settings, contributions, value schemas), failure codes,
   catalog and outcome envelopes.
 - Destination and source access travel through grant stores; raw paths
-  never reach handlers.
+  never reach handlers. A grant is issued only when the desktop picker
+  minted a single-use proof for that extension and grant kind, so a
+  caller-supplied path is never consent.
 - Output creation is exclusive: `V2FileContentPorts.copyFile` /
   `writeFileBytes` and `V2ArchivePorts.createZipArchive` reject an
   existing destination with `V2OutputConflictError` (a stable `code`,
@@ -120,7 +122,7 @@ tool packages import `yard-core` and relatives only.
 ## Source map (real file paths)
 
 - `packages/yard-tools/*-v2/src/{definition,handlers}.ts`
-- `packages/yard-core/src/extensions-v2/{registry,catalog,availability,permissions,grants,host,jobs,plans,transport,operations}.ts`
+- `packages/yard-core/src/extensions-v2/{registry,catalog,availability,permissions,grants,picker-proofs,host,jobs,plans,transport,operations}.ts`
 - `packages/yard-core/src/extensions-v2/terminal-results.ts` — bounded
   result projection and diagnostic redaction
 - `packages/yard-core/src/extensions-v2/output-ownership.ts` — created-file
@@ -128,6 +130,7 @@ tool packages import `yard-core` and relatives only.
   — exclusive creation and version-checked removal
 - `src/lib/extensions-v2/runtime.ts` — the one process-wide v2 runtime
 - `src/lib/extensions-v2/host.ts` — production registry + enablement
+- `src/lib/extensions-v2/picker-grant-client.ts` — the renderer picker-to-grant flow
 - `src/app/api/extensions-v2/**/route.ts` — HTTP surface
 - `src/app/(variant-i)/components/extensions/**` — V3 adapters
 - `src/components/CommandPalette/` + `src/app/library/use-palette.ts`

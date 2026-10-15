@@ -120,7 +120,8 @@ Routes (all under `src/app/api/extensions-v2/`, envelopes
 | `/api/extensions-v2/extensions` | GET | enablement + effective permissions |
 | `/api/extensions-v2/extensions/:id` | PATCH | `{ enabled: boolean }` |
 | `/api/extensions-v2/extensions/:id/approvals` | POST / DELETE | approve / revoke permissions |
-| `/api/extensions-v2/grants` | POST | bridge a picked folder into a grant ID |
+| `/api/extensions-v2/grants` | POST | spend a picker proof for a destination grant ID |
+| `/api/extensions-v2/source-grants` | POST | spend a picker proof for a source grant ID |
 | `/api/extensions-v2/settings/:id` | GET | declarations + values + diagnosis |
 | `/api/extensions-v2/settings/:id/:settingId` | PUT | validated write |
 | `/api/extensions-v2/settings/:id/reset` | POST | reset one setting |
@@ -137,12 +138,14 @@ background. Handlers never branch on client input flags.
 
 Deny by default. Effective permissions are declared intersected with
 explicitly approved, in declaration order. The catalog reports the
-same effective set execution enforces. Grants are destination-scoped,
-expire on restart, and never reach handlers as tokens. Read paths and
-mutations both need authorization. Filesystem guards enforce
-canonical-path containment, traversal and link-escape denial, and
-existing-ancestor resolution; job-owned cleanup removes only resources
-the current job owns.
+same effective set execution enforces. Grants are destination- or
+source-scoped, expire on restart, and never reach handlers as tokens or
+proofs. A grant exists only where the native folder picker minted a
+single-use proof the renderer then spent; a caller-supplied path is not
+consent. Read paths and mutations both need authorization. Filesystem
+guards enforce canonical-path containment, traversal and link-escape
+denial, and existing-ancestor resolution; job-owned cleanup removes only
+resources the current job owns.
 
 These services are built for trusted bundled code. They are not a
 sandbox against hostile JavaScript. Do not claim untrusted extension
@@ -221,7 +224,9 @@ approved; disabling removes its UI and listeners.
 ## Failure behavior and limitations
 
 - Unknown capabilities deny; invalid contexts fail predictably.
-- Missing, expired, or foreign grants deny.
+- Missing, expired, or foreign grants deny; picker proofs that are
+  missing, forged, replayed, expired, or minted for another extension or
+  grant kind deny, and a caller-supplied path is never a grant.
 - Altered, expired, or replayed plans reject per the documented retry rules.
 - No generic undo. Reversible application changes, job-owned
   temporary cleanup, and irreversible file effects stay distinct.
@@ -232,7 +237,7 @@ approved; disabling removes its UI and listeners.
 
 - `packages/yard-core/src/extensions-v2/{version,definition,registry,catalog}.ts` — contracts and discovery
 - `packages/yard-core/src/extensions-v2/{invocation,selection,availability,transport}.ts` — invocation path
-- `packages/yard-core/src/extensions-v2/{permissions,grants,filesystem,operations}.ts` — authorization
+- `packages/yard-core/src/extensions-v2/{permissions,grants,picker-proofs,filesystem,operations}.ts` — authorization
 - `packages/yard-core/src/extensions-v2/{jobs,plans,extension-data,events,contributions}.ts` — lifecycle and UI data
 - `src/lib/extensions-v2/host.ts` — application host composition
 - `src/app/api/extensions-v2/` — HTTP wrappers

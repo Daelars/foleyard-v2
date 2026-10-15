@@ -4,6 +4,7 @@ import { useEffect, useRef, type RefObject } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { CommandItem } from "@/components/ui/foleyard";
+import { useModalSurface } from "@/components/variant-i";
 
 import type { PaletteEntry } from "./command-palette";
 
@@ -31,6 +32,15 @@ export function CommandPalette({
   onClose,
 }: CommandPaletteProps) {
   const entryRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  // The palette is a blocking surface: it advertises `role="dialog"` +
+  // `aria-modal="true"`, so it owns focus in, the Tab trap, an inert
+  // background and focus back on the control that opened it.
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const attachSurface = useModalSurface({
+    surfaceRef,
+    onClose,
+    initialFocusRef: inputRef,
+  });
 
   useEffect(() => {
     if (open && activeIndex >= 0) {
@@ -48,9 +58,11 @@ export function CommandPalette({
       onClick={onClose}
     >
       <div
+        ref={attachSurface}
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
+        tabIndex={-1}
         className="w-full max-w-lg overflow-hidden rounded-xl border border-white/15 bg-shell/95 shadow-glow-overlay backdrop-blur-2xl"
         onClick={(event) => event.stopPropagation()}
       >

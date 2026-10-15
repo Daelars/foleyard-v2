@@ -11,6 +11,7 @@ import {
   CommandRow,
   CommandSection,
   Kbd,
+  useModalSurface,
 } from "@/components/variant-i";
 
 import type { PaletteEntry, PaletteSection } from "@/components/CommandPalette/command-palette";
@@ -45,6 +46,15 @@ export function V3CommandPalette({
   onClose: () => void;
 }) {
   const entryRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  // The live palette is the app's blocking command surface: focus in on open,
+  // a Tab trap, an inert workspace and focus back on the invoking control,
+  // exactly like the dialogs it opens from.
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const attachSurface = useModalSurface({
+    surfaceRef,
+    onClose,
+    initialFocusRef: inputRef,
+  });
 
   useEffect(() => {
     if (open && activeIndex >= 0) {
@@ -61,7 +71,15 @@ export function V3CommandPalette({
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-[12vh] backdrop-blur-sm"
       onClick={onClose}
     >
-      <div className="w-full max-w-lg" onClick={(event) => event.stopPropagation()}>
+      <div
+        ref={attachSurface}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        tabIndex={-1}
+        className="w-full max-w-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
         <CommandPanel>
           <div className="flex items-center gap-2.5 border-b border-white/[0.07] px-4">
             <Search className="size-4 shrink-0 text-zinc-500" />

@@ -24,6 +24,12 @@ export {
   useMenuKeyboard,
   TYPEAHEAD_RESET_MS,
 } from "./components/menu-keyboard";
+export {
+  focusableWithin,
+  useModalSurface,
+  FOCUSABLE_SELECTOR,
+} from "./components/modal-surface";
+export type { ModalSurfaceOptions } from "./components/modal-surface";
 export { Switch, Checkbox, Radio } from "./components/controls";
 export {
   StatusBadge,

@@ -1,11 +1,13 @@
 "use client";
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { useRef } from "react";
 import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 import { Kbd } from "./field";
+import { useModalSurface } from "./modal-surface";
 
 // ---------------------------------------------------------------------------
 // Dialog — the variant I confirmation overlay: dark floating panel, hairline
@@ -19,6 +21,7 @@ export function Dialog({
   describedBy,
   children,
   maxWidth = "max-w-sm",
+  closeOnEscape = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -26,7 +29,17 @@ export function Dialog({
   describedBy?: string;
   children: ReactNode;
   maxWidth?: string;
+  /**
+   * Whether Escape dismisses the dialog. Confirmations and flows that must be
+   * answered pass `false`; the backdrop and the explicit actions still close.
+   */
+  closeOnEscape?: boolean;
 }) {
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  // The alertdialog markup promises a modal surface: focus in on open, a Tab
+  // trap, an inert background and focus back on the invoking control.
+  const attachSurface = useModalSurface({ surfaceRef, onClose, closeOnEscape });
+
   if (!open) return null;
   return (
     <div
@@ -34,10 +47,12 @@ export function Dialog({
       onClick={onClose}
     >
       <div
+        ref={attachSurface}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
         aria-describedby={describedBy}
+        tabIndex={-1}
         className={cn(
           "w-full overflow-hidden rounded-xl border border-[var(--vi-edge-hi)] bg-[#101014]/95 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_24px_60px_rgba(0,0,0,0.65),0_0_40px_color-mix(in_oklab,var(--accent-fill)_8%,transparent)]",
           maxWidth,

@@ -67,7 +67,8 @@ import {
 // Area: client mutation lifecycle (#140). Replaces eight files and 61 tests
 // that exercised extracted reducers with 5 integration tests importing
 // use-library-files.ts directly, driven with deferred promises so requests
-// complete out of order — where B04 and B11 live.
+// complete out of order — the live B04 cases, plus the B11 stale-page case
+// fixed in #278.
 
 type JsonResponse = { ok: boolean; json: () => Promise<unknown> };
 const okJson = (data: unknown): JsonResponse => ({
@@ -264,7 +265,7 @@ describe("client mutation lifecycle", () => {
     ).toEqual(["b1"]);
   });
 
-  it.fails("a stale page cannot unlock a newer request or duplicate appended ids (B11)", async () => {
+  it("a stale page cannot unlock a newer request or duplicate appended ids (B11)", async () => {
     const fetch = stubFetch();
     const { result } = renderHook(({ input }) => useLibraryFiles(input), {
       initialProps: { input: baseInput() },

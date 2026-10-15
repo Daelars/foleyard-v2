@@ -110,4 +110,4 @@ the desktop picker and the routes above in a development checkout.
 - `docs/adr/filesystem-access.md` — ADR this guide implements
 - `docs/library.md` — roots and removal semantics
 - `docs/scanning.md` — root validation and discovery
-- `docs/development.md` — expected-failures ledger (8 live entries)
+- `docs/development.md` — expected-failures ledger (7 live entries)

@@ -10,7 +10,7 @@ import {
 import type { SelectModifiers } from "@/components/FileTable/types";
 import type { FileRecord } from "./types";
 
-export type SelectionPlayIds = (ids: string[], id: string) => void;
+export type SelectionPlayIds = (files: FileRecord[], startId: string) => void;
 
 /** Keep only ids still present in the visible list. */
 export function pruneSelection(
@@ -157,7 +157,7 @@ export function useSelection(input: SelectionInput) {
           togglePlayback();
           return current;
         }
-        playIds(orderedIds, file.id);
+        playIds(orderedFiles, file.id);
         return file;
       });
       setSelectedIds([file.id]);
@@ -185,10 +185,7 @@ export function useSelection(input: SelectionInput) {
       if (!next) {
         return;
       }
-      playIds(
-        visible.map((listed) => listed.id),
-        next.id,
-      );
+      playIds(visible, next.id);
       setSelectedFile(next);
       setSelectedIds([next.id]);
       selectionAnchorRef.current = next.id;

@@ -568,9 +568,9 @@ describe("client mutation lifecycle", () => {
     // Route slices: transport titles, scan toasts, palette ids.
     const queue = [file("a"), file("b"), file("c")];
     expect(
-      resolveNextTitle({ files: queue, queue: ["a", "b", "c"], cursor: 0, selectedFileId: "a" }),
+      resolveNextTitle({ queue, cursor: 0, selectedFileId: "a" }),
     ).toBe("b");
-    expect(resolveNextTitle({ files: queue, queue: ["a"], cursor: 0, selectedFileId: "a" })).toBeNull();
+    expect(resolveNextTitle({ queue: [file("a")], cursor: 0, selectedFileId: "a" })).toBeNull();
     expect(
       resolveScanToast({ phase: "done", error: null, errors: 0 } as never),
     ).toMatchObject({ kind: "success" });

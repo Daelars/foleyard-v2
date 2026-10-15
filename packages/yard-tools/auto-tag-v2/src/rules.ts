@@ -38,6 +38,23 @@ export const MAX_QUEUE_FILES = 2000;
 /** How many candidates one listing returns at most. */
 export const MAX_CANDIDATES = 100;
 
+/**
+ * How many candidate records Auto Tag retains in workflow state (#288).
+ * The listing pages the retained queue; anything beyond this bound is
+ * dropped deterministically and reported as truncated, never silently.
+ */
+export const MAX_RETAINED_CANDIDATES = 200;
+
+/** How many example file IDs one retained candidate keeps. */
+export const MAX_CANDIDATE_EXAMPLES = 12;
+
+/**
+ * Serialized byte ceiling for the retained candidate queue. Records are
+ * pruned in priority order until the queue fits, so a large Library can
+ * never push the extension's workflow state past `MAX_V2_STATE_BYTES`.
+ */
+export const MAX_CANDIDATE_STATE_BYTES = 32 * 1024;
+
 export function filenameMatchesToken(filename: string, tok: string): boolean {
   const clean = tok.trim().toLowerCase();
   if (!clean) return false;

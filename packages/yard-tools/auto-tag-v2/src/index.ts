@@ -57,8 +57,11 @@ export {
   type LastRunSummary,
 } from "./handlers";
 export {
+  MAX_CANDIDATE_EXAMPLES,
+  MAX_CANDIDATE_STATE_BYTES,
   MAX_CANDIDATES,
   MAX_QUEUE_FILES,
+  MAX_RETAINED_CANDIDATES,
   MAX_TAG_FILES,
   SEED_RULES,
   cleanCandidateWord,
@@ -69,3 +72,4 @@ export {
   type CandidateEntry,
   type TagRule,
 } from "./rules";
+export { MAX_ARRIVAL_FILES, MAX_ARRIVAL_STATE_BYTES } from "./handlers";

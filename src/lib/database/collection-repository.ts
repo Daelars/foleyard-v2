@@ -7,6 +7,7 @@ import type { Collection } from "@yard-core";
 
 import { sqlite as defaultSqlite } from "./connection";
 import { filenameSearch } from "./filename-search";
+import { chunkArray, SQLITE_MAX_VARIABLES } from "./sql-parameters";
 import { extractSmartQuery } from "@/lib/smart-collection-filter";
 import * as schema from "@/lib/schema";
 
@@ -203,41 +204,61 @@ export class SqliteCollectionRepository implements CollectionRepository {
       .run();
   }
 
+  /**
+   * Materialize a Smart Collection into a regular one (#273). The matched
+   * membership rows and the collection's own `isSmart`/`filter` change commit
+   * as one transaction, so a failure leaves the Smart Collection and its
+   * absent memberships exactly as they were. Membership inserts are chunked
+   * within the shared bind-variable ceiling like every other batch write in
+   * this repository: each row binds two variables, so the chunk is half the
+   * ceiling.
+   */
   convertToRegularCollection(collectionId: string): void {
-    const collection = this.db
-      .select({ filter: schema.collections.filter })
-      .from(schema.collections)
-      .where(eq(schema.collections.id, collectionId))
-      .get() as { filter: string | null } | undefined;
+    // Two bound variables per membership row (file_id, collection_id).
+    const membershipChunkSize = Math.max(1, Math.floor(SQLITE_MAX_VARIABLES / 2));
 
-    const query = extractSmartQuery(collection?.filter ?? null);
-    if (query) {
-      const files = this.db
-        .select({ id: schema.files.id })
-        .from(schema.files)
-        .where(
-          and(
-            sql`${schema.files.removedAt} IS NULL`,
-            filenameSearch(this.sqlite, query),
-          ),
-        )
-        .all() as { id: string }[];
+    const convert = this.sqlite.transaction(() => {
+      const collection = this.db
+        .select({ filter: schema.collections.filter })
+        .from(schema.collections)
+        .where(eq(schema.collections.id, collectionId))
+        .get() as { filter: string | null } | undefined;
 
-      const insertValues = files.map((f) => ({
-        fileId: f.id,
-        collectionId,
-      }));
+      const query = extractSmartQuery(collection?.filter ?? null);
+      if (query) {
+        const files = this.db
+          .select({ id: schema.files.id })
+          .from(schema.files)
+          .where(
+            and(
+              sql`${schema.files.removedAt} IS NULL`,
+              filenameSearch(this.sqlite, query),
+            ),
+          )
+          .all() as { id: string }[];
 
-      if (insertValues.length > 0) {
-        this.db.insert(schema.fileCollections).values(insertValues).onConflictDoNothing().run();
+        const membershipRows = files.map((file) => ({
+          fileId: file.id,
+          collectionId,
+        }));
+
+        for (const chunk of chunkArray(membershipRows, membershipChunkSize)) {
+          this.db
+            .insert(schema.fileCollections)
+            .values(chunk)
+            .onConflictDoNothing()
+            .run();
+        }
       }
-    }
 
-    this.db
-      .update(schema.collections)
-      .set({ isSmart: 0, filter: null })
-      .where(eq(schema.collections.id, collectionId))
-      .run();
+      this.db
+        .update(schema.collections)
+        .set({ isSmart: 0, filter: null })
+        .where(eq(schema.collections.id, collectionId))
+        .run();
+    });
+
+    convert();
   }
 }
 

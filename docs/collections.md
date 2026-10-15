@@ -16,8 +16,8 @@ the Sound Shelf — a bundled extension surface distinct from Collections.
 - Regular Collection: explicit `fileCollections` membership rows managed
   by the user. Smart Collection: a saved `{ q }` filter
   (`extractSmartQuery` in `src/lib/smart-collection-filter.ts`) evaluated
-  at read time; conversion between them is unchunked and non-atomic
-  (finding B09).
+  at read time; conversion between them materializes the current matches in
+  one transaction, chunked within the SQLite bind-variable ceiling.
 - Tags are named labels on files (`fileTags`); favorites are a boolean on
   the file row (`isFavorite`, toggled via `toggleFavorite`/`setFavorites`).
 - Sound Shelf is a bundled yard-tools v2 extension
@@ -55,8 +55,6 @@ its save-search replaces the retired v1 tool.
 
 ## Failure behavior and limitations
 
-- B09 (expected-to-fail, #137): smart conversion is unchunked and
-  non-atomic — large conversions can partially apply.
 - B02 (expected-to-fail, #136): distinct recordings can inherit tags.
 - B04 (expected-to-fail, #140): a late tag failure can erase a newer edit.
 - Deleting a Collection removes membership rows, never audio files (file

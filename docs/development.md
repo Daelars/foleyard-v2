@@ -80,19 +80,19 @@ checkout never ships and is never read by production builds.
 
 ## Failure behavior and limitations
 
-Expected-failures ledger (`docs/expected-failures.md`, 7 entries — a PR
+Expected-failures ledger (`docs/expected-failures.md`, 6 entries — a PR
 that fixes a finding flips its test to `it` and removes the entry in the
 same change; deleting a test without fixing fails CI):
 
-1. B09 — database-correctness: unchunked, non-atomic smart conversion (#137)
-2. B02 — data-loss-prevention: distinct recordings inherit tags (#136)
-3. B10 — data-loss-prevention: removal undone by rescan (#136)
-4. I03 — scanner: order-dependent root ownership (#139)
-5. B04 — client-mutation-lifecycle: late tag failure erases newer edit (#140)
-6. B04 — client-mutation-lifecycle: stale deletion restores old root (#140)
-7. B11 — client-mutation-lifecycle: stale page unlocks duplicate request (#140)
+1. B02 — data-loss-prevention: distinct recordings inherit tags (#136)
+2. B10 — data-loss-prevention: removal undone by rescan (#136)
+3. I03 — scanner: order-dependent root ownership (#139)
+4. B04 — client-mutation-lifecycle: late tag failure erases newer edit (#140)
+5. B04 — client-mutation-lifecycle: stale deletion restores old root (#140)
+6. B11 — client-mutation-lifecycle: stale page unlocks duplicate request (#140)
 
-Previously fixed and removed from the ledger: B03 (collection-branch count
+Previously fixed and removed from the ledger: B09 (unchunked, non-atomic
+smart conversion), B03 (collection-branch count
 disagreement), B01 (gather overwrite),
 B05 (header-only first parse), B06 (silent 5,000-file scan cap), B08
 (null/malformed envelopes now 400 via `validateTransportEnvelope`), B12

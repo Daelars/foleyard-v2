@@ -5,7 +5,7 @@ import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, parsePageInteger } from "@/lib/api/pa
 import { encodeFileCursor } from "@/lib/database/file-cursor";
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteFiles } from '@/lib/files/delete-files';
-import { attachTagToFile, detachTagFromFile, getAttachmentsForFiles, getFileCount, getFiles, getOwnedFilesByIds, getTagsForFiles, setFavorites, setFileTagBatch, toggleFavorite } from '@/lib/db';
+import { attachTagToFile, detachTagFromFile, getAttachmentsForFiles, getFileCount, getFiles, getFilesByIds, getOwnedFilesByIds, getTagsForFiles, restoreFiles, setFavorites, setFileTagBatch, toggleFavorite } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -229,6 +229,20 @@ export async function PATCH(request: NextRequest) {
       }
       detachTagFromFile(id, tagId);
       return NextResponse.json({ success: true });
+    }
+
+    // Explicit restore: the only action that clears a user exclusion (#275).
+    // Scans and metadata refreshes never re-admit a removed file on their own.
+    if (action === 'restoreFiles') {
+      const { fileIds } = body;
+      if (!Array.isArray(fileIds) || fileIds.some((entry) => typeof entry !== 'string' || !entry)) {
+        return errorResponse('fileIds must be string[]', 400);
+      }
+      const paths = getFilesByIds(fileIds).map((file) => file.path);
+      if (paths.length > 0) {
+        restoreFiles(paths, new Date().toISOString());
+      }
+      return NextResponse.json({ success: true, restored: paths.length });
     }
 
     return errorResponse('Unknown action', 400);

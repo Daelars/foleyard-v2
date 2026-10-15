@@ -13,7 +13,6 @@ the same change.
 - B03 — database-correctness: collection-branch count disagreement (#137)
 - B09 — database-correctness: unchunked, non-atomic smart conversion (#137)
 - B02 — data-loss-prevention: distinct recordings inherit tags (#136)
-- B10 — data-loss-prevention: removal undone by rescan (#136)
 - I03 — scanner: order-dependent root ownership (#139)
 - B04 — client-mutation-lifecycle: late tag failure erases newer edit (#140)
 - B04 — client-mutation-lifecycle: stale deletion restores old root (#140)

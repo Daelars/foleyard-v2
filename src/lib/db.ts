@@ -38,6 +38,7 @@ export {
   getFiles,
   markFileRemoved,
   reconcileMovedFiles,
+  restoreFiles,
   analyzeStatistics,
   setFavorites,
   setFileTagBatch,

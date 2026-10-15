@@ -1,10 +1,15 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import type { ScanFileRecord } from "@yard-core";
 import { getFileById } from "./reads";
 import * as schema from "@/lib/schema";
 import type { FileRepositoryContext } from "./context";
 
+/**
+ * Insert or update one scanned record. On conflict, a null incoming
+ * `removedAt` keeps any existing exclusion (#275), so re-seeing a path never
+ * re-admits a file the user removed; an explicit non-null value still writes.
+ */
 export function upsertFile(context: FileRepositoryContext, record: ScanFileRecord): void {
     context.db.insert(schema.files)
       .values({
@@ -41,7 +46,7 @@ export function upsertFile(context: FileRepositoryContext, record: ScanFileRecor
           channels: record.channels,
           fileSize: record.fileSize,
           mtimeMs: record.mtimeMs,
-          removedAt: record.removedAt,
+          removedAt: sql`COALESCE(excluded.removed_at, ${schema.files.removedAt})`,
           detachedAt: null,
           lastScannedAt: record.lastScannedAt,
           updatedAt: new Date().toISOString(),

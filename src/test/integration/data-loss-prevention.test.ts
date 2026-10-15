@@ -58,7 +58,7 @@ describe("data-loss prevention", () => {
     },
   );
 
-  it.fails("keeps a user exclusion through the next scan (B10)", () => {
+  it("keeps a user exclusion through the next scan (B10)", () => {
     const sqlite: TestDatabase = createTestDatabase();
     try {
       const repository = new SqliteAudioFileRepository(sqlite);

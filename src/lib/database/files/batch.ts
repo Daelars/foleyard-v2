@@ -36,6 +36,12 @@ export function batchTouchActiveFiles(context: FileRepositoryContext, paths: str
     txn(paths);
   }
 
+/**
+ * Upsert scanned records. An incoming row with no removal keeps an existing
+ * `removed_at`: a scan rediscovers a file whose path the user excluded and
+ * must not silently re-admit it (#275). Only an explicit restore clears the
+ * flag; `reconcileMovedFiles` still relinks organization data to a live row.
+ */
 export function batchUpsertFiles(context: FileRepositoryContext, records: ScanFileRecord[], now: string): void {
     if (records.length === 0) return;
 
@@ -46,7 +52,7 @@ export function batchUpsertFiles(context: FileRepositoryContext, records: ScanFi
          filename=excluded.filename, library_root=excluded.library_root, directory=excluded.directory, format=excluded.format, codec=excluded.codec,
          duration=excluded.duration, sample_rate=excluded.sample_rate, bit_depth=excluded.bit_depth,
          channels=excluded.channels, file_size=excluded.file_size, mtime_ms=excluded.mtime_ms,
-         removed_at=excluded.removed_at, detached_at=NULL, last_scanned_at=excluded.last_scanned_at, updated_at=excluded.updated_at`,
+         removed_at=COALESCE(excluded.removed_at, removed_at), detached_at=NULL, last_scanned_at=excluded.last_scanned_at, updated_at=excluded.updated_at`,
     );
     const txn = context.sqlite.transaction((batchRecords: ScanFileRecord[]) => {
       for (const record of batchRecords) {
@@ -120,6 +126,27 @@ export function batchMarkRemoved(context: FileRepositoryContext, paths: string[]
     const txn = context.sqlite.transaction((batchPaths: string[]) => {
       for (const filePath of batchPaths) {
         stmt.run(removedAt, now, filePath);
+      }
+    });
+
+    txn(paths);
+  }
+
+/**
+ * Explicitly restore excluded files: clear `removed_at` for the given paths.
+ * This is the only write that re-admits a removed row (#275); scans and
+ * metadata refreshes never call it. A re-add of a detached root reattaches
+ * detached rows but leaves their exclusion in place.
+ */
+export function restoreFiles(context: FileRepositoryContext, paths: string[], now: string): void {
+    if (paths.length === 0) return;
+
+    const stmt = context.sqlite.prepare(
+      "UPDATE files SET removed_at = NULL, updated_at = ? WHERE path = ? AND removed_at IS NOT NULL",
+    );
+    const txn = context.sqlite.transaction((batchPaths: string[]) => {
+      for (const filePath of batchPaths) {
+        stmt.run(now, filePath);
       }
     });
 

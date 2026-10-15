@@ -47,6 +47,7 @@ batchUpdateFileMetadata(
   ): void { return batch.batchUpdateFileMetadata({ sqlite: this.sqlite, db: this.db }, records, now); }
 markFileRemoved(pathValue: string, removedAt: string) { return writes.markFileRemoved({ sqlite: this.sqlite, db: this.db }, pathValue, removedAt); }
 batchMarkRemoved(paths: string[], removedAt: string, now: string): void { return batch.batchMarkRemoved({ sqlite: this.sqlite, db: this.db }, paths, removedAt, now); }
+restoreFiles(paths: string[], now: string): void { return batch.restoreFiles({ sqlite: this.sqlite, db: this.db }, paths, now); }
 reconcileMovedFiles(): number { return batch.reconcileMovedFiles({ sqlite: this.sqlite, db: this.db }); }
 analyzeStatistics(): void { this.sqlite.exec("ANALYZE"); }
 toggleFavorite(id: string): boolean { return writes.toggleFavorite({ sqlite: this.sqlite, db: this.db }, id); }
@@ -82,6 +83,7 @@ export const batchUpsertFiles = (records: ScanFileRecord[], now: string) => getF
 export const batchUpdateFileMetadata = (...args: Parameters<SqliteAudioFileRepository["batchUpdateFileMetadata"]>) => getFileRepo().batchUpdateFileMetadata(...args);
 export const markFileRemoved = (path: string, removed: string) => getFileRepo().markFileRemoved(path, removed);
 export const batchMarkRemoved = (paths: string[], removed: string, now: string) => getFileRepo().batchMarkRemoved(paths, removed, now);
+export const restoreFiles = (paths: string[], now: string) => getFileRepo().restoreFiles(paths, now);
 export const reconcileMovedFiles = () => getFileRepo().reconcileMovedFiles();
 export const analyzeStatistics = () => getFileRepo().analyzeStatistics();
 export const toggleFavorite = (id: string) => getFileRepo().toggleFavorite(id);

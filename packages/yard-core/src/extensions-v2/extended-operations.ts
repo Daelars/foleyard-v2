@@ -38,6 +38,7 @@ import {
   denyAllV2Operations,
   type V2LibraryReadPorts,
   type V2OperationServices,
+  type V2ReadableRootsPorts,
 } from "./operations";
 import {
   createV2ShelfOperations,
@@ -69,6 +70,10 @@ import type { V2SourceGrantStore } from "./source-grants";
  * - `tags.*` reads → `tags:read`, writes → `tags:write`
  *   (membership writes also need `library:read`)
  * - `shelf.*` → `library:read` (matches the v1 Sound Shelf permission)
+ * - `analysis.modelStatus`/`embedTexts` → `embeddings:read`;
+ *   `analysis.downloadModel` → `embeddings:write`; `analysis.embedAudio`
+ *   → `embeddings:read` *and* `files:read` plus the Library-root read
+ *   guard, so inference cannot bypass file-read authorization (#268)
  * - `folders.listFolder` → `files:read` plus Library-root or readable
  *   source-grant containment; `folders.deleteEmptyFolder` →
  *   `files:delete` plus Library-root containment rechecked at delete
@@ -98,6 +103,12 @@ export type V2ExtendedOperationFactoryArgs = {
   tags?: V2TagPorts;
   embeddings?: V2EmbeddingPorts;
   analysis?: V2AnalysisPorts;
+  /**
+   * Readable Library roots + path primitives for analysis inference.
+   * The same guard `files.readFile` uses (#268): without it, audio
+   * inference fails closed rather than decoding a raw indexed path.
+   */
+  analysisReads?: V2ReadableRootsPorts;
   shelf?: V2ShelfPorts;
   folders?: V2FolderScanPorts;
   /** Readable grants for folders outside the Library roots. */
@@ -170,6 +181,8 @@ export function createV2ExtendedOperations(
     analysis: createV2AnalysisOperations({
       extensionId: args.extensionId,
       effectivePermissions: args.effectivePermissions,
+      library: args.library,
+      ...(args.analysisReads ? { reads: args.analysisReads } : {}),
       ...(args.analysis ? { analysis: args.analysis } : {}),
     }),
     shelf: createV2ShelfOperations({

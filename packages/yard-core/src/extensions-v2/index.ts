@@ -202,6 +202,7 @@ export {
   type V2AnalysisFactoryArgs,
   type V2AnalysisOperations,
   type V2AnalysisPorts,
+  type V2AuthorizedAudioSource,
   type V2ModelState,
   type V2ModelStatus,
 } from "./analysis";
@@ -245,6 +246,7 @@ export {
   type V2OperationFactoryArgs,
   type V2OperationServices,
   type V2PlanOperations,
+  type V2ReadableRootsPorts,
   type V2SelectionOperations,
   type V2SettingsOperations,
   type V2SettingsPorts,

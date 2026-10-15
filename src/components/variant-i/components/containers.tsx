@@ -1,7 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useLayoutEffect, useRef, useState } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -69,12 +69,22 @@ export function Tabs<T extends string>({
   tabs,
   value,
   onChange,
+  id,
 }: {
   label: string;
   tabs: ReadonlyArray<{ value: T; label: string; icon?: ReactNode }>;
   value: T;
   onChange: (value: T) => void;
+  /**
+   * Shared id base for the tablist and its panels. Pair it with a matching
+   * `TabPanel id` so each tab's `aria-controls` meets a panel that points back
+   * through `aria-labelledby`; the library generates one when omitted, but two
+   * siblings can only find each other through the caller-supplied base.
+   */
+  id?: string;
 }) {
+  const generatedId = useId();
+  const baseId = id ?? generatedId;
   const buttonRefs = useRef(new Map<T, HTMLButtonElement>());
   const [pill, setPill] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
 
@@ -89,10 +99,35 @@ export function Tabs<T extends string>({
     return () => window.removeEventListener("resize", measure);
   }, [value, tabs]);
 
+  // The horizontal tablist contract: ArrowRight/ArrowLeft move across the tab
+  // stops with wrapping, Home/End jump to the ends, and because every panel is
+  // mounted (cheap to show), moving focus also activates the tab. Keys the
+  // tablist does not own are left to the browser.
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const index = tabs.findIndex((tab) => tab.value === value);
+    if (index === -1) return;
+
+    let nextIndex: number;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = tabs.length - 1;
+    else return;
+
+    const next = tabs[nextIndex];
+    if (!next) return;
+    event.preventDefault();
+    buttonRefs.current.get(next.value)?.focus();
+    if (next.value !== value) onChange(next.value);
+  };
+
   return (
     <div
+      id={baseId}
       role="tablist"
       aria-label={label}
+      aria-orientation="horizontal"
+      onKeyDown={handleKeyDown}
       className="relative flex h-9 items-center gap-0.5 rounded-lg border border-[var(--vi-edge)] bg-[var(--vi-well)] p-1 shadow-[var(--vi-sink)]"
     >
       <span
@@ -109,9 +144,15 @@ export function Tabs<T extends string>({
               if (node) buttonRefs.current.set(tab.value, node);
               else buttonRefs.current.delete(tab.value);
             }}
+            id={`${baseId}-tab-${tab.value}`}
             type="button"
             role="tab"
             aria-selected={activeTab}
+            // Only point at a panel the caller promised through a shared id;
+            // an unpaired tablist must not leave a dangling reference.
+            aria-controls={id ? `${baseId}-panel-${tab.value}` : undefined}
+            // Roving tab stop: only the selected tab is in the page tab order.
+            tabIndex={activeTab ? 0 : -1}
             onClick={() => onChange(tab.value)}
             className={cn(
               "relative z-10 flex h-7 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium outline-none transition-colors duration-150",
@@ -130,11 +171,27 @@ export function Tabs<T extends string>({
   );
 }
 
-export function TabPanel({ tabKey, children }: { tabKey: string; children: ReactNode }) {
+export function TabPanel({
+  tabKey,
+  id,
+  children,
+}: {
+  /** The tab `value` this panel belongs to. */
+  tabKey: string;
+  /**
+   * The `Tabs id` base. The panel points back at its tab through
+   * `aria-labelledby` only when it is given, so an unpaired panel is never
+   * labelled by an id that does not exist.
+   */
+  id?: string;
+  children: ReactNode;
+}) {
   return (
     <div
       key={tabKey}
+      id={id ? `${id}-panel-${tabKey}` : undefined}
       role="tabpanel"
+      aria-labelledby={id ? `${id}-tab-${tabKey}` : undefined}
       className="[animation:vi-fade_0.16s_ease-out] motion-reduce:[animation:none]"
     >
       {children}

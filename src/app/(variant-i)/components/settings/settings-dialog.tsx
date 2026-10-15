@@ -108,12 +108,18 @@ function V3SettingsDialogBody({
       </div>
 
       <div className="mt-4">
-        <Tabs label="Settings sections" tabs={SETTINGS_TABS} value={activeTab} onChange={setActiveTab} />
+        <Tabs
+          id="v3-settings-tabs"
+          label="Settings sections"
+          tabs={SETTINGS_TABS}
+          value={activeTab}
+          onChange={setActiveTab}
+        />
       </div>
 
       <div className="vi-scroll -mx-1 mt-4 min-h-0 flex-1 overflow-y-auto px-1">
         <div className={cn(activeTab !== "library" && "hidden")}>
-          <TabPanel tabKey="library">
+          <TabPanel id="v3-settings-tabs" tabKey="library">
             <V3SettingsLibraryTab
               settings={settings}
               onSaveRoot={onSaveRoot}
@@ -125,7 +131,7 @@ function V3SettingsDialogBody({
         </div>
 
         <div className={cn(activeTab !== "metadata" && "hidden")}>
-          <TabPanel tabKey="metadata">
+          <TabPanel id="v3-settings-tabs" tabKey="metadata">
             <V3SettingsMetadataTab
               collections={collections}
               tags={tags}
@@ -140,19 +146,19 @@ function V3SettingsDialogBody({
         </div>
 
         <div className={cn(activeTab !== "extensions" && "hidden")}>
-          <TabPanel tabKey="extensions">
+          <TabPanel id="v3-settings-tabs" tabKey="extensions">
             <V3SettingsExtensionsTab v2Settings={v2Settings} />
           </TabPanel>
         </div>
 
         <div className={cn(activeTab !== "appearance" && "hidden")}>
-          <TabPanel tabKey="appearance">
+          <TabPanel id="v3-settings-tabs" tabKey="appearance">
             <V3SettingsAppearanceTab zoom={zoom} onUpdateZoom={onUpdateZoom} />
           </TabPanel>
         </div>
 
         <div className={cn(activeTab !== "customisation" && "hidden")}>
-          <TabPanel tabKey="customisation">
+          <TabPanel id="v3-settings-tabs" tabKey="customisation">
             <V3SettingsShortcutsTab
               shortcutBindings={shortcutBindings}
               onRebindShortcut={onRebindShortcut}
@@ -164,7 +170,7 @@ function V3SettingsDialogBody({
         </div>
 
         <div className={cn(activeTab !== "about" && "hidden")}>
-          <TabPanel tabKey="about">
+          <TabPanel id="v3-settings-tabs" tabKey="about">
             <V3SettingsAboutTab />
           </TabPanel>
         </div>

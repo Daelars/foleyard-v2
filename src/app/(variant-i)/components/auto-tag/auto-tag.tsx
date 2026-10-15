@@ -1158,6 +1158,7 @@ export function V3AutoTagBoard({
   return (
     <div className="space-y-3">
       <Tabs
+        id="auto-tag-tabs"
         label="Auto Tag workspace"
         tabs={[
           { value: "coverage", label: "Coverage" },
@@ -1170,7 +1171,7 @@ export function V3AutoTagBoard({
         }}
       />
       <div className={cn(page !== "coverage" && "hidden")}>
-        <TabPanel tabKey="coverage">
+        <TabPanel id="auto-tag-tabs" tabKey="coverage">
           <div className="space-y-3">
             <div
               className={cn(
@@ -1825,7 +1826,7 @@ export function V3AutoTagBoard({
       </div>
       {originsVisited && (
         <div className={cn(page !== "origins" && "hidden")}>
-          <TabPanel tabKey="origins">
+          <TabPanel id="auto-tag-tabs" tabKey="origins">
             <V3TagOrigins />
           </TabPanel>
         </div>

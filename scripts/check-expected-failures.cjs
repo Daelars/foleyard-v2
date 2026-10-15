@@ -1,41 +1,57 @@
-// Guards the expected-to-fail regression set (#133).
+// Guards the expected-to-fail regression set (#133, #304).
 //
-// Each it.fails() in src/test/integration/ pins a live defect. Deleting one
-// without fixing the finding would pass the suite silently, so CI requires
-// the it.fails count to equal the entries in docs/expected-failures.md.
-// Fixing a defect flips its test to it() and removes its entry in the same
-// PR; both sides of this check move together.
+// Each it.fails() in the test suite pins a live defect and carries its ledger
+// id in the title. This checker maps pinned tests to the structured entries in
+// docs/expected-failures.md by id, so deleting or swapping one is detected
+// instead of hidden by a count. Fixing a defect flips its test to it() and
+// removes its entry in the same PR; both sides move together.
+//
+// Severity is explicit. Entries tagged `data-loss` are release blockers: they
+// are reported here and `--release` (used by the release build gate) refuses to
+// continue while any are pinned.
+//
+// Usage: node scripts/check-expected-failures.cjs [--release]
 
-const fs = require("node:fs");
 const path = require("node:path");
 
+const {
+  LEDGER_PATH,
+  evaluateRepository,
+} = require("./lib/expected-failures.cjs");
+
 const root = path.resolve(__dirname, "..");
-const integrationDir = path.join(root, "src", "test", "integration");
-const docsPath = path.join(root, "docs", "expected-failures.md");
+const release = process.argv.includes("--release");
 
-function countOccurrences(filePath, needle) {
-  const source = fs.readFileSync(filePath, "utf8");
-  return source.split(needle).length - 1;
+const result = evaluateRepository(root);
+
+if (result.errors.length > 0) {
+  console.error(`expected-failures: FAILED with ${result.errors.length} problem(s):`);
+  for (const error of result.errors) console.error(`  - ${error}`);
+  process.exit(1);
 }
 
-let fails = 0;
-for (const entry of fs.readdirSync(integrationDir)) {
-  if (!/\.test\.(ts|tsx)$/.test(entry)) continue;
-  fails += countOccurrences(path.join(integrationDir, entry), "it.fails(");
-}
-
-const docs = fs.readFileSync(docsPath, "utf8");
-const recorded = docs.split("\n").filter((line) => line.startsWith("- ")).length;
-
-if (fails !== recorded) {
+if (release && result.blockers.length > 0) {
   console.error(
-    `expected-failures: found ${fails} it.fails() in src/test/integration/ but docs/expected-failures.md lists ${recorded}.`,
+    `expected-failures: release blocked by ${result.blockers.length} data-loss finding(s): ${result.blockers
+      .map((entry) => `${entry.id} (${entry.area})`)
+      .join(", ")}.`,
   );
   console.error(
-    "If you fixed a finding, flip its test to it() and remove its entry in the same PR. " +
-      "If you deleted a test, that is the signal working: put it back or fix the defect.",
+    "Fix the finding, flip its test to it() and remove its ledger entry before releasing.",
   );
   process.exit(1);
 }
 
-console.log(`expected-failures: ${fails} pinned regressions, all accounted for.`);
+if (result.blockers.length > 0) {
+  console.warn(
+    `expected-failures: ${result.blockers.length} release-blocking data-loss finding(s) pinned: ${result.blockers
+      .map((entry) => entry.id)
+      .join(", ")}.`,
+  );
+}
+
+console.log(
+  `expected-failures: ${result.tests.length} pinned regression(s) mapped to ${result.entries.length} ledger entr${
+    result.entries.length === 1 ? "y" : "ies"
+  } in ${LEDGER_PATH}, all accounted for.`,
+);

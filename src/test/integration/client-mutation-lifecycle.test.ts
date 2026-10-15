@@ -163,7 +163,7 @@ describe("client mutation lifecycle", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
-  it.fails("a late-failing tag mutation does not erase a later success (B04)", async () => {
+  it.fails("[XF-B04-01] a late-failing tag mutation does not erase a later success (B04)", async () => {
     const fetch = stubFetch();
     const { result } = renderHook(({ input }) => useLibraryFiles(input), {
       initialProps: { input: baseInput() },
@@ -217,7 +217,7 @@ describe("client mutation lifecycle", () => {
     ).toEqual(["t2"]);
   });
 
-  it.fails("a stale deletion failure does not restore the previous root's files (B04)", async () => {
+  it.fails("[XF-B04-02] a stale deletion failure does not restore the previous root's files (B04)", async () => {
     const fetch = stubFetch();
     const { result, rerender } = renderHook(({ input }) => useLibraryFiles(input), {
       initialProps: { input: baseInput() },
@@ -264,7 +264,7 @@ describe("client mutation lifecycle", () => {
     ).toEqual(["b1"]);
   });
 
-  it.fails("a stale page cannot unlock a newer request or duplicate appended ids (B11)", async () => {
+  it.fails("[XF-B11-01] a stale page cannot unlock a newer request or duplicate appended ids (B11)", async () => {
     const fetch = stubFetch();
     const { result } = renderHook(({ input }) => useLibraryFiles(input), {
       initialProps: { input: baseInput() },

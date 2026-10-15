@@ -2,6 +2,8 @@ const { execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
+const { assertReleaseReady } = require("./lib/expected-failures.cjs");
+
 const root = path.join(__dirname, "..");
 
 function run(command, args, options = {}) {
@@ -164,6 +166,15 @@ function main() {
   const shouldCut = args.includes("--cut");
   const shouldPush = args.includes("--push") || shouldCut;
   const dryRun = args.includes("--dry-run");
+
+  // Data-loss expected failures are release blockers (#304): refuse to bump or
+  // tag while any are pinned, so the tag never exists in the first place.
+  try {
+    assertReleaseReady(root);
+  } catch (error) {
+    console.error(`[release] ${error instanceof Error ? error.message : error}`);
+    process.exit(1);
+  }
 
   const resumeVersionBump = assertCleanOrResumableWorkingTree();
 

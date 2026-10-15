@@ -88,6 +88,10 @@ export const V3FileRow = memo(function V3FileRow({
       }}
       tabIndex={0}
       role="row"
+      // The table's header row is row 1, so the first virtual item is row 2.
+      // Indexing from the virtual index (not the mounted slice) is what keeps
+      // the announcement honest while rows mount and unmount.
+      aria-rowindex={virtualIndex + 2}
       aria-selected={isSelected || isMultiSelected}
       data-file-id={file.id}
       onClick={(event) =>
@@ -114,6 +118,8 @@ export const V3FileRow = memo(function V3FileRow({
         />
       )}
       <span
+        role="gridcell"
+        aria-colindex={1}
         className={cn(
           "flex justify-center",
           isSelected && isSelectedFilePlaying
@@ -127,7 +133,7 @@ export const V3FileRow = memo(function V3FileRow({
           <Play className="size-4" />
         )}
       </span>
-      <span className="min-w-0">
+      <span role="gridcell" aria-colindex={2} className="min-w-0">
         <span
           className={cn(
             "block truncate text-[15px] font-medium",
@@ -147,7 +153,7 @@ export const V3FileRow = memo(function V3FileRow({
           </span>
         ) : null}
       </span>
-      <span className="hidden min-w-0 sm:block">
+      <span role="gridcell" aria-colindex={3} className="hidden min-w-0 sm:block">
         <RowWaveform
           fileId={file.id}
           sourceVersion={`${file.mtimeMs ?? "unknown"}:${file.fileSize ?? "unknown"}`}
@@ -155,10 +161,14 @@ export const V3FileRow = memo(function V3FileRow({
           sizeBytes={file.fileSize}
         />
       </span>
-      <span className="text-right font-mono text-xs font-medium tabular-nums text-zinc-300">
+      <span
+        role="gridcell"
+        aria-colindex={4}
+        className="text-right font-mono text-xs font-medium tabular-nums text-zinc-300"
+      >
         {formatDuration(file.duration)}
       </span>
-      <span className="flex justify-center">
+      <span role="gridcell" aria-colindex={5} className="flex justify-center">
         <button
           type="button"
           aria-label={
@@ -186,7 +196,7 @@ export const V3FileRow = memo(function V3FileRow({
         </button>
       </span>
       {desktop ? (
-        <span className="flex justify-center">
+        <span role="gridcell" aria-colindex={6} className="flex justify-center">
           <div
             role="button"
             tabIndex={0}

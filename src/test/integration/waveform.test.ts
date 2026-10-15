@@ -7,7 +7,7 @@ import ffmpeg from "ffmpeg-static";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createScratchLibrary, type ScratchLibrary } from "@/test/fixtures";
 import { generateWaveform, WAVEFORM_PEAK_COUNT } from "@/lib/waveform-generator";
-import { getWaveformPeaks, withGenerationSlot } from "@/lib/waveform-cache";
+import { getWaveformPeaks, MAX_GENERATION_WAITERS, withGenerationSlot } from "@/lib/waveform-cache";
 vi.mock("node:child_process", { spy: true });
 
 let library: ScratchLibrary;
@@ -77,6 +77,41 @@ it("serves a valid cache hit while both generation slots are held", async () => 
   await Promise.all([holdA, holdB]);
 
   expect(hit).toBe("hit");
+});
+
+it("bounds the server generation queue instead of growing it without limit (#292)", async () => {
+  const files = Array.from({ length: MAX_GENERATION_WAITERS + 1 }, (_, index) => {
+    const filePath = path.join(library.root, `queue-${index}.wav`);
+    fs.writeFileSync(filePath, writePcm16Wav(new Int16Array([index, -index, index, -index]), 1));
+    return filePath;
+  });
+  const cache = library.directory("cache");
+
+  let releaseA: () => void = () => {};
+  let releaseB: () => void = () => {};
+  const holdA = withGenerationSlot(() => new Promise<void>((resolve) => { releaseA = resolve; }));
+  const holdB = withGenerationSlot(() => new Promise<void>((resolve) => { releaseB = resolve; }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const outcomes: string[] = [];
+  const reads = files.map((file) => {
+    const read = getWaveformPeaks(file, cache);
+    read.then(
+      () => outcomes.push("ok"),
+      (error: Error) => outcomes.push(`error:${error.message}`),
+    );
+    return read;
+  });
+
+  await vi.waitFor(() => expect(outcomes.some((outcome) => outcome.startsWith("error:"))).toBe(true));
+  expect(outcomes.filter((outcome) => outcome.startsWith("error:"))).toEqual([
+    "error:Too many waveform generations waiting",
+  ]);
+
+  releaseA();
+  releaseB();
+  await Promise.all([holdA, holdB]);
+  await Promise.allSettled(reads);
 });
 
 it("keeps corrupt audio neutral rather than inventing peaks", async () => {

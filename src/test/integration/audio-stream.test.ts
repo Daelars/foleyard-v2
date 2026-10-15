@@ -5,8 +5,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createScratchLibrary, type ScratchLibrary } from "@/test/fixtures";
 
 const db = vi.hoisted(() => ({ getFileById: vi.fn(), getLibraryRoots: vi.fn() }));
+const recent = vi.hoisted(() => ({ recordRecentMakePackFile: vi.fn() }));
 vi.mock("@/lib/db", () => db);
-vi.mock("@/lib/extensions-v2/recent-source-store", () => ({ recordRecentMakePackFile: vi.fn() }));
+vi.mock("@/lib/extensions-v2/recent-source-store", () => recent);
 import { GET } from "@/app/api/audio/route";
 
 let library: ScratchLibrary;
@@ -15,6 +16,7 @@ beforeEach(() => {
   const path = library.writeFile("hit.wav", "audio".repeat(500000));
   db.getFileById.mockReturnValue({ id: "hit", path, removedAt: null });
   db.getLibraryRoots.mockReturnValue([library.root]);
+  recent.recordRecentMakePackFile.mockClear();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -72,6 +74,23 @@ it("closes a request aborted before the file stream opens", async () => {
   const file = createReadStream.mock.results[0].value as fs.ReadStream;
   await vi.waitFor(() => expect(file.closed).toBe(true));
   expect(getEventListeners(request.signal, "abort")).toHaveLength(0);
+});
+
+it("records a Recent preview for a playback request", async () => {
+  const response = await GET(new NextRequest("http://localhost/api/audio?id=hit", {
+    headers: { range: "bytes=0-" },
+  }));
+  await response.arrayBuffer();
+  expect(recent.recordRecentMakePackFile).toHaveBeenCalledWith("hit");
+});
+
+it("does not record a Recent preview for a waveform read (#292)", async () => {
+  const response = await GET(new NextRequest("http://localhost/api/audio?id=hit&recordRecent=0", {
+    headers: { range: "bytes=0-33554431" },
+  }));
+  expect(response.status).toBe(206);
+  await response.arrayBuffer();
+  expect(recent.recordRecentMakePackFile).not.toHaveBeenCalled();
 });
 
 it("reports a file read failure through the response and releases the stream", async () => {

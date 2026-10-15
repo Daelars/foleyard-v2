@@ -26,12 +26,44 @@ const PEAK_FLOOR = 0.04;
 const MAX_BROWSER_DECODE_BYTES = 32 * 1024 * 1024;
 /** Bound simultaneous fetches/decodes so fast scrolling cannot pile work up. */
 const MAX_CONCURRENT_PEAK_JOBS = 4;
+/**
+ * Bound the decode slot queue. Each mounted row that is waiting for a slot
+ * holds one entry here; a viewport cannot legitimately need more than this,
+ * so a longer queue is abandoned scroll churn. Fail it fast rather than let
+ * the queue grow without limit (#292). Exported for the integration suite.
+ */
+export const MAX_PEAK_JOB_WAITERS = 32;
 let activePeakJobs = 0;
 const peakJobWaiters: Array<() => void> = [];
 
-async function withPeakJobSlot<T>(work: () => Promise<T>): Promise<T> {
+function abortError(): DOMException {
+  return new DOMException("Aborted", "AbortError");
+}
+
+/**
+ * Take a decode slot, or wait for one. `signal` lets an abandoned caller
+ * leave the queue instead of holding a place it will never use (#292).
+ */
+async function withPeakJobSlot<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (signal?.aborted) throw abortError();
   if (activePeakJobs >= MAX_CONCURRENT_PEAK_JOBS) {
-    await new Promise<void>((resolve) => peakJobWaiters.push(resolve));
+    if (peakJobWaiters.length >= MAX_PEAK_JOB_WAITERS) {
+      throw new Error("Too many waveform reads queued");
+    }
+    await new Promise<void>((resolve, reject) => {
+      const waiter = () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      };
+      const onAbort = () => {
+        const index = peakJobWaiters.indexOf(waiter);
+        if (index >= 0) peakJobWaiters.splice(index, 1);
+        reject(abortError());
+      };
+      peakJobWaiters.push(waiter);
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
+    if (signal?.aborted) throw abortError();
   }
   activePeakJobs += 1;
   try {
@@ -43,8 +75,45 @@ async function withPeakJobSlot<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * Decoded peaks for recently rendered rows, most-recent last. Bounded so a
+ * long browsing session cannot retain every peak array it ever decoded; the
+ * least-recently used entry is dropped once the limit is reached (#292).
+ * Exported for the integration suite.
+ */
+export const MAX_MEMORY_ENTRIES = 64;
 const memory = new Map<string, number[]>();
-const pending = new Map<string, Promise<number[]>>();
+
+function readRememberedPeaks(key: string): number[] | undefined {
+  const cached = memory.get(key);
+  if (cached === undefined) return undefined;
+  memory.delete(key);
+  memory.set(key, cached);
+  return cached;
+}
+
+function rememberPeaks(key: string, peaks: number[]): void {
+  memory.delete(key);
+  memory.set(key, peaks);
+  while (memory.size > MAX_MEMORY_ENTRIES) {
+    const oldestKey = memory.keys().next().value;
+    if (oldestKey === undefined) break;
+    memory.delete(oldestKey);
+  }
+}
+
+/**
+ * In-flight work is shared per file/version and reference-counted. When the
+ * last subscriber leaves, the shared decode is cancelled and released instead
+ * of running on for nobody (#292).
+ */
+type PeakTask = {
+  promise: Promise<number[]>;
+  controller: AbortController;
+  subscribers: number;
+  settled: boolean;
+};
+const pending = new Map<string, PeakTask>();
 
 function openCacheDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -70,19 +139,26 @@ type CachedPeaks = { sourceVersion: string; peaks: number[] };
 /** IndexedDB is a best-effort cache: bound the wait so rows always reach a live decode. */
 const CACHE_READ_TIMEOUT_MS = 3000;
 
-function cacheReadWithTimeout(fileId: string, sourceVersion: string): Promise<number[] | null> {
+function cacheReadWithTimeout(
+  fileId: string,
+  sourceVersion: string,
+  signal?: AbortSignal,
+): Promise<number[] | null> {
   return new Promise((resolve) => {
     let settled = false;
     const done = (value: number[] | null) => {
       if (!settled) {
         settled = true;
         clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
         resolve(value);
       }
     };
+    const onAbort = () => done(null);
     const timer = setTimeout(() => done(null), CACHE_READ_TIMEOUT_MS);
     // Avoid keeping the process alive over a cache read in non-browser runtimes.
     (timer as unknown as { unref?: () => void }).unref?.();
+    signal?.addEventListener("abort", onAbort, { once: true });
     void getCachedPeaks(fileId, sourceVersion).then(
       (peaks) => done(peaks),
       () => done(null),
@@ -236,10 +312,11 @@ async function decodePeaks(
   if (typeof sizeBytes === "number" && Number.isFinite(sizeBytes) && sizeBytes > MAX_BROWSER_DECODE_BYTES) {
     return fetchServerPeaks(fileId, sourceVersion, signal);
   }
-  // No cache:no-store here: the <audio> element fetches the same URL, so the
-  // browser HTTP cache shares bytes instead of downloading twice. A bounded
-  // prefix keeps even unknown-size files from streaming indefinitely.
-  const response = await fetch(`/api/audio?id=${encodeURIComponent(fileId)}`, {
+  // No cache:no-store here so a repeated range read can be served from the
+  // browser HTTP cache. A bounded prefix keeps even unknown-size files from
+  // streaming indefinitely. `recordRecent=0` marks this as a derivative read:
+  // rendering a row must never register a Recent preview (#292).
+  const response = await fetch(`/api/audio?id=${encodeURIComponent(fileId)}&recordRecent=0`, {
     signal,
     headers: { Range: `bytes=0-${MAX_BROWSER_DECODE_BYTES - 1}` },
   });
@@ -261,10 +338,24 @@ async function decodePeaks(
   return peaksFromAudioBuffer(buffer);
 }
 
-/** Wait for the shared task without letting this caller's unmount kill it for others. */
-function abortableWait<T>(task: Promise<T>, signal: AbortSignal): Promise<T> {
+/**
+ * Wait for the shared task. `onLeave` runs exactly once, when this caller
+ * stops being a subscriber — whether it aborted, resolved, or failed — so the
+ * caller count can cancel the shared work once nobody is left waiting.
+ */
+function abortableWait<T>(task: Promise<T>, signal: AbortSignal, onLeave: () => void): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+    let settled = false;
+    const finish = () => {
+      if (settled) return false;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      onLeave();
+      return true;
+    };
+    const onAbort = () => {
+      if (finish()) reject(abortError());
+    };
     if (signal.aborted) {
       onAbort();
       return;
@@ -272,45 +363,47 @@ function abortableWait<T>(task: Promise<T>, signal: AbortSignal): Promise<T> {
     signal.addEventListener("abort", onAbort, { once: true });
     task.then(
       (value) => {
-        signal.removeEventListener("abort", onAbort);
-        resolve(value);
+        if (finish()) resolve(value);
       },
       (error) => {
-        signal.removeEventListener("abort", onAbort);
-        reject(error);
+        if (finish()) reject(error);
       },
     );
   });
 }
 
 /**
- * Run the peaks job detached from any single caller's lifetime. A row that
- * unmounts mid-decode (remount churn, folder switches) must not fail the
- * shared in-flight decode a remounted row is about to await — that sequence
- * left every row blank with no error and no retry.
+ * Run the peaks job for a shared task. The task carries its own abort signal:
+ * while it has subscribers a single row's unmount must not kill it, but once
+ * the last subscriber leaves (#292) the signal aborts and the fetch/decode is
+ * cancelled instead of running on for nobody.
  */
 async function runPeaksTask(
   fileId: string,
   sourceVersion: string,
   key: string,
+  signal: AbortSignal,
   sizeBytes?: number | null,
 ): Promise<number[]> {
-  const cached = await cacheReadWithTimeout(fileId, sourceVersion);
+  const cached = await cacheReadWithTimeout(fileId, sourceVersion, signal);
+  if (signal.aborted) throw abortError();
   if (cached) {
-    memory.set(key, cached);
+    rememberPeaks(key, cached);
     return cached;
   }
-  const peaks = await withPeakJobSlot(() =>
-    decodePeaks(fileId, sourceVersion, sizeBytes),
+  const peaks = await withPeakJobSlot(
+    () => decodePeaks(fileId, sourceVersion, sizeBytes, signal),
+    signal,
   );
-  memory.set(key, peaks);
+  if (signal.aborted) throw abortError();
+  rememberPeaks(key, peaks);
   await setCachedPeaks(fileId, sourceVersion, peaks);
   return peaks;
 }
 
 /**
  * Both list rows and the player read browser-decoded peaks with an IndexedDB
- * cache. `options.sizeBytes` lets rows hand long files to the server peaks
+ * cache. `options.sizeBytes` lets callers hand long files to the server peaks
  * route instead of streaming them through the renderer.
  */
 export async function computeAndCachePeaks(
@@ -319,18 +412,44 @@ export async function computeAndCachePeaks(
   signal?: AbortSignal,
   options?: { sizeBytes?: number | null },
 ): Promise<number[]> {
+  if (signal?.aborted) throw abortError();
   const key = `${fileId}:${sourceVersion}`;
-  const inMemory = memory.get(key);
+  const inMemory = readRememberedPeaks(key);
   if (inMemory) return inMemory;
+
   let task = pending.get(key);
   if (!task) {
-    task = runPeaksTask(fileId, sourceVersion, key, options?.sizeBytes);
-    pending.set(key, task);
-    const evict = () => {
-      if (pending.get(key) === task) pending.delete(key);
+    const controller = new AbortController();
+    const promise = runPeaksTask(fileId, sourceVersion, key, controller.signal, options?.sizeBytes);
+    const entry: PeakTask = { promise, controller, subscribers: 0, settled: false };
+    const settle = () => {
+      entry.settled = true;
+      if (pending.get(key) === entry) pending.delete(key);
     };
-    task.then(evict, evict);
+    // Attach a handler so an abandoned task's rejection is never unhandled.
+    promise.then(settle, settle);
+    pending.set(key, entry);
+    task = entry;
   }
-  if (!signal) return task;
-  return abortableWait(task, signal);
+  const activeTask: PeakTask = task;
+
+  activeTask.subscribers += 1;
+  const release = () => {
+    activeTask.subscribers -= 1;
+    if (activeTask.subscribers <= 0 && !activeTask.settled) {
+      // Last subscriber gone: cancel the shared decode and drop it so a later
+      // remount starts a fresh task rather than attaching to abandoned work.
+      activeTask.controller.abort();
+      if (pending.get(key) === activeTask) pending.delete(key);
+    }
+  };
+
+  if (!signal) {
+    try {
+      return await activeTask.promise;
+    } finally {
+      release();
+    }
+  }
+  return abortableWait(activeTask.promise, signal, release);
 }

@@ -31,14 +31,18 @@ and `collection-menu.tsx`.
 `GET /api/audio?id=…` resolves the record via `getFileById`, confines the
 path with `resolveExistingPathWithinRoots(file.path, getLibraryRoots())`,
 serves `Range` bytes (`parseByteRange`, suffix ranges supported, 206
-partial / 200 full) with the per-extension MIME map, and — as a side
-effect — records the file as a recent Make Pack candidate
-(`recordRecentMakePackFile` in
-`src/lib/extensions-v2/recent-source-store.ts`).
+partial / 200 full) with the per-extension MIME map, and records the file
+as a recent Make Pack candidate (`recordRecentMakePackFile` in
+`src/lib/extensions-v2/recent-source-store.ts`) for playback requests;
+derivative reads pass `recordRecent=0` to opt out.
 `GET /api/waveform?id=…&peaks=N` (N in 32–512, default 180) resolves the
 same way, calls `getWaveformPeaks` (`src/lib/waveform-cache.ts`), decodes
 via `src/lib/waveform-decoder.ts`, generates with FFmpeg
 (`src/lib/waveform-generator.ts`, `resizeWaveform` for the requested count).
+Row and player peaks share one reference-counted decode per file/version
+(`src/lib/client-waveform.ts`): the shared fetch/decode is cancelled and
+released once its last subscriber leaves, and rows hand their file size to
+the pipeline so a long file reads `/api/waveform` instead of streaming.
 
 Format matrix (`SUPPORTED_AUDIO_EXTENSIONS` in
 `packages/yard-core/src/services/library/scan-types.ts`:
@@ -72,8 +76,12 @@ must not be read as a playback guarantee for every browser.
   per `parseByteRange` outcome; unsatisfiable starts return null.
 - Waveform failure logs server-side and returns 500
   (`Failed to generate waveform`); the player still streams audio.
-- `/api/audio` unconditionally records a recent Make Pack entry on
-  success — clients cannot opt out per request.
+- `/api/audio` records a recent Make Pack entry for playback requests;
+  derivative reads opt out with `recordRecent=0`, so rendering rows and the
+  player waveform never changes Recent state (#292).
+- In-memory peaks are bounded to the most recently used rows, the client
+  decode-slot queue and the server generation queue each have a fixed upper
+  bound, and a read past that bound fails rather than waiting forever (#292).
 
 ## Source map (real file paths)
 

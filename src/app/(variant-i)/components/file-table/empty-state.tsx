@@ -1,8 +1,8 @@
 "use client";
 
-// app-v3 adapter for FileTableEmptyState: I empty-state treatment over the
-// app's existing loading/failure contract (no dedicated error display —
-// FileTable has none today, so neither does this).
+// app-v3 adapter for FileTableEmptyState: I empty-state treatment. The
+// loading/failure contract lives with the table (#276): a failed view load
+// renders V3LoadFailure with a retry instead of this empty state.
 import { ChevronLeft } from "lucide-react";
 
 import { Button } from "@/components/variant-i";

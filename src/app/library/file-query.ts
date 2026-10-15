@@ -94,6 +94,19 @@ export function describeFilesQuery(input: FilesQueryInput): FilesQuery {
   return { kind: "list", query, fetchParams: params.toString() };
 }
 
+/**
+ * Stable identity of the Library view/query a file list belongs to (#276).
+ * Rows returned for one identity must never be shown under another, so the
+ * key combines the load branch (shelf / list / empty) with the exact query
+ * string that produced the fetch. Two inputs that would load the same rows
+ * share a key; any search, filter, directory, collection, root or sort
+ * change produces a new one.
+ */
+export function viewQueryIdentity(input: FilesQueryInput): string {
+  const described = describeFilesQuery(input);
+  return described.kind === "list" ? `list:${described.query}` : described.kind;
+}
+
 /** Client-side ordering for the shelf view. List views arrive server-ordered. */
 export function sortFileRecords(
   files: FileRecord[],

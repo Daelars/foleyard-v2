@@ -9,8 +9,64 @@ import {
   rollbackBulkTags,
   snapshotBulkFavorites,
   snapshotBulkTags,
+  viewQueryIdentity,
 } from "./file-query";
 import type { FileRecord } from "./types";
+
+// Area: #276. Rows belong to the view/query that loaded them: identical
+// inputs share an identity, and any search, filter, directory, Collection,
+// root or sort change produces a new one.
+describe("view query identity", () => {
+  function input(
+    overrides: Partial<Parameters<typeof viewQueryIdentity>[0]> = {},
+  ): Parameters<typeof viewQueryIdentity>[0] {
+    return {
+      view: "all" as const,
+      search: "",
+      collectionId: null,
+      tagId: null,
+      tagOrigin: null,
+      directory: null,
+      libraryRoots: ["/lib"],
+      sort: { key: "filename" as const, dir: 1 as const },
+      ...overrides,
+    };
+  }
+
+  it("is stable for identical inputs and changes with the query", () => {
+    expect(viewQueryIdentity(input())).toBe(viewQueryIdentity(input()));
+    expect(viewQueryIdentity(input({ search: "kick" }))).not.toBe(
+      viewQueryIdentity(input()),
+    );
+    expect(
+      viewQueryIdentity(input({ view: "collection", collectionId: "c1" })),
+    ).not.toBe(viewQueryIdentity(input()));
+    expect(
+      viewQueryIdentity(
+        input({
+          view: "directory",
+          directory: {
+            libraryRoot: "/lib",
+            directory: "drums",
+          },
+        }),
+      ),
+    ).not.toBe(viewQueryIdentity(input()));
+    expect(
+      viewQueryIdentity(input({ sort: { key: "duration", dir: -1 } })),
+    ).not.toBe(viewQueryIdentity(input()));
+  });
+
+  it("names the shelf and empty branches distinctly", () => {
+    expect(viewQueryIdentity(input({ view: "shelf" }))).toBe("shelf");
+    expect(viewQueryIdentity(input({ view: "extensions" }))).toBe("empty");
+    expect(viewQueryIdentity(input({ view: "auto-tag" }))).toBe("empty");
+    // Two roots make the plain Library branch load nothing.
+    expect(viewQueryIdentity(input({ libraryRoots: ["/a", "/b"] }))).toBe(
+      "empty",
+    );
+  });
+});
 
 // Area: provenance UI (#193). The origin filter travels from view state
 // into the files query: set an origin and the fetch params carry it,

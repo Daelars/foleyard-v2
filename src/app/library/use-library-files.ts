@@ -18,6 +18,7 @@ import {
   snapshotBulkFavorites,
   snapshotBulkTags,
   sortFileRecords,
+  viewQueryIdentity,
   type BulkFavoritesBatch,
   type BulkTagBatch,
   type FileSortDir,
@@ -56,6 +57,9 @@ interface FilesPage {
   nextCursor?: string | null;
 }
 
+/** Stable empty list so stale gating does not churn consumer identities. */
+const NO_FILES: FileRecord[] = [];
+
 /**
  * Library files data layer: server-sorted list, pagination, directories,
  * favorites count, and every file mutation with its optimistic update and
@@ -67,6 +71,10 @@ export function useLibraryFiles(input: LibraryFilesInput) {
   const [directories, setDirectories] = useState<FileTableDirectory[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [hasMoreFiles, setHasMoreFiles] = useState(false);
+  /** The view/query identity whose rows are currently in `files` (#276). */
+  const [loadedViewKey, setLoadedViewKey] = useState<string | null>(null);
+  /** Inline failure for the current view; cleared when a load starts. */
+  const [filesError, setFilesError] = useState<string | null>(null);
   const {
     favoritesCount,
     loadFavoritesCount,
@@ -112,6 +120,39 @@ export function useLibraryFiles(input: LibraryFilesInput) {
     filesRef.current = orderedFiles;
   }, [orderedFiles]);
 
+  // Identity of the view/query the current inputs describe (#276). Rows are
+  // only "current" when the identity that loaded them still matches, so a
+  // failed or in-flight transition can never expose the previous view's
+  // rows to the table, selection, palette, or bulk actions.
+  const currentViewKey = useMemo(
+    () =>
+      viewQueryIdentity({
+        view: input.view,
+        search: input.search,
+        collectionId: input.collectionId,
+        tagId: input.tagId,
+        tagOrigin: input.tagOrigin,
+        directory: input.directory,
+        libraryRoots: input.libraryRoots,
+        sort,
+      }),
+    [
+      input.view,
+      input.search,
+      input.collectionId,
+      input.tagId,
+      input.tagOrigin,
+      input.directory,
+      input.libraryRoots,
+      sort,
+    ],
+  );
+  const filesStale = files.length > 0 && loadedViewKey !== currentViewKey;
+  // Stale rows are withheld from every consumer until the matching load
+  // succeeds, so nothing can play, select, edit, remove or drag them.
+  const currentFiles = filesStale ? NO_FILES : files;
+  const currentOrderedFiles = filesStale ? NO_FILES : orderedFiles;
+
   const flipSort = useCallback((key: FileSortKey) => {
     setSort((prev) =>
       prev.key === key
@@ -127,6 +168,7 @@ export function useLibraryFiles(input: LibraryFilesInput) {
     filesNextCursorRef.current = null;
     isLoadingMoreFilesRef.current = false;
     setHasMoreFiles(false);
+    setFilesError(null);
 
     if (input.view === "shelf") {
       setIsLoadingFiles(true);
@@ -161,11 +203,12 @@ export function useLibraryFiles(input: LibraryFilesInput) {
         if (filesRequestIdRef.current === requestId) {
           const items = (data.files ?? []) as FileRecord[];
           setFiles(items);
+          setLoadedViewKey(currentViewKey);
           callbacksRef.current.onShelfItemsLoaded(items);
         }
       } catch {
         if (filesRequestIdRef.current === requestId) {
-          toast.error("Failed to load shelf");
+          setFilesError("Failed to load shelf");
         }
       } finally {
         if (filesRequestIdRef.current === requestId) {
@@ -187,6 +230,7 @@ export function useLibraryFiles(input: LibraryFilesInput) {
     });
     if (described.kind !== "list") {
       setFiles([]);
+      setLoadedViewKey(currentViewKey);
       setIsLoadingFiles(false);
       return;
     }
@@ -206,10 +250,11 @@ export function useLibraryFiles(input: LibraryFilesInput) {
       filesNextCursorRef.current =
         typeof data.nextCursor === "string" ? data.nextCursor : null;
       setFiles(pageFiles);
+      setLoadedViewKey(currentViewKey);
       setHasMoreFiles(data.hasMore === true && pageFiles.length > 0);
       noteFavoritesTotal(data.favoritesTotal);    } catch {
       if (filesRequestIdRef.current === requestId) {
-        toast.error("Failed to load library");
+        setFilesError("Failed to load library");
       }
     } finally {
       if (filesRequestIdRef.current === requestId) {
@@ -225,6 +270,7 @@ export function useLibraryFiles(input: LibraryFilesInput) {
     input.directory,
     input.libraryRoots,
     sort,
+    currentViewKey,
     noteFavoritesTotal,
   ]);
 
@@ -551,8 +597,10 @@ export function useLibraryFiles(input: LibraryFilesInput) {
   );
 
   return {
-    files,
-    orderedFiles,
+    files: currentFiles,
+    orderedFiles: currentOrderedFiles,
+    filesStale,
+    filesError,
     sortKey: sort.key,
     sortDir: sort.dir,
     flipSort,
@@ -561,6 +609,8 @@ export function useLibraryFiles(input: LibraryFilesInput) {
     hasMoreFiles,
     favoritesCount,
     loadFiles,
+    /** Retry the current view/query after an inline load failure (#276). */
+    retryLoadFiles: loadFiles,
     loadMoreFiles,
     loadDirectories,
     loadFavoritesCount,

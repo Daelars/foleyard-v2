@@ -55,6 +55,9 @@ export interface FileTableProps {
   onToggleFavorite: (id: string) => Promise<void>;
   searchQuery: string;
   isLoading: boolean;
+  /** Inline failure for the current view; renders a retry affordance (#276). */
+  error?: string | null;
+  onRetry?: () => void;
   hasMore?: boolean;
   onLoadMore?: () => void;
   showContainerBorder?: boolean;

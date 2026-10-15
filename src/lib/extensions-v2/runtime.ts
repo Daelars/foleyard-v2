@@ -3,6 +3,7 @@ import {
   V2EventBus,
   V2GrantStore,
   V2PermissionApprovals,
+  V2PickerProofStore,
   V2PlanManager,
   V2SourceGrantStore,
   type ExtensionV2Host,
@@ -24,9 +25,9 @@ import {
  * invisible to the subscription that owned it.
  *
  * One object now owns registration, host execution, plans, grants,
- * jobs, enablement, approvals, and events, and is created once per
- * process. Every module reads its slice through `getV2Runtime()`; no
- * module keeps a second copy.
+ * picker proofs, jobs, enablement, approvals, and events, and is created
+ * once per process. Every module reads its slice through `getV2Runtime()`;
+ * no module keeps a second copy.
  *
  * The guard is structural, not `instanceof`: a re-evaluated module
  * (tests simulate bundles with `vi.resetModules()`) must still
@@ -35,12 +36,17 @@ import {
 
 export type V2DestinationGrants = {
   store: V2GrantStore;
-  /** Opaque picker token → grant ID; never persisted, cleared on restart. */
+  /**
+   * Filesystem-boundary grant token → v2 grant ID, for the internal
+   * writable-path boundary; never persisted, cleared on restart. Picker
+   * consent travels through `pickerProofs`, not this map.
+   */
   tokens: Map<string, string>;
 };
 
 export type V2SourceGrants = {
   store: V2SourceGrantStore;
+  /** Filesystem-boundary grant token → v2 grant ID; never persisted, cleared on restart. */
   tokens: Map<string, string>;
 };
 
@@ -70,6 +76,13 @@ export type V2Runtime = {
   /** Grants: destination (write) and source (read) access. */
   destinationGrants: V2DestinationGrants;
   sourceGrants: V2SourceGrants;
+  /**
+   * Picker proofs: the desktop picker mints one per chosen folder and an
+   * extension grant route spends it once for exactly one extension and
+   * grant kind. Minting happens in the desktop-grants bundle and spending
+   * in the grant bundles, so the store must be process-wide.
+   */
+  pickerProofs: V2PickerProofStore;
   /** Host-owned events: the bus every adapter and renderer subscription shares. */
   events: V2EventBus;
 };
@@ -93,6 +106,7 @@ export function createV2Runtime(): V2Runtime {
     approvalsLoaded: false,
     destinationGrants: { store: new V2GrantStore(), tokens: new Map() },
     sourceGrants: { store: new V2SourceGrantStore(), tokens: new Map() },
+    pickerProofs: new V2PickerProofStore(),
     events: new V2EventBus(),
   };
 }

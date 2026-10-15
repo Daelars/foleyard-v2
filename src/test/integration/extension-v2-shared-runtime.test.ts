@@ -152,6 +152,10 @@ async function importGrantsRoute() {
   vi.resetModules();
   return import("@/app/api/extensions-v2/grants/route");
 }
+async function importDesktopGrantsRoute() {
+  vi.resetModules();
+  return import("@/app/api/desktop/grants/route");
+}
 async function importPlanRoute() {
   vi.resetModules();
   return import("@/app/api/extensions-v2/plans/[planId]/route");
@@ -180,6 +184,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   const host = await importHost();
   try {
     host.unregisterV2Extension(PROBE_ID);
@@ -243,11 +248,23 @@ describe("shared v2 runtime across route bundles", () => {
     await registerProbe();
     scratch = createScratchLibrary();
     const destination = scratch.directory("out");
+    vi.stubEnv("FOLEYARD_GRANT_SECRET", "shared-runtime-secret");
 
+    // One bundle mints the picker proof the desktop picker would return.
+    const desktopGrants = await importDesktopGrantsRoute();
+    const picked = await callRoute<{ ok: boolean; proof: string }>(desktopGrants.POST, {
+      url: "http://localhost/api/desktop/grants",
+      headers: { "x-foleyard-grant-secret": "shared-runtime-secret" },
+      body: { path: destination, extensionId: PROBE_ID, grantKind: "destination" },
+    });
+    expect(picked.status).toBe(200);
+
+    // A different bundle spends it: the proof store is process-wide like the
+    // grant store beside it.
     const grants = await importGrantsRoute();
     const issued = await callRoute(grants.POST, {
       url: "http://localhost/api/extensions-v2/grants",
-      body: { extensionId: PROBE_ID, directoryPath: destination },
+      body: { extensionId: PROBE_ID, proof: picked.body.proof },
     });
     expect(issued.status).toBe(200);
     const { grantId } = issued.body as { grantId: string };

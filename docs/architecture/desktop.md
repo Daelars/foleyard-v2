@@ -60,9 +60,9 @@ back to the raw indexed file (`resolveIndexedFile`) when preparation fails.
 Missing ids or unresolvable files emit `desktop:action-error` instead of
 starting a drag.
 
-v2 reuse: the desktop folder picker mints destinations that
-`POST /api/extensions-v2/grants` bridges into per-extension grant
-IDs, and the reveal/open actions back Make Pack v2's
+v2 reuse: the desktop folder picker mints a single-use proof that
+`POST /api/extensions-v2/grants` and `/source-grants` spend into
+per-extension grant IDs, and the reveal/open actions back Make Pack v2's
 capability-aware result button (`desktop:reveal`, `desktop:open`).
 No new IPC channels were added for v2; channel/handler/preload/client
 parity is unchanged.
@@ -81,9 +81,10 @@ under `resources/` outside the archive, readable without extracting app code.
 - Internal IPC contracts: channel names, kinds, and payload fields in
   `CHANNEL_SPECS`; `validateIpcPayload` rejects unknown channels and missing
   fields.
-- Desktop grants: `pick-folder` returns an opaque grant via
-  `/api/desktop/grants` (`x-foleyard-grant-secret`); transport adapters scope
-  writes to it.
+- Desktop grants: `pick-folder` returns the canonical path (Library-root
+  browsing) or, for an extension purpose, a single-use opaque picker proof via
+  `/api/desktop/grants` (`x-foleyard-grant-secret`); the extension grant routes
+  spend that proof and transport adapters scope writes to the resulting grant.
 
 ## Failure behavior and limitations
 

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import {
@@ -40,6 +40,7 @@ import {
   createShelfSelectionSource,
 } from "@/lib/extensions-v2/sources";
 import { POST as postGrant } from "@/app/api/extensions-v2/grants/route";
+import { POST as desktopGrantsPOST } from "@/app/api/desktop/grants/route";
 import { GET as getCatalog } from "@/app/api/extensions-v2/route";
 import { PATCH as patchExtension } from "@/app/api/extensions-v2/extensions/[extensionId]/route";
 import {
@@ -732,11 +733,28 @@ describe("make-pack-v2 production registration and routes", () => {
     const dir = await fs.promises.realpath(
       fs.mkdtempSync(path.join(os.tmpdir(), "foleyard-mpv2-grant-")),
     );
+    vi.stubEnv("FOLEYARD_GRANT_SECRET", "make-pack-secret");
     try {
+      // The native picker mints the single-use proof the renderer hands over.
+      const picked = await desktopGrantsPOST(
+        new NextRequest("http://localhost/api/desktop/grants", {
+          method: "POST",
+          headers: { "x-foleyard-grant-secret": "make-pack-secret" },
+          body: JSON.stringify({
+            path: dir,
+            extensionId: MAKE_PACK_V2_ID,
+            grantKind: "destination",
+          }),
+        }),
+      );
+      expect(picked.status).toBe(200);
+      const proof = ((await picked.json()) as { proof: string }).proof;
+      expect(proof).toEqual(expect.any(String));
+
       const response = await postGrant(
         new NextRequest("http://localhost/api/extensions-v2/grants", {
           method: "POST",
-          body: JSON.stringify({ extensionId: MAKE_PACK_V2_ID, directoryPath: dir }),
+          body: JSON.stringify({ extensionId: MAKE_PACK_V2_ID, proof }),
         }),
       );
       expect(response.status).toBe(200);
@@ -745,14 +763,24 @@ describe("make-pack-v2 production registration and routes", () => {
       expect(body.grantId.length).toBeGreaterThan(0);
       expect(body.path).toBe(dir);
 
+      // A caller-supplied path is not consent.
+      const viaPath = await postGrant(
+        new NextRequest("http://localhost/api/extensions-v2/grants", {
+          method: "POST",
+          body: JSON.stringify({ extensionId: MAKE_PACK_V2_ID, directoryPath: dir }),
+        }),
+      );
+      expect(viaPath.status).toBe(400);
+
       const unknown = await postGrant(
         new NextRequest("http://localhost/api/extensions-v2/grants", {
           method: "POST",
-          body: JSON.stringify({ extensionId: "nope", directoryPath: dir }),
+          body: JSON.stringify({ extensionId: "nope", proof: "vpick_forged" }),
         }),
       );
       expect(unknown.status).toBe(404);
     } finally {
+      vi.unstubAllEnvs();
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });

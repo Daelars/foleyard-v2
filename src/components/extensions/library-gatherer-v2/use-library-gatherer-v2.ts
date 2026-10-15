@@ -15,6 +15,7 @@ import {
   pollV2JobUntilSettled,
   requestV2JobCancel,
 } from "@/lib/extensions-v2/job-client";
+import { pickV2Grant } from "@/lib/extensions-v2/picker-grant-client";
 
 export type LibraryGathererV2Phase = "form" | "preview" | "working" | "done";
 
@@ -35,27 +36,6 @@ function outcomeError(body: unknown, fallback: string): string {
     return parsed?.error?.message ?? fallback;
   }
   return fallback;
-}
-
-async function issueSourceGrant(
-  directoryPath: string,
-): Promise<{ grantId: string; path: string } | null> {
-  const response = await fetch("/api/extensions-v2/source-grants", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ extensionId: LIBRARY_GATHERER_V2_ID, directoryPath }),
-  });
-  const body = (await response.json().catch(() => null)) as {
-    ok?: boolean;
-    grantId?: string;
-    path?: string;
-    error?: { message?: string };
-  } | null;
-  if (!response.ok || !body?.ok || !body.grantId) {
-    toast.error(body?.error?.message ?? "Source grant failed");
-    return null;
-  }
-  return { grantId: body.grantId, path: body.path ?? directoryPath };
 }
 
 /** Full library-gatherer v2 dialog flow: sources → preview → destination → job. */
@@ -89,42 +69,28 @@ export function useLibraryGathererV2({ open }: { open: boolean }) {
 
   const sourceGrantIds = sources.map((source) => source.grantId);
 
-  const handleAddFolder = useCallback(
-    async (folderPath: string) => {
-      const trimmed = folderPath.trim();
-      if (!trimmed) return;
-      if (sources.some((source) => source.path === trimmed)) {
+  const handlePickFolder = useCallback(async () => {
+    if (!isDesktopApp()) {
+      toast.error("Source folders need the desktop app to grant access");
+      return;
+    }
+    setBusy(true);
+    try {
+      // The picker mints a single-use source proof; the source-grant route spends it.
+      const picked = await pickV2Grant(getDesktopBridge(), LIBRARY_GATHERER_V2_ID, "source");
+      if (!picked.ok) {
+        toast.error(picked.error);
+        return;
+      }
+      if (sources.some((source) => source.path === picked.path)) {
         toast.error("Folder already added");
         return;
       }
-      if (!isDesktopApp()) {
-        toast.error("Source folders need the desktop app to grant access");
-        return;
-      }
-      setBusy(true);
-      try {
-        const issued = await issueSourceGrant(trimmed);
-        if (!issued) return;
-        setSources((prev) => [...prev, { path: issued.path, grantId: issued.grantId }]);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [sources],
-  );
-
-  const handlePickFolder = useCallback(async () => {
-    if (!isDesktopApp()) {
-      toast.error("Folder picker requires the desktop app");
-      return;
+      setSources((prev) => [...prev, { path: picked.path, grantId: picked.grantId }]);
+    } finally {
+      setBusy(false);
     }
-    const picked = await getDesktopBridge()?.pickFolder();
-    if (picked?.ok && picked.path) {
-      await handleAddFolder(picked.path);
-    } else if (picked && !picked.ok) {
-      toast.error(picked.error ?? "Folder picker failed");
-    }
-  }, [handleAddFolder]);
+  }, [sources]);
 
   const handleRemoveFolder = useCallback((folderPath: string) => {
     setSources((prev) => prev.filter((source) => source.path !== folderPath));
@@ -135,30 +101,16 @@ export function useLibraryGathererV2({ open }: { open: boolean }) {
       toast.error("Folder picker requires the desktop app");
       return;
     }
-    const picked = await getDesktopBridge()?.pickFolder();
-    if (!picked?.ok || !picked.path) {
-      if (picked && !picked.ok) toast.error(picked.error ?? "Folder picker failed");
-      return;
-    }
     setBusy(true);
     try {
-      const response = await fetch("/api/extensions-v2/grants", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ extensionId: LIBRARY_GATHERER_V2_ID, directoryPath: picked.path }),
-      });
-      const body = (await response.json().catch(() => null)) as {
-        ok?: boolean;
-        grantId?: string;
-        path?: string;
-        error?: { message?: string };
-      } | null;
-      if (!response.ok || !body?.ok || !body.grantId) {
-        toast.error(body?.error?.message ?? "Destination grant failed");
+      // The picker mints a single-use destination proof; the grant route spends it.
+      const picked = await pickV2Grant(getDesktopBridge(), LIBRARY_GATHERER_V2_ID, "destination");
+      if (!picked.ok) {
+        toast.error(picked.error);
         return;
       }
-      setDestPath(body.path ?? picked.path);
-      setGrantId(body.grantId);
+      setDestPath(picked.path);
+      setGrantId(picked.grantId);
     } finally {
       setBusy(false);
     }
@@ -294,7 +246,6 @@ export function useLibraryGathererV2({ open }: { open: boolean }) {
     error,
     busy,
     jobId,
-    handleAddFolder,
     handlePickFolder,
     handleRemoveFolder,
     handlePickDest,

@@ -10,6 +10,7 @@ import {
   pollV2JobUntilSettled,
   requestV2JobCancel,
 } from "@/lib/extensions-v2/job-client";
+import { pickV2Grant } from "@/lib/extensions-v2/picker-grant-client";
 
 export type MakePackV2Source = "selection" | "shelf" | "recent";
 export type MakePackV2Format = "folder" | "zip";
@@ -105,30 +106,16 @@ export function useMakePackV2({
       toast.error("Folder picker requires the desktop app");
       return;
     }
-    const picked = await getDesktopBridge()?.pickFolder();
-    if (!picked?.ok || !picked.path) {
-      if (picked && !picked.ok) toast.error(picked.error ?? "Folder picker failed");
-      return;
-    }
     setBusy(true);
     try {
-      const response = await fetch("/api/extensions-v2/grants", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ extensionId: MAKE_PACK_V2_ID, directoryPath: picked.path }),
-      });
-      const body = (await response.json().catch(() => null)) as {
-        ok?: boolean;
-        grantId?: string;
-        path?: string;
-        error?: { message?: string };
-      } | null;
-      if (!response.ok || !body?.ok || !body.grantId) {
-        toast.error(body?.error?.message ?? "Destination grant failed");
+      // The picker mints a single-use proof; the grant route spends it.
+      const picked = await pickV2Grant(getDesktopBridge(), MAKE_PACK_V2_ID, "destination");
+      if (!picked.ok) {
+        toast.error(picked.error);
         return;
       }
-      setDestPath(body.path ?? picked.path);
-      setGrantId(body.grantId);
+      setDestPath(picked.path);
+      setGrantId(picked.grantId);
     } finally {
       setBusy(false);
     }

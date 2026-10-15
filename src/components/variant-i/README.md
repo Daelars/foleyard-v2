@@ -83,5 +83,10 @@ attribute is removed and the original presentation resumes.
   the first enabled `menuitem`, roves with the arrow keys (wrapping, skipping
   disabled items), honours Home/End and typeahead, and closes on Escape (with
   focus back on the trigger) or Tab.
+- `Tabs` is a real tablist: one roving tab stop (the selected tab), ArrowLeft/
+  ArrowRight movement with wrapping, Home/End to the ends, and — because every
+  panel is mounted and cheap to show — activation on move. Pair its `id` with
+  a matching `TabPanel id` so each tab's `aria-controls` and the panel's
+  `aria-labelledby` resolve to each other.
 - The library does not import from `src/app/prototype/**` or route-local
   state; specimen fixtures live in the specimen route.

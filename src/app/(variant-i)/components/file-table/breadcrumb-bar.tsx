@@ -2,6 +2,11 @@
 
 // app-v3 adapter for FileTableBreadcrumbBar: same navigation contract,
 // I breadcrumb treatment (mono crumbs with chevrons, back button).
+//
+// The nav advertises breadcrumb semantics, so every navigable segment is a
+// real button — focusable and keyboard-reachable, rather than a span that only
+// looked clickable — and the current location is announced with aria-current
+// instead of being conveyed by bold styling alone.
 import { ChevronLeft, ListMusic } from "lucide-react";
 
 import { Button } from "@/components/variant-i";
@@ -12,6 +17,37 @@ import {
 } from "@/lib/directory-navigation";
 import { cn } from "@/lib/utils";
 import type { FileTableDirectory } from "@/components/FileTable/types";
+
+const CRUMB =
+  "rounded px-1 py-0.5 outline-none transition-colors hover:bg-white/[0.05] hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-[var(--vi-focus)]";
+
+function CrumbButton({
+  label,
+  current,
+  onClick,
+}: {
+  label: string;
+  current: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      // The full name is otherwise lost to the 150px clamp, for mouse and
+      // keyboard users alike.
+      title={label}
+      aria-current={current ? "page" : undefined}
+      className={cn(
+        CRUMB,
+        "max-w-[150px] truncate",
+        current ? "font-bold text-zinc-100" : "text-zinc-400",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
 
 export function V3BreadcrumbBar({
   currentDirectory,
@@ -26,6 +62,10 @@ export function V3BreadcrumbBar({
   onNavigate: (dir: FileTableDirectory | null) => void;
   onNavigateLibrary: () => void;
 }) {
+  const parts = currentDirectory?.directory
+    ? currentDirectory.directory.split(/[\\/]/)
+    : [];
+
   return (
     <div className="flex items-center gap-2 border-b border-[var(--vi-edge)] px-6 py-2">
       <Button
@@ -41,51 +81,61 @@ export function V3BreadcrumbBar({
         aria-label="Breadcrumb"
         className="flex items-center gap-1 overflow-hidden font-mono text-[11px] text-zinc-400"
       >
-        <span
-          className="cursor-pointer rounded px-1 py-0.5 outline-none transition-colors hover:bg-white/[0.05] hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-[var(--vi-focus)]"
+        <button
+          type="button"
           onClick={onNavigateLibrary}
+          aria-current={
+            !currentDirectory?.showRoot && parts.length === 0 && !currentCollectionName
+              ? "page"
+              : undefined
+          }
+          className={cn(
+            CRUMB,
+            !currentDirectory?.showRoot && parts.length === 0 && !currentCollectionName
+              ? "font-bold text-zinc-100"
+              : "text-zinc-400",
+          )}
         >
           Library
-        </span>
+        </button>
         {currentDirectory?.showRoot ? (
           <span className="flex items-center gap-1">
             <ChevronRightIcon />
-            <span
-              className={cn(
-                "max-w-[150px] cursor-pointer truncate rounded px-1 py-0.5 outline-none transition-colors hover:bg-white/[0.05] hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-[var(--vi-focus)]",
-                currentDirectory.directory === null && "font-bold text-zinc-100",
-              )}
+            <CrumbButton
+              label={basename(currentDirectory.libraryRoot)}
+              current={parts.length === 0 && !currentCollectionName}
               onClick={() => onNavigate(navigateToRoot(currentDirectory))}
-            >
-              {basename(currentDirectory.libraryRoot)}
-            </span>
+            />
           </span>
         ) : null}
         {currentDirectory?.directory
-          ? currentDirectory.directory.split(/[\\/]/).map((part, index, allParts) => (
+          ? parts.map((part, index) => (
               <span key={index} className="flex items-center gap-1">
                 <ChevronRightIcon />
-                <span
-                  className={cn(
-                    "max-w-[150px] cursor-pointer truncate rounded px-1 py-0.5 outline-none transition-colors hover:bg-white/[0.05] hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-[var(--vi-focus)]",
-                    index === allParts.length - 1 && "font-bold text-zinc-100",
-                  )}
+                <CrumbButton
+                  label={part}
+                  current={index === parts.length - 1 && !currentCollectionName}
                   onClick={() => {
                     onNavigate(
-                      navigateToSegment(currentDirectory, allParts, index),
+                      navigateToSegment(currentDirectory, parts, index),
                     );
                   }}
-                >
-                  {part}
-                </span>
+                />
               </span>
             ))
           : null}
         {currentCollectionName ? (
           <>
             <ChevronRightIcon />
-            <span className="flex max-w-[220px] items-center gap-1 truncate font-bold text-zinc-100">
-              <ListMusic className="size-3" />
+            {/* The collection is the current page but not a navigation target,
+                so it carries the current-location semantics without pretending
+                to be a button. */}
+            <span
+              aria-current="page"
+              title={currentCollectionName}
+              className="flex max-w-[220px] items-center gap-1 truncate font-bold text-zinc-100"
+            >
+              <ListMusic aria-hidden className="size-3" />
               {currentCollectionName}
             </span>
           </>

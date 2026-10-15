@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -22,6 +23,7 @@ import {
   Slider,
   StatusBadge,
   Switch,
+  TabPanel,
   Tabs,
   TagEditor,
   Toast,
@@ -240,6 +242,41 @@ describe("Select", () => {
   });
 });
 
+type SpecimenTab = "library" | "extensions" | "about";
+
+// A controlled tab bar, the way the app mounts it: Tabs and TabPanel are
+// siblings that share an id base so the panels are labelled by their tabs.
+function TabsHarness({ onChange }: { onChange?: (value: SpecimenTab) => void }) {
+  const [value, setValue] = useState<SpecimenTab>("library");
+  return (
+    <>
+      <Tabs
+        id="specimen-tabs"
+        label="Specimen tabs"
+        value={value}
+        onChange={(next) => {
+          setValue(next);
+          onChange?.(next);
+        }}
+        tabs={[
+          { value: "library", label: "Library" },
+          { value: "extensions", label: "Extensions" },
+          { value: "about", label: "About" },
+        ]}
+      />
+      <TabPanel id="specimen-tabs" tabKey="library">
+        Library panel
+      </TabPanel>
+      <TabPanel id="specimen-tabs" tabKey="extensions">
+        Extensions panel
+      </TabPanel>
+      <TabPanel id="specimen-tabs" tabKey="about">
+        About panel
+      </TabPanel>
+    </>
+  );
+}
+
 describe("Tabs", () => {
   it("switches the active tab with aria-selected", () => {
     const onChange = vi.fn();
@@ -258,6 +295,66 @@ describe("Tabs", () => {
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
     fireEvent.click(screen.getByRole("tab", { name: "Extensions" }));
     expect(onChange).toHaveBeenCalledWith("extensions");
+  });
+
+  it("keeps a single tab stop and links each tab to its labelled panel", () => {
+    render(<TabsHarness />);
+
+    const tabs = screen.getAllByRole("tab");
+    // Roving tabindex: only the selected tab is in the page tab order.
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1]);
+    expect(tabs.map((tab) => tab.getAttribute("aria-controls"))).toEqual([
+      "specimen-tabs-panel-library",
+      "specimen-tabs-panel-extensions",
+      "specimen-tabs-panel-about",
+    ]);
+
+    // Every panel carries the tabpanel role and is named by its tab.
+    const panels = screen.getAllByRole("tabpanel");
+    expect(panels.map((panel) => panel.id)).toEqual([
+      "specimen-tabs-panel-library",
+      "specimen-tabs-panel-extensions",
+      "specimen-tabs-panel-about",
+    ]);
+    expect(
+      screen.getByRole("tabpanel", { name: "Library" }).getAttribute("aria-labelledby"),
+    ).toBe("specimen-tabs-tab-library");
+  });
+
+  it("roves focus and selection with the arrow keys, Home and End", () => {
+    render(<TabsHarness />);
+    const tab = (name: string) => screen.getByRole("tab", { name });
+
+    fireEvent.keyDown(tab("Library"), { key: "ArrowRight" });
+    expect(document.activeElement).toBe(tab("Extensions"));
+    expect(tab("Extensions").getAttribute("aria-selected")).toBe("true");
+    expect(screen.getAllByRole("tab").map((t) => t.tabIndex)).toEqual([-1, 0, -1]);
+
+    // ArrowRight wraps past the last tab.
+    fireEvent.keyDown(tab("Extensions"), { key: "ArrowRight" });
+    fireEvent.keyDown(tab("About"), { key: "ArrowRight" });
+    expect(document.activeElement).toBe(tab("Library"));
+
+    // ArrowLeft wraps before the first tab.
+    fireEvent.keyDown(tab("Library"), { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(tab("About"));
+
+    fireEvent.keyDown(tab("About"), { key: "Home" });
+    expect(document.activeElement).toBe(tab("Library"));
+    expect(tab("Library").getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.keyDown(tab("Library"), { key: "End" });
+    expect(document.activeElement).toBe(tab("About"));
+    expect(screen.getAllByRole("tab").map((t) => t.tabIndex)).toEqual([-1, -1, 0]);
+  });
+
+  it("leaves keys it does not own to the browser", () => {
+    const onChange = vi.fn();
+    render(<TabsHarness onChange={onChange} />);
+    fireEvent.keyDown(screen.getByRole("tab", { name: "Library" }), {
+      key: "ArrowDown",
+    });
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 

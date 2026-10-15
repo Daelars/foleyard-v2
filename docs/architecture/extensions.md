@@ -77,7 +77,12 @@ commandId, selection, input }`:
    projection are memory-only — a persisted snapshot never carries a
    value, a grant, a stack, or a private path. Per-item availability
    comes from the same evaluator as preflight. Disable removes
-   contributions and listeners.
+   contributions and listeners. The durable job center (#281) is the
+   renderer lifecycle over that history: it lists and polls the job API
+   (no client-owned job state, so a dialog closing, a reload, or a
+   reopened application reconnects), cancels idempotently, reports
+   stopped only once the runner unwinds, and renders success, failure,
+   cancellation, interruption, and partial output distinctly.
 
 Module dependency direction (enforced by
 `node scripts/check-v2-boundaries.cjs` in CI): definitions →
@@ -127,6 +132,10 @@ tool packages import `yard-core` and relatives only.
   versions and the output-conflict error; `src/lib/extensions-v2/output-files.ts`
   — exclusive creation and version-checked removal
 - `src/lib/extensions-v2/runtime.ts` — the one process-wide v2 runtime
+- `src/lib/extensions-v2/job-center.ts` — job center view model (phases,
+  progress, cancellation state, terminal outcomes, durable history read);
+  `src/components/extensions-v2/{job-center.tsx,use-v2-job-center.ts}` —
+  the renderer surface and its polling/reconnect hook
 - `src/lib/extensions-v2/host.ts` — production registry + enablement
 - `src/app/api/extensions-v2/**/route.ts` — HTTP surface
 - `src/app/(variant-i)/components/extensions/**` — V3 adapters

@@ -187,6 +187,21 @@ of snapshot writes. Batched writes through the tag operation
 (`attachMany`) land in one transaction per chunk and are idempotent per
 `(file, tag)` pair, so a retried job cannot duplicate attachments.
 
+The renderer lifecycle is the durable job center (#281): the Tools
+surface lists the history (`GET /api/extensions-v2/jobs`) and polls each
+live job, so closing the dialog that started it, reloading the renderer,
+or reopening the application reconnects to an active or terminal job
+with no client-owned job state. Cancellation is idempotent — a repeated
+request while already stopping returns the same record and does not move
+the request time — and the center reports *stopping* until the server
+sets the stop time, then *stopped*. Success, failure, cancellation, and
+interruption are distinct outcomes, each with its bounded diagnostic,
+and partial output is reported separately (`partial.succeeded`,
+`partial.failed`, `partial.incomplete`) so an early stop is never shown
+as a clean success. The client view model lives in
+`src/lib/extensions-v2/job-center.ts` and the surface in
+`src/components/extensions-v2/job-center.tsx`.
+
 Plans (`vplan_` IDs) bind extension, command, validated
 targets/options, authorization context, expiry, and invocation.
 Single use, 15-minute default TTL capped at 1 hour. Apply revalidates

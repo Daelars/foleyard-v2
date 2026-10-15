@@ -190,7 +190,16 @@ describe("v2 job center", () => {
   });
 
   it("updates live progress while the job is running", async () => {
-    let polls = 0;
+    // The history read always serves the live 0/10 record; only a status
+    // poll can serve 5/10, so 5/10 on screen proves the poll was applied
+    // rather than the first paint. The mock then holds the job at 5/10
+    // until this test releases it: the poll interval is 20ms, so a mock
+    // that advanced the job to terminal on its own clock would give the
+    // intermediate render a lifetime shorter than one event-loop turn,
+    // and `waitFor` yields one turn (the testing-library async wrapper)
+    // before the caller reads the DOM again.
+    let statusPolls = 0;
+    let finish = false;
     world.jobs = [
       job({
         jobId: "vjob_progress",
@@ -199,10 +208,10 @@ describe("v2 job center", () => {
       }),
     ];
     installFetch(world, () => {
-      polls += 1;
+      statusPolls += 1;
       const target = world.jobs[0]!;
-      if (polls === 1) target.progress = { completed: 5, total: 10, updatedAt: "t" };
-      if (polls >= 2) {
+      target.progress = { completed: 5, total: 10, updatedAt: "t" };
+      if (finish) {
         target.state = "succeeded";
         target.progress = { completed: 10, total: 10, updatedAt: "t" };
         target.result = { value: { message: "done" } };
@@ -214,8 +223,10 @@ describe("v2 job center", () => {
     await waitFor(() =>
       expect(screen.getByRole("progressbar", { name: "Job progress: vjob_progress" })).toBeTruthy(),
     );
-    // Progress moves on a poll, not only on the first paint.
+    // Progress moves on a poll, not only on the first paint, and it stays
+    // there because the job is still running in the mock.
     await waitFor(() => expect(screen.getByText("5/10")).toBeTruthy());
+    expect(statusPolls).toBeGreaterThanOrEqual(1);
     expect(
       screen
         .getByRole("progressbar", { name: "Job progress: vjob_progress" })
@@ -223,6 +234,7 @@ describe("v2 job center", () => {
     ).toBe("50");
 
     // A terminal poll stops the loop and renders the result.
+    finish = true;
     await waitFor(() => expect(screen.getByText("Succeeded")).toBeTruthy());
     expect(screen.getByText(/\{"message":"done"\}/)).toBeTruthy();
   });

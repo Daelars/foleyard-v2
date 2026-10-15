@@ -136,6 +136,7 @@ entries through the v2 bridge.
 | `payload-too-large` | 413 | over body/input/selection limits |
 | `job-unknown` / `plan-unknown` | 404 | missing job or plan id |
 | `plan-expired` / `plan-altered` / `review-required` | 400 | reviewed-plan contract violations |
+| `plan-limit` / `job-limit` | 429 | waiting work past its named cap; make room, then retry |
 
 Cancellation is cooperative: work stops between operations.
 

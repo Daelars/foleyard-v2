@@ -158,6 +158,13 @@ stopped while work still writes. Restart marks live jobs interrupted
 with known outputs; filesystem effects never replay. Duplicate
 invocation keys return the existing job.
 
+Queued work is bounded before it starts: at most 16 live `queued` jobs
+per extension and 64 across the process. Past either cap a submit is
+refused with `job-limit` (429) naming the limit; queued work is never
+silently dropped or evicted. Running and terminal jobs do not consume
+queue slots, and the number of `waitFor` waiters parked on one job is
+capped (`MAX_V2_JOB_WAITERS_PER_JOB`).
+
 A terminal job exposes a bounded summary over the polling route
 (#279): `job.result.value` is the handler's declared result projected
 onto the command `result` schema — undeclared fields dropped, strings,
@@ -179,6 +186,18 @@ Plans (`vplan_` IDs) bind extension, command, validated
 targets/options, authorization context, expiry, and invocation.
 Single use, 15-minute default TTL capped at 1 hour. Apply revalidates
 targets, grants, permissions, and availability.
+
+Pending plans are bounded before prepare does expensive work. An
+identical pending plan is coalesced (same extension, command, targets,
+options, destructive flag, grants, and required permissions): the second
+prepare returns the existing plan instead of a duplicate. Stale records
+are expired by TTL and counted rather than vanishing. A genuinely new
+plan past the hard cap — 32 pending per extension, 64 across the process
+— is refused with `plan-limit` (429) naming the limit; pending plans are
+never silently evicted to make room. The stored preview payload is
+capped at 64 KiB, and a plan record is retained at most 24 h after it
+stops being pending so a replay can still report `plan-consumed`.
+See `docs/adr/extension-v2-work-bounds.md`.
 
 Settings are author-declared and validated with reset semantics; reset-all
 writes each declared setting under its canonical namespaced row. Workflow

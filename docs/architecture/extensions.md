@@ -85,6 +85,16 @@ commandId, selection, input }`:
    comes from the same evaluator as preflight. Disable removes
    contributions and listeners.
 
+Waiting work is bounded before expensive work begins — before
+selection hydration, preview construction, or handler execution. The
+policy is coalesce first, expire stale plans by TTL and report the
+count, then reject past a named hard cap; nothing is silently dropped
+or evicted to make room. Pending plans are capped per extension and in
+total, queued jobs likewise, `waitFor` waiters per job, and the stored
+plan preview payload; a refusal is a typed `plan-limit` / `job-limit`
+(HTTP 429) naming the limit. See the decision record
+`docs/adr/extension-v2-work-bounds.md`.
+
 Module dependency direction (enforced by
 `node scripts/check-v2-boundaries.cjs` in CI): definitions →
 registry → catalog/availability → host → operations → jobs/plans;
@@ -124,10 +134,16 @@ tool packages import `yard-core` and relatives only.
 ## Failure behavior and limitations
 
 - Envelope failures precede execution; failure codes map through the
-  transport status table (400/403/404/413/500).
+  transport status table (400/403/404/413/429/500).
 - Null envelopes and unknown ids fail closed; nothing is fetched or loaded.
 - Jobs are host-owned and cooperative; plans require host-stamped review
   and expire. No generic undo.
+- Waiting work is bounded before execution: pending plans coalesce, then
+  expire by TTL (counted), then reject past `32` per extension / `64`
+  total; queued jobs coalesce by idempotency key, then reject past `16`
+  per extension / `64` total; `waitFor` waiters are capped per job; the
+  plan preview payload is capped. Refusals are `plan-limit` / `job-limit`
+  (429) naming the limit.
 
 ## Source map (real file paths)
 

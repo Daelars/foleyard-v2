@@ -77,8 +77,8 @@ callbacks (see `docs/events.md`). There is no `services/commands/` module
 
 - v2 failures use typed codes (`input-invalid`, `permission-denied`,
   `selection-*`, `context-unsupported`, `payload-too-large`,
-  `review-required`, `job-unknown`, `plan-*`, `handler-*`) mapped to HTTP
-  by the transport table.
+  `review-required`, `job-unknown`, `plan-*`, `job-limit`, `handler-*`)
+  mapped to HTTP by the transport table.
 - Destination and source access travel through grant stores with canonical
   path containment; raw paths never reach handlers. Trusted bundled code is
   not sandboxed against direct Node imports.

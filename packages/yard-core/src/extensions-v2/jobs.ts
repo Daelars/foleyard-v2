@@ -35,7 +35,13 @@ import {
  *
  * Bounds: at most `MAX_CONCURRENT_V2_JOBS` runners execute at once
  * (extra submits queue FIFO); history keeps at most
- * `MAX_V2_JOB_HISTORY` records with live jobs never evicted.
+ * `MAX_V2_JOB_HISTORY` records with live jobs never evicted. Waiting
+ * work is bounded before a new job is created (#299): a duplicate
+ * idempotency key is coalesced first, then a genuinely new submit is
+ * refused with `job-limit` past `MAX_V2_QUEUED_JOBS_PER_EXTENSION` or
+ * `MAX_V2_QUEUED_JOBS_TOTAL` queued jobs, naming the limit, and queued
+ * jobs are never silently dropped or evicted to make room. At most
+ * `MAX_V2_JOB_WAITERS_PER_JOB` promises may park on one job.
  *
  * Restart: `snapshot`/`restoreSnapshot` carry serializable records
  * only (ownership metadata and owned output paths; never grant tokens,
@@ -69,6 +75,18 @@ import {
 
 export const MAX_CONCURRENT_V2_JOBS = 2;
 export const MAX_V2_JOB_HISTORY = 100;
+/**
+ * Waiting-work bounds (#299): at most this many *live queued* jobs per
+ * extension and across the process. Running and terminal jobs do not
+ * consume a queue slot. Past a cap a submit is refused with
+ * `job-limit` naming the limit; queued work is never silently dropped
+ * or evicted to make room. A duplicate idempotency key is coalesced
+ * first, so retries never consume a slot.
+ */
+export const MAX_V2_QUEUED_JOBS_PER_EXTENSION = 16;
+export const MAX_V2_QUEUED_JOBS_TOTAL = 64;
+/** Largest number of `waitFor` waiters parked on one job. */
+export const MAX_V2_JOB_WAITERS_PER_JOB = 64;
 /**
  * Retention for the persisted snapshot (R7): the newest
  * `MAX_V2_JOB_SNAPSHOT_RETAINED` records survive a restart; older
@@ -204,6 +222,20 @@ export class V2JobCancelledError extends Error {
 
 export function isV2JobCancellation(error: unknown): error is V2JobCancelledError {
   return error instanceof V2JobCancelledError;
+}
+
+/**
+ * Thrown by `V2JobManager.submit` when a genuinely new job would exceed
+ * the per-extension or process-wide queued-work bound. Carries
+ * `failureCode` structurally (not by class identity) so a route bundle
+ * that re-evaluated this module still maps it to `job-limit`.
+ */
+export class V2JobLimitError extends Error {
+  readonly failureCode = "job-limit";
+  constructor(message: string) {
+    super(message);
+    this.name = "V2JobLimitError";
+  }
 }
 
 /**
@@ -369,6 +401,10 @@ export class V2JobManager implements V2JobStatusReader {
         return { record: { ...existing.record }, duplicate: true };
       }
     }
+    // Reject past the queued-work bound, naming the limit; queued work is
+    // never silently dropped or evicted to make room. Coalescing above
+    // means a retry with the same idempotency key never hits this.
+    this.checkQueueCapacity(spec.extensionId);
     const now = this.clock();
     const record: V2JobRecord = {
       jobId: createJobId(),
@@ -482,9 +518,45 @@ export class V2JobManager implements V2JobStatusReader {
     const entry = this.entries.get(jobId);
     if (!entry) return Promise.reject(new Error(`Job "${jobId}" is unknown.`));
     if (isTerminal(entry.record.state)) return Promise.resolve({ ...entry.record });
+    if (entry.waiters.length >= MAX_V2_JOB_WAITERS_PER_JOB) {
+      return Promise.reject(
+        new Error(
+          `Job "${jobId}" already has ${entry.waiters.length} waiters; the per-job waiter limit is ${MAX_V2_JOB_WAITERS_PER_JOB}. Poll the job status instead of parking another waiter.`,
+        ),
+      );
+    }
     return new Promise((resolve) => {
       entry.waiters.push(resolve);
     });
+  }
+
+  /**
+   * Live queued work, optionally scoped to one extension. Only `queued`
+   * jobs count: running and terminal work do not consume queue slots.
+   */
+  private queuedCount(extensionId?: string): number {
+    let count = 0;
+    for (const entry of this.entries.values()) {
+      if (entry.record.state !== "queued") continue;
+      if (extensionId !== undefined && entry.record.extensionId !== extensionId) continue;
+      count += 1;
+    }
+    return count;
+  }
+
+  private checkQueueCapacity(extensionId: string): void {
+    const perExtension = this.queuedCount(extensionId);
+    if (perExtension >= MAX_V2_QUEUED_JOBS_PER_EXTENSION) {
+      throw new V2JobLimitError(
+        `Extension "${extensionId}" already has ${perExtension} queued jobs; the per-extension queue limit is ${MAX_V2_QUEUED_JOBS_PER_EXTENSION}. Wait for queued work to start or cancel it before submitting more.`,
+      );
+    }
+    const total = this.queuedCount();
+    if (total >= MAX_V2_QUEUED_JOBS_TOTAL) {
+      throw new V2JobLimitError(
+        `The host already has ${total} queued jobs; the process-wide queue limit is ${MAX_V2_QUEUED_JOBS_TOTAL}. Wait for queued work to start or cancel it before submitting more.`,
+      );
+    }
   }
 
   /**

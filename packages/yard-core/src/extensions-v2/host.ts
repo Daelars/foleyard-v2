@@ -652,9 +652,13 @@ export class ExtensionV2Host {
         },
       });
     } catch (error) {
+      const failureCode =
+        (error as { failureCode?: unknown }).failureCode === "job-limit"
+          ? "job-limit"
+          : "extension-disabled";
       return {
         ok: false,
-        code: "extension-disabled",
+        code: failureCode,
         message: error instanceof Error ? error.message : String(error),
         invocationId,
         extensionId,

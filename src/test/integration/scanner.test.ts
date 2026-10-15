@@ -1,4 +1,5 @@
 import { rmSync, utimesSync } from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -13,7 +14,7 @@ import { SqliteSettingsRepository } from "@/lib/database/settings-repository";
 import { startScan, getScanStatus } from "@/lib/scanner/run-scan";
 
 // Area: scanner (#139). Replaces two files and 17 tests that constructed
-// ScanRunner directly with injected seams with 6 integration tests driven
+// ScanRunner directly with injected seams with 7 integration tests driven
 // through startScan — what the API route actually calls — against real temp
 // directories and a real database.
 
@@ -230,27 +231,65 @@ describe("scanner", () => {
     }
   });
 
-  it.fails("resolves parent/child root ownership deterministically regardless of order (I03)", async () => {
+  it("resolves parent/child root ownership deterministically regardless of order (I03)", async () => {
     const scratch = createScratchLibrary("foleyard-scan-roots-");
     try {
       const deep = scratch.writeFile("sub/deep.wav");
-      scratch.writeFile("top.wav");
+      const top = scratch.writeFile("top.wav");
+      const parent = path.resolve(scratch.root);
+      const child = path.resolve(scratch.root, "sub");
 
-      settings.setLibraryRoots([scratch.root, `${scratch.root}/sub`]);
+      settings.setLibraryRoots([parent, child]);
       await runScanToIdle();
       const firstOwner = files.getFileByPath(deep)?.libraryRoot;
+      const firstTopOwner = files.getFileByPath(top)?.libraryRoot;
 
       // Same files, same roots, opposite order: a fresh index must agree.
       sqlite.close();
       wireDatabase();
-      settings.setLibraryRoots([`${scratch.root}/sub`, scratch.root]);
+      settings.setLibraryRoots([child, parent]);
       await runScanToIdle();
       const secondOwner = files.getFileByPath(deep)?.libraryRoot;
+      const secondTopOwner = files.getFileByPath(top)?.libraryRoot;
 
+      // The most specific (deepest) configured root owns the nested file, and
+      // the shallower root keeps the file that only it contains.
+      expect(firstOwner).toBe(child);
+      expect(firstTopOwner).toBe(parent);
       expect(
         secondOwner,
         `ownership must not depend on root order (got ${firstOwner} then ${secondOwner})`,
       ).toBe(firstOwner);
+      expect(secondTopOwner).toBe(firstTopOwner);
+    } finally {
+      scratch.dispose();
+    }
+  });
+
+  it("moves a file to a nested root configured after it was indexed, without duplicating it", async () => {
+    const scratch = createScratchLibrary("foleyard-scan-nested-add-");
+    try {
+      const deep = scratch.writeFile("sub/deep.wav");
+      const parent = path.resolve(scratch.root);
+      const child = path.resolve(scratch.root, "sub");
+
+      settings.setLibraryRoots([parent]);
+      await runScanToIdle();
+      expect(files.getFileByPath(deep)?.libraryRoot).toBe(parent);
+
+      // The user adds the nested root. Its order is not a contract, so the
+      // parent is deliberately present but must not reclaim the nested file.
+      settings.setLibraryRoots([child, parent]);
+      await runScanToIdle();
+
+      expect(files.getFileCount()).toBe(1);
+      expect(files.getFileByPath(deep)?.libraryRoot).toBe(child);
+      // Directory navigation and root filters read the same resolved owner:
+      // the file sits at the child root, not in a "sub" directory of the parent.
+      expect(
+        files.getFiles({ libraryRoot: child, atLibraryRoot: true, limit: 10 }).map((row) => row.path),
+      ).toEqual([deep]);
+      expect(files.getFiles({ libraryRoot: parent, limit: 10 })).toEqual([]);
     } finally {
       scratch.dispose();
     }

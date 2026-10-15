@@ -1,6 +1,6 @@
 # Scanning
 
-> Feature status: shipped (with known defects B03 / I03 tracked as expected-to-fail)
+> Feature status: shipped (with known defect B03 tracked as expected-to-fail)
 > Contract: internal
 > Owner: `src/lib/scanner/*` + `packages/yard-core/src/services/library/*`
 > Applies to: docs manifest ID (`scanning`); development checkout when unbuilt
@@ -32,10 +32,13 @@ phases:
    extension wins).
 2. **Reconcile** — `reconcile.ts` (`markRemovedFiles`) diffs discovered
    paths against the index: unchanged files skipped, missing files marked
-   removed, new/changed files queued. Detached rows (a removed root, #271)
-   are reattached when the owning root is scanned; they are never touched by
-   another root's scan, and interrupted root removals are reconciled from the
-   `pending_root_changes` journal before discovery.
+   removed, new/changed files queued. Each discovered file's owner is resolved
+   from every configured root by `resolveOwningRoot`
+   (`src/lib/database/file-ownership.ts`), so overlapping roots always agree on
+   the most specific (deepest) owner and the stored directory (#309). Detached
+   rows (a removed root, #271) are reattached when the owning root is scanned;
+   they are never touched by another root's scan, and interrupted root removals
+   are reconciled from the `pending_root_changes` journal before discovery.
 3. **Metadata-queue** — `metadata-queue.ts` extracts metadata with
    concurrency 16 and write batches of 250 (`METADATA_CONCURRENCY`,
    `METADATA_WRITE_BATCH_SIZE` in `scan-runner.ts`).
@@ -60,8 +63,6 @@ phases:
   `failed`/`errors` without aborting the run; the summary records them.
 - B03 (expected-to-fail): collection-branch counts disagree with the
   file list (#137).
-- I03 (expected-to-fail): order-dependent root ownership — overlapping
-  roots attribute files by scan order (#139).
 - An interrupted Library root removal is reconciled before discovery from
   `pending_root_changes` (#271); the scan never resurrects a detached record
   on its own (see `docs/library.md`).
@@ -92,5 +93,5 @@ post-scan state against the checkout.
 
 - `docs/library.md` — roots and file identity
 - `docs/metadata.md` — what extraction produces
-- `docs/development.md` — expected-failures ledger (B03, I03, B06)
+- `docs/development.md` — expected-failures ledger (B03, B06)
 - `docs/filesystem.md` — root readability and grants

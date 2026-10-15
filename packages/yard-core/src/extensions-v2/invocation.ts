@@ -45,10 +45,12 @@ export type V2FailureCode =
   | "handler-failed"
   | "result-invalid"
   | "job-unknown"
+  | "job-limit"
   | "plan-unknown"
   | "plan-expired"
   | "plan-altered"
   | "plan-consumed"
+  | "plan-limit"
   | "review-required";
 
 export type V2Failure = {

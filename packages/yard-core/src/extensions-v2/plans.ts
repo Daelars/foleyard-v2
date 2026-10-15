@@ -63,12 +63,41 @@ import type { ExtensionV2Registry } from "./registry";
  * over in-memory/file-fake targets; no destructive end-user extension ships
  * here.
  *
+ * Bounds (#299): pending plans are bounded before a new record is
+ * created. An identical pending plan (same extension, command, targets,
+ * options, destructive flag, grants, and required permissions) is
+ * coalesced, so the second prepare returns the existing plan. Stale
+ * records are expired by TTL and reported, never vanished. Only then is
+ * a genuinely new plan refused past `MAX_V2_PENDING_PLANS_PER_EXTENSION`
+ * or `MAX_V2_PENDING_PLANS_TOTAL` with `plan-limit` naming the limit;
+ * pending plans are never silently evicted to make room. The stored
+ * preview payload is bounded by `MAX_V2_PLAN_PREVIEW_BYTES`.
+ *
  * Framework-free: no React, routes, database handles, or v1 imports.
  */
 
 export const V2_PLAN_TTL_MS = 15 * 60_000;
 export const V2_PLAN_MAX_TTL_MS = 60 * 60_000;
-export const MAX_V2_PLANS = 200;
+/**
+ * Waiting-work bounds (#299). A pending plan is prepared, reviewed, and
+ * applied; past the per-extension or process-wide cap a genuinely new
+ * plan is refused (`plan-limit`) rather than silently evicted. An
+ * identical pending plan is coalesced first, so duplicate previews never
+ * consume capacity. Stale records are swept by TTL and the count is
+ * reported (`sweep()` / `lastSweep()`), never vanished silently.
+ */
+export const MAX_V2_PENDING_PLANS_PER_EXTENSION = 32;
+export const MAX_V2_PENDING_PLANS_TOTAL = 64;
+/** Hard cap on stored plan records (pending + retained terminal records). */
+export const MAX_V2_PLAN_RECORDS = 256;
+/**
+ * Stale-record TTL: the longest a plan record is kept after it stops
+ * being pending, so a replay can still report `plan-consumed`. Pending
+ * plans expire earlier at their own `expiresAt`.
+ */
+export const V2_PLAN_STALE_TTL_MS = 24 * 60 * 60_000;
+/** Largest accepted serialized preview payload, in bytes, checked before storing. */
+export const MAX_V2_PLAN_PREVIEW_BYTES = 65_536;
 
 export type V2PlanState = "pending" | "consumed";
 
@@ -274,6 +303,18 @@ function checkPreview(preview: V2PlanPreview): void {
       throw new V2OperationError("input-invalid", "Plan preview details must be JSON-serializable.");
     }
   }
+  let previewBytes: number;
+  try {
+    previewBytes = new TextEncoder().encode(JSON.stringify(preview) ?? "").length;
+  } catch {
+    throw new V2OperationError("input-invalid", "Plan preview must be JSON-serializable.");
+  }
+  if (previewBytes > MAX_V2_PLAN_PREVIEW_BYTES) {
+    throw new V2OperationError(
+      "input-invalid",
+      `Plan preview is ${previewBytes} bytes; the limit is ${MAX_V2_PLAN_PREVIEW_BYTES}. Trim the preview tables, notices, or details before preparing.`,
+    );
+  }
 }
 
 function lookupCommand(
@@ -300,6 +341,8 @@ export class V2PlanManager {
   private readonly plans = new Map<string, V2PlanRecord>();
   private readonly clock: () => string;
   private readonly nowMs: () => number;
+  /** Counts from the most recent `sweep`, reported rather than discarded. */
+  private sweepCounts: { expired: number; dropped: number } = { expired: 0, dropped: 0 };
 
   constructor(
     private readonly registry: ExtensionV2Registry,
@@ -310,11 +353,113 @@ export class V2PlanManager {
   }
 
   pendingCount(): number {
+    return this.countPending();
+  }
+
+  /** Counts from the most recent `sweep` (`{ expired, dropped }`). */
+  lastSweep(): { expired: number; dropped: number } {
+    return { ...this.sweepCounts };
+  }
+
+  /**
+   * Expire stale records and report the count instead of vanishing them:
+   * a pending plan past its `expiresAt` is expired, and any record past
+   * `V2_PLAN_STALE_TTL_MS` since creation is dropped. Runs before capacity
+   * is judged, so expiry frees slots before a new plan is refused.
+   */
+  sweep(): { expired: number; dropped: number } {
+    const now = this.clock();
+    // Staleness is measured on the same clock that stamped `createdAt`,
+    // so a test that overrides only `clock` stays self-consistent.
+    const parsedNow = Date.parse(now);
+    const nowMs = Number.isFinite(parsedNow) ? parsedNow : this.nowMs();
+    let expired = 0;
+    let dropped = 0;
+    for (const [id, record] of [...this.plans]) {
+      if (record.state === "pending" && record.expiresAt <= now) {
+        this.plans.delete(id);
+        expired += 1;
+        continue;
+      }
+      const createdMs = Date.parse(record.createdAt);
+      if (Number.isFinite(createdMs) && nowMs - createdMs >= V2_PLAN_STALE_TTL_MS) {
+        this.plans.delete(id);
+        dropped += 1;
+      }
+    }
+    if (this.plans.size > MAX_V2_PLAN_RECORDS) {
+      for (const [id, record] of [...this.plans]) {
+        if (this.plans.size <= MAX_V2_PLAN_RECORDS) break;
+        if (record.state === "consumed") {
+          this.plans.delete(id);
+          dropped += 1;
+        }
+      }
+    }
+    this.sweepCounts = { expired, dropped };
+    return { ...this.sweepCounts };
+  }
+
+  private countPending(extensionId?: string): number {
     let count = 0;
     for (const record of this.plans.values()) {
-      if (record.state === "pending") count += 1;
+      if (record.state !== "pending") continue;
+      if (extensionId !== undefined && record.extensionId !== extensionId) continue;
+      count += 1;
     }
     return count;
+  }
+
+  /**
+   * Refuse a genuinely new plan past the named cap. Pending plans are
+   * never evicted to make room; expiry (`sweep`) is the only pressure
+   * valve, and it reports what it removed.
+   */
+  private checkCapacity(extensionId: string): void {
+    const perExtension = this.countPending(extensionId);
+    if (perExtension >= MAX_V2_PENDING_PLANS_PER_EXTENSION) {
+      throw planFailure(
+        "plan-limit",
+        `Extension "${extensionId}" already holds ${perExtension} pending plans; the per-extension limit is ${MAX_V2_PENDING_PLANS_PER_EXTENSION}. Apply or let existing plans expire before preparing another.`,
+      );
+    }
+    const total = this.countPending();
+    if (total >= MAX_V2_PENDING_PLANS_TOTAL) {
+      throw planFailure(
+        "plan-limit",
+        `The host already holds ${total} pending plans; the process-wide limit is ${MAX_V2_PENDING_PLANS_TOTAL}. Apply or let existing plans expire before preparing another.`,
+      );
+    }
+  }
+
+  /**
+   * Find an identical pending plan so the caller can reuse it. Identity
+   * is the full binding: same extension, command, targets/options hash,
+   * destructive flag, grants, and required permissions.
+   */
+  private findPending(record: {
+    extensionId: string;
+    commandId: string;
+    bindingHash: string;
+    destructive: boolean;
+    grantIds: readonly string[];
+    requiredPermissions: readonly string[];
+  }): V2PlanRecord | null {
+    const now = this.clock();
+    const grants = [...record.grantIds].sort().join("\u0000");
+    const permissions = [...record.requiredPermissions].sort().join("\u0000");
+    for (const candidate of this.plans.values()) {
+      if (candidate.state !== "pending") continue;
+      if (candidate.expiresAt <= now) continue;
+      if (candidate.extensionId !== record.extensionId) continue;
+      if (candidate.commandId !== record.commandId) continue;
+      if (candidate.bindingHash !== record.bindingHash) continue;
+      if (candidate.destructive !== record.destructive) continue;
+      if ([...candidate.grantIds].sort().join("\u0000") !== grants) continue;
+      if ([...candidate.requiredPermissions].sort().join("\u0000") !== permissions) continue;
+      return candidate;
+    }
+    return null;
   }
 
   /**
@@ -333,6 +478,9 @@ export class V2PlanManager {
     },
     spec: V2PlanPrepareSpec,
   ): V2PlanRecord {
+    // Bound waiting work before any expensive validation or preview work:
+    // stale records expire (and are counted) before capacity is judged.
+    this.sweep();
     const { command } = lookupCommand(this.registry, binding.extensionId, binding.commandId);
     if (!spec || typeof spec !== "object") {
       throw planFailure("input-invalid", "Plan spec must be an object.");
@@ -357,6 +505,31 @@ export class V2PlanManager {
     if (grantIds.some((id) => typeof id !== "string" || !id.trim())) {
       throw planFailure("input-invalid", "Plan grant IDs must be non-empty strings.");
     }
+    const destructive = command.destructive === true || spec.destructive === true;
+    const requiredPermissions = [...(spec.requiredPermissions ?? binding.effectivePermissions)];
+    const bindingHash = bindingHashFor({ fileIds: [...fileIds] }, spec.options ?? null);
+
+    // Coalesce first: an identical pending plan is deduplicated, so the
+    // same work never queues twice. The stored record keeps its plan ID
+    // and expiry; only the invocation binding is refreshed so the
+    // execute-time ownership check accepts this caller.
+    const existing = this.findPending({
+      extensionId: binding.extensionId,
+      commandId: binding.commandId,
+      bindingHash,
+      destructive,
+      grantIds,
+      requiredPermissions,
+    });
+    if (existing) {
+      existing.invocationId = binding.invocationId;
+      existing.capabilities = [...binding.capabilities];
+      return { ...existing };
+    }
+
+    // Reject past the hard cap, naming the limit; never evict pending work.
+    this.checkCapacity(binding.extensionId);
+
     const ttlMs = Math.max(1, Math.min(V2_PLAN_MAX_TTL_MS, Math.floor(spec.ttlMs ?? V2_PLAN_TTL_MS)));
     const createdAt = this.clock();
     const record: V2PlanRecord = {
@@ -365,10 +538,10 @@ export class V2PlanManager {
       commandId: binding.commandId,
       invocationId: binding.invocationId,
       targets: { fileIds: [...fileIds] },
-      bindingHash: bindingHashFor({ fileIds: [...fileIds] }, spec.options ?? null),
+      bindingHash,
       options: spec.options ?? null,
       grantIds: [...grantIds],
-      requiredPermissions: [...(spec.requiredPermissions ?? binding.effectivePermissions)],
+      requiredPermissions,
       capabilities: [...binding.capabilities],
       preview: {
         summary: spec.preview.summary,
@@ -384,13 +557,12 @@ export class V2PlanManager {
         reversibility: spec.preview.reversibility,
         reversibilityNote: spec.preview.reversibilityNote,
       },
-      destructive: command.destructive === true || spec.destructive === true,
+      destructive,
       createdAt,
       expiresAt: new Date(this.nowMs() + ttlMs).toISOString(),
       state: "pending",
     };
     this.plans.set(record.planId, record);
-    this.evict();
     return { ...record };
   }
 
@@ -501,24 +673,5 @@ export class V2PlanManager {
       expiresAt: record.expiresAt,
       reviewedAt: record.reviewedAt ?? this.clock(),
     };
-  }
-
-  /**
-   * Bounded memory: drop expired records first, then oldest consumed
-   * ones (kept until evicted so replays report `plan-consumed`, not
-   * `plan-unknown`). Pending plans are never evicted while under bound.
-   */
-  private evict(): void {
-    if (this.plans.size <= MAX_V2_PLANS) return;
-    const now = this.clock();
-    for (const [id, record] of this.plans) {
-      if (this.plans.size <= MAX_V2_PLANS) return;
-      if (record.expiresAt <= now) this.plans.delete(id);
-    }
-    if (this.plans.size <= MAX_V2_PLANS) return;
-    for (const [id, record] of this.plans) {
-      if (this.plans.size <= MAX_V2_PLANS) return;
-      if (record.state === "consumed") this.plans.delete(id);
-    }
   }
 }

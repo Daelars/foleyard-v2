@@ -54,6 +54,7 @@ export { V2_PAYLOAD_LIMITS };
  * - 403 disabled extensions and denied permissions.
  * - 404 unknown extensions/commands, unresolvable selections, unknown jobs.
  * - 413 envelopes or inputs over the payload limits.
+ * - 429 waiting work (`plan-limit`, `job-limit`) past its named cap.
  * - 500 missing handlers, handler failures, invalid handler results.
  *
  * Error envelope: `{ ok: false, error: { code, message,
@@ -105,10 +106,12 @@ export const V2_FAILURE_STATUS: Record<V2FailureCode, number> = {
   "handler-failed": 500,
   "result-invalid": 500,
   "job-unknown": 404,
+  "job-limit": 429,
   "plan-unknown": 404,
   "plan-expired": 400,
   "plan-altered": 400,
   "plan-consumed": 400,
+  "plan-limit": 429,
   "review-required": 400,
 };
 
